@@ -1,0 +1,584 @@
+# Global Configuration Schema
+# Version: 1.0.0
+# Date: 2025-10-24
+
+# 本文件定义全局配置文件（settings.yaml）的完整schema和示例
+
+# ============================================================================
+# SCHEMA DEFINITION
+# ============================================================================
+
+schema_version: "1.0"
+
+# ============================================================================
+# COMPLETE CONFIGURATION EXAMPLE
+# ============================================================================
+
+# ---------- 系统设置 ----------
+system:
+  # 软件版本信息
+  version: "1.0.0"
+  
+  # 配置文件版本
+  config_version: "1.0.0"
+  
+  # 系统名称
+  name: "reportgen"
+  
+  # 描述
+  description: "Excel到Docx自动化医疗报告生成系统"
+
+# ---------- 目录路径配置 ----------
+paths:
+  # 配置文件目录（包含mapping.yaml, project_types.yaml）
+  config_dir: "config/"
+  
+  # 模板文件目录
+  template_dir: "templates/"
+  
+  # 输入数据目录
+  input_dir: "data/input/"
+  
+  # 输出报告目录
+  output_dir: "data/output/"
+  
+  # 日志文件目录
+  log_dir: "data/logs/"
+  
+  # 临时文件目录
+  temp_dir: "/tmp/reportgen/"
+
+# ---------- 文件命名规则 ----------
+naming:
+  # 输出报告文件命名模板
+  # 可用变量: {patient_name}, {sample_id}, {project_name}, {report_date}, {timestamp}
+  output_pattern: "{patient_name}_{sample_id}_{project_name}_{report_date}_终版.docx"
+  
+  # 日志文件命名模板
+  log_pattern: "reportgen_{timestamp}.log"
+  
+  # 时间戳格式
+  timestamp_format: "%Y%m%d_%H%M%S"
+  
+  # 日期格式（用于文件名）
+  date_format: "%Y-%m-%d"
+  
+  # 文件名非法字符替换
+  illegal_chars_replace: "_"  # 将非法字符（如/\:*?"<>|）替换为此字符
+  
+  # 文件名最大长度
+  max_filename_length: 200
+
+# ---------- 数据处理设置 ----------
+data:
+  # Excel读取设置
+  excel:
+    # 支持的文件扩展名
+    supported_extensions: [".xlsx"]
+    
+    # 文件大小限制（MB）
+    max_file_size_mb: 100
+    
+    # 最大行数限制
+    max_rows: 10000
+    
+    # 数据类型推断
+    dtype_inference: false  # false表示全部读为字符串，避免自动推断错误
+    
+    # 空值处理
+    na_values: ["", "NA", "N/A", "-", "null"]
+    
+    # 保留原始空字符串
+    keep_default_na: false
+
+  # MSI 状态推断阈值（基于 MSIsensor2 百分比）
+  # Ref: MSIsensor2 (Niu et al., Bioinformatics 2020)
+  # 请根据实验室验证的临床方案调整阈值
+  msi:
+    thresholds:
+      msi_h: 40    # ≥此值 → MSI-H
+      msi_l: 20    # ≥此值且<msi_h → MSI-L，<此值 → MSS
+
+  # 报告正文中日期字段的格式（与 naming.date_format 分离）
+  report_date_format: "%Y-%m-%d"
+
+  # 数据验证设置
+  validation:
+    # 严格模式（警告也视为错误）
+    strict_mode: false
+    
+    # 必填字段验证
+    enforce_required_fields: true
+    
+    # 数据类型验证
+    enforce_type_validation: true
+    
+    # 范围验证
+    enforce_range_validation: true
+  
+  # 数据清洗设置
+  cleaning:
+    # 自动清洗
+    auto_clean: true
+    
+    # 去除不可见字符
+    remove_invisible_chars: true
+    
+    # 统一空格
+    normalize_whitespace: true
+    
+    # 全角转半角
+    full_width_to_half_width: true
+    
+    # 日期自动识别
+    auto_detect_dates: true
+
+# ---------- 模板设置 ----------
+template:
+  # 模板文件后缀
+  file_extension: ".docx"
+  
+  # 模板缓存（批量处理时提高性能）
+  enable_cache: true
+  
+  # 模板验证
+  validate_on_load: true
+  
+  # 占位符语法
+  placeholder_syntax: "jinja2"  # jinja2 / mustache
+  
+  # 空值占位符
+  null_placeholder: "-"
+  
+  # 图片嵌入设置
+  image:
+    # 默认图片宽度（cm）
+    default_width_cm: 5.0
+    
+    # 默认图片高度（cm，null表示按比例缩放）
+    default_height_cm: null
+    
+    # 支持的图片格式
+    supported_formats: [".png", ".jpg", ".jpeg"]
+
+# ---------- 报告生成设置 ----------
+generation:
+  # 性能设置
+  performance:
+    # 批量处理时的最大并发数
+    max_workers: 4
+    
+    # 单个报告生成超时时间（秒）
+    timeout_seconds: 60
+    
+    # 内存限制（MB）
+    max_memory_mb: 500
+  
+  # 错误处理
+  error_handling:
+    # 遇到错误时继续处理其他样本
+    continue_on_error: true
+    
+    # 最大重试次数
+    max_retries: 2
+    
+    # 重试间隔（秒）
+    retry_delay_seconds: 1
+  
+  # 输出设置
+  output:
+    # 覆盖已存在的文件
+    overwrite_existing: false
+    
+    # 自动创建输出目录
+    auto_create_dir: true
+    
+    # 文件权限（Unix系统）
+    file_permissions: "0644"
+    
+    # 目录权限（Unix系统）
+    dir_permissions: "0755"
+  
+  # 验证设置
+  verification:
+    # 生成后验证文件可打开
+    verify_file_openable: true
+    
+    # 计算文件校验和
+    calculate_checksum: false
+    
+    # 校验和算法
+    checksum_algorithm: "md5"  # md5 / sha256
+
+# ---------- 日志设置 ----------
+logging:
+  # 日志级别: DEBUG/INFO/WARNING/ERROR/CRITICAL
+  level: "INFO"
+  
+  # 日志格式: json / text
+  format: "json"
+  
+  # JSON日志美化输出（便于人类阅读，但文件更大）
+  json_indent: null  # null表示紧凑格式，2表示缩进2空格
+  
+  # 控制台输出
+  console:
+    enabled: true
+    level: "INFO"
+    colored: true  # 彩色输出
+  
+  # 文件输出
+  file:
+    enabled: true
+    level: "DEBUG"
+    # 日志文件滚动策略
+    rotation:
+      enabled: true
+      max_size_mb: 10      # 单个日志文件最大大小
+      backup_count: 5      # 保留的备份文件数量
+  
+  # 日志内容
+  content:
+    # 记录完整堆栈信息
+    include_stacktrace: true
+    
+    # 记录执行时间
+    include_duration: true
+    
+    # 记录内存使用
+    include_memory_usage: false
+    
+    # 敏感信息脱敏
+    mask_sensitive_data: true
+    
+    # 脱敏字段（这些字段值会被遮蔽）
+    sensitive_fields: ["patient_name", "pathology_id"]
+
+# ---------- 项目类型识别设置 ----------
+project_type:
+  # 自动识别
+  auto_detect: true
+  
+  # 识别依据的字段
+  detection_field: "project_name"
+  
+  # 关键词匹配阈值（0-1）
+  match_threshold: 0.6
+  
+  # 无法识别时的默认模板
+  default_template: "templates/default_template.docx"
+  
+  # 项目类型配置文件路径
+  types_config: "config/project_types.yaml"
+
+# ---------- 质量控制设置 ----------
+quality:
+  # 启用质量检查
+  enabled: true
+  
+  # 检查项
+  checks:
+    # 必填字段完整性
+    required_fields: true
+    
+    # 数据格式正确性
+    data_format: true
+    
+    # 数值范围合理性
+    value_range: true
+    
+    # 模板占位符完整性
+    template_placeholders: true
+  
+  # 质量报告
+  report:
+    # 生成质量报告
+    generate: true
+    
+    # 报告格式: json / html / text
+    format: "json"
+    
+    # 报告保存路径
+    output_path: "data/logs/quality_report_{timestamp}.json"
+
+# ---------- 性能监控设置 ----------
+monitoring:
+  # 启用性能监控
+  enabled: true
+  
+  # 记录性能指标
+  metrics:
+    # 处理时间
+    duration: true
+    
+    # 内存使用
+    memory: true
+    
+    # CPU使用
+    cpu: false
+    
+    # 文件大小
+    file_size: true
+  
+  # 性能基准
+  benchmarks:
+    # Excel解析目标时间（秒）
+    excel_parsing_target: 5.0
+    
+    # 报告生成目标时间（秒）
+    report_generation_target: 10.0
+    
+    # 批量处理目标速度（样本/分钟）
+    batch_processing_target: 10.0
+
+# ---------- 安全设置 ----------
+security:
+  # 数据隐私保护
+  privacy:
+    # 日志中脱敏患者姓名
+    mask_patient_name: true
+    
+    # 不记录完整患者信息到日志
+    exclude_patient_data_from_logs: true
+  
+  # 文件访问控制
+  file_access:
+    # 限制读取路径（空列表表示不限制）
+    allowed_read_paths: []
+    
+    # 限制写入路径
+    allowed_write_paths: ["data/output/", "data/logs/"]
+    
+    # 禁止访问的路径
+    forbidden_paths: ["/etc/", "/root/", "/sys/"]
+  
+  # 输入验证
+  input_validation:
+    # 文件路径安全检查（防止路径遍历攻击）
+    check_path_traversal: true
+    
+    # 文件名安全检查
+    check_filename_safety: true
+
+# ---------- 开发和调试设置 ----------
+development:
+  # 开发模式
+  debug_mode: false
+  
+  # 详细错误信息
+  verbose_errors: false
+  
+  # 保留临时文件（用于调试）
+  keep_temp_files: false
+  
+  # 性能分析
+  profiling:
+    enabled: false
+    output_path: "data/logs/profile_{timestamp}.prof"
+  
+  # 模拟模式（不生成实际文件）
+  dry_run: false
+
+# ---------- 通知设置 ----------
+notification:
+  # 启用通知
+  enabled: false
+  
+  # 通知方式: email / webhook / none
+  method: "none"
+  
+  # 邮件通知配置
+  email:
+    smtp_server: ""
+    smtp_port: 587
+    username: ""
+    password: ""
+    from_address: ""
+    to_addresses: []
+    subject_template: "报告生成通知: {status}"
+  
+  # Webhook通知配置
+  webhook:
+    url: ""
+    method: "POST"
+    headers: {}
+    body_template: '{"status": "{status}", "count": {count}}'
+  
+  # 通知触发条件
+  triggers:
+    on_success: false
+    on_failure: true
+    on_batch_complete: true
+
+# ---------- 扩展功能设置 ----------
+extensions:
+  # 自定义过滤器（用于模板）
+  custom_filters:
+    enabled: false
+    module_path: "reportgen.custom_filters"
+  
+  # 插件系统
+  plugins:
+    enabled: false
+    plugin_dir: "plugins/"
+    auto_load: false
+
+# ---------- 知识库/参考库 ----------
+knowledge_bases:
+  # 靶向药物提示数据库（可选）：用于将变异基因映射为“潜在获益/耐药或慎重”药物列表
+  # 若为空或文件不存在，将回退为旧逻辑（CtDrug等）
+  targeted_drug_db:
+    enabled: true
+    # 由 tools/knowledge_bases/build_public_kb.py 生成：
+    # - sheet `targeted_drug_tips`: internal + public (CIViC/CGI) 合并结果（程序默认读取第一个可用sheet）
+    # - 其他sheet仅用于溯源/对照
+    path: "data/knowledge_bases/processed/targeted_drug_db_public.xlsx"
+    # 生产级筛选策略（建议启用后再进入生产输出）：
+    # - 按癌种：仅使用与当前癌种匹配的条目（CGI: Primary Tumor type / CIViC: disease）
+    # - 按证据等级：过滤掉低证据条目（避免“研究级/个案”进入终版报告）
+    # - 必须位点匹配：避免公共库“仅基因级别”条目误入输出
+    filters:
+      enabled: true
+      # 仅对这些来源启用筛选（internal 由内部审核；默认不做强过滤）
+      apply_to_sources: ["CGI", "CIViC"]
+      # 必须满足：数据库行至少提供 c_point 或 p_point（否则视为基因级别，跳过）
+      require_position_match: true
+      cancer_type:
+        enabled: true
+        # 若报告未提供 cancer_type（为 "-" 或空），默认放行（避免输出为空）
+        # 设为 reject 可强制要求每份报告都明确癌种后才能输出公共库条目
+        if_missing_patient_cancer: "allow"  # allow|reject
+        # 识别“结直肠癌/CRC”的关键词（用于启用 CRC 专用过滤）
+        crc_keywords: ["结直肠", "结肠", "直肠", "乙状结肠", "sigmoid", "colon", "rectal", "colorectal"]
+        # CGI: CRC 对应的主癌种代码（CGI Primary Tumor type）
+        cgi_allowed_primary_tumor_types: ["COREAD"]
+        # CIViC: disease 关键词（英文为主；如需也可补充中文）
+        civic_disease_keywords: ["colorectal", "colon", "rectal"]
+      evidence:
+        enabled: true
+        # 若缺失证据字段，默认放行；设为 reject 可更严格
+        if_missing_evidence: "allow"  # allow|reject
+        # CGI Evidence level rank（越大越强）：
+        # 5: FDA/NCCN/CPIC/ELN guidelines
+        # 4: Late trials
+        # 3: Clinical trials
+        # 2: Early trials
+        # 1: Case report
+        # 0: Pre-clinical
+        cgi_min_rank: 4
+        # CIViC AMP/ASCO/CAP category rank（越大越强）：
+        # 5: Tier I - Level A
+        # 4: Tier I - Level B / Tier I
+        # 3: Tier II - Level C
+        # 2: Tier II - Level D / Tier II
+        # 1: Tier III
+        # 0: Tier IV
+        civic_min_rank: 4
+    # 可选：当数据库缺失某些基因/位点时，可用此处做最小覆盖（优先级高于数据库）
+    # 仅建议放"已审阅/已验证"的规则，避免生成不可靠的医学结论。
+    overrides:
+      # 示例：SETD2 在示例数据库中缺失，但终版报告里有固定写法
+      SETD2:
+        benefit_drugs: "AZD1775（C）"
+        caution_drugs: "--"
+
+  # 免疫治疗相关基因列表（可选）：用于生成"免疫正/负相关/超进展相关基因"检出汇总
+  immune_gene_list:
+    enabled: true
+    # 由 tools/knowledge_bases/build_public_kb.py 生成（在原内部清单基础上，补充CGI免疫相关条目）
+    path: "data/knowledge_bases/processed/immune_gene_list_public.xlsx"
+    # 可选：补充额外的正相关基因（例如部分历史终版将TP53归入正相关）
+    extra_positive_genes: ["TP53"]
+
+  # 基因知识库（可选）：用于生成基因诊疗知识部分
+  # 包含基因简介、基因变异解析、药物疗效临床解析等
+  gene_knowledge_db:
+    enabled: true
+    path: "data/knowledge_bases/processed/gene_knowledge_db.xlsx"
+    sheets:
+      # 基因变异解析sheet：包含基因简介、基因变异说明模板、基因变异解析
+      gene_analysis: "基因变异解析"
+      # 用药提示解析sheet：包含药物疗效临床解析
+      drug_analysis: "用药提示解析"
+    columns:
+      gene_name: "基因名称"
+      gene_intro: "基因简介"
+      mutation_desc_template: "基因变异说明"
+      mutation_analysis: "基因变异解析"
+      drug_analysis: "药物疗效临床解析"
+
+  # 基因-转录本-染色体信息（可选）：用于未检出基因列表和变异信息补全
+  gene_transcript_db:
+    enabled: false
+    # 建议将私有KB放在仓库外（例如 ../reportgen_private/），并用环境变量覆盖：
+    #   REPORTGEN_KNOWLEDGE_BASES_GENE_TRANSCRIPT_DB_ENABLED=true
+    #   REPORTGEN_KNOWLEDGE_BASES_GENE_TRANSCRIPT_DB_PATH=...
+    path: ""
+    columns:
+      gene_name: "Genename"
+      transcript: "Transcriptid"
+      chromosome: "Chr"
+
+# ============================================================================
+# ENVIRONMENT-SPECIFIC OVERRIDES
+# ============================================================================
+
+# 不同环境的配置覆盖（可选）
+environments:
+  development:
+    logging:
+      level: "DEBUG"
+      console:
+        colored: true
+    development:
+      debug_mode: true
+      verbose_errors: true
+  
+  production:
+    logging:
+      level: "INFO"
+      file:
+        rotation:
+          max_size_mb: 50
+          backup_count: 30
+    generation:
+      performance:
+        max_workers: 8
+    security:
+      privacy:
+        mask_patient_name: true
+  
+  testing:
+    paths:
+      output_dir: "tests/output/"
+      log_dir: "tests/logs/"
+    logging:
+      level: "DEBUG"
+    development:
+      dry_run: true
+
+# ============================================================================
+# METADATA
+# ============================================================================
+
+metadata:
+  config_version: "1.0.0"
+  created_date: "2025-10-24"
+  last_updated: "2025-10-24"
+  author: "reportgen"
+  description: "全局配置文件用于Excel到Docx报告生成系统"
+
+# ============================================================================
+# NOTES
+# ============================================================================
+
+# 使用说明:
+# 1. 所有路径支持相对路径（相对于项目根目录）和绝对路径
+# 2. 环境变量可以覆盖配置值，格式: REPORTGEN_<SECTION>_<KEY>
+#    例如: REPORTGEN_LOGGING_LEVEL=DEBUG 覆盖 logging.level
+# 3. 命令行参数优先级最高，其次是环境变量，最后是配置文件
+# 4. 配置文件修改后需重启程序才能生效
+# 5. 布尔值使用true/false（小写）
+# 6. 数值不需要引号
+# 7. 字符串使用双引号或单引号
+# 8. 列表使用方括号[]，字典使用花括号{}

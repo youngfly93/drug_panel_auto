@@ -1,0 +1,19 @@
+# Vercel Python serverless dependencies
+# Backend (FastAPI)
+fastapi>=0.104.0
+uvicorn>=0.24.0
+sqlalchemy>=2.0.0
+python-multipart>=0.0.6
+python-jose[cryptography]>=3.3.0
+passlib>=1.7.4
+bcrypt>=4.0.0,<4.1
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Upstream reportgen dependencies
+docxtpl>=0.16.0
+pandas>=1.5.0
+openpyxl>=3.0.0
+PyYAML>=6.0
+python-dateutil>=2.8.0
+click>=8.0.0

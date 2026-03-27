@@ -1,0 +1,63 @@
+# 2.1 基因变异检测结果及相关靶向药物信息（九列表）基线行
+#
+# 说明：
+# - 用于在 Variations 表仅包含“检出变异”时，补齐“未见突变”基因行（对齐终版报告展示）。
+# - transcript/chr 来自模板契约（与具体样本无关）。
+# - 如需按癌种/项目拆分，可扩展为多套 baseline（例如 crc_358 / lung / ...）。
+schema_version: "1.0"
+
+variants_2_1:
+  # 终版报告固定展示的“未见突变”基因列表（结直肠癌358基因+MSI）
+  unmutated_rows:
+    - gene: "BRAF"
+      transcript: "NM_004333.4"
+      chr: "7"
+    - gene: "ERBB2"
+      transcript: "NM_004448.3"
+      chr: "17"
+    - gene: "FBXW7"
+      transcript: "NM_001349798.2"
+      chr: "4"
+    - gene: "MLH1"
+      transcript: "NM_000249.4"
+      chr: "3"
+    - gene: "MSH2"
+      transcript: "NM_000251.3"
+      chr: "2"
+    - gene: "MSH6"
+      transcript: "NM_000179.3"
+      chr: "2"
+    - gene: "NF1"
+      transcript: "NM_000267.3"
+      chr: "17"
+    - gene: "NRAS"
+      transcript: "NM_002524.4"
+      chr: "1"
+    - gene: "NTRK1"
+      transcript: "NM_001007792.1"
+      chr: "1"
+    - gene: "NTRK2"
+      transcript: "NM_006180.4"
+      chr: "9"
+    - gene: "NTRK3"
+      transcript: "NM_001012338.2"
+      chr: "15"
+    - gene: "PIK3CA"
+      transcript: "NM_006218.4"
+      chr: "3"
+    - gene: "PMS2"
+      transcript: "NM_000535.7"
+      chr: "7"
+    - gene: "SMAD4"
+      transcript: "NM_005359.6"
+      chr: "18"
+    - gene: "SMARCA4"
+      transcript: "NM_001128849.3"
+      chr: "19"
+    - gene: "TCF7L2"
+      transcript: "NM_001146274.2"
+      chr: "10"
+    - gene: "TSC1"
+      transcript: "NM_000368.5"
+      chr: "9"
+

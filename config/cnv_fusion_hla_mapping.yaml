@@ -1,0 +1,94 @@
+# ========== CNV、Fusion、HLA表格映射配置 ==========
+# 拷贝数变异、基因融合、HLA分型三个表格
+
+  cnv:
+    sheet_name: "Cnv"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "simple"
+    skip_rows: 1  # 跳过第1行（空行），从第2行开始读取（表头在第2行）
+    columns:
+      gene:
+        synonyms: ['Gene', 'gene', '基因']
+        type: string
+        description: "基因名称"
+      chr:
+        synonyms: ['#Chr', 'Chr', 'chromosome', '染色体']
+        type: string
+        description: "染色体"
+      start:
+        synonyms: ['Start', 'start_pos', '起始位置']
+        type: string
+        description: "起始位置"
+      end:
+        synonyms: ['End', 'end_pos', '终止位置']
+        type: string
+        description: "终止位置"
+      status:
+        synonyms: ['Status', 'status', '状态']
+        type: string
+        description: "CNV状态（增加/缺失）"
+      copy_num:
+        synonyms: ['CopyNum(X)', 'CopyNum', 'copy_number', '拷贝数']
+        type: string
+        description: "拷贝数"
+
+  fusion:
+    sheet_name: "Fusion"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "simple"
+    skip_rows: 1  # 跳过第1行（空行），从第2行开始读取（表头在第2行）
+    columns:
+      gene1:
+        synonyms: ['Gene1', 'gene1', '基因1']
+        type: string
+        description: "融合基因1"
+      gene2:
+        synonyms: ['Gene2', 'gene2', '基因2']
+        type: string
+        description: "融合基因2"
+      chr1:
+        synonyms: ['Chr1', 'chr1', 'pos1', '染色体1']
+        type: string
+        description: "染色体1"
+      break1:
+        synonyms: ['Break1', 'breakpoint1', 'annotation1', '断点1']
+        type: string
+        description: "断点1"
+      chr2:
+        synonyms: ['Chr2', 'chr2', 'pos2', '染色体2']
+        type: string
+        description: "染色体2"
+      break2:
+        synonyms: ['Break2', 'breakpoint2', 'annotation2', '断点2']
+        type: string
+        description: "断点2"
+      freq:
+        synonyms: ['FinalFreq', 'Freq', 'freq1', 'frequency', '频率']
+        type: string
+        description: "融合频率"
+      type:
+        synonyms: ['Sv_type', 'Est_Type', '#Est_Type', 'fusion_type', '类型']
+        type: string
+        description: "融合类型"
+
+  hla:
+    sheet_name: "HLA"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "hla_special"  # 特殊格式：每个HLA位点独立section
+    skip_rows: 0  # HLA表格不跳过行，需要特殊处理
+    columns:
+      locus:
+        synonyms: ['HLA-A', 'HLA-B', 'HLA-C', 'Locus', '位点']
+        type: string
+        description: "HLA位点"
+      type1:
+        synonyms: ['HET', 'Type1', 'Allele1', 'Type 1']
+        type: string
+        description: "Type 1基因型"
+      type2:
+        synonyms: ['Allele2', 'Type2', 'Type 2']
+        type: string
+        description: "Type 2基因型"

@@ -1,0 +1,1 @@
+import{c as r}from"./client-DH3sZdI9.js";const o={async generate(t){const{data:a}=await r.post("/reports/generate",t);return a.data},async getTaskStatus(t){const{data:a}=await r.get(`/reports/${t}`);return a.data},getDownloadUrl(t){return`/api/v1/reports/${t}/download`}};export{o as r};

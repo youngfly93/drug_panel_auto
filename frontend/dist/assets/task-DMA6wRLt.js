@@ -1,0 +1,1 @@
+import{c as a}from"./client-DH3sZdI9.js";const n={async list(t={}){const{data:s}=await a.get("/tasks",{params:t});return s.data},async getStats(){const{data:t}=await a.get("/tasks/stats");return t.data},async get(t){const{data:s}=await a.get(`/tasks/${t}`);return s.data},async cancel(t){await a.delete(`/tasks/${t}`)}};export{n as t};

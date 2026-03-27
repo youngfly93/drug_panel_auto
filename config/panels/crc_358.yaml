@@ -1,0 +1,214 @@
+# CRC 358 panel rule sets (gene lists)
+#
+# This file contains *only* gene symbols / panel display metadata.
+# Do NOT put any patient-level identifiers or real reports into git.
+schema_version: "1.0"
+panel_id: "crc_358"
+updated: "2025-12-29"
+notes:
+  - "用于 reportgen/core/template_bridge_358.py 的基因集合口径（重要基因/免疫相关基因等）"
+  - "仅保留 gene symbol + 显示用 transcript/chr 信息，不包含任何患者数据"
+
+# Class I genes: primary drug targets and MSI genes
+class_i_genes:
+  - KRAS
+  - NRAS
+  - BRAF
+  - PIK3CA
+  - ERBB2
+  - HER2
+  - MLH1
+  - MSH2
+  - MSH6
+  - PMS2
+  - EPCAM
+
+# Class II genes: secondary targets and tumor suppressors
+class_ii_genes:
+  - APC
+  - TP53
+  - SMAD4
+  - PTEN
+  - STK11
+  - FBXW7
+
+# CRC important genes (main table shows only Class I/II within this set)
+crc_important_genes:
+  - KRAS
+  - NRAS
+  - BRAF
+  - MLH1
+  - MSH2
+  - MSH6
+  - PMS2
+  - HER2
+  - NTRK1
+  - NTRK2
+  - NTRK3
+  - TP53
+  - APC
+  - PIK3CA
+  - SMAD4
+  - FBXW7
+  - RNF43
+  - CTNNB1
+  - KMT2D
+  - ACVR2A
+  - TCF7L2
+  - ATM
+  - FAT4
+  - KMT2C
+  - ARID1A
+  - LRP1B
+  - PTEN
+  - FAT1
+  - ZFHX3
+  - AMER1
+  - GNAS
+  - ERBB3
+  - PTPRT
+  - NF1
+  - MUTYH
+  - ERBB2
+  - SETD2
+
+# Immune-related gene sets (only Class I/II shown in immune tables)
+immune_positive_genes:
+  - MLH1
+  - MSH2
+  - MSH6
+  - PMS2
+  - POLE
+  - POLD1
+  - CD274
+  - PDCD1LG2
+  - TET1
+  - PMS1
+  - ERCC2
+  - ERCC3
+  - ERCC4
+  - ERCC5
+  - BRCA1
+  - MRE11A
+  - NBN
+  - RAD50
+  - RAD51
+  - RAD51B
+  - RAD51D
+  - RAD52
+  - RAD54L
+  - BRCA2
+  - BRIP1
+  - FANCA
+  - FANCC
+  - PALB2
+  - RAD51C
+  - BLM
+  - ATM
+  - ATR
+  - CHEK1
+  - CHEK2
+  - MDC1
+  - MUTYH
+  - PARP1
+  - RECQL4
+  - ARID1A
+  - ATRX
+  - FANCM
+  - PRKDC
+  - CDK12
+  - MLH3
+  - MSH3
+  - FANCI
+  - ARID1B
+  - ARID2
+  - KRAS
+  - SERPINB3
+  - SERPINB4
+  - PBRM1
+  - TP53
+
+immune_negative_genes:
+  - PTEN
+  - JAK1
+  - JAK2
+  - B2M
+  - CTNNB1
+  - KEAP1
+  - EGFR
+  - ALK
+  - MET
+  - STK11
+  - IFNGR1
+  - IFNGR2
+
+immune_hyperprogression_genes:
+  - MDM2
+  - MDM4
+  - DNMT3A
+  - EGFR
+  - CCND1
+  - FGF3
+  - FGF4
+  - FGF19
+
+# Subset list used for "undetected genes" display in the template.
+panel_display_genes:
+  - name: BRAF
+    transcript: NM_004333.4
+    chromosome: "7"
+  - name: ERBB2
+    transcript: NM_004448.4
+    chromosome: "17"
+  - name: NRAS
+    transcript: NM_002524.5
+    chromosome: "1"
+  - name: PIK3CA
+    transcript: NM_006218.4
+    chromosome: "3"
+  - name: SMAD4
+    transcript: NM_005359.6
+    chromosome: "18"
+  - name: MLH1
+    transcript: NM_000249.4
+    chromosome: "3"
+  - name: MSH2
+    transcript: NM_000251.3
+    chromosome: "2"
+  - name: MSH6
+    transcript: NM_000179.3
+    chromosome: "2"
+  - name: PMS2
+    transcript: NM_000535.7
+    chromosome: "7"
+  - name: PTEN
+    transcript: NM_000314.8
+    chromosome: "10"
+  - name: AKT1
+    transcript: NM_001014431.2
+    chromosome: "14"
+  - name: EGFR
+    transcript: NM_005228.5
+    chromosome: "7"
+  - name: MET
+    transcript: NM_000245.4
+    chromosome: "7"
+  - name: RET
+    transcript: NM_020975.6
+    chromosome: "10"
+  - name: ROS1
+    transcript: NM_002944.2
+    chromosome: "6"
+  - name: ALK
+    transcript: NM_004304.5
+    chromosome: "2"
+  - name: KRAS
+    transcript: NM_033360.4
+    chromosome: "12"
+  - name: APC
+    transcript: NM_000038.6
+    chromosome: "5"
+  - name: TP53
+    transcript: NM_000546.6
+    chromosome: "17"
+

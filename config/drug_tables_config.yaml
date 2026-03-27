@@ -1,0 +1,1066 @@
+
+# ========== 化疗药物详细解析表（自动生成） ==========
+# 30个药物详细表格，每个药物一个表格
+# 格式：基因、检测位点、基因型、等级、检测结果、参考文献
+
+  drug_shunbo:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "顺铂（cisplatin）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_kabo:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "卡铂（carboplatin）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_aoshalibo:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "奥沙利铂（oxaliplatin）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_boleihuahewu:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "顺铂（cisplatin）"
+        - "卡铂（carboplatin）"
+        - "奥沙利铂（oxaliplatin）"
+        - "铂类化合物（platinum compounds）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_jiaandieling:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "甲氨蝶呤（methotrexate）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_zishanchun:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "紫杉醇（paclitaxel）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_huanlinyanan:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "环磷酰胺（cyclophosphamide）"
+        - "异环磷酰胺（ifosfamide）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_yihuanlinyanan:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "异环磷酰胺（ifosfamide）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_yilitikang:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "伊立替康（irinotecan）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_yituopogan:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "依托泊苷（etoposide）"
+        - "足叶乙甙（Etoposide）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_dakabazuo:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "达卡巴嗪（Dacarbazine）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_genhuanlei:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "蒽环类（anthracyclines and related substances）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_bolaimeisin:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "博来霉素（Bleomycin）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_kaipeibaibin:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "卡培他滨（capecitabine）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_fluorouracil:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "5-FU、氟尿嘧啶（fluorouracil）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_jixitabin:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "吉西他滨（gemcitabine）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_duoxitasai:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "多西他赛（Docetaxel）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_peimeiqusai:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "培美曲塞（pemetrexed）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_changchunjianlei:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "长春新碱（vincristine）"
+        - "长春新碱（Vincristine）"
+        - "长春瑞滨（vinorelbine）"
+        - "长春碱（vinblastine）"
+        - "长春地辛（Vindesine）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_mituogenquan:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "米托蒽醌（Mitoxantrone ）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_sananliulin:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "三胺硫磷（thiotepa）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_mafalan:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "马法兰（melphalan）"
+        - "马法兰（Melphalan）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_tegafur:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "替加氟（tegafur）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_atangbaoyin:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "阿糖胞苷（Cytarabine）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_letrozole_anastrozole:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "来曲唑（letrozole）"
+        - "阿那曲唑（anastrozole）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_disaimisong:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "地塞米松（dexamethasone）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_qiangdesong:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "强的松（Prednisone）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_tamoxifen:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "他莫昔芬（tamoxifen）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_yiximeitang:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "依西美坦（exemestane ）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+
+  drug_yidabixing:
+    sheet_name: "CtDrug"
+    required: false
+    empty_behavior: "hide_section"
+    table_format: "detail"
+    filter:
+      column: "药物"
+      values:
+        - "伊达比星（Idarubicin）"
+    columns:
+      Gene:
+        synonyms: ['检测基因', 'Gene']
+        type: string
+        description: "检测基因"
+      Locus:
+        synonyms: ['检测位点', 'Locus', 'Position']
+        type: string
+        description: "检测位点"
+      Genotype:
+        synonyms: ['基因型', 'Genotype']
+        type: string
+        description: "基因型"
+      Level:
+        synonyms: ['等级', 'Level', 'Evidence']
+        type: string
+        description: "证据等级"
+      Result:
+        synonyms: ['用药提示', '检测结果', 'Result', 'Recommendation']
+        type: string
+        description: "检测结果/用药提示"
+      Reference:
+        synonyms: ['参考文献', 'Reference', 'PMID']
+        type: string
+        description: "参考文献"
+

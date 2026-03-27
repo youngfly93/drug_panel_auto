@@ -1,0 +1,81 @@
+# 项目类型识别配置
+# Version: 1.1.0
+
+schema_version: "1.0"
+
+# 项目类型定义
+project_types:
+  - id: crc_301_msi
+    name: "结直肠癌301基因+MSI"
+    keywords: ["301基因", "301", "结直肠癌301"]
+    keyword_groups:
+      # 组内为 OR（任一命中即可），组与组之间为 AND（按组加权求分）
+      - any:
+          - "结直肠癌301"
+          - "301基因"
+          - {type: regex, pattern: "(^|\\D)301(\\D|$)"}
+        weight: 1
+    template: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
+    priority: 10
+    description: "结直肠癌301基因检测+微卫星不稳定性检测"
+
+  - id: crc_358_msi
+    name: "结直肠癌358基因+MSI"
+    keywords: ["358基因", "358", "结直肠癌358"]
+    keyword_groups:
+      - any:
+          - "结直肠癌358"
+          - "358基因"
+          - {type: regex, pattern: "(^|\\D)358(\\D|$)"}
+        weight: 1
+    template: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
+    priority: 10
+    description: "结直肠癌358基因检测+微卫星不稳定性检测"
+
+  - id: mlf_result
+    name: "MLF基因检测结果"
+    keywords: ["mlf", "result", "mlb"]
+    keyword_groups:
+      - any: ["mlf", "mlb"]
+        weight: 1
+      - any: ["result"]
+        weight: 1
+    template: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
+    priority: 5
+    description: "MLF系列基因检测结果报告"
+
+  - id: lung_methylation
+    name: "肺癌甲基化"
+    keywords: ["肺癌", "甲基化", "methylation", "lung"]
+    keyword_groups:
+      - any: ["肺癌", "lung"]
+        weight: 1
+      - any: ["甲基化", "methylation"]
+        weight: 1
+    # NOTE: lung_methylation_template.docx is not present in this repo checkout.
+    # Update this path if you have a dedicated methylation template locally.
+    template: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
+    priority: 10
+    description: "肺癌甲基化检测（若未配置独立模板则回退至主线 aligned 模板；字段含义与展示略有差异，以 mapping/settings 为准）"
+
+# 默认配置
+default:
+  # 无法识别项目类型时使用的默认模板
+  # NOTE: default_template.docx is not present; fall back to the main aligned template.
+  template: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
+  
+  # 关键词匹配阈值（0-1之间）
+  match_threshold: 0.6
+  
+  # 识别依据的Excel字段
+  detection_field: "project_name"
+  
+  # 是否区分大小写
+  case_sensitive: false
+
+# 元数据
+metadata:
+  version: "1.0.0"
+  created_date: "2025-10-24"
+  last_updated: "2025-10-24"
+  description: "项目类型自动识别配置"
