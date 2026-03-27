@@ -25,6 +25,14 @@ async def lifespan(app: FastAPI):
     # Create tables
     Base.metadata.create_all(bind=engine)
 
+    # Security warnings
+    import logging
+    _log = logging.getLogger("reportgen-web")
+    if settings.secret_key == "change-me-in-production":
+        _log.warning("⚠ SECRET_KEY is using default value — set RG_WEB_SECRET_KEY for production")
+    if settings.default_admin_password == "admin123":
+        _log.warning("⚠ Admin password is default 'admin123' — set RG_WEB_DEFAULT_ADMIN_PASSWORD")
+
     # Seed default admin if no users exist
     from app.database import SessionLocal
 
@@ -53,10 +61,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS (development: allow all; production: restrict)
+    # CORS — restrict in production via RG_WEB_CORS_ORIGINS env var
+    import os
+    cors_origins = os.environ.get("RG_WEB_CORS_ORIGINS", "").split(",")
+    cors_origins = [o.strip() for o in cors_origins if o.strip()]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins or ["*"],  # default "*" only if env not set
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

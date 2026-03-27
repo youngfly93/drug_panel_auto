@@ -55,6 +55,7 @@ def generate_report(
             template_name=req.template_name,
             clinical_info=req.clinical_info,
             project_type=req.project_type or upload.detected_project_type,
+            project_name=req.project_name or upload.detected_project_name,
             strict_mode=req.strict_mode,
             template_contract_mode=req.template_contract_mode,
         )

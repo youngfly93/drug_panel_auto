@@ -13,24 +13,39 @@ from app.config import settings
 
 # No hardcoded paths — upstream root comes from settings
 
-# Cached DataFrames
+# Cached DataFrames with mtime tracking for auto-refresh
 _gene_kb_df: Optional[dict[str, pd.DataFrame]] = None
+_gene_kb_mtime: float = 0.0
 _drug_db_df: Optional[pd.DataFrame] = None
+_drug_db_mtime: float = 0.0
 _immune_df: Optional[pd.DataFrame] = None
+_immune_mtime: float = 0.0
 
 
 def _kb_base_path() -> Path:
     return Path(settings.upstream_root) / "data" / "knowledge_bases" / "processed"
 
 
+def _file_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def _load_gene_kb() -> dict[str, pd.DataFrame]:
-    global _gene_kb_df
-    if _gene_kb_df is not None:
-        return _gene_kb_df
+    global _gene_kb_df, _gene_kb_mtime
 
     path = _kb_base_path() / "gene_knowledge_db.xlsx"
+    current_mtime = _file_mtime(path)
+
+    # Return cache if still valid
+    if _gene_kb_df is not None and current_mtime == _gene_kb_mtime:
+        return _gene_kb_df
+
     if not path.exists():
         _gene_kb_df = {}
+        _gene_kb_mtime = 0.0
         return _gene_kb_df
 
     try:
@@ -38,38 +53,47 @@ def _load_gene_kb() -> dict[str, pd.DataFrame]:
         _gene_kb_df = {}
         for sheet in xls.sheet_names:
             _gene_kb_df[sheet] = pd.read_excel(xls, sheet_name=sheet, dtype=str).fillna("")
+        _gene_kb_mtime = current_mtime
     except Exception:
         _gene_kb_df = {}
     return _gene_kb_df
 
 
 def _load_drug_db() -> Optional[pd.DataFrame]:
-    global _drug_db_df
-    if _drug_db_df is not None:
-        return _drug_db_df
+    global _drug_db_df, _drug_db_mtime
 
     path = _kb_base_path() / "targeted_drug_db_public.xlsx"
+    current_mtime = _file_mtime(path)
+
+    if _drug_db_df is not None and current_mtime == _drug_db_mtime:
+        return _drug_db_df
+
     if not path.exists():
         return None
 
     try:
         _drug_db_df = pd.read_excel(path, dtype=str).fillna("")
+        _drug_db_mtime = current_mtime
     except Exception:
         pass
     return _drug_db_df
 
 
 def _load_immune_genes() -> Optional[pd.DataFrame]:
-    global _immune_df
-    if _immune_df is not None:
-        return _immune_df
+    global _immune_df, _immune_mtime
 
     path = _kb_base_path() / "immune_gene_list_public.xlsx"
+    current_mtime = _file_mtime(path)
+
+    if _immune_df is not None and current_mtime == _immune_mtime:
+        return _immune_df
+
     if not path.exists():
         return None
 
     try:
         _immune_df = pd.read_excel(path, dtype=str).fillna("")
+        _immune_mtime = current_mtime
     except Exception:
         pass
     return _immune_df
@@ -163,3 +187,14 @@ def get_stats() -> dict:
         "drug_mappings": {"total_rows": len(drug_df) if drug_df is not None else 0},
         "immune_genes": {"total_rows": len(immune_df) if immune_df is not None else 0},
     }
+
+
+def reload_all() -> None:
+    """Force invalidate all caches so next access re-reads from disk."""
+    global _gene_kb_df, _gene_kb_mtime, _drug_db_df, _drug_db_mtime, _immune_df, _immune_mtime
+    _gene_kb_df = None
+    _gene_kb_mtime = 0.0
+    _drug_db_df = None
+    _drug_db_mtime = 0.0
+    _immune_df = None
+    _immune_mtime = 0.0

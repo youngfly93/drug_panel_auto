@@ -2,8 +2,10 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from app.dependencies import require_admin
+from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.services import knowledge_service as svc
 
@@ -48,3 +50,10 @@ def list_immune_genes():
 def knowledge_stats():
     data = svc.get_stats()
     return ApiResponse(data=data)
+
+
+@router.post("/reload", response_model=ApiResponse)
+def reload_knowledge_bases(admin: User = Depends(require_admin)):
+    """Force reload all knowledge base caches (admin only)."""
+    svc.reload_all()
+    return ApiResponse(data={"reloaded": True})

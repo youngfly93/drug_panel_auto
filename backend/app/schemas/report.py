@@ -10,6 +10,7 @@ class GenerateRequest(BaseModel):
     upload_id: str
     clinical_info: dict[str, Any] = {}
     project_type: Optional[str] = None
+    project_name: Optional[str] = None
     template_name: Optional[str] = None
     strict_mode: bool = False
     template_contract_mode: str = "warn"

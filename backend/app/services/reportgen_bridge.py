@@ -181,6 +181,7 @@ class ReportGenBridge:
         template_name: Optional[str] = None,
         clinical_info: Optional[dict[str, Any]] = None,
         project_type: Optional[str] = None,
+        project_name: Optional[str] = None,
         strict_mode: bool = False,
         template_contract_mode: str = "warn",
     ) -> dict[str, Any]:
@@ -206,6 +207,12 @@ class ReportGenBridge:
                 if value is not None and value != "":
                     excel_data.single_values[key] = value
 
+        # Auto-detect project_name from project_type if not provided
+        if project_type and not project_name:
+            detect = self.detect_project_type(excel_path, excel_data=excel_data)
+            if detect.get("detected"):
+                project_name = detect.get("project_name")
+
         result = self.generator.generate(
             excel_file=excel_path,
             template_file=template_path,
@@ -215,6 +222,7 @@ class ReportGenBridge:
             return_context=False,
             template_contract_mode=template_contract_mode,
             project_type=project_type,
+            project_name=project_name,
         )
 
         return result
