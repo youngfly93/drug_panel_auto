@@ -29,6 +29,10 @@ export function useDynamicForm(projectType: Ref<string | null>) {
               }
             }
           }
+          // Auto-fill report_date with today if not set (Fix Issue 3)
+          if (!formData['report_date']) {
+            formData['report_date'] = new Date().toISOString().slice(0, 10)
+          }
         }
       } finally {
         loading.value = false

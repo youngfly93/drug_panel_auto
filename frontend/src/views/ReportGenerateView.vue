@@ -32,6 +32,19 @@
           </el-descriptions-item>
         </el-descriptions>
 
+        <!-- Validation warnings -->
+        <div v-if="excelStore.upload.validation_warnings?.length" style="margin-top: 12px">
+          <el-alert
+            v-for="(w, i) in excelStore.upload.validation_warnings"
+            :key="i"
+            :title="w.message"
+            :type="w.level === 'error' ? 'error' : w.level === 'warning' ? 'warning' : 'info'"
+            show-icon
+            :closable="false"
+            style="margin-bottom: 4px"
+          />
+        </div>
+
         <!-- Sheet tabs preview -->
         <el-tabs v-if="excelStore.sheets.length > 0" style="margin-top: 12px">
           <el-tab-pane

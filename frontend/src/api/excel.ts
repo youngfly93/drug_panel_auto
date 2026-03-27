@@ -1,5 +1,11 @@
 import client from './client'
 
+export interface ValidationWarning {
+  level: 'warning' | 'error' | 'info'
+  field: string
+  message: string
+}
+
 export interface UploadResult {
   upload_id: string
   original_filename: string
@@ -8,6 +14,7 @@ export interface UploadResult {
   detected_project_type: string | null
   detected_project_name: string | null
   detection_confidence: number | null
+  validation_warnings: ValidationWarning[]
 }
 
 export interface SheetInfo {

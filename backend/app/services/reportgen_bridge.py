@@ -119,6 +119,68 @@ class ReportGenBridge:
                 result[k] = v
         return result
 
+    def validate_excel_data(self, excel_data: ExcelDataSource) -> list[dict[str, str]]:
+        """
+        Validate Excel data for common issues and return warnings.
+
+        Returns list of {level: "warning"|"error", message: str}
+        """
+        warnings = []
+        sv = excel_data.single_values or {}
+
+        # Issue 1: Check if sample_id was extracted from filename
+        meta_sid = excel_data.metadata.get("sample_id_from_filename")
+        if not meta_sid:
+            warnings.append({
+                "level": "warning",
+                "field": "sample_id",
+                "message": "文件名中未提取到样本编号，请在临床信息表单中手动填写",
+            })
+
+        # Issue 2: MSI percentage vs label conflict detection
+        msi_label = sv.get("MSI状态") or sv.get("msi_status")
+        msi_pct_raw = sv.get("MSI百分比") or sv.get("msi_score")
+        if msi_label and msi_pct_raw:
+            try:
+                msi_pct = float(msi_pct_raw)
+                # Thresholds: >=40 MSI-H, >=20 MSI-L, else MSS
+                if msi_pct >= 40 and "MSI-H" not in str(msi_label).upper():
+                    warnings.append({
+                        "level": "warning",
+                        "field": "msi_status",
+                        "message": f"MSI 百分比 ({msi_pct:.1f}%) 达到 MSI-H 阈值(≥40%)，"
+                                   f"但标签为 '{msi_label}'，存在冲突。系统将使用标签值。",
+                    })
+                elif msi_pct >= 20 and msi_pct < 40 and "MSI-L" not in str(msi_label).upper():
+                    if "MSS" in str(msi_label).upper() or "MSI-H" in str(msi_label).upper():
+                        warnings.append({
+                            "level": "warning",
+                            "field": "msi_status",
+                            "message": f"MSI 百分比 ({msi_pct:.1f}%) 处于 MSI-L 区间(20-40%)，"
+                                       f"但标签为 '{msi_label}'，存在冲突。系统将使用标签值。",
+                        })
+                elif msi_pct < 20 and "MSS" not in str(msi_label).upper():
+                    warnings.append({
+                        "level": "warning",
+                        "field": "msi_status",
+                        "message": f"MSI 百分比 ({msi_pct:.1f}%) 低于 MSI-L 阈值(<20%)，"
+                                   f"但标签为 '{msi_label}'，存在冲突。系统将使用标签值。",
+                    })
+            except (ValueError, TypeError):
+                pass
+
+        # Issue 3: report_date missing
+        report_date = sv.get("出报告日期") or sv.get("报告日期") or sv.get("report_date")
+        if not report_date:
+            from datetime import date
+            warnings.append({
+                "level": "info",
+                "field": "report_date",
+                "message": f"Excel 中未找到报告日期，将自动使用今天 ({date.today().isoformat()})",
+            })
+
+        return warnings
+
     def get_table_data(
         self, excel_data: ExcelDataSource, table_name: str, page: int = 1, page_size: int = 50
     ) -> dict[str, Any]:
@@ -202,10 +264,18 @@ class ReportGenBridge:
         excel_data = self.read_excel(excel_path)
 
         # If clinical_info is provided, inject into excel_data.single_values
+        # AND into metadata to override filename-based sample_id extraction
         if clinical_info:
             for key, value in clinical_info.items():
                 if value is not None and value != "":
                     excel_data.single_values[key] = value
+
+            # Fix Issue 1: Override filename-derived sample_id with form value
+            # The upstream ExcelReader extracts sample_id from filename, but when
+            # the file is uploaded via web (renamed to UUID), this extraction fails.
+            # Ensure the user-provided sample_id takes precedence.
+            if "sample_id" in clinical_info and clinical_info["sample_id"]:
+                excel_data.metadata["sample_id_from_filename"] = clinical_info["sample_id"]
 
         # Auto-detect project_name from project_type if not provided
         if project_type and not project_name:

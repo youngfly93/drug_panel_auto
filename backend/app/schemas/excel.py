@@ -6,6 +6,12 @@ from typing import Any, Optional
 from pydantic import BaseModel
 
 
+class ValidationWarning(BaseModel):
+    level: str  # "warning" | "error" | "info"
+    field: str
+    message: str
+
+
 class UploadResponse(BaseModel):
     upload_id: str
     original_filename: str
@@ -14,6 +20,7 @@ class UploadResponse(BaseModel):
     detected_project_type: Optional[str] = None
     detected_project_name: Optional[str] = None
     detection_confidence: Optional[float] = None
+    validation_warnings: list[ValidationWarning] = []
 
 
 class SheetInfo(BaseModel):

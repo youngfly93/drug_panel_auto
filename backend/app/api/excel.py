@@ -1,6 +1,7 @@
 """Excel upload and preview endpoints."""
 
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -54,8 +55,15 @@ def upload_excel(
     sheet_names = bridge.get_sheet_names(excel_data)
     _excel_cache[upload_id] = excel_data
 
-    # Detect project type (needs file path for filename-based matching)
-    detect = bridge.detect_project_type(str(stored_path), excel_data=excel_data)
+    # Detect project type using ORIGINAL filename (not UUID stored path)
+    # This is critical: upstream ProjectDetector matches keywords in filename
+    detect = bridge.detect_project_type(
+        str(Path(stored_path).parent / (file.filename or "upload.xlsx")),
+        excel_data=excel_data,
+    )
+
+    # Run data validation (Issue 1/2/3 checks)
+    validation_warnings = bridge.validate_excel_data(excel_data)
 
     # Persist upload record
     record = Upload(
@@ -81,6 +89,7 @@ def upload_excel(
             detected_project_type=detect.get("project_type"),
             detected_project_name=detect.get("project_name"),
             detection_confidence=detect.get("confidence"),
+            validation_warnings=validation_warnings,
         )
     )
 
