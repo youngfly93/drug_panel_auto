@@ -365,8 +365,26 @@ class TemplateRenderer:
                 tr = tbl.rows[idx]._tr
                 tbl._tbl.remove(tr)
                 removed += 1
-        if removed:
-            self.logger.debug("移除空白表格行", removed_rows=removed)
+        # #15: 删除只有表头的空数据表格（CNV/Fusion）
+        tables_removed = 0
+        cnv_fusion_markers = [
+            (["起始位置", "终止位置", "拷贝数"], "CNV"),
+            (["基因1", "基因2", "断点"], "Fusion"),
+        ]
+        for tbl in list(doc.tables):
+            if len(tbl.rows) <= 1:  # 只有表头，无数据行
+                header_text = " ".join(c.text.strip() for c in tbl.rows[0].cells) if tbl.rows else ""
+                for markers, name in cnv_fusion_markers:
+                    if all(m in header_text for m in markers):
+                        tbl._tbl.getparent().remove(tbl._tbl)
+                        tables_removed += 1
+                        self.logger.debug(f"移除空{name}表格", table=name)
+                        break
+        if tables_removed:
+            removed += tables_removed  # ensure save happens
+
+        if removed or tables_removed:
+            self.logger.debug("移除空白表格行", removed_rows=removed, removed_tables=tables_removed)
             doc.save(file_path)
 
     def _render_part3_formatted(self, file_path: str, context: dict) -> None:
