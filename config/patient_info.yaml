@@ -30,6 +30,7 @@ defaults:
   department: "肿瘤科"
   issuer: "张医生"
   reviewer: "李医生"
+  report_number: ""
 
 # 项目信息
 project_info:

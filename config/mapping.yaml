@@ -78,11 +78,11 @@ single_values:
     description: "样本采集日期"
   
   receive_date:
-    synonyms: ["接收日期", "收样日期", "Receive Date"]
+    synonyms: ["接收日期", "收样日期", "送检日期", "Receive Date"]
     type: date
     required: false
     format_template: "%Y-%m-%d"
-    description: "样本接收日期"
+    description: "样本接收/送检日期"
 
   # ---------- 项目信息 ----------
   project_name:
