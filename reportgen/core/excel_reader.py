@@ -390,6 +390,32 @@ class ExcelReader:
                                 "无法解析MSI百分比", value=msi_percentage
                             )
 
+            # ---- 提取 QC 指标 (Q30, 覆盖度, 平均深度等) ----
+            if "QC" in sheet_names:
+                try:
+                    qc_df = self._parse_sheet(
+                        excel_file, "QC", sheet_cache, skip_rows=0, header=None
+                    )
+                    if qc_df is not None and len(qc_df) > 0:
+                        for _, row in qc_df.iterrows():
+                            metric = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
+                            # column 1 is typically 'case' value
+                            value = row.iloc[1] if len(row) > 1 and pd.notna(row.iloc[1]) else None
+                            if value is None:
+                                continue
+                            metric_lower = metric.lower()
+                            if "q30" in metric_lower:
+                                data_source.single_values["Q30"] = value
+                                self.logger.info("提取Q30成功", value=value)
+                            elif "coverage" in metric_lower or "覆盖" in metric:
+                                data_source.single_values["覆盖度"] = value
+                                self.logger.info("提取覆盖度成功", value=value)
+                            elif "average" in metric_lower and "depth" in metric_lower or "平均深度" in metric:
+                                data_source.single_values["平均深度"] = value
+                                self.logger.info("提取平均深度成功", value=value)
+                except Exception as e:
+                    self.logger.warning("QC指标提取失败", error=str(e))
+
             if not include_tables:
                 self.logger.info(
                     "Excel单值字段读取完成（未读取表格数据）",

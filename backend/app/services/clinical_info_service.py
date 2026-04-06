@@ -45,7 +45,7 @@ FIELD_GROUPS = {
     },
     "sample": {
         "label": "样本与项目",
-        "fields": ["sample_type", "detection_method", "panel_name", "project_name"],
+        "fields": ["sample_type", "detection_method", "panel_name"],
     },
     "biomarkers": {
         "label": "检测指标",
@@ -53,15 +53,19 @@ FIELD_GROUPS = {
     },
 }
 
+# Fields hidden from web form (auto-computed or not applicable)
+ALWAYS_HIDE = ["project_name", "signature_image_path"]
+
 # Project-specific field overrides
 PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
     "lung_methylation": {
         "show": ["methylation_result"],
+        "hide": ALWAYS_HIDE,
         "require": ["methylation_result"],
     },
-    "crc_301_msi": {},
-    "crc_358_msi": {},
-    "mlf_result": {},
+    "crc_301_msi": {"hide": ALWAYS_HIDE},
+    "crc_358_msi": {"hide": ALWAYS_HIDE},
+    "mlf_result": {"hide": ALWAYS_HIDE},
 }
 
 # UI component mapping by field type

@@ -29,9 +29,21 @@ export function useDynamicForm(projectType: Ref<string | null>) {
               }
             }
           }
-          // Auto-fill report_date with today if not set (Fix Issue 3)
+          // Auto-fill report_date with today if not set
           if (!formData['report_date']) {
             formData['report_date'] = new Date().toISOString().slice(0, 10)
+          }
+          // Auto-fill project_name from project_type (#1 fix)
+          if (type) {
+            const nameMap: Record<string, string> = {
+              crc_301_msi: '结直肠癌301基因+MSI',
+              crc_358_msi: '结直肠癌358基因+MSI',
+              mlf_result: 'MLF基因检测结果',
+              lung_methylation: '肺癌甲基化',
+            }
+            if (nameMap[type]) {
+              formData['project_name'] = nameMap[type]
+            }
           }
         }
       } finally {

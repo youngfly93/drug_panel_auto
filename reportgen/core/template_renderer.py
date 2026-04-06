@@ -434,12 +434,7 @@ class TemplateRenderer:
                 c_elem = OxmlElement("w:color")
                 c_elem.set(qn("w:val"), color)
                 rPr.append(c_elem)
-            # 浅蓝背景（标记动态内容）
-            shd = OxmlElement("w:shd")
-            shd.set(qn("w:val"), "clear")
-            shd.set(qn("w:color"), "auto")
-            shd.set(qn("w:fill"), "B4D6F5")
-            rPr.append(shd)
+            # 生产报告不加背景色（#5 fix: 去掉浅蓝阴影）
 
             new_r.append(rPr)
             new_t = OxmlElement("w:t")
