@@ -418,9 +418,8 @@ class ExcelReader:
                             if m_lower == "q30" or "q30" in m_lower:
                                 data_source.single_values["Q30"] = _num(value)
                                 self.logger.info("提取Q30成功", value=str(value)[:30])
-                            # 覆盖度 / Coverage
-                            elif ("coverage" in m_lower or "覆盖" in metric
-                                  or ("mapping" in m_lower and "rate" in m_lower)):
+                            # 覆盖度 / Coverage (only real "coverage", not mapping rate)
+                            elif "coverage" in m_lower or "覆盖" in metric:
                                 data_source.single_values["覆盖度"] = _num(value)
                                 self.logger.info("提取覆盖度成功", value=str(value)[:30])
                             # 平均深度 / Average depth
