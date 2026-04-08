@@ -263,17 +263,41 @@ class ReportGenBridge:
         # Read Excel first
         excel_data = self.read_excel(excel_path)
 
-        # If clinical_info is provided, inject into excel_data.single_values
-        # AND into metadata to override filename-based sample_id extraction
+        # ========================================================
+        # CRITICAL: Inject clinical_info so FieldMapper picks it up
+        # ========================================================
+        # FieldMapper iterates mapping.yaml fields and searches
+        # excel_data.single_values for matching SYNONYMS (not var_names).
+        # So we must inject values using the FIRST SYNONYM as key.
         if clinical_info:
-            for key, value in clinical_info.items():
-                if value is not None and value != "":
-                    excel_data.single_values[key] = value
+            # Load mapping.yaml to get synonyms
+            import yaml
+            mapping_path = Path(self.config_dir) / "mapping.yaml"
+            with open(mapping_path, "r", encoding="utf-8") as f:
+                mapping_cfg = yaml.safe_load(f) or {}
+            single_values_cfg = mapping_cfg.get("single_values", {})
 
-            # Fix Issue 1: Override filename-derived sample_id with form value
-            # The upstream ExcelReader extracts sample_id from filename, but when
-            # the file is uploaded via web (renamed to UUID), this extraction fails.
-            # Ensure the user-provided sample_id takes precedence.
+            for var_name, value in clinical_info.items():
+                if value is None or value == "":
+                    continue
+
+                field_def = single_values_cfg.get(var_name)
+                if field_def and isinstance(field_def, dict):
+                    synonyms = field_def.get("synonyms", [])
+                    if synonyms:
+                        # Use first synonym as the key so FieldMapper's
+                        # matches_column_name() will match it
+                        excel_data.single_values[synonyms[0]] = value
+                    else:
+                        # Computed field (empty synonyms) — write to var_name directly
+                        # These get picked up as fallback via report_data.get_field
+                        excel_data.single_values[var_name] = value
+                else:
+                    # Unknown field — still inject under var_name for flexibility
+                    excel_data.single_values[var_name] = value
+
+            # Override filename-derived sample_id (the one used by patient_info.yaml lookup)
+            # This prevents patient_info.yaml fallback from overwriting user form input
             if "sample_id" in clinical_info and clinical_info["sample_id"]:
                 excel_data.metadata["sample_id_from_filename"] = clinical_info["sample_id"]
 

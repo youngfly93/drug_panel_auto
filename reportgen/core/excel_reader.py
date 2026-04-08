@@ -391,28 +391,62 @@ class ExcelReader:
                             )
 
             # ---- 提取 QC 指标 (Q30, 覆盖度, 平均深度等) ----
+            # QC sheet 是双 block 布局：
+            #   Block 1 (col 0-2): metric_name | case_value | control_value
+            #   Block 2 (col 11-12): Quality | Value (Q30/MappingRate/insert 等摘要)
             if "QC" in sheet_names:
                 try:
                     qc_df = self._parse_sheet(
                         excel_file, "QC", sheet_cache, skip_rows=0, header=None
                     )
                     if qc_df is not None and len(qc_df) > 0:
+                        def _match_metric(metric: str, value):
+                            """匹配常见 QC 指标名并写入 single_values。"""
+                            if value is None or (isinstance(value, float) and value != value):
+                                return
+
+                            # Strip trailing % from string values so float parsing works
+                            def _num(v):
+                                s = str(v).strip().rstrip('%').rstrip('X').rstrip('x')
+                                try:
+                                    return float(s)
+                                except (ValueError, TypeError):
+                                    return v  # keep original if can't parse
+
+                            m_lower = metric.lower()
+                            # Q30
+                            if m_lower == "q30" or "q30" in m_lower:
+                                data_source.single_values["Q30"] = _num(value)
+                                self.logger.info("提取Q30成功", value=str(value)[:30])
+                            # 覆盖度 / Coverage
+                            elif ("coverage" in m_lower or "覆盖" in metric
+                                  or ("mapping" in m_lower and "rate" in m_lower)):
+                                data_source.single_values["覆盖度"] = _num(value)
+                                self.logger.info("提取覆盖度成功", value=str(value)[:30])
+                            # 平均深度 / Average depth
+                            elif (("average" in m_lower and "depth" in m_lower)
+                                  or "平均深度" in metric
+                                  or "average sequencing depth" in m_lower):
+                                data_source.single_values["平均深度"] = _num(value)
+                                self.logger.info("提取平均深度成功", value=str(value)[:30])
+                            # 插入片段
+                            elif m_lower == "insert" or "insert size" in m_lower:
+                                data_source.single_values["插入片段"] = value
+
+                        n_cols = qc_df.shape[1]
                         for _, row in qc_df.iterrows():
-                            metric = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
-                            # column 1 is typically 'case' value
-                            value = row.iloc[1] if len(row) > 1 and pd.notna(row.iloc[1]) else None
-                            if value is None:
-                                continue
-                            metric_lower = metric.lower()
-                            if "q30" in metric_lower:
-                                data_source.single_values["Q30"] = value
-                                self.logger.info("提取Q30成功", value=value)
-                            elif "coverage" in metric_lower or "覆盖" in metric:
-                                data_source.single_values["覆盖度"] = value
-                                self.logger.info("提取覆盖度成功", value=value)
-                            elif "average" in metric_lower and "depth" in metric_lower or "平均深度" in metric:
-                                data_source.single_values["平均深度"] = value
-                                self.logger.info("提取平均深度成功", value=value)
+                            # Block 1: col 0 metric → col 1 value
+                            metric_b1 = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
+                            val_b1 = row.iloc[1] if n_cols > 1 and pd.notna(row.iloc[1]) else None
+                            if metric_b1 and val_b1 is not None:
+                                _match_metric(metric_b1, val_b1)
+
+                            # Block 2: col 11 metric → col 12 value (Quality/Value)
+                            if n_cols > 12:
+                                metric_b2 = str(row.iloc[11]).strip() if pd.notna(row.iloc[11]) else ""
+                                val_b2 = row.iloc[12] if pd.notna(row.iloc[12]) else None
+                                if metric_b2 and val_b2 is not None and metric_b2.lower() not in ("quality", "value"):
+                                    _match_metric(metric_b2, val_b2)
                 except Exception as e:
                     self.logger.warning("QC指标提取失败", error=str(e))
 
