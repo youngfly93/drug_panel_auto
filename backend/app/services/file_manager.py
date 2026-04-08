@@ -9,6 +9,8 @@ from fastapi import UploadFile
 
 from app.config import settings
 
+ALLOWED_SIGNATURE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
 
 def save_upload(file: UploadFile) -> tuple[str, Path, int]:
     """
@@ -49,3 +51,30 @@ def ensure_report_dir(task_id: str) -> Path:
     out = settings.report_dir / task_id
     out.mkdir(parents=True, exist_ok=True)
     return out
+
+
+def save_signature_upload(file: UploadFile) -> tuple[Path, int]:
+    """
+    Save an uploaded signature image under storage/signatures.
+
+    Returns: (stored_path, file_size_bytes)
+    """
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_SIGNATURE_EXTENSIONS:
+        raise ValueError(
+            "签名图片仅支持 PNG/JPG/JPEG/WEBP 格式"
+        )
+
+    today = date.today().isoformat()
+    dest_dir = settings.signature_dir / today
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    dest_path = dest_dir / f"{uuid.uuid4()}{suffix}"
+
+    size = 0
+    with open(dest_path, "wb") as f:
+        while chunk := file.file.read(8192):
+            size += len(chunk)
+            f.write(chunk)
+
+    return dest_path, size

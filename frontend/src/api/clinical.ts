@@ -5,6 +5,7 @@ export interface FieldUiHints {
   placeholder: string | null
   span: number
   options: string[] | null
+  accept: string | null
 }
 
 export interface FieldSchema {
@@ -43,6 +44,12 @@ export interface PatientInfo {
   receive_date?: string | null
 }
 
+export interface SignatureUploadResponse {
+  stored_path: string
+  original_filename: string
+  file_size_bytes: number
+}
+
 export const clinicalApi = {
   async getSchema(projectType?: string | null): Promise<ClinicalFormSchema> {
     const params = projectType ? { project_type: projectType } : {}
@@ -72,5 +79,14 @@ export const clinicalApi = {
 
   async deletePatient(sampleId: string): Promise<void> {
     await client.delete(`/patients/${encodeURIComponent(sampleId)}`)
+  },
+
+  async uploadSignature(file: File): Promise<SignatureUploadResponse> {
+    const form = new FormData()
+    form.append('file', file)
+    const { data } = await client.post('/signature-images', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data.data
   },
 }

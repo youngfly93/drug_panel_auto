@@ -319,4 +319,45 @@ class ReportGenBridge:
             project_name=project_name,
         )
 
+        # Post-process: inject signature image if provided
+        if result.get("success") and result.get("output_file") and clinical_info:
+            sig_path = clinical_info.get("signature_image_path")
+            if sig_path and Path(sig_path).exists():
+                try:
+                    self._insert_signature_image(result["output_file"], sig_path)
+                except Exception as e:
+                    if "warnings" not in result:
+                        result["warnings"] = []
+                    result["warnings"].append(f"签名图片插入失败: {e}")
+
         return result
+
+    def _insert_signature_image(self, docx_path: str, signature_path: str) -> None:
+        """Replace __SIG_IMG__ marker in the generated docx with an inline image."""
+        from docx import Document as DocxDocument
+        from docx.shared import Cm
+
+        doc = DocxDocument(docx_path)
+        MARKER = "__SIG_IMG__"
+
+        for p in doc.paragraphs:
+            if MARKER not in p.text:
+                continue
+            # Find run containing marker and split/replace
+            for run in p.runs:
+                if MARKER in run.text:
+                    # Remove marker text, keep any prefix/suffix
+                    parts = run.text.split(MARKER, 1)
+                    run.text = parts[0]
+                    # Insert image inline in the same run
+                    run.add_picture(signature_path, width=Cm(2.5))
+                    # Append suffix as new run if any
+                    if len(parts) > 1 and parts[1]:
+                        new_run = p.add_run(parts[1])
+                        # Copy font from original run
+                        if run.font.name:
+                            new_run.font.name = run.font.name
+                    break
+            break
+
+        doc.save(docx_path)

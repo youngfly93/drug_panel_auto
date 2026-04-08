@@ -19,7 +19,13 @@ from app.models import User  # noqa: F401 — ensure models are registered
 async def lifespan(app: FastAPI):
     """Application startup/shutdown events."""
     # Ensure storage directories exist
-    for d in [settings.upload_dir, settings.report_dir, settings.preview_dir, settings.storage_root / "db"]:
+    for d in [
+        settings.upload_dir,
+        settings.report_dir,
+        settings.preview_dir,
+        settings.signature_dir,
+        settings.storage_root / "db",
+    ]:
         d.mkdir(parents=True, exist_ok=True)
 
     # Create tables

@@ -6,10 +6,11 @@ from pydantic import BaseModel
 
 
 class FieldUiHints(BaseModel):
-    component: str  # input | input-number | date-picker | switch | select
+    component: str  # input | input-number | date-picker | switch | select | file-upload
     placeholder: Optional[str] = None
     span: int = 12  # grid span (out of 24)
     options: Optional[list[str]] = None  # for select component
+    accept: Optional[str] = None  # for file-upload component
 
 
 class FieldSchema(BaseModel):
@@ -60,3 +61,9 @@ class PatientDefaults(BaseModel):
 class ProjectInfo(BaseModel):
     project_name: Optional[str] = None
     detection_method: Optional[str] = None
+
+
+class SignatureUploadResponse(BaseModel):
+    stored_path: str
+    original_filename: str
+    file_size_bytes: int

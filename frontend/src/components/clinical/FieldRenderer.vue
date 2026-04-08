@@ -61,6 +61,28 @@
       />
     </el-select>
 
+    <!-- File upload -->
+    <div
+      v-else-if="field.ui.component === 'file-upload'"
+      style="display: flex; gap: 8px; width: 100%; align-items: center"
+    >
+      <el-input
+        :model-value="model || ''"
+        :placeholder="field.ui.placeholder || ''"
+        readonly
+        style="flex: 1"
+      />
+      <el-upload
+        :show-file-list="false"
+        :http-request="handleFileUpload"
+        :accept="field.ui.accept || 'image/*'"
+        :disabled="field.computed"
+      >
+        <el-button :disabled="field.computed">选择图片</el-button>
+      </el-upload>
+      <el-button v-if="model" :disabled="field.computed" @click="clearUpload">清空</el-button>
+    </div>
+
     <!-- Fallback -->
     <el-input v-else v-model="model" :disabled="field.computed" />
 
@@ -75,8 +97,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ElMessage, type UploadRequestOptions } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
-import type { FieldSchema } from '@/api/clinical'
+import { clinicalApi, type FieldSchema } from '@/api/clinical'
 
 const props = defineProps<{
   field: FieldSchema
@@ -92,4 +115,21 @@ const model = computed({
   get: () => props.modelValue,
   set: (val) => emit('update:modelValue', val),
 })
+
+async function handleFileUpload(options: UploadRequestOptions) {
+  try {
+    const result = await clinicalApi.uploadSignature(options.file as File)
+    model.value = result.stored_path
+    ElMessage.success(`签名图片已上传：${result.original_filename}`)
+    options.onSuccess?.(result)
+  } catch (error: any) {
+    const message = error?.response?.data?.detail || '签名图片上传失败'
+    ElMessage.error(message)
+    options.onError?.(error)
+  }
+}
+
+function clearUpload() {
+  model.value = ''
+}
 </script>

@@ -88,5 +88,9 @@ class Settings(BaseSettings):
     def preview_dir(self) -> Path:
         return self.storage_root / "previews"
 
+    @property
+    def signature_dir(self) -> Path:
+        return self.storage_root / "signatures"
+
 
 settings = Settings()

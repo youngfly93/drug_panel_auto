@@ -2,16 +2,18 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.schemas.clinical_info import (
     ClinicalFormSchema,
     PatientDefaults,
     PatientInfo,
     ProjectInfo,
+    SignatureUploadResponse,
 )
 from app.schemas.common import ApiResponse
 from app.services import clinical_info_service as svc
+from app.services.file_manager import save_signature_upload
 
 router = APIRouter(tags=["clinical-info"])
 
@@ -30,6 +32,25 @@ def get_clinical_schema(project_type: Optional[str] = None):
 @router.get("/patients", response_model=ApiResponse[list[PatientInfo]])
 def list_patients():
     return ApiResponse(data=svc.list_patients())
+
+
+@router.post("/signature-images", response_model=ApiResponse[SignatureUploadResponse])
+def upload_signature_image(file: UploadFile = File(...)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="缺少签名图片文件名")
+    if file.content_type and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="签名图片必须是图片格式")
+    try:
+        stored_path, file_size = save_signature_upload(file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ApiResponse(
+        data=SignatureUploadResponse(
+            stored_path=str(stored_path),
+            original_filename=file.filename,
+            file_size_bytes=file_size,
+        )
+    )
 
 
 @router.get("/patients/defaults", response_model=ApiResponse[PatientDefaults])

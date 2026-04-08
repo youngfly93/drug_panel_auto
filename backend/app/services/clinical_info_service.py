@@ -47,6 +47,10 @@ FIELD_GROUPS = {
         "label": "样本与项目",
         "fields": ["sample_type", "detection_method", "panel_name"],
     },
+    "approval": {
+        "label": "签发信息",
+        "fields": ["issuer", "reviewer", "signature_image_path"],
+    },
     "biomarkers": {
         "label": "检测指标",
         "fields": ["msi_status", "msi_score", "tmb_value", "tmb_unit", "final_conclusion"],
@@ -54,7 +58,7 @@ FIELD_GROUPS = {
 }
 
 # Fields hidden from web form (auto-computed or not applicable)
-ALWAYS_HIDE = ["project_name", "signature_image_path"]
+ALWAYS_HIDE = ["project_name"]
 
 # Project-specific field overrides
 PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
@@ -93,6 +97,14 @@ def _is_computed_field(field_def: dict) -> bool:
 
 def _build_ui_hints(key: str, field_def: dict) -> FieldUiHints:
     """Build UI hints for a field."""
+    if key == "signature_image_path":
+        return FieldUiHints(
+            component="file-upload",
+            placeholder="请选择或上传签名图片",
+            span=24,
+            accept=".png,.jpg,.jpeg,.webp",
+        )
+
     ftype = field_def.get("type", "string")
     component = TYPE_TO_COMPONENT.get(ftype, "input")
     desc = field_def.get("description", "")
