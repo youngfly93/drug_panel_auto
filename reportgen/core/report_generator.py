@@ -404,6 +404,11 @@ class ReportGenerator:
         if pattern:
             try:
                 filename = str(pattern).format(**filename_context)
+                # Clean up consecutive underscores and leading/trailing underscores
+                # caused by empty fields (e.g. "_MLB123_..." when patient_name is empty)
+                import re
+                filename = re.sub(r'_+', '_', filename)  # collapse multiple underscores
+                filename = filename.lstrip('_')  # remove leading underscore
             except KeyError as e:
                 self.logger.warning(
                     "文件名模板包含未知变量，回退默认命名",
