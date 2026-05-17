@@ -8,7 +8,7 @@ import pytest
 import yaml
 from docx import Document
 from docx.enum.section import WD_SECTION
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm
@@ -1187,6 +1187,21 @@ def test_detection_content_fill_underline_is_restored(tmp_path):
     assert runs[2].font.underline is None
 
 
+def test_report_generator_normalizes_duplicate_project_name_suffix():
+    assert (
+        ReportGenerator._normalize_project_name(
+            "结直肠癌358基因+MSI检测项目", "crc_358_msi"
+        )
+        == "结直肠癌358基因+MSI"
+    )
+    assert (
+        ReportGenerator._normalize_project_name(
+            "结直肠癌358基因+MSI检测项目检测项目", "crc_358_msi"
+        )
+        == "结直肠癌358基因+MSI"
+    )
+
+
 def test_variant_summary_table_restores_reviewed_link_style(tmp_path):
     docx_path = tmp_path / "variant_summary.docx"
     doc = Document()
@@ -1218,6 +1233,39 @@ def test_variant_summary_table_restores_reviewed_link_style(tmp_path):
     assert str(drug_run.font.color.rgb) == "0000FF"
     assert resist_run.font.underline is True
     assert str(resist_run.font.color.rgb) == "0000FF"
+
+
+def test_variant_summary_table_can_disable_link_underlines_from_panel_style(tmp_path):
+    docx_path = tmp_path / "variant_summary_plain.docx"
+    doc = Document()
+    table = doc.add_table(rows=2, cols=4)
+    headers = ["基因", "突变位点", "潜在获益靶向药物\n（证据等级）", "可能耐药或慎重药物\n（证据等级）"]
+    values = ["KRAS", "c.34G>A,\np.G12S", "司美替尼（C）", "西妥昔单抗（A）"]
+    for idx, value in enumerate(headers):
+        table.rows[0].cells[idx].text = value
+    for idx, value in enumerate(values):
+        table.rows[1].cells[idx].text = value
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._restore_variant_summary_table_style(
+        str(docx_path),
+        {
+            "panel_style": {
+                "variant_summary_table": {
+                    "link_underline": False,
+                    "link_color": "000000",
+                }
+            }
+        },
+    )
+
+    table = Document(docx_path).tables[0]
+    gene_run = table.rows[1].cells[0].paragraphs[0].runs[0]
+    drug_run = table.rows[1].cells[2].paragraphs[0].runs[0]
+    assert gene_run.font.underline is False
+    assert str(gene_run.font.color.rgb) == "000000"
+    assert drug_run.font.underline is False
+    assert str(drug_run.font.color.rgb) == "000000"
 
 
 def test_variant_detail_table_restores_reviewed_template_style(tmp_path):
@@ -1282,6 +1330,69 @@ def test_variant_detail_table_restores_reviewed_template_style(tmp_path):
     assert drug_run.font.underline is True
     assert str(drug_run.font.color.rgb) == "0000FF"
     assert table.rows[2].cells[7].paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.CENTER
+
+
+def test_variant_detail_table_can_disable_link_underlines_from_panel_style(tmp_path):
+    docx_path = tmp_path / "variant_detail_plain.docx"
+    doc = Document()
+    table = doc.add_table(rows=3, cols=9)
+    row0 = [
+        "基因名称",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "靶向药物信息",
+        "靶向药物信息",
+    ]
+    row1 = [
+        "基因名称",
+        "转录本号",
+        "染色体",
+        "外显子",
+        "位点",
+        "突变\n类型",
+        "频率\n(%)",
+        "潜在获益靶向药物\n（证据等级）",
+        "可能耐药或\n慎重药物\n（证据等级）",
+    ]
+    row2 = [
+        "KRAS",
+        "NM_004985.5",
+        "12",
+        "2",
+        "c.34G>A,\np.G12S",
+        "点突变",
+        "46.29",
+        "司美替尼（C）",
+        "西妥昔单抗（A）",
+    ]
+    for row, values in zip(table.rows, [row0, row1, row2]):
+        for idx, value in enumerate(values):
+            row.cells[idx].text = value
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._restore_variant_detail_table_style(
+        str(docx_path),
+        {
+            "panel_style": {
+                "variant_detail_table": {
+                    "link_underline": False,
+                    "link_color": "000000",
+                }
+            }
+        },
+    )
+
+    table = Document(docx_path).tables[0]
+    gene_run = table.rows[2].cells[0].paragraphs[0].runs[0]
+    drug_run = table.rows[2].cells[7].paragraphs[0].runs[0]
+    assert gene_run.font.underline is False
+    assert str(gene_run.font.color.rgb) == "000000"
+    assert drug_run.font.underline is False
+    assert str(drug_run.font.color.rgb) == "000000"
 
 
 def test_biomarker_table_restores_template_typography(tmp_path):
@@ -1444,6 +1555,30 @@ def test_empty_numbered_paragraphs_are_removed(tmp_path):
     ]
     assert bullets == ["保留", "也保留"]
     assert any(not p.text for p in rendered.paragraphs)
+
+
+def test_blank_page_break_before_references_heading_is_removed(tmp_path):
+    docx_path = tmp_path / "reference_break.docx"
+    doc = Document()
+    doc.add_paragraph("Gene List for MLseq (n=358)")
+    blank = doc.add_paragraph()
+    blank.add_run().add_break(WD_BREAK.PAGE)
+    doc.add_paragraph("5. 参考文献")
+    doc.add_paragraph("PMID: 23066310 KRAS mutation testing in metastatic colorectal cancer.")
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._remove_blank_page_breaks_before_headings(
+        str(docx_path)
+    )
+
+    rendered = Document(docx_path)
+    texts = [p.text for p in rendered.paragraphs]
+    assert texts == [
+        "Gene List for MLseq (n=358)",
+        "5. 参考文献",
+        "PMID: 23066310 KRAS mutation testing in metastatic colorectal cancer.",
+    ]
+    assert all('w:type="page"' not in p._p.xml for p in rendered.paragraphs)
 
 
 def test_template_tmb_msi_patient_narratives_are_dynamic():

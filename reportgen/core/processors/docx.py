@@ -144,8 +144,14 @@ def _run_toc_refresh(ctx: ProcessorContext) -> None:
         ctx.renderer._set_update_fields(ctx.output_path)
     except Exception:
         pass
-    ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
-    ctx.renderer._set_update_fields(ctx.output_path)
+    try:
+        ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
+    except Exception as refresh_err:
+        ctx.logger.warning("目录页码刷新失败，将继续最终刷新兜底", error=str(refresh_err))
+    try:
+        ctx.renderer._set_update_fields(ctx.output_path)
+    except Exception:
+        pass
 
 
 def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
@@ -154,6 +160,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
     ctx.renderer._normalize_quality_control_tables(ctx.output_path)
     ctx.renderer._optimize_variant_table_layout(ctx.output_path)
     ctx.renderer._cleanup_trailing_blank_page(ctx.output_path)
+    ctx.renderer._remove_blank_page_breaks_before_headings(ctx.output_path)
     try:
         ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
         ctx.renderer._set_update_fields(ctx.output_path)
@@ -166,7 +173,11 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
 
 def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     ctx.renderer._remove_template_underlines(ctx.output_path)
-    ctx.renderer._restore_variant_summary_table_style(ctx.output_path)
-    ctx.renderer._restore_variant_detail_table_style(ctx.output_path)
+    ctx.renderer._restore_variant_summary_table_style(
+        ctx.output_path, ctx.template_context
+    )
+    ctx.renderer._restore_variant_detail_table_style(
+        ctx.output_path, ctx.template_context
+    )
     ctx.renderer._restore_biomarker_table_style(ctx.output_path)
     ctx.renderer._restore_detection_content_underlines(ctx.output_path)

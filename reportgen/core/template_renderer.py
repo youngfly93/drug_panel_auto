@@ -198,6 +198,29 @@ class TemplateRenderer:
         return cfg if isinstance(cfg, dict) else {}
 
     @staticmethod
+    def _panel_style_config(context: dict | None, table_name: str) -> dict:
+        if not isinstance(context, dict):
+            return {}
+        root = context.get("panel_style")
+        if not isinstance(root, dict):
+            return {}
+        table_cfg = root.get(table_name)
+        return table_cfg if isinstance(table_cfg, dict) else {}
+
+    @staticmethod
+    def _bool_config(value: Any, default: bool) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().lower()
+        if text in {"1", "true", "yes", "y", "on"}:
+            return True
+        if text in {"0", "false", "no", "n", "off"}:
+            return False
+        return default
+
+    @staticmethod
     def _float_config(value: Any, default: float) -> float:
         try:
             return float(value)
@@ -445,7 +468,9 @@ class TemplateRenderer:
         if changed:
             doc.save(file_path)
 
-    def _restore_variant_summary_table_style(self, file_path: str) -> None:
+    def _restore_variant_summary_table_style(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
         """Restore reviewed link-style formatting in the 2.1 variant summary table."""
         from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE
         from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -455,6 +480,12 @@ class TemplateRenderer:
 
         doc = Document(file_path)
         changed = False
+        style_cfg = self._panel_style_config(context, "variant_summary_table")
+        link_underline = self._bool_config(style_cfg.get("link_underline"), True)
+        link_color_hex = str(style_cfg.get("link_color") or "0000FF").strip().lstrip("#")
+        if len(link_color_hex) != 6:
+            link_color_hex = "0000FF"
+        link_color = RGBColor.from_string(link_color_hex.upper())
 
         def is_variant_summary_table(table) -> bool:
             if len(table.columns) != 4 or not table.rows:
@@ -514,8 +545,8 @@ class TemplateRenderer:
                         run.font.color.rgb = RGBColor(255, 255, 255)
                     elif link_cell:
                         run.font.bold = False
-                        run.font.underline = True
-                        run.font.color.rgb = RGBColor(0, 0, 255)
+                        run.font.underline = link_underline
+                        run.font.color.rgb = link_color
                     else:
                         run.font.bold = False
                         run.font.underline = False
@@ -537,7 +568,9 @@ class TemplateRenderer:
         if changed:
             doc.save(file_path)
 
-    def _restore_variant_detail_table_style(self, file_path: str) -> None:
+    def _restore_variant_detail_table_style(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
         """Restore the reviewed 9-column 2.1 variant-detail table styling."""
         from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE
         from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -547,6 +580,12 @@ class TemplateRenderer:
 
         doc = Document(file_path)
         changed = False
+        style_cfg = self._panel_style_config(context, "variant_detail_table")
+        link_underline = self._bool_config(style_cfg.get("link_underline"), True)
+        link_color_hex = str(style_cfg.get("link_color") or "0000FF").strip().lstrip("#")
+        if len(link_color_hex) != 6:
+            link_color_hex = "0000FF"
+        link_color = RGBColor.from_string(link_color_hex.upper())
 
         def is_variant_detail_table(table) -> bool:
             if len(table.columns) != 9 or len(table.rows) < 2:
@@ -601,8 +640,8 @@ class TemplateRenderer:
                 run.font.underline = False
                 run.font.color.rgb = RGBColor(249, 251, 250)
             elif link:
-                run.font.underline = True
-                run.font.color.rgb = RGBColor(0, 0, 255)
+                run.font.underline = link_underline
+                run.font.color.rgb = link_color
             else:
                 run.font.underline = False
                 run.font.color.rgb = RGBColor(0, 0, 0)
@@ -1700,6 +1739,63 @@ class TemplateRenderer:
                 os.unlink(tmp_name)
 
         self.logger.debug("已清理文档尾部空白页", changed=changed)
+
+    def _remove_blank_page_breaks_before_headings(
+        self, file_path: str, headings: tuple[str, ...] | None = None
+    ) -> None:
+        """Remove blank page-break paragraphs immediately before known headings.
+
+        Some templates keep a blank paragraph containing only ``w:br type=page``
+        before a section heading. When the previous table already ends exactly at
+        a page boundary, Word/LibreOffice renders that paragraph as a visual
+        blank page. This removes only contiguous blank paragraphs before exact
+        heading text when at least one of those blanks carries a page break.
+        """
+        headings = headings or ("5. 参考文献",)
+        target_headings = {str(item).strip() for item in headings if str(item).strip()}
+        if not target_headings:
+            return
+
+        doc = Document(file_path)
+        paragraphs = list(doc.paragraphs)
+        to_remove = []
+
+        def has_page_break(paragraph) -> bool:
+            return 'w:type="page"' in paragraph._p.xml or "w:lastRenderedPageBreak" in paragraph._p.xml
+
+        def is_blank(paragraph) -> bool:
+            return not (paragraph.text or "").strip()
+
+        for idx, paragraph in enumerate(paragraphs):
+            if (paragraph.text or "").strip() not in target_headings:
+                continue
+            cluster = []
+            saw_page_break = False
+            prev_idx = idx - 1
+            while prev_idx >= 0 and is_blank(paragraphs[prev_idx]):
+                prev = paragraphs[prev_idx]
+                cluster.append(prev)
+                saw_page_break = saw_page_break or has_page_break(prev)
+                prev_idx -= 1
+            if saw_page_break:
+                to_remove.extend(cluster)
+
+        removed = 0
+        seen = set()
+        for paragraph in to_remove:
+            marker = id(paragraph._element)
+            if marker in seen:
+                continue
+            parent = paragraph._element.getparent()
+            if parent is None:
+                continue
+            parent.remove(paragraph._element)
+            seen.add(marker)
+            removed += 1
+
+        if removed:
+            doc.save(file_path)
+            self.logger.debug("已移除标题前空白分页段落", removed=removed)
 
     def _cleanup_section_spacing(self, file_path: str) -> None:
         """删除章节标题前的空白段落。

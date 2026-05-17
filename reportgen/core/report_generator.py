@@ -123,6 +123,9 @@ class ReportGenerator:
 
         try:
             canonical_project_type = normalize_project_type(project_type)
+            project_name = self._normalize_project_name(
+                project_name, canonical_project_type
+            )
             panel_registration = self._get_panel_registration(canonical_project_type)
             panel_package = (
                 panel_registration.package if panel_registration is not None else None
@@ -184,6 +187,9 @@ class ReportGenerator:
             report_content = self.config_loader.get_setting("report_content", {}) or {}
             if isinstance(report_content, dict):
                 report_data.set_field("report_content", report_content)
+            panel_style = self._load_panel_style_config(panel_package)
+            if panel_style:
+                report_data.set_field("panel_style", panel_style)
 
             # 3.6 358基因模板增强：添加模板特定的表格和字段
             # 可选接入：基因知识库（由 settings.yaml 决定是否启用）
@@ -499,6 +505,48 @@ class ReportGenerator:
             return get_panel_registry().get(project_type)
         except Exception:
             return None
+
+    @staticmethod
+    def _normalize_project_name(
+        project_name: Optional[str], project_type: Optional[str] = None
+    ) -> Optional[str]:
+        """Normalize UI-supplied panel names to the canonical display name.
+
+        Templates append wording such as "检测项目" in prose. Web forms and
+        operators sometimes pass a display label that already includes the same
+        suffix; stripping it here keeps report copy deterministic without making
+        each template compensate for caller-specific phrasing.
+        """
+        if project_name is None:
+            return None
+        normalized = str(project_name).strip()
+        if not normalized:
+            return normalized
+        suffixes = ("检测项目",)
+        for suffix in suffixes:
+            while normalized.endswith(suffix):
+                normalized = normalized[: -len(suffix)].strip()
+        return normalized
+
+    @staticmethod
+    def _load_panel_style_config(panel_package) -> dict:
+        """Load optional panel-level visual style rules from panel_rules YAML."""
+        if panel_package is None:
+            return {}
+        try:
+            import yaml
+
+            rule_file = panel_package.resolve_rule_file("panel_rules")
+            if not rule_file.exists():
+                return {}
+            with rule_file.open("r", encoding="utf-8") as fh:
+                rules = yaml.safe_load(fh) or {}
+        except Exception:
+            return {}
+        if not isinstance(rules, dict):
+            return {}
+        style = rules.get("style")
+        return style if isinstance(style, dict) else {}
 
     @staticmethod
     def _get_template_contract_spec(panel_package) -> Optional[dict]:
