@@ -20,11 +20,35 @@ _upstream = Path(str(settings.upstream_root))
 if str(_upstream) not in sys.path:
     sys.path.insert(0, str(_upstream))
 
-from reportgen.core.excel_reader import ExcelReader
-from reportgen.core.field_mapper import FieldMapper
-from reportgen.core.project_detector import ProjectDetector
-from reportgen.core.report_generator import ReportGenerator
-from reportgen.models.excel_data import ExcelDataSource
+from reportgen.core.excel_reader import ExcelReader  # noqa: E402
+from reportgen.core.field_mapper import FieldMapper  # noqa: E402
+from reportgen.core.project_detector import ProjectDetector  # noqa: E402
+from reportgen.core.report_generator import ReportGenerator  # noqa: E402
+from reportgen.core.validation import validate_excel_data_common  # noqa: E402
+from reportgen.models.excel_data import ExcelDataSource  # noqa: E402
+
+DERIVED_REPORT_FIELDS = {
+    "TMB",
+    "MSI状态",
+    "msi_status_cn",
+    "msi",
+    "msi_summary",
+    "tmb",
+    "tmb_status",
+    "tmb_reference",
+    "tmb_level_cn",
+    "tmb_summary",
+    "immuno_tips",
+    "immuno_positive_genes",
+    "immuno_negative_genes",
+    "immuno_hyperprogression_genes",
+}
+
+EXCEL_OWNED_BIOMARKER_FIELDS = {
+    "msi_status": ("MSI状态", "MSI结论", "MSI Status"),
+    "msi_score": ("MSI百分比", "MSI评分", "MSI Score"),
+    "tmb_value": ("TMB", "TMB值", "Tumor Mutation Burden"),
+}
 
 
 class ReportGenBridge:
@@ -125,69 +149,25 @@ class ReportGenBridge:
 
         Returns list of {level: "warning"|"error", message: str}
         """
-        warnings = []
-        sv = excel_data.single_values or {}
-
-        # Issue 1: Check if sample_id was extracted from filename
-        meta_sid = excel_data.metadata.get("sample_id_from_filename")
-        if not meta_sid:
-            warnings.append({
-                "level": "warning",
-                "field": "sample_id",
-                "message": "文件名中未提取到样本编号，请在临床信息表单中手动填写",
-            })
-
-        # Issue 2: MSI percentage vs label conflict detection
-        msi_label = sv.get("MSI状态") or sv.get("msi_status")
-        msi_pct_raw = sv.get("MSI百分比") or sv.get("msi_score")
-        if msi_label and msi_pct_raw:
-            try:
-                msi_pct = float(msi_pct_raw)
-                # Thresholds: >=40 MSI-H, >=20 MSI-L, else MSS
-                if msi_pct >= 40 and "MSI-H" not in str(msi_label).upper():
-                    warnings.append({
-                        "level": "warning",
-                        "field": "msi_status",
-                        "message": f"MSI 百分比 ({msi_pct:.1f}%) 达到 MSI-H 阈值(≥40%)，"
-                                   f"但标签为 '{msi_label}'，存在冲突。系统将使用标签值。",
-                    })
-                elif msi_pct >= 20 and msi_pct < 40 and "MSI-L" not in str(msi_label).upper():
-                    if "MSS" in str(msi_label).upper() or "MSI-H" in str(msi_label).upper():
-                        warnings.append({
-                            "level": "warning",
-                            "field": "msi_status",
-                            "message": f"MSI 百分比 ({msi_pct:.1f}%) 处于 MSI-L 区间(20-40%)，"
-                                       f"但标签为 '{msi_label}'，存在冲突。系统将使用标签值。",
-                        })
-                elif msi_pct < 20 and "MSS" not in str(msi_label).upper():
-                    warnings.append({
-                        "level": "warning",
-                        "field": "msi_status",
-                        "message": f"MSI 百分比 ({msi_pct:.1f}%) 低于 MSI-L 阈值(<20%)，"
-                                   f"但标签为 '{msi_label}'，存在冲突。系统将使用标签值。",
-                    })
-            except (ValueError, TypeError):
-                pass
-
-        # Issue 3: report_date missing
-        report_date = sv.get("出报告日期") or sv.get("报告日期") or sv.get("report_date")
-        if not report_date:
-            from datetime import date
-            warnings.append({
-                "level": "info",
-                "field": "report_date",
-                "message": f"Excel 中未找到报告日期，将自动使用今天 ({date.today().isoformat()})",
-            })
-
-        return warnings
+        return validate_excel_data_common(excel_data)
 
     def get_table_data(
-        self, excel_data: ExcelDataSource, table_name: str, page: int = 1, page_size: int = 50
+        self,
+        excel_data: ExcelDataSource,
+        table_name: str,
+        page: int = 1,
+        page_size: int = 50,
     ) -> dict[str, Any]:
         """Get table data for a specific sheet with pagination."""
         tables = excel_data.table_data or {}
         if table_name not in tables:
-            return {"columns": [], "rows": [], "total_rows": 0, "page": page, "page_size": page_size}
+            return {
+                "columns": [],
+                "rows": [],
+                "total_rows": 0,
+                "page": page,
+                "page_size": page_size,
+            }
 
         df = tables[table_name]
         if hasattr(df, "to_dict"):
@@ -197,7 +177,13 @@ class ReportGenBridge:
             end = start + page_size
             page_df = df.iloc[start:end]
             columns = list(df.columns)
-            rows = json.loads(page_df.to_json(orient="records", force_ascii=False, default_handler=str))
+            rows = json.loads(
+                page_df.to_json(
+                    orient="records",
+                    force_ascii=False,
+                    default_handler=str,
+                )
+            )
         elif isinstance(df, list):
             total = len(df)
             start = (page - 1) * page_size
@@ -205,7 +191,13 @@ class ReportGenBridge:
             rows = df[start:end]
             columns = list(rows[0].keys()) if rows else []
         else:
-            return {"columns": [], "rows": [], "total_rows": 0, "page": page, "page_size": page_size}
+            return {
+                "columns": [],
+                "rows": [],
+                "total_rows": 0,
+                "page": page,
+                "page_size": page_size,
+            }
 
         return {
             "columns": columns,
@@ -215,7 +207,11 @@ class ReportGenBridge:
             "page_size": page_size,
         }
 
-    def detect_project_type(self, excel_path: str, excel_data: Optional[ExcelDataSource] = None) -> dict[str, Any]:
+    def detect_project_type(
+        self,
+        excel_path: str,
+        excel_data: Optional[ExcelDataSource] = None,
+    ) -> dict[str, Any]:
         """
         Auto-detect project type from Excel filename + content.
 
@@ -232,9 +228,19 @@ class ReportGenBridge:
                     "confidence": result.get("confidence"),
                     "detected": result.get("detected", False),
                 }
-            return {"project_type": None, "project_name": None, "confidence": None, "detected": False}
+            return {
+                "project_type": None,
+                "project_name": None,
+                "confidence": None,
+                "detected": False,
+            }
         except Exception:
-            return {"project_type": None, "project_name": None, "confidence": None, "detected": False}
+            return {
+                "project_type": None,
+                "project_name": None,
+                "confidence": None,
+                "detected": False,
+            }
 
     def generate_report(
         self,
@@ -280,6 +286,14 @@ class ReportGenBridge:
             for var_name, value in clinical_info.items():
                 if value is None or value == "":
                     continue
+                if var_name in DERIVED_REPORT_FIELDS:
+                    continue
+                excel_owned_synonyms = EXCEL_OWNED_BIOMARKER_FIELDS.get(var_name)
+                if excel_owned_synonyms and any(
+                    key in excel_data.single_values for key in excel_owned_synonyms
+                ):
+                    # Prefer parsed Excel biomarkers over stale/hidden form data.
+                    continue
 
                 field_def = single_values_cfg.get(var_name)
                 if field_def and isinstance(field_def, dict):
@@ -301,11 +315,18 @@ class ReportGenBridge:
             if "sample_id" in clinical_info and clinical_info["sample_id"]:
                 excel_data.metadata["sample_id_from_filename"] = clinical_info["sample_id"]
 
-        # Auto-detect project_name from project_type if not provided
+        # Resolve project_name from project_type if not provided. This must not
+        # depend on fuzzy detection because operators can manually select a type
+        # for files whose names do not contain "301/358".
         if project_type and not project_name:
-            detect = self.detect_project_type(excel_path, excel_data=excel_data)
-            if detect.get("detected"):
-                project_name = detect.get("project_name")
+            for entry in self.detector.project_types:
+                if entry.get("id") == project_type:
+                    project_name = entry.get("name")
+                    break
+            if not project_name:
+                detect = self.detect_project_type(excel_path, excel_data=excel_data)
+                if detect.get("detected"):
+                    project_name = detect.get("project_name")
 
         result = self.generator.generate(
             excel_file=excel_path,

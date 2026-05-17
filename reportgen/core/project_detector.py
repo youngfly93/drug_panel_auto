@@ -566,25 +566,11 @@ class ProjectDetector:
                 except Exception:
                     pass
 
-        parts: list[str] = [str(single_values)]
-
-        # 将 sheet_names（若存在）也纳入识别文本：常见项目会在sheet名或表头出现关键标识
-        sheet_names = getattr(excel_data, "sheet_names", None)
-        if isinstance(sheet_names, list) and sheet_names:
-            parts.append(" ".join(str(s) for s in sheet_names if s is not None))
-
-        # 纳入关键表的列名（避免把整表转成超大字符串）
-        table_data = getattr(excel_data, "table_data", None)
-        if isinstance(table_data, dict) and table_data:
-            for sheet in ("Variations", "TMB", "Msisensor"):
-                rows = table_data.get(sheet)
-                if isinstance(rows, list) and rows:
-                    first = rows[0]
-                    if isinstance(first, dict) and first:
-                        cols = [str(k) for k in first.keys() if k is not None]
-                        parts.append(" ".join(cols[:60]))
-
-        return "\n".join([p for p in parts if p and str(p).strip()])
+        # Do not fall back to the full single_values dict, sheet names, or table
+        # columns. Generic columns such as ExistInsmall358 contain panel numbers
+        # and caused false CRC project detection. If no trusted project field is
+        # available, project detection should rely on the filename or user input.
+        return None
 
     def get_available_project_types(self) -> List[Dict[str, str]]:
         """

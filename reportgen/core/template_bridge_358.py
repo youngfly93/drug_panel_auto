@@ -23,9 +23,11 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import yaml
 
 from reportgen.knowledge import GeneKnowledgeProvider
+from reportgen.core.validation import build_msi_fields, build_tmb_fields
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
 from reportgen.utils.hgvs_utils import infer_variant_type_cn
+from reportgen.utils.text_utils import norm_text as _norm_text
 
 # Panel gene definitions for 358-gene colorectal cancer panel.
 #
@@ -232,6 +234,8 @@ class PanelConfig:
     panel_display_genes: List[Dict[str, str]] = field(
         default_factory=lambda: [dict(x) for x in _DEFAULT_PANEL_DISPLAY_GENES]
     )
+    reviewed_variant_overrides: List[Dict[str, Any]] = field(default_factory=list)
+    approved_drug_rows: List[Dict[str, str]] = field(default_factory=list)
 
     @property
     def all_immune_genes(self) -> Set[str]:
@@ -306,6 +310,12 @@ def load_panel_config(*, base_path: Optional[str] = None) -> PanelConfig:
                 )
             panel_display = items
 
+    def as_dict_list(key: str) -> List[Dict[str, Any]]:
+        value = raw.get(key)
+        if not isinstance(value, list):
+            return []
+        return [dict(row) for row in value if isinstance(row, dict)]
+
     pc = PanelConfig(
         class_i_genes=as_gene_set("class_i_genes", set(_DEFAULT_CLASS_I_GENES)),
         class_ii_genes=as_gene_set("class_ii_genes", set(_DEFAULT_CLASS_II_GENES)),
@@ -315,6 +325,8 @@ def load_panel_config(*, base_path: Optional[str] = None) -> PanelConfig:
         immune_hyperprogression_genes=as_gene_set(
             "immune_hyperprogression_genes", set(_DEFAULT_IMMUNE_HYPERPROGRESSION_GENES)
         ),
+        reviewed_variant_overrides=as_dict_list("reviewed_variant_overrides"),
+        approved_drug_rows=as_dict_list("crc_approved_drugs"),
     )
     if panel_display is not None:
         pc.panel_display_genes = panel_display
@@ -391,6 +403,8 @@ def load_crc_358_panel_config(*, base_path: Optional[str] = None) -> Optional[Pa
     _LOADED_CRC_358_CONFIG_PATH = cfg_path
     return cfg_path
 
+EXPLICIT_GENE_CLASS_LABELS = {"Ⅰ类", "Ⅱ类", "Ⅲ类"}
+
 # Mutation type translation
 MUTATION_TYPE_MAP = {
     "Missense": "错义突变",
@@ -405,37 +419,67 @@ MUTATION_TYPE_MAP = {
     "Stop_loss": "终止密码子丢失",
 }
 
+def _explicit_gene_class(value: Any) -> str:
+    """Return the reviewed I/II/III label from a raw class cell, if present."""
+    val = _norm_text(value)
+    return val if val in EXPLICIT_GENE_CLASS_LABELS else ""
 
-from reportgen.utils.text_utils import norm_text as _norm_text  # unified implementation
+
+def _has_explicit_gene_class_labels(
+    rows: List[Dict[str, Any]],
+    class_column: str = "ExistIn552",
+) -> bool:
+    """Whether this sheet contains reviewed Chinese class labels.
+
+    Some legacy workbooks use numeric 1/0 in ``ExistIn552`` as panel-membership
+    flags. Once any row contains an explicit I/II/III label, numeric values in
+    that same column must be treated as non-reviewed flags, not as classes.
+    """
+    return any(_explicit_gene_class(row.get(class_column)) for row in rows)
 
 
-def _get_gene_class(gene: str, exist_in_552: Any, panel_config: Optional[PanelConfig] = None) -> str:
+def _get_gene_class(
+    gene: str,
+    exist_in_552: Any,
+    panel_config: Optional[PanelConfig] = None,
+    *,
+    allow_gene_fallback: bool = True,
+) -> str:
     """
     Determine gene class based on gene name and ExistIn552 value.
 
     Args:
         gene: Gene symbol
         exist_in_552: ExistIn552 column value (1, 0, or Chinese labels)
+        allow_gene_fallback: For legacy numeric-only workbooks, infer I/II/III
+            from the panel config. For reviewed workbooks with explicit labels,
+            set False so numeric 1 remains only a panel-membership flag.
 
     Returns:
-        Gene class string: "Ⅰ类", "Ⅱ类", or "Ⅲ类"
+        Gene class string: "Ⅰ类", "Ⅱ类", "Ⅲ类", or "" when no reviewed class
+        can be resolved.
     """
     if panel_config is None:
         panel_config = get_default_panel_config()
-    # First check by gene name
+
+    val = _norm_text(exist_in_552)
+    if val in EXPLICIT_GENE_CLASS_LABELS:
+        return val
+    if val in ("0", "0.0", "False", "false"):
+        return ""
+    if not allow_gene_fallback:
+        return ""
+
+    # Legacy fallback: old workbooks used numeric flags, so derive class from
+    # reviewed panel config rather than from a patient-specific value.
     gene_upper = gene.upper()
     if gene_upper in panel_config.class_i_genes:
         return "Ⅰ类"
     if gene_upper in panel_config.class_ii_genes:
         return "Ⅱ类"
 
-    # If not in known classes, check ExistIn552
-    val = _norm_text(exist_in_552)
-    if val in ("Ⅰ类", "Ⅱ类", "Ⅲ类"):
-        return val
-
-    # Numeric mapping (if exists)
-    # For now, default to Ⅲ类 for unknown genes
+    # Numeric legacy rows that are panel members but not in I/II config remain
+    # III class; reviewed mixed-label sheets are handled by allow_gene_fallback.
     return "Ⅲ类"
 
 
@@ -473,6 +517,77 @@ def _format_frequency(freq: Any) -> str:
         return val
 
 
+def _as_text_list(value: Any) -> List[str]:
+    """Normalize YAML scalar/list values to a list of non-empty strings."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _join_text_value(value: Any) -> str:
+    return "\n".join(_as_text_list(value))
+
+
+def _override_gene_values(override: Dict[str, Any]) -> Set[str]:
+    values = _as_text_list(override.get("gene") or override.get("genes"))
+    return {value.upper() for value in values}
+
+
+def _variant_override_matches(
+    override: Dict[str, Any],
+    gene: str,
+    c_hgvs: str = "",
+    p_hgvs: str = "",
+    locus: str = "",
+) -> bool:
+    """Match a variant row against a reviewed YAML override rule."""
+    gene_norm = _norm_text(gene).upper()
+    if not gene_norm:
+        return False
+
+    override_genes = _override_gene_values(override)
+    if override_genes and gene_norm not in override_genes:
+        return False
+
+    c_values = set(_as_text_list(override.get("c_hgvs") or override.get("cHGVS")))
+    p_values = set(_as_text_list(override.get("p_hgvs") or override.get("pHGVS")))
+    c_norm = _norm_text(c_hgvs)
+    p_norm = _norm_text(p_hgvs)
+    locus_norm = _norm_text(locus)
+
+    if c_values and c_norm not in c_values and not any(c in locus_norm for c in c_values):
+        return False
+    if p_values and p_norm not in p_values and not any(p in locus_norm for p in p_values):
+        return False
+
+    return bool(c_values or p_values or override_genes)
+
+
+def _find_reviewed_variant_override(
+    panel_config: PanelConfig,
+    gene: str,
+    c_hgvs: str = "",
+    p_hgvs: str = "",
+    locus: str = "",
+) -> Optional[Dict[str, Any]]:
+    for override in panel_config.reviewed_variant_overrides:
+        if _variant_override_matches(override, gene, c_hgvs, p_hgvs, locus):
+            return override
+    return None
+
+
+def _drugs_from_override(override: Optional[Dict[str, Any]]) -> Tuple[str, str]:
+    if not override:
+        return "", ""
+    return (
+        _join_text_value(override.get("benefit_drugs")),
+        _join_text_value(override.get("caution_drugs")),
+    )
+
+
 def build_variants_for_template(
     excel_data: ExcelDataSource,
     filter_column: str = "ExistInsmall358",
@@ -503,10 +618,11 @@ def build_variants_for_template(
         panel_config = get_default_panel_config()
 
     variations = excel_data.get_table_data("Variations") or []
+    allow_gene_fallback = not _has_explicit_gene_class_labels(variations)
     variants = []
 
     for row in variations:
-        # Filter: only include variants with ExistInsmall358 == 1
+        # Filter: only include variants in the active CRC panel
         filter_val = row.get(filter_column)
         if filter_val not in (1, "1", True):
             continue
@@ -525,7 +641,14 @@ def build_variants_for_template(
             continue
 
         # Get gene class
-        gene_class = _get_gene_class(gene, row.get("ExistIn552"), panel_config=panel_config)
+        gene_class = _get_gene_class(
+            gene,
+            row.get("ExistIn552"),
+            panel_config=panel_config,
+            allow_gene_fallback=allow_gene_fallback,
+        )
+        if not gene_class:
+            continue
 
         # 批注#3: 只显示Ⅰ类和Ⅱ类基因
         if filter_class_i_ii_only and gene_class == "Ⅲ类":
@@ -535,13 +658,25 @@ def build_variants_for_template(
         p_hgvs = _norm_text(row.get("pHGVS_S") or row.get("pHGVS_A"))
         if not p_hgvs or p_hgvs == "*":
             p_hgvs = "--"
+        reviewed_override = _find_reviewed_variant_override(
+            panel_config,
+            gene,
+            c_hgvs,
+            "" if p_hgvs in {"--", "*"} else p_hgvs,
+        )
 
-        # Get clinical significance
+        # Get clinical significance. Missing CLNSIG is not evidence of pathogenicity;
+        # keep it explicit so downstream drug/immune summaries do not overstate it.
         clnsig = _norm_text(row.get("CLNSIG"))
         if clnsig and clnsig not in ("*", "-"):
             clinical_significance = clnsig
         else:
-            clinical_significance = "致病"  # Default for detected variants
+            clinical_significance = "临床意义未明"
+        if reviewed_override:
+            clinical_significance = (
+                _norm_text(reviewed_override.get("clinical_significance"))
+                or clinical_significance
+            )
 
         # Get drug associations (批注#5：来自自建数据库/既往报告口径)
         benefit_drugs = "--"
@@ -558,6 +693,10 @@ def build_variants_for_template(
             drug = _norm_text(row.get("Drug"))
             benefit_drugs = drug if drug and drug not in ("*", "-") else "--"
             caution_drugs = "--"
+        override_benefit, override_caution = _drugs_from_override(reviewed_override)
+        if override_benefit or override_caution:
+            benefit_drugs = override_benefit or "--"
+            caution_drugs = override_caution or "--"
 
         variant = {
             "gene": gene,
@@ -630,7 +769,7 @@ def build_summary_variants(
     summary_variants = []
     for v in variants:
         # 批注#19: Ⅲ类需要加上"（意义未明突变）"
-        clinical_significance = v.get("clinical_significance", "致病")
+        clinical_significance = v.get("clinical_significance", "临床意义未明")
         gene_class = v.get("gene_class", "")
         if add_class_iii_annotation and gene_class == "Ⅲ类":
             if "意义未明" not in clinical_significance:
@@ -657,6 +796,7 @@ def build_summary_variants(
 
 def build_immune_variants(
     excel_data: ExcelDataSource,
+    filter_column: str = "ExistInsmall358",
     filter_class_i_ii_only: bool = True,
     drug_lookup: Optional[Callable[[str, str, str, str], Tuple[str, str]]] = None,
     panel_config: Optional[PanelConfig] = None,
@@ -682,6 +822,7 @@ def build_immune_variants(
     # Get all 358 panel variants first (without class/important gene filtering)
     all_variants = build_variants_for_template(
         excel_data,
+        filter_column=filter_column,
         filter_class_i_ii_only=False,
         important_genes_only=False,
         drug_lookup=drug_lookup,
@@ -708,7 +849,7 @@ def build_immune_variants(
     def _is_pathogenic(gene: str, chgvs: str) -> bool:
         clnsig = _clnsig_map.get(f"{gene.upper()}:{chgvs}", "").lower()
         if not clnsig or clnsig in ("*", "-", ""):
-            return True  # 无 CLNSIG 数据时默认放行
+            return False
         return any(kw in clnsig for kw in _pathogenic_keywords)
 
     for v in all_variants:
@@ -725,7 +866,7 @@ def build_immune_variants(
             continue
 
         # Add "(意义未明突变)" annotation for Ⅲ类 if not filtered out
-        clinical_sig = v.get("clinical_significance", "致病")
+        clinical_sig = v.get("clinical_significance", "临床意义未明")
         if gene_class == "Ⅲ类" and "意义未明" not in clinical_sig:
             v = v.copy()
             v["clinical_significance"] = f"{clinical_sig}（意义未明突变）"
@@ -785,40 +926,11 @@ def build_msi_summary(excel_data: ExcelDataSource) -> Dict[str, str]:
     """
     Build MSI summary fields.
 
-    Returns dict with: msi_status, msi_status_cn, msi_summary
+    Returns dict with: msi_status, msi_status_cn, msi_summary and dynamic
+    narrative fields for the Word template.
     """
     # 优先使用ExcelReader已抽取的单值（Msisensor解析）
-    raw_status = excel_data.single_values.get("MSI状态")
-    msi_status = str(raw_status).strip() if raw_status is not None else ""
-    if not msi_status:
-        msi_status = "MSS"
-
-    up = msi_status.upper()
-    if up == "MSS":
-        msi_status = "MSS"
-        msi_status_cn = "微卫星稳定型，MSS"
-        msi_summary = "微卫星稳定型，MSS"
-    elif up == "MSI-H":
-        msi_status = "MSI-H"
-        msi_status_cn = "微卫星高度不稳定，MSI-H"
-        msi_summary = "微卫星不稳定型，MSI-H"
-    elif up == "MSI-L":
-        msi_status = "MSI-L"
-        msi_status_cn = "微卫星低度不稳定，MSI-L"
-        msi_summary = "微卫星不稳定型，MSI-L"
-    elif up.startswith("MSI"):
-        # 兜底：保持原始值
-        msi_status_cn = msi_status
-        msi_summary = f"微卫星不稳定型，{msi_status}"
-    else:
-        msi_status_cn = msi_status
-        msi_summary = msi_status
-
-    return {
-        "msi_status": msi_status,
-        "msi_status_cn": msi_status_cn,
-        "msi_summary": msi_summary,
-    }
+    return build_msi_fields(excel_data.single_values.get("MSI状态"))
 
 
 def build_tmb_summary(excel_data: ExcelDataSource) -> Dict[str, str]:
@@ -827,50 +939,10 @@ def build_tmb_summary(excel_data: ExcelDataSource) -> Dict[str, str]:
 
     Returns dict with: tmb_value, tmb_status, tmb_level_cn, tmb_reference, tmb_summary
     """
-    # Get TMB from single values
-    tmb_val = excel_data.single_values.get("TMB")
-
-    if tmb_val is None:
-        return {
-            "tmb_value": "--",
-            "tmb_status": "L",
-            "tmb_level_cn": "低",
-            "tmb_reference": 10,
-            "tmb_summary": "",
-        }
-
-    try:
-        tmb = float(tmb_val)
-        # 样本类型决定参考值：组织10；血液16
-        sample_type = str(excel_data.single_values.get("样本类型") or "组织")
-        threshold = (
-            16 if ("血" in sample_type or "blood" in sample_type.lower()) else 10
-        )
-
-        tmb_status = "H" if tmb >= threshold else "L"
-        tmb_level_cn = "高" if tmb_status == "H" else "低"
-        level = "TMB-H" if tmb_status == "H" else "TMB-L"
-        direction = "高于" if tmb_status == "H" else "低于"
-        unit = "mutations/Mb"
-
-        return {
-            "tmb_value": f"{tmb:.1f}",
-            "tmb_status": tmb_status,
-            "tmb_level_cn": tmb_level_cn,
-            "tmb_reference": threshold,
-            "tmb_summary": (
-                f"{tmb:.1f}{unit}，{level}\n"
-                f"(本次检测结果{direction}参考值\n{threshold} mutations/Mb)"
-            ),
-        }
-    except (ValueError, TypeError):
-        return {
-            "tmb_value": str(tmb_val),
-            "tmb_status": "L",
-            "tmb_level_cn": "低",
-            "tmb_reference": 10,
-            "tmb_summary": str(tmb_val),
-        }
+    return build_tmb_fields(
+        excel_data.single_values.get("TMB"),
+        sample_type=excel_data.single_values.get("样本类型") or "组织",
+    )
 
 
 def format_immune_positive_result(
@@ -969,6 +1041,52 @@ def _build_nccn_and_immune_fields(
     逻辑：遍历 all_variants，按基因+外显子/检测内容匹配，
     检出时填入 cHGVS，pHGVS；未检出时填"未检出"/"未检出有害变异"。
     """
+    nccn_map = {
+        "EGFR_EX18": ("EGFR", "外显子18"), "EGFR_EX19": ("EGFR", "外显子19"),
+        "EGFR_EX20": ("EGFR", "外显子20"), "EGFR_EX21": ("EGFR", "外显子21"),
+        "KRAS_EX2": ("KRAS", "外显子2"), "KRAS_EX3": ("KRAS", "外显子3"),
+        "KRAS_EX4": ("KRAS", "外显子4"),
+        "ALK_FUSION": ("ALK", "融合"), "ROS1_FUSION": ("ROS1", "融合"),
+        "RET_FUSION": ("RET", "融合"),
+        "ERBB2_MUT": ("ERBB2", "突变"), "ERBB2_AMP": ("ERBB2", "扩增"),
+        "PIK3CA_EX10": ("PIK3CA", "外显子10"), "PIK3CA_EX21": ("PIK3CA", "外显子21"),
+        "MET_EX14SKIP": ("MET", "外显子14跳跃"), "MET_AMP": ("MET", "扩增"),
+        "NRAS_EX2": ("NRAS", "外显子2"), "NRAS_EX3": ("NRAS", "外显子3"),
+        "NRAS_EX4": ("NRAS", "外显子4"),
+        "BRAF_V600": ("BRAF", "密码子600"),
+        "FGFR123_MUT": ("FGFR1", "突变"), "FGFR123_FUSION": ("FGFR1", "融合"),
+        "NTRK123_FUSION": ("NTRK1", "融合"),
+        "KIT_EX9": ("KIT", "外显子9"), "KIT_EX11": ("KIT", "外显子11"),
+        "KIT_EX13": ("KIT", "外显子13"), "KIT_EX17": ("KIT", "外显子17"),
+        "PDGFRA_EX12": ("PDGFRA", "外显子12"), "PDGFRA_EX14": ("PDGFRA", "外显子14"),
+        "PDGFRA_EX18": ("PDGFRA", "外显子18"),
+        "BRCA12_MUT": ("BRCA1", "突变"), "IDH12_MUT": ("IDH1", "突变"),
+    }
+    imm_pos_keys = [
+        "MLH1", "MSH2", "MSH6", "PMS2", "POLE", "POLD1",
+        "CD274", "PDCD1LG2", "PBRM1", "KRAS", "KRAS_TP53",
+        "TET1", "SERPINB3", "SERPINB4", "DDR",
+    ]
+    imm_neg_keys = [
+        "PTEN", "JAK1", "JAK2", "B2M", "CTNNB1",
+        "EGFR_L858R", "ALK", "MET", "STK11", "KRAS_STK11",
+        "KEAP1", "IFNGR12",
+    ]
+    imm_hyper_keys = [
+        "MDM2", "MDM4", "DNMT3A", "EGFR_AMP",
+        "CCND1", "FGF3", "FGF4", "FGF19",
+    ]
+
+    # 先打固定默认值，避免 2.3/3.3 因任何解析缺口出现空白单元格。
+    for key in nccn_map:
+        report_data.set_field(f"nccn_{key}", "未检出")
+    for key in imm_pos_keys:
+        report_data.set_field(f"imm_pos_{key}", "未检出有害变异")
+    for key in imm_neg_keys:
+        report_data.set_field(f"imm_neg_{key}", "未检出有害变异")
+    for key in imm_hyper_keys:
+        report_data.set_field(f"imm_hyper_{key}", "未检出有害变异")
+
     # 构建基因→变异映射（同一基因可能有多个变异）
     gene_variants: Dict[str, List[Dict[str, str]]] = {}
     for v in all_variants:
@@ -978,9 +1096,18 @@ def _build_nccn_and_immune_fields(
 
     # 从原始 Variations 补充（all_variants 可能被 ExistInsmall358 过滤）
     raw_variations = excel_data.get_table_data("Variations") or []
+    allow_gene_fallback = not _has_explicit_gene_class_labels(raw_variations)
     for r in raw_variations:
         g = _norm_text(r.get("Gene_Symbol") or r.get("Gene"))
         if not g:
+            continue
+        gene_class = _get_gene_class(
+            g,
+            r.get("ExistIn552"),
+            panel_config=get_default_panel_config(),
+            allow_gene_fallback=allow_gene_fallback,
+        )
+        if not gene_class:
             continue
         c = _norm_text(r.get("cHGVS"))
         if not c or not c.startswith("c."):
@@ -994,6 +1121,7 @@ def _build_nccn_and_immune_fields(
             gene_variants.setdefault(g_upper, []).append({
                 "gene": g, "cHGVS": c, "pHGVS": p or "",
                 "exon": _norm_text(r.get("ExIn_ID")),
+                "gene_class": gene_class,
             })
 
     # 合并 CNV 数据（NCCN 表需要检测 ERBB2 扩增等）
@@ -1034,6 +1162,15 @@ def _build_nccn_and_immune_fields(
             for v in variants:
                 exon = str(v.get("exon", "")).lower()
                 c_hgvs = v.get("cHGVS", "")
+                c_hgvs_norm = str(c_hgvs or "")
+                c_hgvs_upper = c_hgvs_norm.upper()
+                c_hgvs_lower = c_hgvs_norm.lower()
+                is_fusion = "融合" in c_hgvs_norm or "融合" in exon or "fusion" in c_hgvs_lower
+                is_cnv = (
+                    c_hgvs_upper.startswith("CNV:")
+                    or "扩增" in c_hgvs_norm
+                    or "amp" in c_hgvs_lower
+                )
                 # 匹配外显子号或特殊类型
                 if ef.startswith("ex") or ef.startswith("外显子"):
                     exon_num = re.search(r"\d+", ef)
@@ -1045,10 +1182,12 @@ def _build_nccn_and_immune_fields(
                         filtered.append(v)
                 elif "扩增" in ef or "amp" in ef:
                     # 只匹配 CNV 扩增类型的条目
-                    if "CNV" in c_hgvs or "扩增" in c_hgvs or "amp" in c_hgvs.lower():
+                    if is_cnv:
                         filtered.append(v)
                 elif "突变" in ef or "mut" in ef:
-                    filtered.append(v)
+                    # "突变"行只展示 SNV/indel 等序列变异，避免混入同基因 CNV/Fusion。
+                    if not is_cnv and not is_fusion:
+                        filtered.append(v)
                 elif "密码子" in ef:
                     # 特殊：BRAF 密码子600 → 检查 p.V600
                     if "600" in ef and "V600" in (v.get("pHGVS", "") or c_hgvs):
@@ -1065,83 +1204,84 @@ def _build_nccn_and_immune_fields(
         for v in variants:
             c = v.get("cHGVS", "")
             p = v.get("pHGVS", "")
+            if not c:
+                continue
             if p and p not in ("--", "*", ""):
                 parts.append(f"{c}，{p}")
             else:
                 parts.append(c)
-        return "\n".join(parts)
+        return "\n".join(parts) if parts else "未检出"
+
+    def _immune_eligible_variants(gene_key: str) -> List[Dict[str, str]]:
+        """Return immune-table variants after I/II class filtering."""
+        return [
+            v for v in gene_variants.get(gene_key.upper(), [])
+            if v.get("gene_class") in {"Ⅰ类", "Ⅱ类"}
+        ]
 
     def _immune_result(gene_key: str) -> str:
         """免疫基因检测结果：检出时返回变异详情；未检出时返回标准文本。"""
-        variants = gene_variants.get(gene_key.upper(), [])
+        variants = _immune_eligible_variants(gene_key)
         if not variants:
             return "未检出有害变异"
         parts = []
         for v in variants:
             c = v.get("cHGVS", "")
             p = v.get("pHGVS", "")
+            if not c:
+                continue
             if p and p not in ("--", "*", ""):
                 parts.append(f"{c}，{p}")
             else:
                 parts.append(c)
-        return "\n".join(parts)
+        return "\n".join(parts) if parts else "未检出有害变异"
+
+    def _first_detected(results: List[str], default: str) -> str:
+        for result in results:
+            value = str(result or "").strip()
+            if value and value not in {"--", default}:
+                return value
+        return default
 
     # ===== T[5] NCCN 检测基因表 =====
-    nccn_map = {
-        "EGFR_EX18": ("EGFR", "外显子18"), "EGFR_EX19": ("EGFR", "外显子19"),
-        "EGFR_EX20": ("EGFR", "外显子20"), "EGFR_EX21": ("EGFR", "外显子21"),
-        "KRAS_EX2": ("KRAS", "外显子2"), "KRAS_EX3": ("KRAS", "外显子3"),
-        "KRAS_EX4": ("KRAS", "外显子4"),
-        "ALK_FUSION": ("ALK", "融合"), "ROS1_FUSION": ("ROS1", "融合"),
-        "RET_FUSION": ("RET", "融合"),
-        "ERBB2_MUT": ("ERBB2", "突变"), "ERBB2_AMP": ("ERBB2", "扩增"),
-        "PIK3CA_EX10": ("PIK3CA", "外显子10"), "PIK3CA_EX21": ("PIK3CA", "外显子21"),
-        "MET_EX14SKIP": ("MET", "外显子14跳跃"), "MET_AMP": ("MET", "扩增"),
-        "NRAS_EX2": ("NRAS", "外显子2"), "NRAS_EX3": ("NRAS", "外显子3"),
-        "NRAS_EX4": ("NRAS", "外显子4"),
-        "BRAF_V600": ("BRAF", "密码子600"),
-        "FGFR123_MUT": ("FGFR1", "突变"), "FGFR123_FUSION": ("FGFR1", "融合"),
-        "NTRK123_FUSION": ("NTRK1", "融合"),
-        "KIT_EX9": ("KIT", "外显子9"), "KIT_EX11": ("KIT", "外显子11"),
-        "KIT_EX13": ("KIT", "外显子13"), "KIT_EX17": ("KIT", "外显子17"),
-        "PDGFRA_EX12": ("PDGFRA", "外显子12"), "PDGFRA_EX14": ("PDGFRA", "外显子14"),
-        "PDGFRA_EX18": ("PDGFRA", "外显子18"),
-        "BRCA12_MUT": ("BRCA1", "突变"), "IDH12_MUT": ("IDH1", "突变"),
-    }
     for key, (gene, exon_filter) in nccn_map.items():
         # FGFR1/2/3 和 NTRK1/2/3 需要合并多个基因
         if key == "FGFR123_MUT":
             results = [_format_result(g, "突变") for g in ("FGFR1", "FGFR2", "FGFR3")]
-            val = next((r for r in results if r != "未检出"), "未检出")
+            val = _first_detected(results, "未检出")
         elif key == "FGFR123_FUSION":
             results = [_format_result(g, "融合") for g in ("FGFR1", "FGFR2", "FGFR3")]
-            val = next((r for r in results if r != "未检出"), "未检出")
+            val = _first_detected(results, "未检出")
         elif key == "NTRK123_FUSION":
             results = [_format_result(g, "融合") for g in ("NTRK1", "NTRK2", "NTRK3")]
-            val = next((r for r in results if r != "未检出"), "未检出")
+            val = _first_detected(results, "未检出")
         elif key == "BRCA12_MUT":
             results = [_format_result(g, "突变") for g in ("BRCA1", "BRCA2")]
-            val = next((r for r in results if r != "未检出"), "未检出")
+            val = _first_detected(results, "未检出")
         elif key == "IDH12_MUT":
             results = [_format_result(g, "突变") for g in ("IDH1", "IDH2")]
-            val = next((r for r in results if r != "未检出"), "未检出")
+            val = _first_detected(results, "未检出")
         else:
             val = _format_result(gene, exon_filter)
         report_data.set_field(f"nccn_{key}", val)
 
     # ===== T[6] 免疫正相关基因 =====
-    imm_pos_keys = [
-        "MLH1", "MSH2", "MSH6", "PMS2", "POLE", "POLD1",
-        "CD274", "PDCD1LG2", "PBRM1", "KRAS", "KRAS_TP53",
-        "TET1", "SERPINB3", "SERPINB4", "DDR",
-    ]
     for key in imm_pos_keys:
         if key == "KRAS_TP53":
             # 共突变：两者都检出才算
-            k_var = gene_variants.get("KRAS", [])
-            t_var = gene_variants.get("TP53", [])
+            k_var = _immune_eligible_variants("KRAS")
+            t_var = _immune_eligible_variants("TP53")
             if k_var and t_var:
-                val = "检出共突变"
+                found = []
+                for v in t_var + k_var:
+                    c = v.get("cHGVS", "")
+                    p = v.get("pHGVS", "")
+                    g = v.get("gene", "")
+                    if p and p not in ("--", "*", ""):
+                        found.append(f"{g}：{c}，{p}")
+                    elif c:
+                        found.append(f"{g}：{c}")
+                val = "\n".join(found) if found else "未检出有害变异"
             else:
                 val = "未检出有害变异"
         elif key == "DDR":
@@ -1153,7 +1293,7 @@ def _build_nccn_and_immune_fields(
             ]
             found = []
             for dg in ddr_genes:
-                vs = gene_variants.get(dg.upper(), [])
+                vs = _immune_eligible_variants(dg)
                 for v in vs:
                     c = v.get("cHGVS", "")
                     p = v.get("pHGVS", "")
@@ -1167,11 +1307,6 @@ def _build_nccn_and_immune_fields(
         report_data.set_field(f"imm_pos_{key}", val)
 
     # ===== T[7] 免疫负相关基因 =====
-    imm_neg_keys = [
-        "PTEN", "JAK1", "JAK2", "B2M", "CTNNB1",
-        "EGFR_L858R", "ALK", "MET", "STK11", "KRAS_STK11",
-        "KEAP1", "IFNGR12",
-    ]
     for key in imm_neg_keys:
         if key == "EGFR_L858R":
             # EGFR L858R 或 EX19del 特定突变
@@ -1179,12 +1314,24 @@ def _build_nccn_and_immune_fields(
             found = [v for v in vs if "L858R" in (v.get("pHGVS", "") or "") or "EX19" in (v.get("cHGVS", "") or "")]
             val = "\n".join(f"{v.get('cHGVS','')}" for v in found) if found else "未检出有害变异"
         elif key == "KRAS_STK11":
-            k_var = gene_variants.get("KRAS", [])
-            s_var = gene_variants.get("STK11", [])
-            val = "检出共突变" if (k_var and s_var) else "未检出有害变异"
+            k_var = _immune_eligible_variants("KRAS")
+            s_var = _immune_eligible_variants("STK11")
+            if k_var and s_var:
+                found = []
+                for v in k_var + s_var:
+                    c = v.get("cHGVS", "")
+                    p = v.get("pHGVS", "")
+                    g = v.get("gene", "")
+                    if p and p not in ("--", "*", ""):
+                        found.append(f"{g}：{c}，{p}")
+                    elif c:
+                        found.append(f"{g}：{c}")
+                val = "\n".join(found) if found else "未检出有害变异"
+            else:
+                val = "未检出有害变异"
         elif key == "IFNGR12":
-            r1 = gene_variants.get("IFNGR1", [])
-            r2 = gene_variants.get("IFNGR2", [])
+            r1 = _immune_eligible_variants("IFNGR1")
+            r2 = _immune_eligible_variants("IFNGR2")
             found = []
             for v in r1 + r2:
                 c = v.get("cHGVS", "")
@@ -1200,16 +1347,209 @@ def _build_nccn_and_immune_fields(
         report_data.set_field(f"imm_neg_{key}", val)
 
     # ===== T[8] 免疫超进展基因 =====
-    imm_hyper_keys = [
-        "MDM2", "MDM4", "DNMT3A", "EGFR_AMP",
-        "CCND1", "FGF3", "FGF4", "FGF19",
-    ]
     for key in imm_hyper_keys:
         if key == "EGFR_AMP":
-            val = _immune_result("EGFR")  # 扩增检测
+            val = _format_result("EGFR", "扩增")  # 扩增检测
+            if val == "未检出":
+                val = "未检出有害变异"
         else:
             val = _immune_result(key)
         report_data.set_field(f"imm_hyper_{key}", val)
+
+
+def _resolve_crc_filter_column(excel_data: ExcelDataSource) -> Optional[str]:
+    """Pick the active panel membership column for CRC 358/301 Excel layouts."""
+    variations_data = excel_data.get_table_data("Variations") or []
+    if not variations_data:
+        return "ExistInsmall358"
+    first_row_keys = set(variations_data[0].keys()) if variations_data[0] else set()
+    for candidate in ("ExistInsmall358", "ExistInsmall301"):
+        if candidate in first_row_keys:
+            return candidate
+    return None
+
+
+def _build_crc_approved_drugs(panel_config: PanelConfig) -> List[Dict[str, str]]:
+    """Build the CRC 2.2 approved/backup targeted-drug table from YAML config."""
+    rows: List[Dict[str, str]] = []
+    for row in panel_config.approved_drug_rows:
+        drug = _join_text_value(row.get("drug") or row.get("Drug"))
+        gene = _join_text_value(row.get("gene") or row.get("Gene"))
+        indication = _norm_text(
+            row.get("indication")
+            or row.get("药物适应情况")
+            or row.get("recommendation")
+        )
+        if not drug and not gene and not indication:
+            continue
+        rows.append(
+            {
+                "Drug": drug,
+                "Gene": gene,
+                "药物适应情况": indication,
+            }
+        )
+    return rows
+
+
+def _load_drug_brand_map(*, base_path: Optional[str] = None) -> Dict[str, str]:
+    """Load marketed drug brand names from config/drug_brands.yaml."""
+    candidates: List[Path] = []
+    if base_path:
+        root = Path(str(base_path)).expanduser().resolve()
+        candidates.append(root / "config" / "drug_brands.yaml")
+    candidates.append(Path("config") / "drug_brands.yaml")
+    candidates.append(Path(__file__).resolve().parents[2] / "config" / "drug_brands.yaml")
+
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        brands = raw.get("brands") if isinstance(raw, dict) else None
+        if not isinstance(brands, dict):
+            continue
+        return {
+            str(drug).strip(): str(brand).strip()
+            for drug, brand in brands.items()
+            if str(drug).strip() and str(brand).strip()
+        }
+    return {}
+
+
+def build_targeted_drug_brand_summary(
+    variants: List[Dict[str, str]],
+    *,
+    base_path: Optional[str] = None,
+) -> str:
+    """Build marketed-drug brand summary from final displayed drug columns.
+
+    The source is the already-filtered 2.1 variants table, so III/hidden rows
+    cannot leak into the brand summary. The brand map is maintained in config.
+    """
+    brand_map = _load_drug_brand_map(base_path=base_path)
+    if not brand_map:
+        return ""
+
+    seen: Set[str] = set()
+    brand_names = sorted(brand_map, key=len, reverse=True)
+
+    for row in variants:
+        text = "\n".join(
+            str(row.get(key) or "")
+            for key in ("benefit_drugs", "caution_drugs")
+        )
+        if not text or text.strip() in {"--", "-"}:
+            continue
+
+        matches: List[Tuple[int, str]] = []
+        for drug in brand_names:
+            start = text.find(drug)
+            while start >= 0:
+                matches.append((start, drug))
+                start = text.find(drug, start + len(drug))
+        for _, drug in sorted(matches, key=lambda x: x[0]):
+            if drug in seen:
+                continue
+            seen.add(drug)
+
+    if not seen:
+        return ""
+
+    drugs = [drug for drug in brand_map if drug in seen]
+    return "、".join(f"{drug}[{brand_map[drug]}]" for drug in drugs) + "。"
+
+
+def _override_has_detected_variant(
+    override: Dict[str, Any],
+    report_data: ReportData,
+) -> bool:
+    """Return True only when this sample contains the reviewed variant.
+
+    Reviewed overrides can add/replace drug text, but they must never create a
+    variant that was not actually detected in the current Excel result.
+    """
+    candidate_tables = ("variants", "summary_variants", "variants_2_1")
+    for table_name in candidate_tables:
+        for row in report_data.get_table(table_name) or []:
+            gene = _norm_text(row.get("gene") or row.get("Gene"))
+            c_hgvs = _norm_text(row.get("cHGVS") or row.get("c_hgvs"))
+            p_hgvs = _norm_text(row.get("pHGVS") or row.get("p_hgvs"))
+            locus = _norm_text(row.get("locus") or row.get("variant_site"))
+            if _variant_override_matches(override, gene, c_hgvs, p_hgvs, locus):
+                return True
+    return False
+
+
+def _patch_reviewed_variant_override_rows(
+    report_data: ReportData,
+    panel_config: PanelConfig,
+) -> None:
+    """Apply reviewed YAML variant overrides to rendered 2.1 and summary tables."""
+    overrides = panel_config.reviewed_variant_overrides
+    if not overrides:
+        return
+
+    rows = report_data.get_table("variants_2_1") or []
+    changed = False
+    for row in rows:
+        gene = _norm_text(row.get("gene")).upper()
+        locus = _norm_text(row.get("locus"))
+        override = _find_reviewed_variant_override(panel_config, gene, locus=locus)
+        if not override:
+            continue
+        benefit, caution = _drugs_from_override(override)
+        if benefit or caution:
+            row["benefit_drugs"] = benefit or "--"
+            row["caution_drugs"] = caution or "--"
+            changed = True
+    if changed:
+        report_data.set_table("variants_2_1", rows)
+
+    tips = list(report_data.get_table("targeted_drug_tips") or [])
+    for override in overrides:
+        benefit, caution = _drugs_from_override(override)
+        if not (benefit or caution):
+            continue
+        if not _override_has_detected_variant(override, report_data):
+            continue
+        genes = sorted(_override_gene_values(override))
+        if not genes:
+            continue
+        c_values = _as_text_list(override.get("c_hgvs") or override.get("cHGVS"))
+        p_values = _as_text_list(override.get("p_hgvs") or override.get("pHGVS"))
+        gene = genes[0]
+        variant_site = _norm_text(override.get("variant_site"))
+        if not variant_site:
+            site_parts = []
+            if c_values:
+                site_parts.append(c_values[0])
+            if p_values:
+                site_parts.append(p_values[0])
+            variant_site = ",\n".join(site_parts)
+        if not variant_site:
+            continue
+        has_tip = any(
+            _variant_override_matches(
+                override,
+                _norm_text(row.get("gene")),
+                locus=_norm_text(row.get("variant_site")),
+            )
+            for row in tips
+        )
+        if has_tip:
+            continue
+        tips.append(
+            {
+                "gene": gene,
+                "variant_site": variant_site,
+                "benefit_drugs": benefit or "--",
+                "caution_drugs": caution or "--",
+            }
+        )
+    report_data.set_table("targeted_drug_tips", tips)
 
 
 def enhance_report_data(
@@ -1275,34 +1615,52 @@ def enhance_report_data(
 
             drug_lookup = _drug_lookup
 
-    # Panel 前置校验：检查 Variations 表是否包含 CRC panel 必需列（ExistInsmall358）
-    # 如果不包含，说明数据不是 CRC panel 格式，跳过增强逻辑避免错误覆盖
-    variations_data = excel_data.get_table_data("Variations") or []
-    if variations_data:
-        first_row_keys = set(variations_data[0].keys()) if variations_data[0] else set()
-        if "ExistInsmall358" not in first_row_keys:
-            import logging
-            logging.getLogger("reportgen").warning(
-                "Variations 表缺少 ExistInsmall358 列，跳过 CRC-358 panel 增强逻辑"
-            )
-            return report_data
+    # Panel 前置校验：CRC-358 使用 ExistInsmall358，CRC-301 使用 ExistInsmall301。
+    # 两者都不存在时才跳过，避免把非 CRC panel 强行套用 CRC 口径。
+    filter_column = _resolve_crc_filter_column(excel_data)
+    if not filter_column:
+        import logging
+        logging.getLogger("reportgen").warning(
+            "Variations 表缺少 ExistInsmall358/ExistInsmall301 列，跳过 CRC panel 增强逻辑"
+        )
+        return report_data
 
     # Build main variants table (批注#3: 只含重要基因的Ⅰ类、Ⅱ类)
-    variants = build_variants_for_template(excel_data, drug_lookup=drug_lookup, panel_config=pc)
+    variants = build_variants_for_template(
+        excel_data,
+        filter_column=filter_column,
+        drug_lookup=drug_lookup,
+        panel_config=pc,
+    )
     report_data.set_table("variants", variants)
+    report_data.set_field(
+        "targeted_drug_brand_summary",
+        build_targeted_drug_brand_summary(variants, base_path=base_path),
+    )
 
     # Build all variants for summary (含Ⅲ类)
-    all_variants = build_all_variants_for_template(excel_data, drug_lookup=drug_lookup, panel_config=pc)
+    all_variants = build_all_variants_for_template(
+        excel_data,
+        filter_column=filter_column,
+        drug_lookup=drug_lookup,
+        panel_config=pc,
+    )
     report_data.set_table("all_variants", all_variants)
 
     # Build summary variants (批注#19: Ⅲ类加"意义未明突变"标注)
     summary_variants = build_summary_variants(all_variants)
     report_data.set_table("summary_variants", summary_variants)
 
-    # Build immune variants — 按免疫基因集筛选，不按 CRC Ⅰ/Ⅱ类硬裁
-    # 确保 JAK1 等 Ⅲ类但属于免疫相关的变异能正确出现在免疫摘要中
+    # Build immune variants — reviewed final reports only use I/II class
+    # variants for immune positive/negative summaries. III/unknown rows may
+    # remain in full variant lists, but they must not trigger immune benefit
+    # or resistance summaries.
     immune_variants = build_immune_variants(
-        excel_data, filter_class_i_ii_only=False, drug_lookup=drug_lookup, panel_config=pc
+        excel_data,
+        filter_column=filter_column,
+        filter_class_i_ii_only=True,
+        drug_lookup=drug_lookup,
+        panel_config=pc,
     )
     report_data.set_table("immune_positive_variants", immune_variants["positive"])
     report_data.set_table("immune_negative_variants", immune_variants["negative"])
@@ -1369,6 +1727,13 @@ def enhance_report_data(
     # ====== T[5] NCCN 检测基因表 + T[6-8] 免疫基因表 动态填充 ======
     _build_nccn_and_immune_fields(report_data, all_variants, excel_data)
 
+    # 2.1/摘要表中的人工复核变异覆盖口径由 panel YAML 配置驱动。
+    _patch_reviewed_variant_override_rows(report_data, pc)
+
+    # 2.2 是 CRC 适应症固定药物表，不来自 CtDrug 全量药敏表。
+    if not report_data.get_table("chemotherapy"):
+        report_data.set_table("chemotherapy", _build_crc_approved_drugs(pc))
+
     # MSI/TMB 字段由 FieldMapper 生成（终版口径）；此处仅做缺失兜底，避免覆盖
     for key, value in build_msi_summary(excel_data).items():
         cur = report_data.get_field(key)
@@ -1403,19 +1768,39 @@ def enhance_report_data(
             "靶向药物提示回填失败: %s", e
         )
 
+    report_content_cfg = report_data.get_field("report_content")
+    report_content_cfg = report_content_cfg if isinstance(report_content_cfg, dict) else {}
+
+    def _select_part3_variants(scope: str, default_variants: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        scope_key = str(scope or "").strip().lower()
+        if scope_key in {"summary", "summary_variants"}:
+            return summary_variants
+        if scope_key in {"all", "all_variants"}:
+            return all_variants
+        if scope_key in {"visible", "variants", "part2", "part2_variants"}:
+            return variants
+        return default_variants
+
     # Build gene knowledge sections (批注#20-35: 基因诊疗知识)
     if gene_knowledge_provider is not None:
         try:
             # Load knowledge base if not already loaded
             gene_knowledge_provider.load(base_path)
 
-            # Build knowledge sections only for Part 2 visible variants
-            # 第三部分口径：只解析第二部分已上屏的变异（variants = Ⅰ/Ⅱ类重要基因）
-            # 避免用 all_variants (58个) 导致报告膨胀到 100+ 页
-            part2_variants = variants  # Ⅰ/Ⅱ类重要基因变异
+            # 第三部分解析范围由 settings.report_content 控制。默认仍支持只解析
+            # 2.1 主表变异；本次 reviewed CRC 口径使用 summary_variants，包含
+            # 第二维度汇总中展示的 III 类/非用药变异，但不扩展到全 panel。
+            part3_variants = _select_part3_variants(
+                report_content_cfg.get("part3_variant_scope", "variants"),
+                variants,
+            )
+            reference_variants = _select_part3_variants(
+                report_content_cfg.get("part3_reference_variant_scope", "variants"),
+                part3_variants,
+            )
             gene_knowledge_sections = (
                 gene_knowledge_provider.build_all_gene_knowledge_sections(
-                    variants=part2_variants, cancer_type="结直肠癌"
+                    variants=part3_variants, cancer_type="结直肠癌"
                 )
             )
             report_data.set_table("gene_knowledge_sections", gene_knowledge_sections)
@@ -1437,16 +1822,16 @@ def enhance_report_data(
             report_data.set_table("drug_benefit_sections", drug_benefit_sections)
             report_data.set_table("drug_caution_sections", drug_caution_sections)
 
-            # Build references (参考文献) — 同样只覆盖第二部分上屏的变异
+            # Build references (参考文献) — follows configured Part 3 scope.
             references = gene_knowledge_provider.build_all_references_flat(
-                variants=part2_variants, max_per_gene=5
+                variants=reference_variants, max_per_gene=5
             )
             report_data.set_table("references", references)
             report_data.set_table("gene_references", references)  # 模板中引用名
 
             # Also provide grouped references by gene
             references_by_gene = gene_knowledge_provider.build_references(
-                variants=part2_variants, max_per_gene=5
+                variants=reference_variants, max_per_gene=5
             )
             report_data.set_table("references_by_gene", references_by_gene)
 

@@ -311,4 +311,8 @@ class DataCleaner:
                 self.logger.warning(
                     "必填字段缺失或为空", field=field_name, current_value=value
                 )
-                report_data.add_validation_error(f"缺失必填字段: {field_name}")
+                prefix = f"缺失必填字段: {field_name}"
+                if not any(
+                    str(err).startswith(prefix) for err in report_data.validation_errors
+                ):
+                    report_data.add_validation_error(prefix)

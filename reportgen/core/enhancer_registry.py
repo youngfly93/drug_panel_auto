@@ -85,6 +85,11 @@ _REGISTRY: Dict[str, PanelEnhancer] = {
     "lung_methylation": _NOOP,
 }
 
+_ALIASES: Dict[str, str] = {
+    "crc_301": "crc_301_msi",
+    "crc_358": "crc_358_msi",
+}
+
 
 def get_enhancer(project_type: Optional[str] = None) -> PanelEnhancer:
     """Look up the enhancer for a given project type.
@@ -95,7 +100,8 @@ def get_enhancer(project_type: Optional[str] = None) -> PanelEnhancer:
     """
     if project_type is None:
         return _NOOP
-    return _REGISTRY.get(project_type, _NOOP)
+    normalized = _ALIASES.get(project_type, project_type)
+    return _REGISTRY.get(normalized, _NOOP)
 
 
 def register_enhancer(project_type: str, enhancer: PanelEnhancer) -> None:

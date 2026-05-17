@@ -164,6 +164,12 @@ class ReportGenerator:
                         new=project_name,
                     )
 
+            # Report body literals and report-structure switches remain
+            # operator-configurable and need to be available during enhancement.
+            report_content = self.config_loader.get_setting("report_content", {}) or {}
+            if isinstance(report_content, dict):
+                report_data.set_field("report_content", report_content)
+
             # 3.6 358基因模板增强：添加模板特定的表格和字段
             # 可选接入：基因知识库（由 settings.yaml 决定是否启用）
             gene_knowledge_provider = None
@@ -202,12 +208,50 @@ class ReportGenerator:
                 gene_knowledge_provider=gene_knowledge_provider,
                 base_path=str(Path(self.config_dir).parent),
             )
+            self._apply_clinical_diagnosis_for_display(report_data)
             self.logger.log_event(
                 "template_enhancement_completed",
                 variants=len(report_data.get_table("variants") or []),
                 summary_variants=len(report_data.get_table("summary_variants") or []),
                 undetected_genes=len(report_data.get_table("undetected_genes") or []),
             )
+
+            consultation_phone = str(
+                report_content.get("consultation_phone", "")
+                if isinstance(report_content, dict)
+                else ""
+                or ""
+            ).strip()
+            consultation_template = str(
+                (
+                    report_content.get(
+                        "consultation_line_template",
+                        "咨询电话：{phone}。",
+                    )
+                    if isinstance(report_content, dict)
+                    else "咨询电话：{phone}。"
+                )
+                or ""
+            ).strip()
+            if consultation_phone and consultation_template:
+                try:
+                    consultation_line = consultation_template.format(
+                        phone=consultation_phone
+                    )
+                except Exception:
+                    consultation_line = consultation_template
+                report_data.set_field("consultation_phone", consultation_phone)
+                report_data.set_field("consultation_line", consultation_line)
+            report_data.set_field(
+                "show_hla_table",
+                bool(
+                    report_content.get("show_hla_table", False)
+                    if isinstance(report_content, dict)
+                    else False
+                ),
+            )
+
+            self._set_patient_salutation(report_data)
 
             # 检查验证错误
             if not report_data.is_valid():
@@ -239,19 +283,10 @@ class ReportGenerator:
                         missing_fields=missing_important,
                     )
 
-            # 4.5 回填 report_date：若缺失则用当天日期，确保模板正文不留空
-            # 使用 data.report_date_format（报告正文日期格式），不复用 naming.date_format（文件名格式）
+            # 4.5 report_date 缺失时显式标记，不静默回填当天日期。
             rd = report_data.get_field("report_date")
             if rd is None or (isinstance(rd, str) and rd.strip() == ""):
-                date_fmt = self.config_loader.get_setting(
-                    "data.report_date_format", "%Y-%m-%d"
-                )
-                fallback_date = datetime.now().strftime(date_fmt)
-                report_data.set_field("report_date", fallback_date)
-                self.logger.warning(
-                    "report_date缺失，已回填当天日期",
-                    fallback_date=fallback_date,
-                )
+                self._mark_missing_report_date(report_data)
 
             # 5. 生成输出文件名
             if not output_filename:
@@ -433,6 +468,36 @@ class ReportGenerator:
 
         self.logger.debug("生成输出文件名", filename=filename)
         return filename
+
+    def _mark_missing_report_date(self, report_data: ReportData) -> None:
+        """Mark missing report_date explicitly instead of silently using today."""
+        report_data.set_field("report_date", "未填写")
+        if not any(
+            str(err).startswith("缺失必填字段: report_date")
+            for err in report_data.validation_errors
+        ):
+            report_data.add_validation_error("缺失必填字段: report_date")
+        self.logger.warning("report_date缺失，报告中已标记为未填写")
+
+    def _set_patient_salutation(self, report_data: ReportData) -> None:
+        """Derive the patient-letter salutation from the mapped gender field."""
+        gender_text = str(report_data.get_field("gender") or "").strip()
+        report_data.set_field(
+            "patient_salutation",
+            "女士" if "女" in gender_text else "先生",
+        )
+
+    def _apply_clinical_diagnosis_for_display(self, report_data: ReportData) -> None:
+        """Use clinical_diagnosis for the basic-info display when cancer_type is empty.
+
+        `cancer_type` is also used by drug-knowledge filters. Keeping the displayed
+        diagnosis separate prevents form-only diagnosis text from narrowing drug
+        evidence lookup unless the caller intentionally sets `cancer_type`.
+        """
+        diagnosis = str(report_data.get_field("clinical_diagnosis") or "").strip()
+        current = str(report_data.get_field("cancer_type") or "").strip()
+        if diagnosis and diagnosis not in {"-", "--"} and current in {"", "-", "--"}:
+            report_data.set_field("cancer_type", diagnosis)
 
     def validate_inputs(
         self, excel_file: str, template_file: str, output_dir: str

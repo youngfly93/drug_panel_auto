@@ -26,7 +26,7 @@ single_values:
     type: string
     required: false
     default_value: ""
-    description: "报告编号，如MLJY-LZ258792"
+    description: "报告编号，如MLJY-LZ000001"
 
   gender:
     synonyms: ["性别", "Gender"]
@@ -97,6 +97,13 @@ single_values:
     required: false
     default_value: "-"
     description: "肿瘤类型，如：结直肠癌、肺癌等"
+
+  clinical_diagnosis:
+    synonyms: ["临床诊断", "诊断", "Clinical Diagnosis"]
+    type: string
+    required: false
+    default_value: "-"
+    description: "报告基本信息区展示的临床诊断；不直接参与药物知识库过滤"
   
   panel_name:
     synonyms: ["Panel名称", "Panel", "基因组"]
@@ -147,7 +154,7 @@ single_values:
     synonyms: ["MSI状态中文", "MSI Status CN"]
     type: string
     required: false
-    default_value: "微卫星稳定型，MSS"
+    default_value: "未检测"
     description: "MSI状态中文描述：微卫星稳定型，MSS / 微卫星高度不稳定，MSI-H / 微卫星低度不稳定，MSI-L"
 
   msi:
@@ -196,6 +203,27 @@ single_values:
     default_value: ""
     description: "MSI展示摘要（如“微卫星稳定型，MSS”）"
 
+  msi_detail_sentence:
+    synonyms: []
+    type: string
+    required: false
+    default_value: ""
+    description: "MSI正文结论句（由程序按MSI状态生成）"
+
+  msi_detail_interpretation:
+    synonyms: []
+    type: string
+    required: false
+    default_value: ""
+    description: "MSI正文解读（由程序按MSI状态生成）"
+
+  msi_tips:
+    synonyms: []
+    type: string
+    required: false
+    default_value: ""
+    description: "MSI表格用药提示（由程序按MSI状态生成）"
+
   immuno_tips:
     synonyms: []
     type: string
@@ -228,22 +256,43 @@ single_values:
     synonyms: ["TMB状态", "TMB Level"]
     type: string
     required: false
-    default_value: "L"
+    default_value: "未检测"
     description: "TMB状态：H(高)/L(低)"
 
   tmb_reference:
     synonyms: ["TMB参考值", "TMB Reference"]
     type: float
     required: false
-    default_value: 10
+    default_value: null
     description: "TMB参考值，组织样本默认10，血液样本16"
 
   tmb_level_cn:
     synonyms: ["TMB水平中文", "TMB Level CN"]
     type: string
     required: false
-    default_value: "低"
+    default_value: "未检测"
     description: "TMB水平中文描述：高/低"
+
+  tmb_detail_sentence:
+    synonyms: []
+    type: string
+    required: false
+    default_value: ""
+    description: "TMB正文结论句（由程序按TMB值和阈值生成）"
+
+  tmb_detail_interpretation:
+    synonyms: []
+    type: string
+    required: false
+    default_value: ""
+    description: "TMB正文解读（由程序按TMB-H/TMB-L/未检测生成）"
+
+  tmb_drug_note:
+    synonyms: []
+    type: string
+    required: false
+    default_value: ""
+    description: "TMB-H时展示的免疫药物说明，TMB-L/未检测时为空"
 
   # 甲基化结果（肺癌项目）
   methylation_result:

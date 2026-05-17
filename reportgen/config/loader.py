@@ -359,7 +359,7 @@ class ConfigLoader:
         Returns:
             患者信息字典
         """
-        patient_info_file = self.config_dir / "patient_info.yaml"
+        patient_info_file = self._patient_info_file()
 
         if not patient_info_file.exists():
             self.logger.warning("患者信息配置文件不存在", file=str(patient_info_file))
@@ -401,6 +401,20 @@ class ConfigLoader:
         except Exception as e:
             self.logger.error("加载患者信息失败", error=str(e))
             return {}
+
+    def _patient_info_file(self) -> Path:
+        """Resolve patient info YAML path, allowing runtime storage outside repo."""
+        override = os.environ.get("REPORTGEN_PATIENT_INFO_PATH")
+        if not override:
+            override = self.get_setting("data.patient_info.path", None)
+
+        if override:
+            path = Path(str(override)).expanduser()
+            if not path.is_absolute():
+                path = self.project_root / path
+            return path.resolve()
+
+        return self.config_dir / "patient_info.yaml"
 
     def resolve_path(self, relative_path: str) -> Path:
         """将配置中的相对路径解析为基于项目根目录的绝对路径。

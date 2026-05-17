@@ -423,6 +423,92 @@ extensions:
     plugin_dir: "plugins/"
     auto_load: false
 
+# ---------- 报告正文固定文案 ----------
+report_content:
+  consultation_phone: "022-87190699"
+  consultation_line_template: "咨询电话：{phone}。"
+  show_hla_table: false
+  part3_variant_scope: "summary_variants"
+  part3_reference_variant_scope: "summary_variants"
+  patient_letter:
+    after_greeting:
+      - "感谢您选择本机构为您精心定的{project_name}检测项目。天津脉络医学检验很荣幸能为您提供基因检测服务。"
+    after_modern_medicine:
+      - "脉络医学致力于通过检测受检者肿瘤样本的基因信息，以美国食品药品监督管理局（FDA）批准、国家药品监督管理局（NMPA）批准、临床实践指南、专家共识以及目前国际权威的研究进展为理论依据，寻找患者罹患肿瘤的可能致病原因和潜在的治疗靶点，协助您更好地了解相应药物的用药提示及治疗方案。"
+      - "相信您经过主治医师的精心治疗，一定能够顺利度过眼前这个暂时的难关。最后，脉络医学全体员工衷心祝愿您早日康复！"
+  part3_reading_blocks:
+    - text: "3. 阅读说明"
+      bold: true
+      size: 12
+      page_break_before: true
+    - text: "3.1 文中参考文献及临床试验编号说明"
+      bold: true
+      size: 11
+    - text: "以上“基因变异及相应靶向药物解析”部分，文中方括号内的数字编号为参考文献的PMID号，可根据此编号对应报告后面的参考文献列表。"
+    - text: "以上“基因变异及相应靶向药物解析”部分，文中的方括号内以NCT、CTR或者ChiCTR开头的编号为国际、国内临床试验编号，具体的入组条件和试验设计等临床试验细节，可以通过检索相应的临床试验官网获得。"
+    - text: "3.2 文中医学及生物学常见名词说明"
+      bold: true
+      size: 11
+    - text: "报告文中涉及很多医学或生物学专有名词，以下是一些常见的名词简介，希望能对您的阅读带来帮助。"
+    - text: "肿瘤临床疗效常用评价指标："
+      bold: true
+    - text: "总生存期（OS，Overall Survival）：指从随机化开始至因任何原因引起死亡的时间。"
+    - text: "中位总生存（mOS，median OS）：又称半数生存期，表示恰好有50%的个体尚存活的时间。"
+    - text: "无病生存期（DFS，Disease Free Survival）：指从随机化开始至第一次肿瘤复发/转移或由于任何原因导致受试者死亡的时间。"
+    - text: "无进展生存期（PFS，Progress Free Survival）：指从随机分组开始到第一次肿瘤进展或死亡时间，通常作为晚期肿瘤疗效评价的重要指标。"
+    - text: "客观缓解率（ORR，Objective Response Rate）：指肿瘤缩小达到一定量并且保持一定时间的病人的比例，包含完全缓解和部分缓解。"
+    - text: "疾病控制率（DCR，Disease Control Rate）：指肿瘤缩小或稳定且保持一定时间的病人的比例，包含完全缓解、部分缓解和稳定。"
+    - text: "生物学常用名词："
+      bold: true
+    - text: "点突变（SNV）：指只有一个碱基对发生改变，可发生在启动子、内含子、外显子以及内含子与外显子的交界处。"
+    - text: "插入缺失突变（Indel）：指小片段碱基插入或缺失，可能导致插入突变、缺失突变或移码突变，进而影响蛋白功能。"
+    - text: "拷贝数变异（CNV）：指某个基因的拷贝数增加或者减少，可能会引起蛋白表达水平的升高或降低。"
+    - text: "融合基因（Fusion Gene）：指将两个或多个基因的编码区首尾相连，构成的嵌合基因，表达产物为融合蛋白。"
+    - text: "体细胞突变（Somatic Mutation）：指发生在正常机体细胞中的突变，不会传给后代。"
+    - text: "生殖细胞突变（Germline Mutation）：又称胚系突变，指突变发生于精子或卵子，可传递给后代。"
+    - text: "碱基差异阅读参考：人体的遗传物质DNA由A、G、T、C四种碱基构成。A为腺嘌呤，G为鸟嘌呤，T为胸腺嘧啶，C为胞嘧啶。"
+    - text: "氨基酸差异阅读参考：下表为人体的20种氨基酸。"
+  tail_content:
+    anchor_text: "部分基因与药物对应关系，目前仅限于临床试验科学研究阶段"
+    marker_text: "脉络医学检验简介"
+    paragraphs:
+      - text: "脉络医学检验简介"
+        bold: true
+        size: 14
+        color: "00AFC6"
+        page_break_before: true
+        space_before_pt: 20
+        space_after_pt: 18
+      - text: "脉络医学检验有限公司（以下简称脉络医学检验）是一家以精准医学为导向，以二代测序、数字PCR和医学人工智能为技术核心，集研发、生产和检验服务为一体的创新型高科技医疗机构。脉络医学检验秉承精准、卓越、诚信、为民的企业精神，以科技服务人类健康为宗旨，以打造国际一流的精准医疗大平台为目标，不断创新并努力成为国际一流的一站式精准医疗专业服务机构。"
+        first_line_indent_cm: 0.74
+        line_spacing_multiple: 1.3
+        space_after_pt: 13
+      - text: "脉络医学检验位于天津市南开区凌奥创意产业园，拥有7000平方米实验室，配备了国际先进的研发设备，基于PCR、FISH和二代测序技术组建了一流的生物医学分析软硬件平台，拥有国际领先水平的分子诊断及病理检测平台，涵盖基因组学、转录组学、蛋白组学、免疫组学及代谢组学等技术领域。"
+        first_line_indent_cm: 0.74
+        line_spacing_multiple: 1.3
+        space_after_pt: 13
+      - text: "脉络医学检验以癌症诊疗为核心，检测服务覆盖肿瘤全周期，包括肿瘤遗传风险评估、早期筛查、诊断分型、用药指导、预后评估、复发监测等。脉络医学检验不断进行技术创新和产品优化，联合全国知名医疗机构、高校和企业，整合科学研究、产业开发和临床应用资源，助力我国肿瘤精准医学的发展。"
+        first_line_indent_cm: 0.74
+        line_spacing_multiple: 1.3
+        space_after_pt: 0
+    contact_block:
+      enabled: true
+      space_before_pt: 52
+      left_width_cm: 11.9
+      right_width_cm: 3.0
+      font_size: 8.2
+      qr_width_cm: 3.0
+      qr_template_media: "word/media/image37.png"
+      lines:
+        - "地址：天津市南开区凌奥创意产业园三期二号综合楼脉络大厦"
+        - "电话：022-87190699"
+        - "邮箱：marvel@marvelbio.com"
+        - "网站：www.marvelbio.com"
+  gene_list_table_style:
+    row_height_cm: 0.88
+    header_font_size: 14.0
+    body_font_size: 10.5
+
 # ---------- 知识库/参考库 ----------
 knowledge_bases:
   # 靶向药物提示数据库（可选）：用于将变异基因映射为“潜在获益/耐药或慎重”药物列表
@@ -480,6 +566,22 @@ knowledge_bases:
       # 示例：SETD2 在示例数据库中缺失，但终版报告里有固定写法
       SETD2:
         benefit_drugs: "AZD1775（C）"
+        caution_drugs: "--"
+      # 已审核肠癌内部口径：ATM Ⅱ类药物清单以终版报告为准，避免公共库条目混入。
+      ATM:
+        benefit_drugs: |-
+          奥拉帕利（C）
+          芦卡帕利（C）
+          尼拉帕利（C）
+          他拉唑帕利（C）
+          AZD6738+奥拉帕利（C）
+          阿维鲁单抗+他拉唑帕利（C）
+          LY2606368（C）
+          盐酸可泮利塞+奥拉帕利+度伐利尤单抗（C）
+          奥拉帕利+帕博利珠单抗（C）
+          帕米帕利+替雷利珠单抗（C）
+          芦卡帕利+阿替利珠单抗（C）
+          他拉唑帕利+阿替利珠单抗（C）
         caution_drugs: "--"
 
   # 免疫治疗相关基因列表（可选）：用于生成"免疫正/负相关/超进展相关基因"检出汇总

@@ -63,12 +63,16 @@ def render_docx_to_pngs(
         hint="Install Poppler (macOS: brew install poppler).",
     )
 
-    with tempfile.TemporaryDirectory(prefix=f"render_{docx_path.stem}_") as workdir_str:
+    with tempfile.TemporaryDirectory(prefix="reportgen_render_") as workdir_str:
         workdir = Path(workdir_str)
         profile_dir = workdir / "lo_profile"
         profile_dir.mkdir(parents=True, exist_ok=True)
 
-        # DOCX -> PDF
+        tmp_docx = workdir / "input.docx"
+        shutil.copy2(docx_path, tmp_docx)
+
+        # DOCX -> PDF. LibreOffice is more reliable when both profile and
+        # input paths are ASCII-only, especially on macOS headless runs.
         convert_cmd = [
             soffice,
             f"-env:UserInstallation={_file_uri(profile_dir)}",
@@ -80,7 +84,7 @@ def render_docx_to_pngs(
             "pdf",
             "--outdir",
             str(workdir),
-            str(docx_path),
+            str(tmp_docx),
         ]
         subprocess.run(
             convert_cmd,
@@ -90,7 +94,7 @@ def render_docx_to_pngs(
             text=True,
         )
 
-        pdf_path = workdir / f"{docx_path.stem}.pdf"
+        pdf_path = workdir / "input.pdf"
         if not pdf_path.exists():
             # LibreOffice may sanitize the name; pick the newest PDF in workdir.
             pdfs = sorted(
