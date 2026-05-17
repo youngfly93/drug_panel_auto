@@ -49,6 +49,11 @@ from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.core.validation import validate_excel_data_common
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
+from reportgen.panels.loader import (
+    PanelPackageLoader,
+    load_panel_package,
+    validate_panel_package_config,
+)
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
 
 
@@ -632,6 +637,44 @@ def test_crc_panel_enhancer_accepts_legacy_aliases():
 
     assert isinstance(get_enhancer("crc_301"), CRC358Enhancer)
     assert isinstance(get_enhancer("crc_358"), CRC358Enhancer)
+
+
+def test_panel_package_loader_reads_crc358_package():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+
+    assert package.panel_id == "crc_358_msi"
+    assert package.display_name == "结直肠癌358基因+MSI"
+    assert "crc_358" in package.aliases
+    assert package.default_template.template_id == "crc_358_msi_standard_v1"
+    assert package.resolve_template_file().exists()
+    assert package.resolve_mapping_file().name == "mapping.yaml"
+    assert package.resolve_rule_file("panel_rules").name == "crc_358.yaml"
+    assert package.resolve_rule_file("panel_rules").exists()
+    assert "variant_tables" in package.processors
+    assert package.input_contract["required_tables"] == ["Variations"]
+    assert package.golden_cases[0]["id"] == "crc_358_msi_synthetic_low_tmb_mss"
+
+
+def test_panel_package_loader_loads_all_packages():
+    loader = PanelPackageLoader(project_root=ROOT)
+    packages = loader.load_all()
+
+    assert {package.panel_id for package in packages} >= {"crc_358_msi"}
+
+
+def test_panel_package_schema_rejects_missing_default_template():
+    ok, errors = validate_panel_package_config(
+        {
+            "schema_version": "1.0",
+            "panel_id": "bad_panel",
+            "display_name": "Bad Panel",
+            "default_template": "missing_template",
+            "templates": [{"id": "declared", "file": "templates/a.docx"}],
+        }
+    )
+
+    assert not ok
+    assert any("default_template" in error for error in errors)
 
 
 def test_msi_percentage_label_conflict_is_warned(tmp_path):
