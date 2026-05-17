@@ -470,6 +470,88 @@ def batch_validate(
     sys.exit(0 if int(report_obj.get("failures") or 0) == 0 else 1)
 
 
+@cli.group()
+def qa():
+    """QA and golden-case regression commands."""
+
+
+@qa.command("run")
+@click.option(
+    "--panel",
+    default="crc_358_msi",
+    show_default=True,
+    help="要运行的 golden case Panel ID",
+)
+@click.option(
+    "--output-root",
+    default=None,
+    type=click.Path(),
+    help="golden case 输出目录（默认写入 tmp/golden_cases/）",
+)
+@click.option(
+    "--template",
+    "template_file",
+    default=None,
+    type=click.Path(exists=True),
+    help="覆盖默认模板路径",
+)
+@click.option(
+    "--template-contract",
+    type=click.Choice(["none", "warn", "fail"]),
+    default="fail",
+    show_default=True,
+    help="模板契约校验模式",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    default="ERROR",
+    show_default=True,
+    help="reportgen内部日志级别",
+)
+@click.pass_context
+def qa_run(ctx, panel, output_root, template_file, template_contract, log_level):
+    """运行单个 Panel 的端到端 golden case。"""
+    from reportgen.core.golden_case import GoldenCaseOptions, run_golden_case
+
+    if ctx.obj.get("verbose"):
+        log_level = "DEBUG"
+
+    opts = GoldenCaseOptions(
+        panel=panel,
+        config_dir=ctx.obj["config_dir"],
+        template_file=template_file,
+        output_root=output_root,
+        log_level=log_level,
+        template_contract_mode=template_contract,
+    )
+
+    click.echo(f"🧪 Running golden case: {panel}")
+    try:
+        result = run_golden_case(opts)
+    except Exception as e:
+        click.echo(f"❌ Golden case failed before assertions: {e}", err=True)
+        sys.exit(1)
+
+    click.echo(f"  output: {result.get('output_file')}")
+    click.echo(f"  qa: {result.get('qa_report_file')} ({result.get('qa_status')})")
+    click.echo(f"  report: {result.get('golden_report_file')}")
+
+    failed = [row for row in result.get("checks", []) if not row.get("passed")]
+    if failed:
+        click.echo("\nFailed checks:", err=True)
+        for row in failed:
+            click.echo(f"  - {row.get('name')}: {row.get('message')}", err=True)
+            actual = row.get("actual")
+            expected = row.get("expected")
+            if expected is not None or actual is not None:
+                click.echo(f"    expected={expected!r} actual={actual!r}", err=True)
+        sys.exit(1)
+
+    click.echo("✅ Golden case passed")
+    sys.exit(0)
+
+
 @cli.command()
 @click.option(
     "--template",

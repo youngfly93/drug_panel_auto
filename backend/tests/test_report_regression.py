@@ -29,6 +29,11 @@ from reportgen.core.field_provenance import (
     write_field_provenance_report,
 )
 from reportgen.core.field_mapper import FieldMapper
+from reportgen.core.golden_case import (
+    CRC_358_MSI_EXPECTATIONS,
+    assert_golden_case_output,
+    build_crc_358_msi_golden_excel,
+)
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.processors import ProcessorContext, run_processors
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
@@ -1876,3 +1881,100 @@ def test_write_qa_report_creates_sidecar_json(tmp_path):
     assert qa_path.name == "clean.qa.json"
     assert qa_path.exists()
     assert "PASS" in qa_path.read_text(encoding="utf-8")
+
+
+def test_crc358_golden_excel_fixture_is_synthetic_and_parseable(tmp_path):
+    xlsx_path = build_crc_358_msi_golden_excel(
+        tmp_path / "LZ999001_crc_358_msi_golden.xlsx"
+    )
+
+    excel_data = ExcelReader(
+        config_dir=str(ROOT / "config"), log_level="ERROR"
+    ).read(str(xlsx_path), include_tables=True)
+
+    assert excel_data.metadata["sample_id_from_filename"] == "LZ999001"
+    assert excel_data.single_values["患者姓名"] == "黄金测试患者"
+    assert excel_data.single_values["TMB"] == 6.5
+    assert excel_data.single_values["MSI状态"] == "MSS"
+    assert len(excel_data.get_table_data("Variations")) == 2
+    assert {r["Gene_Symbol"] for r in excel_data.get_table_data("Variations")} == {
+        "ERBB2",
+        "FBXW7",
+    }
+
+
+def test_golden_case_assertions_pass_on_expected_report_shape(tmp_path):
+    docx_path = tmp_path / "golden_like.docx"
+    doc = Document()
+    doc.add_paragraph("本次共检出体细胞变异：2 个")
+    doc.add_paragraph("与靶向药物用药相关的变异有：1 个")
+    doc.add_paragraph("6.5 mutations/Mb，TMB-L；微卫星稳定型，MSS")
+    doc.add_paragraph("多项临床研究表明，TMB-H的肿瘤对免疫检查点抑制剂有更强的免疫应答效果")
+    doc.add_paragraph("研究表明，MSI-H的实体瘤通常具有免疫原性和广泛的T细胞浸润性")
+    doc.add_paragraph("ERBB2：c.1979G>A，p.G660D")
+
+    tips = doc.add_table(rows=2, cols=4)
+    for idx, text in enumerate(["基因", "突变位点", "潜在获益靶向药物", "可能耐药"]):
+        tips.rows[0].cells[idx].text = text
+    tips.rows[1].cells[0].text = "ERBB2"
+    tips.rows[1].cells[1].text = "c.1979G>A，p.G660D"
+
+    summary = doc.add_table(rows=2, cols=4)
+    for idx, text in enumerate(["基因", "基因突变信息", "潜在获益靶向药物", "可能耐药"]):
+        summary.rows[0].cells[idx].text = text
+    summary.rows[1].cells[0].text = "ERBB2"
+
+    detail = doc.add_table(rows=2, cols=9)
+    headers = [
+        "基因名称",
+        "转录本号",
+        "染色体",
+        "外显子",
+        "核苷酸变化",
+        "氨基酸变化",
+        "突变频率",
+        "潜在获益",
+        "可能耐药",
+    ]
+    for idx, text in enumerate(headers):
+        detail.rows[0].cells[idx].text = text
+    detail.rows[1].cells[0].text = "ERBB2"
+    detail.rows[1].cells[4].text = "c.1979G>A"
+    detail.rows[1].cells[5].text = "p.G660D"
+
+    biomarker = doc.add_table(rows=2, cols=3)
+    biomarker.rows[0].cells[0].text = "TMB/MSI/其它生物标志物检测结果"
+    biomarker.rows[0].cells[2].text = "用药提示"
+    biomarker.rows[1].cells[0].text = "MSI"
+    doc.save(docx_path)
+
+    report_data = ReportData()
+    report_data.set_field("total_variants_count", 2)
+    report_data.set_field("drug_related_count", 1)
+    report_data.set_field("tmb_status", "L")
+    report_data.set_field("msi_status", "MSS")
+    report_data.set_table("variants", [{"gene": "ERBB2"}])
+    processor_report = [{"name": "underlines_and_styles", "status": "OK"}]
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        project_type="crc_358_msi",
+        field_provenance={"fields": {"patient_name": {"source": "excel"}}},
+        field_provenance_file=str(docx_path.with_suffix(".field_provenance.json")),
+        processor_report=processor_report,
+    )
+
+    result = {
+        "success": True,
+        "output_file": str(docx_path),
+        "context": report_data.context,
+        "qa_report": qa,
+        "field_provenance_file": str(docx_path.with_suffix(".field_provenance.json")),
+        "post_processors": processor_report,
+        "errors": [],
+    }
+    assertion = assert_golden_case_output(
+        result, expectations=CRC_358_MSI_EXPECTATIONS
+    )
+
+    assert assertion["ok"]
