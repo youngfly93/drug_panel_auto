@@ -4,6 +4,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -19,6 +20,25 @@ from app.services.file_manager import ensure_report_dir
 from app.services.reportgen_bridge import ReportGenBridge
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _qa_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    return Path(output_path).with_suffix(".qa.json")
+
+
+def _load_qa_summary(
+    output_path: Optional[str],
+) -> tuple[Optional[str], Optional[str], list[dict]]:
+    qa_path = _qa_sidecar_path(output_path)
+    if not qa_path or not qa_path.exists():
+        return None, None, []
+    try:
+        payload = json.loads(qa_path.read_text(encoding="utf-8"))
+    except Exception:
+        return str(qa_path), None, []
+    return str(qa_path), payload.get("status"), payload.get("issues") or []
 
 
 @router.post("/generate", response_model=ApiResponse[GenerateResponse])
@@ -74,6 +94,9 @@ def generate_report(
                 task_id=task_id,
                 success=success,
                 output_file=result.get("output_file"),
+                qa_report_file=result.get("qa_report_file"),
+                qa_status=result.get("qa_status"),
+                qa_issues=(result.get("qa_report") or {}).get("issues") or [],
                 duration_seconds=result.get("duration"),
                 errors=result.get("errors", []),
                 warnings=result.get("warnings", []),
@@ -100,6 +123,7 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    qa_report_file, qa_status, _qa_issues = _load_qa_summary(task.output_path)
 
     return ApiResponse(
         data=TaskStatus(
@@ -111,6 +135,8 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             completed_files=task.completed_files,
             failed_files=task.failed_files,
             output_path=task.output_path,
+            qa_report_file=qa_report_file,
+            qa_status=qa_status,
             created_at=task.created_at,
             started_at=task.started_at,
             completed_at=task.completed_at,
@@ -119,6 +145,21 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             warnings=json.loads(task.warnings) if task.warnings else [],
         )
     )
+
+
+@router.get("/{task_id}/qa", response_model=ApiResponse[dict])
+def get_qa_report(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    qa_path = _qa_sidecar_path(task.output_path)
+    if not qa_path or not qa_path.exists():
+        raise HTTPException(status_code=404, detail="QA报告不存在")
+    try:
+        payload = json.loads(qa_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"QA报告读取失败: {exc}") from exc
+    return ApiResponse(data=payload)
 
 
 @router.get("/{task_id}/download")

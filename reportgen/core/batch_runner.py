@@ -341,6 +341,10 @@ def run_batch_generate_validate(
                 output_docx = str(Path(gen["output_file"]).resolve())
             ctx = gen.get("context") or {}
             patient_snapshot = _patient_snapshot_from_context(ctx)
+            qa_report = gen.get("qa_report") or {}
+            qa_report_file = gen.get("qa_report_file")
+            if qa_report_file:
+                artifacts["qa_report_json"] = public_path(Path(str(qa_report_file)))
 
             # --- artifacts: context/meta ---
             template_contract = gen.get("template_contract")
@@ -401,6 +405,11 @@ def run_batch_generate_validate(
             table_presence: Dict[str, bool] = {}
             doc_stats: Dict[str, Any] = {}
             issues: List[str] = []
+            qa_status = qa_report.get("status")
+            if qa_status == "FAIL":
+                issues.append("qa_failed")
+            elif qa_status == "WARN":
+                issues.append("qa_warn")
 
             try:
                 doc = Document(output_docx)
@@ -517,6 +526,10 @@ def run_batch_generate_validate(
                 "issues": issues,
                 "template_contract": template_contract,
                 "input_validation_warnings": input_validation_warnings,
+                "qa_report_file": (
+                    public_path(Path(str(qa_report_file))) if qa_report_file else None
+                ),
+                "qa_report": qa_report,
                 "artifacts": artifacts,
                 "highlight": highlight_info,
             }
@@ -525,6 +538,7 @@ def run_batch_generate_validate(
                 (len(errors) == 0)
                 and doc_ok
                 and (not any(v > 0 for v in placeholder_counts.values()))
+                and (qa_status != "FAIL")
             )
 
         except Exception as e:

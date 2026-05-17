@@ -20,6 +20,9 @@ class GenerateResponse(BaseModel):
     task_id: str
     success: bool
     output_file: Optional[str] = None
+    qa_report_file: Optional[str] = None
+    qa_status: Optional[str] = None
+    qa_issues: list[dict[str, Any]] = []
     duration_seconds: Optional[float] = None
     errors: list[str] = []
     warnings: list[str] = []
@@ -34,6 +37,8 @@ class TaskStatus(BaseModel):
     completed_files: int = 0
     failed_files: int = 0
     output_path: Optional[str] = None
+    qa_report_file: Optional[str] = None
+    qa_status: Optional[str] = None
     created_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

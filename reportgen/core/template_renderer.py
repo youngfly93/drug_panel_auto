@@ -457,9 +457,19 @@ class TemplateRenderer:
         doc = Document(file_path)
         changed = False
 
-        for paragraph in list(doc.paragraphs):
+        def has_numbering(paragraph) -> bool:
+            ppr = paragraph._p.pPr
+            return bool(ppr is not None and ppr.numPr is not None)
+
+        def clear_numbering(paragraph) -> bool:
             ppr = paragraph._p.pPr
             if ppr is None or ppr.numPr is None:
+                return False
+            ppr.remove(ppr.numPr)
+            return True
+
+        for paragraph in list(doc.paragraphs):
+            if not has_numbering(paragraph):
                 continue
             if (paragraph.text or "").strip():
                 continue
@@ -468,6 +478,15 @@ class TemplateRenderer:
                 continue
             parent.remove(paragraph._element)
             changed = True
+
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        if (paragraph.text or "").strip():
+                            continue
+                        if clear_numbering(paragraph):
+                            changed = True
 
         if changed:
             doc.save(file_path)

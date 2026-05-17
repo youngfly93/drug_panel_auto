@@ -26,6 +26,7 @@ from reportgen.core.batch_runner import (
 from reportgen.core.excel_reader import ExcelReader
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.project_detector import ProjectDetector
+from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.report_generator import ReportGenerator
 from reportgen.core.template_bridge_358 import (
     build_targeted_drug_brand_summary,
@@ -1545,3 +1546,168 @@ def test_real_no_variants_sample_regression_if_available():
         (row.get("gene") or "").upper() == "ERBB2"
         for row in report_data.get_table("targeted_drug_tips")
     )
+
+
+def test_qa_report_passes_basic_clean_docx(tmp_path):
+    docx_path = tmp_path / "clean.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+
+    qa = build_docx_qa_report(output_file=str(docx_path))
+
+    assert qa["status"] == "PASS"
+    assert qa["checks"]["docx_openable"]["status"] == "PASS"
+    assert qa["checks"]["unrendered_placeholders"]["count"] == 0
+
+
+def test_qa_report_detects_placeholder_residue(tmp_path):
+    docx_path = tmp_path / "placeholder.docx"
+    doc = Document()
+    doc.add_paragraph("患者：{{ patient_name }}")
+    doc.save(docx_path)
+
+    qa = build_docx_qa_report(output_file=str(docx_path))
+
+    assert qa["status"] == "FAIL"
+    assert any(i["code"] == "UNRENDERED_PLACEHOLDER" for i in qa["issues"])
+
+
+def test_qa_report_detects_empty_numbered_paragraph(tmp_path):
+    docx_path = tmp_path / "empty_numbered.docx"
+    doc = Document()
+    p = doc.add_paragraph("")
+    ppr = p._p.get_or_add_pPr()
+    num_pr = OxmlElement("w:numPr")
+    ilvl = OxmlElement("w:ilvl")
+    ilvl.set(qn("w:val"), "0")
+    num_id = OxmlElement("w:numId")
+    num_id.set(qn("w:val"), "1")
+    num_pr.append(ilvl)
+    num_pr.append(num_id)
+    ppr.append(num_pr)
+    doc.save(docx_path)
+
+    qa = build_docx_qa_report(output_file=str(docx_path))
+
+    assert qa["status"] == "FAIL"
+    assert qa["checks"]["empty_numbered_paragraphs"]["count"] == 1
+    assert any(i["code"] == "EMPTY_NUMBERED_PARAGRAPH" for i in qa["issues"])
+
+
+def test_renderer_clears_empty_numbered_paragraphs_inside_tables(tmp_path):
+    docx_path = tmp_path / "table_empty_numbered.docx"
+    doc = Document()
+    table = doc.add_table(rows=1, cols=1)
+    p = table.rows[0].cells[0].paragraphs[0]
+    ppr = p._p.get_or_add_pPr()
+    num_pr = OxmlElement("w:numPr")
+    num_id = OxmlElement("w:numId")
+    num_id.set(qn("w:val"), "1")
+    num_pr.append(num_id)
+    ppr.append(num_pr)
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._remove_empty_numbered_paragraphs(str(docx_path))
+
+    rendered = Document(docx_path)
+    cleaned = rendered.tables[0].rows[0].cells[0].paragraphs[0]
+    assert cleaned._p.pPr is None or cleaned._p.pPr.numPr is None
+    qa = build_docx_qa_report(output_file=str(docx_path))
+    assert qa["checks"]["empty_numbered_paragraphs"]["count"] == 0
+
+
+def test_qa_report_checks_crc_tables_and_counts(tmp_path):
+    docx_path = tmp_path / "crc.docx"
+    doc = Document()
+    doc.add_paragraph("本次共检出体细胞变异：8 个")
+    doc.add_paragraph("与靶向药物用药相关的变异有：4 个")
+    doc.add_paragraph("6.5 mutations/Mb，TMB-L；微卫星稳定型，MSS")
+
+    tips = doc.add_table(rows=2, cols=4)
+    for idx, text in enumerate(["基因", "突变位点", "潜在获益靶向药物", "可能耐药"]):
+        tips.rows[0].cells[idx].text = text
+
+    summary = doc.add_table(rows=2, cols=4)
+    for idx, text in enumerate(["基因", "基因突变信息", "潜在获益靶向药物", "可能耐药"]):
+        summary.rows[0].cells[idx].text = text
+
+    detail = doc.add_table(rows=2, cols=9)
+    headers = [
+        "基因名称",
+        "转录本号",
+        "染色体",
+        "外显子",
+        "核苷酸变化",
+        "氨基酸变化",
+        "突变频率",
+        "潜在获益",
+        "可能耐药",
+    ]
+    for idx, text in enumerate(headers):
+        detail.rows[0].cells[idx].text = text
+
+    biomarker = doc.add_table(rows=2, cols=3)
+    biomarker.rows[0].cells[0].text = "TMB/MSI/其它生物标志物检测结果"
+    biomarker.rows[0].cells[2].text = "用药提示"
+    biomarker.rows[1].cells[0].text = "MSI"
+    doc.save(docx_path)
+
+    report_data = ReportData()
+    report_data.set_field("total_variants_count", 8)
+    report_data.set_field("drug_related_count", 4)
+    report_data.set_field("tmb_status", "TMB-L")
+    report_data.set_field("msi_status", "MSS")
+    report_data.set_table("variants", [{"gene": "TP53"}])
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        project_type="crc_358_msi",
+    )
+
+    assert qa["status"] == "PASS"
+    assert qa["checks"]["variant_detail_table_shape"]["status"] == "PASS"
+    assert qa["checks"]["total_variant_count_text"]["status"] == "PASS"
+    assert qa["checks"]["drug_related_count_text"]["status"] == "PASS"
+
+
+def test_qa_report_flags_crc_missing_required_tables(tmp_path):
+    docx_path = tmp_path / "crc_missing_tables.docx"
+    doc = Document()
+    doc.add_paragraph("本次共检出体细胞变异：1 个")
+    doc.add_paragraph("与靶向药物用药相关的变异有：1 个")
+    doc.add_paragraph("TMB-L；MSS")
+    doc.save(docx_path)
+
+    report_data = ReportData()
+    report_data.set_field("total_variants_count", 1)
+    report_data.set_field("drug_related_count", 1)
+    report_data.set_field("tmb_status", "TMB-L")
+    report_data.set_field("msi_status", "MSS")
+    report_data.set_table("variants", [{"gene": "TP53"}])
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        project_type="crc_358_msi",
+    )
+
+    assert qa["status"] == "FAIL"
+    issue_codes = {i["code"] for i in qa["issues"]}
+    assert "VARIANT_DETAIL_TABLE_SHAPE" in issue_codes
+    assert "BIOMARKER_TABLE_PRESENT" in issue_codes
+
+
+def test_write_qa_report_creates_sidecar_json(tmp_path):
+    docx_path = tmp_path / "clean.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+
+    qa = build_docx_qa_report(output_file=str(docx_path))
+    qa_path = Path(write_docx_qa_report(qa, str(docx_path)))
+
+    assert qa_path.name == "clean.qa.json"
+    assert qa_path.exists()
+    assert "PASS" in qa_path.read_text(encoding="utf-8")

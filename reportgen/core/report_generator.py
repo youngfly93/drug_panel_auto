@@ -14,6 +14,7 @@ from reportgen.core.data_cleaner import DataCleaner
 from reportgen.core.enhancer_registry import get_enhancer
 from reportgen.core.excel_reader import ExcelReader
 from reportgen.core.field_mapper import FieldMapper
+from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
@@ -371,6 +372,28 @@ class ReportGenerator:
             )
             self.logger.log_event("template_rendering_completed", output=final_output)
 
+            # 7. 生成机器可读 QA 报告。M1 阶段只记录，不阻断出报告。
+            qa_report = None
+            qa_report_file = None
+            try:
+                qa_report = build_docx_qa_report(
+                    output_file=final_output,
+                    report_data=report_data,
+                    project_type=project_type,
+                    project_name=project_name,
+                    template_file=template_file,
+                    generation_id=Path(final_output).stem,
+                )
+                qa_report_file = write_docx_qa_report(qa_report, final_output)
+                self.logger.log_event(
+                    "qa_report_generated",
+                    output=qa_report_file,
+                    status=qa_report.get("status"),
+                    issue_count=len(qa_report.get("issues") or []),
+                )
+            except Exception as qa_err:
+                self.logger.warning("生成QA报告失败", error=str(qa_err))
+
             # 计算耗时
             duration = time.time() - start_time
 
@@ -385,6 +408,9 @@ class ReportGenerator:
                 "errors": [],
                 "warnings": report_data.validation_errors,
                 "template_contract": template_contract_report,
+                "qa_report": qa_report,
+                "qa_report_file": qa_report_file,
+                "qa_status": qa_report.get("status") if qa_report else None,
                 **({"context": template_context} if return_context else {}),
             }
 

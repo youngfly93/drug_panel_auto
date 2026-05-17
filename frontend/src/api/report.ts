@@ -13,6 +13,9 @@ export interface GenerateResult {
   task_id: string
   success: boolean
   output_file: string | null
+  qa_report_file?: string | null
+  qa_status?: string | null
+  qa_issues?: Array<Record<string, any>>
   duration_seconds: number | null
   errors: string[]
   warnings: string[]
@@ -27,6 +30,8 @@ export interface TaskStatus {
   completed_files: number
   failed_files: number
   output_path: string | null
+  qa_report_file?: string | null
+  qa_status?: string | null
   created_at: string | null
   duration_seconds: number | null
   errors: string[]
@@ -41,6 +46,11 @@ export const reportApi = {
 
   async getTaskStatus(taskId: string): Promise<TaskStatus> {
     const { data } = await client.get(`/reports/${taskId}`)
+    return data.data
+  },
+
+  async getQaReport(taskId: string): Promise<Record<string, any>> {
+    const { data } = await client.get(`/reports/${taskId}/qa`)
     return data.data
   },
 
