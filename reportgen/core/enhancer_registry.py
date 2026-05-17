@@ -6,9 +6,13 @@ based on detected project type, decoupling the orchestrator from any
 single panel implementation.
 """
 
-from typing import Any, Dict, Optional, Protocol
+from importlib import import_module
+from pathlib import Path
+from typing import Any, Optional, Protocol
 
 from reportgen.models.report_data import ReportData
+from reportgen.panels.loader import PanelPackageLoader
+from reportgen.panels.registry import PanelRegistry, UnknownPanelError
 
 
 class PanelEnhancer(Protocol):
@@ -28,7 +32,8 @@ class PanelEnhancer(Protocol):
 class NoopEnhancer:
     """Pass-through enhancer that returns data unchanged.
 
-    Used as default for unknown/unregistered project types.
+    Used only when the caller has not supplied a project type or for explicitly
+    registered non-CRC legacy project types.
     """
 
     def enhance(
@@ -70,25 +75,59 @@ class CRC358Enhancer:
         )
 
 
-# ---------------------------------------------------------------------------
-# Registry
-# ---------------------------------------------------------------------------
-
 _NOOP = NoopEnhancer()
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-_REGISTRY: Dict[str, PanelEnhancer] = {
-    "crc_301_msi": CRC358Enhancer(),
-    "crc_358_msi": CRC358Enhancer(),
-    # mlf_result: 通用基因检测结果，不注入 CRC 口径
-    "mlf_result": _NOOP,
-    # lung_methylation 需要独立实现；暂用 Noop 避免注入 CRC 口径
-    "lung_methylation": _NOOP,
-}
 
-_ALIASES: Dict[str, str] = {
-    "crc_301": "crc_301_msi",
-    "crc_358": "crc_358_msi",
-}
+def _build_default_registry() -> PanelRegistry:
+    """Build the compatibility registry used by the legacy generator."""
+    registry = PanelRegistry()
+
+    crc_enhancer = CRC358Enhancer()
+    loaded_packages: set[str] = set()
+    try:
+        for package in PanelPackageLoader(project_root=_PROJECT_ROOT).load_all():
+            registry.register(
+                package.panel_id,
+                _load_enhancer(package.enhancer, fallback=_NOOP),
+                aliases=package.aliases,
+                package=package,
+            )
+            loaded_packages.add(package.panel_id)
+    except Exception:
+        loaded_packages = set()
+
+    if "crc_358_msi" not in loaded_packages:
+        registry.register("crc_358_msi", crc_enhancer, aliases=("crc_358",))
+    registry.register("crc_301_msi", crc_enhancer, aliases=("crc_301",))
+
+    # Legacy project types still intentionally run without CRC enhancement until
+    # they get real panel packages/enhancers.
+    registry.register("mlf_result", _NOOP)
+    registry.register("lung_methylation", _NOOP)
+    return registry
+
+
+def _load_enhancer(path: str, *, fallback: PanelEnhancer) -> PanelEnhancer:
+    """Load an enhancer instance from ``module:attribute`` notation."""
+    raw = str(path or "").strip()
+    if not raw:
+        return fallback
+    if raw in {
+        "reportgen.core.enhancer_registry:CRC358Enhancer",
+        f"{__name__}:CRC358Enhancer",
+    }:
+        return CRC358Enhancer()
+
+    try:
+        module_name, attr_name = raw.split(":", 1)
+        attr = getattr(import_module(module_name), attr_name)
+        return attr() if isinstance(attr, type) else attr
+    except Exception:
+        return fallback
+
+
+_PANEL_REGISTRY = _build_default_registry()
 
 
 def get_enhancer(project_type: Optional[str] = None) -> PanelEnhancer:
@@ -96,14 +135,51 @@ def get_enhancer(project_type: Optional[str] = None) -> PanelEnhancer:
 
     When *project_type* is ``None`` (caller didn't detect or pass a type),
     returns :class:`NoopEnhancer` to avoid注入错误口径的业务逻辑。
-    CRC 项目必须通过 auto-detect 显式识别后才走 CRC358Enhancer。
+    Explicit unknown panel ids raise :class:`UnknownPanelError` instead of
+    silently using Noop.
     """
-    if project_type is None:
+    if not str(project_type or "").strip():
         return _NOOP
-    normalized = _ALIASES.get(project_type, project_type)
-    return _REGISTRY.get(normalized, _NOOP)
+    enhancer = _PANEL_REGISTRY.get_enhancer(project_type)
+    if enhancer is None:
+        raise UnknownPanelError(f"未注册的Panel项目类型: {project_type!r}")
+    return enhancer
 
 
 def register_enhancer(project_type: str, enhancer: PanelEnhancer) -> None:
     """Register a custom enhancer for a project type."""
-    _REGISTRY[project_type] = enhancer
+    _PANEL_REGISTRY.register(project_type, enhancer)
+
+
+def normalize_project_type(project_type: Optional[str]) -> Optional[str]:
+    """Normalize a project type alias to the canonical panel id."""
+    return _PANEL_REGISTRY.normalize(project_type, strict=True)
+
+
+def is_registered_project_type(project_type: Optional[str]) -> bool:
+    """Return whether the project type is known to the panel registry."""
+    return _PANEL_REGISTRY.is_registered(project_type)
+
+
+def get_registered_project_types() -> list[str]:
+    """Return canonical project types registered for enhancement dispatch."""
+    return _PANEL_REGISTRY.panel_ids()
+
+
+def get_panel_registry() -> PanelRegistry:
+    """Return the process-level panel registry."""
+    return _PANEL_REGISTRY
+
+
+__all__ = [
+    "CRC358Enhancer",
+    "NoopEnhancer",
+    "PanelEnhancer",
+    "UnknownPanelError",
+    "get_enhancer",
+    "get_panel_registry",
+    "get_registered_project_types",
+    "is_registered_project_type",
+    "normalize_project_type",
+    "register_enhancer",
+]

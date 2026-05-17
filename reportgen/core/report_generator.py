@@ -11,7 +11,7 @@ from typing import Optional
 
 from reportgen.config.loader import ConfigLoader
 from reportgen.core.data_cleaner import DataCleaner
-from reportgen.core.enhancer_registry import get_enhancer
+from reportgen.core.enhancer_registry import get_enhancer, normalize_project_type
 from reportgen.core.excel_reader import ExcelReader
 from reportgen.core.field_provenance import (
     build_field_provenance_report,
@@ -118,6 +118,8 @@ class ReportGenerator:
         )
 
         try:
+            canonical_project_type = normalize_project_type(project_type)
+
             # 1. 读取Excel（支持复用外部已读取的数据，避免重复IO）
             if excel_data is None:
                 self.logger.log_event("excel_reading_started", file=excel_file)
@@ -159,7 +161,7 @@ class ReportGenerator:
             )
 
             # 3.5 如果项目检测提供了 project_name，写回上下文覆盖全局默认值
-            if project_name and project_type:
+            if project_name and canonical_project_type:
                 cur_pn = report_data.get_field("project_name")
                 if cur_pn != project_name:
                     report_data.set_field("project_name", project_name)
@@ -203,9 +205,9 @@ class ReportGenerator:
                 gene_knowledge_provider = None
 
             self.logger.log_event(
-                "template_enhancement_started", project_type=project_type
+                "template_enhancement_started", project_type=canonical_project_type
             )
-            enhancer = get_enhancer(project_type)
+            enhancer = get_enhancer(canonical_project_type)
             report_data = enhancer.enhance(
                 report_data,
                 excel_data,
@@ -388,7 +390,7 @@ class ReportGenerator:
                     report_data=report_data,
                     excel_data=excel_data,
                     config_loader=self.config_loader,
-                    project_type=project_type,
+                    project_type=canonical_project_type,
                     project_name=project_name,
                     template_file=template_file,
                     generation_id=Path(final_output).stem,
@@ -411,7 +413,7 @@ class ReportGenerator:
                 qa_report = build_docx_qa_report(
                     output_file=final_output,
                     report_data=report_data,
-                    project_type=project_type,
+                    project_type=canonical_project_type,
                     project_name=project_name,
                     template_file=template_file,
                     generation_id=Path(final_output).stem,

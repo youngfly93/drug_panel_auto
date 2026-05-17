@@ -633,10 +633,41 @@ def test_detector_uses_trusted_filename_project_tokens(tmp_path):
 
 
 def test_crc_panel_enhancer_accepts_legacy_aliases():
-    from reportgen.core.enhancer_registry import CRC358Enhancer, get_enhancer
+    from reportgen.core.enhancer_registry import (
+        CRC358Enhancer,
+        UnknownPanelError,
+        get_enhancer,
+        get_panel_registry,
+        get_registered_project_types,
+        is_registered_project_type,
+        normalize_project_type,
+    )
 
     assert isinstance(get_enhancer("crc_301"), CRC358Enhancer)
     assert isinstance(get_enhancer("crc_358"), CRC358Enhancer)
+    assert normalize_project_type("crc_358") == "crc_358_msi"
+    assert normalize_project_type("CRC358") == "crc_358_msi"
+    assert is_registered_project_type("crc_358")
+    assert "crc_358_msi" in get_registered_project_types()
+    assert get_panel_registry().get("crc_358").package.panel_id == "crc_358_msi"
+    with pytest.raises(UnknownPanelError):
+        get_enhancer("unknown_panel")
+
+
+def test_report_generator_rejects_unknown_project_type(tmp_path):
+    generator = ReportGenerator(config_dir=str(ROOT / "config"), log_level="ERROR")
+
+    result = generator.generate(
+        excel_file=str(tmp_path / "missing.xlsx"),
+        template_file=str(
+            ROOT / "templates" / "aligned_template_with_cnv_fusion_hla_FIXED.docx"
+        ),
+        output_dir=str(tmp_path),
+        project_type="unknown_panel",
+    )
+
+    assert result["success"] is False
+    assert any("未注册的Panel项目类型" in error for error in result["errors"])
 
 
 def test_panel_package_loader_reads_crc358_package():
