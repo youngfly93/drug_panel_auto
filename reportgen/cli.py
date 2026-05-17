@@ -269,6 +269,8 @@ def generate(ctx, excel, template, output, filename, strict, auto_detect,
         if result["success"]:
             click.echo("✅ 报告生成成功!")
             click.echo(f"📄 输出文件: {result['output_file']}")
+            if result.get("field_provenance_file"):
+                click.echo(f"🧾 字段来源: {result['field_provenance_file']}")
             if result.get("qa_report_file"):
                 qa_status = result.get("qa_status") or "UNKNOWN"
                 click.echo(f"🧪 QA报告: {result['qa_report_file']} ({qa_status})")

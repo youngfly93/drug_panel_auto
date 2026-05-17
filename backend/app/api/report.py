@@ -28,6 +28,12 @@ def _qa_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
     return Path(output_path).with_suffix(".qa.json")
 
 
+def _field_provenance_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    return Path(output_path).with_suffix(".field_provenance.json")
+
+
 def _load_qa_summary(
     output_path: Optional[str],
 ) -> tuple[Optional[str], Optional[str], list[dict]]:
@@ -94,6 +100,7 @@ def generate_report(
                 task_id=task_id,
                 success=success,
                 output_file=result.get("output_file"),
+                field_provenance_file=result.get("field_provenance_file"),
                 qa_report_file=result.get("qa_report_file"),
                 qa_status=result.get("qa_status"),
                 qa_issues=(result.get("qa_report") or {}).get("issues") or [],
@@ -123,6 +130,7 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    field_provenance_path = _field_provenance_sidecar_path(task.output_path)
     qa_report_file, qa_status, _qa_issues = _load_qa_summary(task.output_path)
 
     return ApiResponse(
@@ -135,6 +143,9 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             completed_files=task.completed_files,
             failed_files=task.failed_files,
             output_path=task.output_path,
+            field_provenance_file=str(field_provenance_path)
+            if field_provenance_path and field_provenance_path.exists()
+            else None,
             qa_report_file=qa_report_file,
             qa_status=qa_status,
             created_at=task.created_at,
@@ -159,6 +170,21 @@ def get_qa_report(task_id: str, db: Session = Depends(get_db)):
         payload = json.loads(qa_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"QA报告读取失败: {exc}") from exc
+    return ApiResponse(data=payload)
+
+
+@router.get("/{task_id}/field-provenance", response_model=ApiResponse[dict])
+def get_field_provenance(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    provenance_path = _field_provenance_sidecar_path(task.output_path)
+    if not provenance_path or not provenance_path.exists():
+        raise HTTPException(status_code=404, detail="字段来源报告不存在")
+    try:
+        payload = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"字段来源报告读取失败: {exc}") from exc
     return ApiResponse(data=payload)
 
 

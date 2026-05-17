@@ -13,6 +13,10 @@ from reportgen.config.loader import ConfigLoader
 from reportgen.core.data_cleaner import DataCleaner
 from reportgen.core.enhancer_registry import get_enhancer
 from reportgen.core.excel_reader import ExcelReader
+from reportgen.core.field_provenance import (
+    build_field_provenance_report,
+    write_field_provenance_report,
+)
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.template_renderer import TemplateRenderer
@@ -372,7 +376,32 @@ class ReportGenerator:
             )
             self.logger.log_event("template_rendering_completed", output=final_output)
 
-            # 7. 生成机器可读 QA 报告。M1 阶段只记录，不阻断出报告。
+            # 7. 生成关键字段来源报告。M1 阶段只记录，不阻断出报告。
+            field_provenance = None
+            field_provenance_file = None
+            try:
+                field_provenance = build_field_provenance_report(
+                    output_file=final_output,
+                    report_data=report_data,
+                    excel_data=excel_data,
+                    config_loader=self.config_loader,
+                    project_type=project_type,
+                    project_name=project_name,
+                    template_file=template_file,
+                    generation_id=Path(final_output).stem,
+                )
+                field_provenance_file = write_field_provenance_report(
+                    field_provenance, final_output
+                )
+                self.logger.log_event(
+                    "field_provenance_generated",
+                    output=field_provenance_file,
+                    field_count=len(field_provenance.get("fields") or {}),
+                )
+            except Exception as provenance_err:
+                self.logger.warning("生成字段来源报告失败", error=str(provenance_err))
+
+            # 8. 生成机器可读 QA 报告。M1 阶段只记录，不阻断出报告。
             qa_report = None
             qa_report_file = None
             try:
@@ -383,6 +412,8 @@ class ReportGenerator:
                     project_name=project_name,
                     template_file=template_file,
                     generation_id=Path(final_output).stem,
+                    field_provenance=field_provenance,
+                    field_provenance_file=field_provenance_file,
                 )
                 qa_report_file = write_docx_qa_report(qa_report, final_output)
                 self.logger.log_event(
@@ -408,6 +439,8 @@ class ReportGenerator:
                 "errors": [],
                 "warnings": report_data.validation_errors,
                 "template_contract": template_contract_report,
+                "field_provenance": field_provenance,
+                "field_provenance_file": field_provenance_file,
                 "qa_report": qa_report,
                 "qa_report_file": qa_report_file,
                 "qa_status": qa_report.get("status") if qa_report else None,

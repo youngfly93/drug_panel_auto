@@ -24,6 +24,10 @@ from reportgen.core.batch_runner import (
     _expected_tables_from_excel,
 )
 from reportgen.core.excel_reader import ExcelReader
+from reportgen.core.field_provenance import (
+    build_field_provenance_report,
+    write_field_provenance_report,
+)
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
@@ -1559,6 +1563,92 @@ def test_qa_report_passes_basic_clean_docx(tmp_path):
     assert qa["status"] == "PASS"
     assert qa["checks"]["docx_openable"]["status"] == "PASS"
     assert qa["checks"]["unrendered_placeholders"]["count"] == 0
+
+
+def test_field_provenance_masks_sensitive_values_and_records_sources(tmp_path):
+    docx_path = tmp_path / "report.docx"
+    doc = Document()
+    doc.add_paragraph("报告")
+    doc.save(docx_path)
+    excel_data = _excel(
+        tmp_path,
+        single_values={
+            "患者姓名": "表单姓名",
+            "TMB": "6.5",
+            "MSI状态": "MSS",
+        },
+    )
+    excel_data.metadata["sample_id_from_filename"] = "ZZ999999"
+    excel_data.metadata["field_source_overrides"] = {
+        "patient_name": {
+            "source": "form",
+            "source_key": "患者姓名",
+            "source_detail": "web_clinical_form",
+        }
+    }
+    report_data = ReportData()
+    report_data.set_field("patient_name", "表单姓名")
+    report_data.set_field("sample_id", "ZZ999999")
+    report_data.set_field("tmb_value", "6.5")
+    report_data.set_field("tmb_status", "L")
+    report_data.set_field("msi_status", "MSS")
+
+    provenance = build_field_provenance_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        excel_data=excel_data,
+        config_loader=ConfigLoader(config_dir=str(ROOT / "config"), log_level="ERROR"),
+        project_type="crc_358_msi",
+        project_name="结直肠癌358基因+MSI",
+    )
+
+    fields = provenance["fields"]
+    assert fields["patient_name"]["source"] == "form"
+    assert fields["patient_name"]["value"] != "表单姓名"
+    assert fields["sample_id"]["source"] == "filename"
+    assert fields["sample_id"]["value"] != "ZZ999999"
+    assert fields["tmb_value"]["source"] == "excel"
+    assert fields["tmb_status"]["source"] == "rule"
+    assert fields["msi_status"]["source"] == "excel"
+
+
+def test_write_field_provenance_report_creates_sidecar_json(tmp_path):
+    docx_path = tmp_path / "report.docx"
+    doc = Document()
+    doc.add_paragraph("报告")
+    doc.save(docx_path)
+    payload = {"schema_version": "1.0", "fields": {}}
+
+    out_path = Path(write_field_provenance_report(payload, str(docx_path)))
+
+    assert out_path.name == "report.field_provenance.json"
+    assert out_path.exists()
+
+
+def test_qa_report_references_field_provenance(tmp_path):
+    docx_path = tmp_path / "clean.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+    provenance = {
+        "fields": {
+            "sample_id": {"source": "filename"},
+            "patient_name": {"source": "form"},
+        }
+    }
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        field_provenance=provenance,
+        field_provenance_file=str(docx_path.with_suffix(".field_provenance.json")),
+    )
+
+    assert qa["status"] == "PASS"
+    assert qa["field_provenance_file"].endswith(".field_provenance.json")
+    assert qa["checks"]["field_provenance"]["key_field_sources"] == {
+        "sample_id": "filename",
+        "patient_name": "form",
+    }
 
 
 def test_qa_report_detects_placeholder_residue(tmp_path):

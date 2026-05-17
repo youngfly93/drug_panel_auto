@@ -34,6 +34,8 @@ def build_docx_qa_report(
     project_name: Optional[str] = None,
     template_file: Optional[str] = None,
     generation_id: Optional[str] = None,
+    field_provenance: Optional[Mapping[str, Any]] = None,
+    field_provenance_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a structured QA report for one generated DOCX file."""
     generated_at = datetime.now().isoformat()
@@ -131,6 +133,20 @@ def build_docx_qa_report(
         "message": "DOCX-level QA cannot reliably identify visual blank pages; use PDF/PNG render QA for this check.",
     }
 
+    if field_provenance:
+        checks["field_provenance"] = {
+            "status": "PASS",
+            "file": field_provenance_file,
+            "key_field_sources": _field_source_summary(field_provenance),
+        }
+    else:
+        checks["field_provenance"] = {
+            "status": "SKIP",
+            "file": field_provenance_file,
+            "key_field_sources": {},
+            "message": "No field provenance report was provided.",
+        }
+
     table_checks = _build_table_checks(table_metrics, project_type, context)
     checks.update(table_checks)
     for table_issue in _table_issues(table_checks):
@@ -148,6 +164,7 @@ def build_docx_qa_report(
         project_name=project_name,
         template_file=template_file,
         output_file=output_file,
+        field_provenance_file=field_provenance_file,
         checks=checks,
         metrics=metrics,
         issues=issues,
@@ -174,6 +191,7 @@ def _finalize_report(
     checks: Mapping[str, Any],
     metrics: Mapping[str, Any],
     issues: List[Dict[str, str]],
+    field_provenance_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     has_error = any(i.get("level") == "error" for i in issues)
     has_warning = any(i.get("level") == "warning" for i in issues)
@@ -187,6 +205,9 @@ def _finalize_report(
         "project_name": project_name,
         "template_file": str(template_file) if template_file else None,
         "output_file": str(output_file),
+        "field_provenance_file": str(field_provenance_file)
+        if field_provenance_file
+        else None,
         "checks": dict(checks),
         "metrics": dict(metrics),
         "issues": issues,
@@ -204,6 +225,17 @@ def _iter_all_paragraphs(doc) -> Iterable[Any]:
                         f"table:{table_idx}:r{row_idx}:c{cell_idx}:p{para_idx}"
                     )
                     yield paragraph
+
+
+def _field_source_summary(field_provenance: Mapping[str, Any]) -> Dict[str, str]:
+    fields = field_provenance.get("fields") or {}
+    if not isinstance(fields, Mapping):
+        return {}
+    return {
+        str(field): str(info.get("source") or "unknown")
+        for field, info in fields.items()
+        if isinstance(info, Mapping)
+    }
 
 
 def _read_docx_text(doc) -> str:

@@ -341,6 +341,12 @@ def run_batch_generate_validate(
                 output_docx = str(Path(gen["output_file"]).resolve())
             ctx = gen.get("context") or {}
             patient_snapshot = _patient_snapshot_from_context(ctx)
+            field_provenance = gen.get("field_provenance") or {}
+            field_provenance_file = gen.get("field_provenance_file")
+            if field_provenance_file:
+                artifacts["field_provenance_json"] = public_path(
+                    Path(str(field_provenance_file))
+                )
             qa_report = gen.get("qa_report") or {}
             qa_report_file = gen.get("qa_report_file")
             if qa_report_file:
@@ -526,6 +532,12 @@ def run_batch_generate_validate(
                 "issues": issues,
                 "template_contract": template_contract,
                 "input_validation_warnings": input_validation_warnings,
+                "field_provenance_file": (
+                    public_path(Path(str(field_provenance_file)))
+                    if field_provenance_file
+                    else None
+                ),
+                "field_provenance": field_provenance,
                 "qa_report_file": (
                     public_path(Path(str(qa_report_file))) if qa_report_file else None
                 ),

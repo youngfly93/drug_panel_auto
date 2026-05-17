@@ -282,6 +282,9 @@ class ReportGenBridge:
             with open(mapping_path, "r", encoding="utf-8") as f:
                 mapping_cfg = yaml.safe_load(f) or {}
             single_values_cfg = mapping_cfg.get("single_values", {})
+            source_overrides = excel_data.metadata.setdefault(
+                "field_source_overrides", {}
+            )
 
             for var_name, value in clinical_info.items():
                 if value is None or value == "":
@@ -296,12 +299,14 @@ class ReportGenBridge:
                     continue
 
                 field_def = single_values_cfg.get(var_name)
+                injected_key = var_name
                 if field_def and isinstance(field_def, dict):
                     synonyms = field_def.get("synonyms", [])
                     if synonyms:
                         # Use first synonym as the key so FieldMapper's
                         # matches_column_name() will match it
-                        excel_data.single_values[synonyms[0]] = value
+                        injected_key = synonyms[0]
+                        excel_data.single_values[injected_key] = value
                     else:
                         # Computed field (empty synonyms) — write to var_name directly
                         # These get picked up as fallback via report_data.get_field
@@ -309,6 +314,11 @@ class ReportGenBridge:
                 else:
                     # Unknown field — still inject under var_name for flexibility
                     excel_data.single_values[var_name] = value
+                source_overrides[var_name] = {
+                    "source": "form",
+                    "source_key": injected_key,
+                    "source_detail": "web_clinical_form",
+                }
 
             # Override filename-derived sample_id (the one used by patient_info.yaml lookup)
             # This prevents patient_info.yaml fallback from overwriting user form input
