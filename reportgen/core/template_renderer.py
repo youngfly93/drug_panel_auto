@@ -15,8 +15,10 @@ from reportgen.core.processors import (
     run_processors,
 )
 from reportgen.core.template_contract import (
+    declared_validation_to_dict,
     extract_template_contract,
     validate_contract,
+    validate_declared_contract,
 )
 from reportgen.models.report_data import ReportData
 from reportgen.utils.logger import get_logger
@@ -1315,22 +1317,48 @@ class TemplateRenderer:
             except OSError:
                 pass
 
-    def validate_template_contract(self, template_path: str, context: dict) -> dict:
-        """Validate that the template's referenced variables exist in the context.
+    def validate_template_contract(
+        self,
+        template_path: str,
+        context: dict,
+        contract_spec: dict | None = None,
+    ) -> dict:
+        """Validate template references and optional panel-declared requirements.
 
         Returns:
             A JSON-serializable dict describing missing variables/fields.
         """
         contract = extract_template_contract(template_path)
         validation = validate_contract(contract, context=context)
+        declared_report = None
+        declared_ok = True
+        if contract_spec:
+            declared_validation = validate_declared_contract(
+                template_path,
+                contract,
+                contract_spec,
+            )
+            declared_report = declared_validation_to_dict(
+                declared_validation,
+                contract_spec,
+            )
+            declared_ok = bool(declared_validation.ok)
+
         return {
-            "ok": bool(validation.ok),
+            "ok": bool(validation.ok and declared_ok),
+            "template_path": contract.template_path,
+            "required_paths": list(contract.required_paths),
+            "required_lists": list(contract.required_lists),
+            "loop_row_fields": {
+                k: list(v) for k, v in contract.loop_row_fields.items()
+            },
             "missing_paths": list(validation.missing_paths),
             "missing_lists": list(validation.missing_lists),
             "missing_row_fields": {
                 k: list(v) for k, v in validation.missing_row_fields.items()
             },
             "missing_row_examples": validation.missing_row_examples,
+            "declared_contract": declared_report,
         }
 
     def validate_template(self, template_path: str) -> tuple[bool, Optional[str]]:

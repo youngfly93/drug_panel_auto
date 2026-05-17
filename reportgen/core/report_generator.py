@@ -11,7 +11,11 @@ from typing import Optional
 
 from reportgen.config.loader import ConfigLoader
 from reportgen.core.data_cleaner import DataCleaner
-from reportgen.core.enhancer_registry import get_enhancer, normalize_project_type
+from reportgen.core.enhancer_registry import (
+    get_enhancer,
+    get_panel_registry,
+    normalize_project_type,
+)
 from reportgen.core.excel_reader import ExcelReader
 from reportgen.core.field_provenance import (
     build_field_provenance_report,
@@ -328,6 +332,9 @@ class ReportGenerator:
 
             # 5. 构建模板上下文（用于可追溯产物/契约校验）
             template_context = self.template_renderer.build_context(report_data)
+            template_contract_spec = self._get_template_contract_spec(
+                canonical_project_type
+            )
 
             # 5.1 模板契约校验（可选）
             template_contract_mode = str(template_contract_mode or "none").lower()
@@ -341,7 +348,9 @@ class ReportGenerator:
             if template_contract_mode != "none":
                 template_contract_report = (
                     self.template_renderer.validate_template_contract(
-                        template_file, template_context
+                        template_file,
+                        template_context,
+                        contract_spec=template_contract_spec,
                     )
                 )
                 if not template_contract_report.get("ok", False):
@@ -350,11 +359,15 @@ class ReportGenerator:
                     missing_row_fields = template_contract_report.get(
                         "missing_row_fields"
                     )
+                    declared_contract = (
+                        template_contract_report.get("declared_contract") or {}
+                    )
                     msg = (
-                        "模板契约校验失败：模板引用了上下文中不存在的变量/字段。"
+                        "模板契约校验失败：模板引用或声明式结构不满足要求。"
                         f" missing_paths={missing_paths},"
                         f" missing_lists={missing_lists},"
                         f" missing_row_fields={missing_row_fields}"
+                        f" declared_contract={declared_contract}"
                     )
                     if template_contract_mode == "fail":
                         duration = time.time() - start_time
@@ -420,6 +433,7 @@ class ReportGenerator:
                     field_provenance=field_provenance,
                     field_provenance_file=field_provenance_file,
                     processor_report=processor_report,
+                    template_contract=template_contract_report,
                 )
                 qa_report_file = write_docx_qa_report(qa_report, final_output)
                 self.logger.log_event(
@@ -471,6 +485,21 @@ class ReportGenerator:
                 "errors": [str(e)],
                 "warnings": [],
             }
+
+    @staticmethod
+    def _get_template_contract_spec(project_type: Optional[str]) -> Optional[dict]:
+        """Return the panel-declared template contract for a project type."""
+        if not str(project_type or "").strip():
+            return None
+        try:
+            registration = get_panel_registry().get(project_type)
+        except Exception:
+            return None
+        package = registration.package if registration is not None else None
+        if package is None:
+            return None
+        spec = package.raw.get("template_contract")
+        return dict(spec) if isinstance(spec, dict) else None
 
     def _generate_output_filename(self, excel_data, report_data: ReportData) -> str:
         """

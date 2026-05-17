@@ -46,6 +46,7 @@ class PanelPackage:
     processors: tuple[str, ...] = ()
     project_detector_rules: Dict[str, Any] = field(default_factory=dict)
     input_contract: Dict[str, Any] = field(default_factory=dict)
+    template_contract: Dict[str, Any] = field(default_factory=dict)
     golden_cases: tuple[Dict[str, Any], ...] = ()
     raw: Dict[str, Any] = field(default_factory=dict)
 
@@ -167,6 +168,7 @@ class PanelPackageLoader:
             processors=processors,
             project_detector_rules=dict(raw.get("project_detector_rules") or {}),
             input_contract=dict(raw.get("input_contract") or {}),
+            template_contract=dict(raw.get("template_contract") or {}),
             golden_cases=golden_cases,
             raw=dict(raw),
         )
@@ -242,7 +244,13 @@ def validate_panel_package_config(cfg: Any) -> tuple[bool, List[str]]:
             f"default_template {default_template!r} is not declared in templates"
         )
 
-    for section in ("rules", "mappings", "project_detector_rules", "input_contract"):
+    for section in (
+        "rules",
+        "mappings",
+        "project_detector_rules",
+        "input_contract",
+        "template_contract",
+    ):
         value = cfg.get(section, {})
         if value is not None and not isinstance(value, Mapping):
             errors.append(f"{section} must be a dict")

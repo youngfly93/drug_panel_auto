@@ -683,6 +683,7 @@ def test_panel_package_loader_reads_crc358_package():
     assert package.resolve_rule_file("panel_rules").exists()
     assert "variant_tables" in package.processors
     assert package.input_contract["required_tables"] == ["Variations"]
+    assert "variant_detail" in package.template_contract["required_table_structures"]
     assert package.golden_cases[0]["id"] == "crc_358_msi_synthetic_low_tmb_mss"
 
 
@@ -706,6 +707,104 @@ def test_panel_package_schema_rejects_missing_default_template():
 
     assert not ok
     assert any("default_template" in error for error in errors)
+
+
+def test_template_contract_fails_when_declared_variable_is_removed(tmp_path):
+    template_path = tmp_path / "missing_declared_variable.docx"
+    doc = Document()
+    doc.add_paragraph("患者：{{ patient_name }}")
+    doc.save(template_path)
+
+    report = TemplateRenderer(log_level="ERROR").validate_template_contract(
+        str(template_path),
+        {"patient_name": "张三", "sample_id": "LZ000001"},
+        contract_spec={
+            "required_variables": ["patient_name", "sample_id"],
+        },
+    )
+
+    assert report["ok"] is False
+    assert report["missing_paths"] == []
+    assert "sample_id" in report["declared_contract"]["missing_required_variables"]
+
+
+def test_template_contract_fails_when_declared_table_shape_changes(tmp_path):
+    template_path = tmp_path / "bad_variant_table.docx"
+    doc = Document()
+    table = doc.add_table(rows=1, cols=8)
+    headers = [
+        "基因名称",
+        "转录本号",
+        "染色体",
+        "外显子",
+        "位点",
+        "突变 类型",
+        "频率 (%)",
+        "潜在获益靶向药物",
+    ]
+    for idx, text in enumerate(headers):
+        table.rows[0].cells[idx].text = text
+    doc.save(template_path)
+
+    report = TemplateRenderer(log_level="ERROR").validate_template_contract(
+        str(template_path),
+        {},
+        contract_spec={
+            "required_table_structures": {
+                "variant_detail": {
+                    "columns": 9,
+                    "required_headers": [
+                        "基因名称",
+                        "转录本号",
+                        "染色体",
+                        "外显子",
+                        "频率",
+                        "潜在获益靶向药物",
+                    ],
+                }
+            }
+        },
+    )
+
+    assert report["ok"] is False
+    errors = report["declared_contract"]["table_errors"]["variant_detail"]
+    assert any("expected 9 columns" in error for error in errors)
+
+
+def test_report_generator_fails_bad_panel_template_before_rendering(tmp_path):
+    template_path = tmp_path / "bad_panel_template.docx"
+    doc = Document()
+    doc.add_paragraph("患者：{{ patient_name }}")
+    doc.save(template_path)
+    output_dir = tmp_path / "out"
+
+    result = ReportGenerator(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).generate(
+        excel_file=str(tmp_path / "case.xlsx"),
+        template_file=str(template_path),
+        output_dir=str(output_dir),
+        output_filename="should_not_render.docx",
+        excel_data=_excel(
+            tmp_path,
+            single_values={
+                "患者姓名": "张三",
+                "样本编号": "LZ000001",
+                "报告日期": "2026.05.17",
+            },
+            variations=[],
+        ),
+        project_type="crc_358_msi",
+        template_contract_mode="fail",
+    )
+
+    assert result["success"] is False
+    assert result["output_file"] is None
+    assert not (output_dir / "should_not_render.docx").exists()
+    declared = result["template_contract"]["declared_contract"]
+    assert "sample_id" in declared["missing_required_variables"]
+    assert "variant_detail" in declared["missing_required_tables"]
 
 
 def test_msi_percentage_label_conflict_is_warned(tmp_path):
@@ -1729,6 +1828,36 @@ def test_qa_report_references_field_provenance(tmp_path):
         "sample_id": "filename",
         "patient_name": "form",
     }
+
+
+def test_qa_report_records_template_contract_failure(tmp_path):
+    docx_path = tmp_path / "clean.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        template_contract={
+            "ok": False,
+            "missing_paths": [],
+            "missing_lists": [],
+            "missing_row_fields": {},
+            "declared_contract": {
+                "missing_required_variables": ["sample_id"],
+                "missing_required_lists": [],
+                "missing_required_tables": ["variant_detail"],
+                "table_errors": {},
+            },
+        },
+    )
+
+    assert qa["status"] == "FAIL"
+    assert qa["checks"]["template_contract"]["status"] == "FAIL"
+    assert qa["checks"]["template_contract"]["missing_required_variables"] == [
+        "sample_id"
+    ]
+    assert any(i["code"] == "TEMPLATE_CONTRACT_FAILED" for i in qa["issues"])
 
 
 def test_processor_runner_records_skip_success_and_error():

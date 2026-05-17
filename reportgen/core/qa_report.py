@@ -37,6 +37,7 @@ def build_docx_qa_report(
     field_provenance: Optional[Mapping[str, Any]] = None,
     field_provenance_file: Optional[str] = None,
     processor_report: Optional[list[Mapping[str, Any]]] = None,
+    template_contract: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build a structured QA report for one generated DOCX file."""
     generated_at = datetime.now().isoformat()
@@ -51,6 +52,14 @@ def build_docx_qa_report(
     def issue(level: str, code: str, message: str) -> None:
         issues.append({"level": level, "code": code, "message": message})
 
+    checks["template_contract"] = _template_contract_check(template_contract)
+    if checks["template_contract"]["status"] == "FAIL":
+        issue(
+            "error",
+            "TEMPLATE_CONTRACT_FAILED",
+            checks["template_contract"]["message"],
+        )
+
     if not output_path.exists():
         issue("error", "DOCX_NOT_FOUND", f"Output DOCX not found: {output_file}")
         return _finalize_report(
@@ -63,6 +72,7 @@ def build_docx_qa_report(
             checks=checks,
             metrics=metrics,
             issues=issues,
+            template_contract=template_contract,
         )
 
     try:
@@ -81,6 +91,7 @@ def build_docx_qa_report(
             checks=checks,
             metrics=metrics,
             issues=issues,
+            template_contract=template_contract,
         )
 
     paragraphs = list(_iter_all_paragraphs(doc))
@@ -185,6 +196,7 @@ def build_docx_qa_report(
         output_file=output_file,
         field_provenance_file=field_provenance_file,
         processor_report=processor_report,
+        template_contract=template_contract,
         checks=checks,
         metrics=metrics,
         issues=issues,
@@ -213,6 +225,7 @@ def _finalize_report(
     issues: List[Dict[str, str]],
     field_provenance_file: Optional[str] = None,
     processor_report: Optional[list[Mapping[str, Any]]] = None,
+    template_contract: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     has_error = any(i.get("level") == "error" for i in issues)
     has_warning = any(i.get("level") == "warning" for i in issues)
@@ -230,9 +243,54 @@ def _finalize_report(
         if field_provenance_file
         else None,
         "post_processors": list(processor_report or []),
+        "template_contract": dict(template_contract) if template_contract else None,
         "checks": dict(checks),
         "metrics": dict(metrics),
         "issues": issues,
+    }
+
+
+def _template_contract_check(
+    template_contract: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    if not template_contract:
+        return {
+            "status": "SKIP",
+            "message": "No template contract report was provided.",
+        }
+
+    declared = template_contract.get("declared_contract") or {}
+    missing_paths = list(template_contract.get("missing_paths") or [])
+    missing_lists = list(template_contract.get("missing_lists") or [])
+    missing_row_fields = dict(template_contract.get("missing_row_fields") or {})
+    missing_required_variables = list(
+        declared.get("missing_required_variables") or []
+    )
+    missing_required_lists = list(declared.get("missing_required_lists") or [])
+    missing_required_tables = list(declared.get("missing_required_tables") or [])
+    table_errors = dict(declared.get("table_errors") or {})
+
+    ok = bool(template_contract.get("ok"))
+    return {
+        "status": "PASS" if ok else "FAIL",
+        "ok": ok,
+        "missing_paths": missing_paths,
+        "missing_lists": missing_lists,
+        "missing_row_fields": missing_row_fields,
+        "missing_required_variables": missing_required_variables,
+        "missing_required_lists": missing_required_lists,
+        "missing_required_tables": missing_required_tables,
+        "table_errors": table_errors,
+        "message": (
+            "Template contract passed."
+            if ok
+            else "Template contract failed: "
+            f"missing_paths={missing_paths}, missing_lists={missing_lists}, "
+            f"missing_required_variables={missing_required_variables}, "
+            f"missing_required_lists={missing_required_lists}, "
+            f"missing_required_tables={missing_required_tables}, "
+            f"table_errors={table_errors}"
+        ),
     }
 
 

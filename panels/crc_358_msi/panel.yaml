@@ -70,6 +70,58 @@ input_contract:
       required: true
       allowed_values: ["MSS", "MSI-L", "MSI-H", "未检测"]
 
+template_contract:
+  required_variables:
+    - "patient_name"
+    - "sample_id"
+    - "report_date"
+    - "total_variants_count"
+    - "drug_related_count"
+    - "tmb_summary"
+    - "msi_summary"
+    - "immuno_tips"
+    - "msi_tips"
+    - "nccn_KRAS_EX2"
+  required_lists:
+    - "targeted_drug_tips"
+    - "variants_2_1"
+    - "chemotherapy"
+  required_table_structures:
+    targeted_drug_tips:
+      columns: 4
+      required_headers:
+        - "基因"
+        - "突变位点"
+        - "潜在获益靶向药物"
+        - "可能耐药"
+    biomarker_results:
+      columns: 3
+      required_headers:
+        - "TMB/MSI"
+        - "用药提示"
+    variant_detail:
+      columns: 9
+      required_headers:
+        - "基因名称"
+        - "转录本号"
+        - "染色体"
+        - "外显子"
+        - "频率"
+        - "潜在获益靶向药物"
+        - "可能耐药"
+    chemotherapy:
+      columns: 3
+      required_headers:
+        - "药物名称"
+        - "相关基因"
+        - "药物适应情况"
+    nccn_results:
+      columns: 3
+      required_headers:
+        - "检测基因"
+        - "检测内容"
+        - "检测结果"
+
 processors:
   - "empty_table_rows"
   - "part3_formatted_sections"
@@ -94,4 +146,3 @@ golden_cases:
     command: "reportgen qa run --panel crc_358_msi"
     synthetic: true
     expected_qa_status: "PASS"
-
