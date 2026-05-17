@@ -18,11 +18,16 @@ from typing import Any, Dict, List, Mapping, Optional
 import pandas as pd
 from docx import Document
 
+from reportgen.core.enhancer_registry import get_panel_registry
 from reportgen.core.report_generator import ReportGenerator
 from reportgen.utils.artifacts import write_json
 
 
-SUPPORTED_PANELS = {"crc_358_msi": "crc_358_msi", "crc_358": "crc_358_msi"}
+SUPPORTED_PANELS = {
+    "crc_358_msi": "crc_358_msi",
+    "crc_358": "crc_358_msi",
+    "lung_methylation": "lung_methylation",
+}
 
 
 @dataclass(frozen=True)
@@ -72,13 +77,42 @@ CRC_358_MSI_EXPECTATIONS: Dict[str, Any] = {
 }
 
 
+LUNG_METHYLATION_EXPECTATIONS: Dict[str, Any] = {
+    "project_type": "lung_methylation",
+    "project_name": "肺癌甲基化",
+    "expected_context": {
+        "patient_name": "黄金甲基化患者",
+        "sample_id": "LUNG999001",
+        "project_name": "肺癌甲基化",
+        "methylation_result": "阳性",
+    },
+    "required_qa_checks": [
+        "template_contract",
+        "unrendered_placeholders",
+        "empty_numbered_paragraphs",
+        "post_processors",
+    ],
+    "required_text": [
+        "肺癌甲基化检测报告",
+        "黄金甲基化患者",
+        "LUNG999001",
+        "肺癌甲基化",
+        "阳性",
+        "SHOX2",
+        "RASSF1A",
+        "78.5",
+    ],
+}
+
+
 def run_golden_case(
     options: Optional[GoldenCaseOptions] = None, **kwargs: Any
 ) -> Dict[str, Any]:
     """Run the configured golden case and return a machine-readable summary."""
     opts = options or GoldenCaseOptions(**kwargs)
     panel = _normalize_panel(opts.panel)
-    expectations = CRC_358_MSI_EXPECTATIONS
+    case = _golden_case_spec(panel)
+    expectations = case["expectations"]
 
     output_root = _resolve_output_root(opts.output_root, panel)
     input_dir = output_root / "input"
@@ -86,9 +120,7 @@ def run_golden_case(
     input_dir.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
 
-    excel_file = build_crc_358_msi_golden_excel(
-        input_dir / "LZ999001_crc_358_msi_golden.xlsx"
-    )
+    excel_file = case["builder"](input_dir / case["input_filename"])
     template_file = _resolve_template_file(opts)
 
     generator = ReportGenerator(
@@ -100,7 +132,7 @@ def run_golden_case(
         excel_file=str(excel_file),
         template_file=str(template_file),
         output_dir=str(report_dir),
-        output_filename="golden_crc_358_msi.docx",
+        output_filename=case["output_filename"],
         strict_mode=True,
         return_context=True,
         template_contract_mode=opts.template_contract_mode,
@@ -134,6 +166,22 @@ def run_golden_case(
     write_json(report_path, summary)
     summary["golden_report_file"] = str(report_path)
     return summary
+
+
+def _golden_case_spec(panel: str) -> Dict[str, Any]:
+    if panel == "lung_methylation":
+        return {
+            "expectations": LUNG_METHYLATION_EXPECTATIONS,
+            "builder": build_lung_methylation_golden_excel,
+            "input_filename": "LUNG999001_lung_methylation_golden.xlsx",
+            "output_filename": "golden_lung_methylation.docx",
+        }
+    return {
+        "expectations": CRC_358_MSI_EXPECTATIONS,
+        "builder": build_crc_358_msi_golden_excel,
+        "input_filename": "LZ999001_crc_358_msi_golden.xlsx",
+        "output_filename": "golden_crc_358_msi.docx",
+    }
 
 
 def build_crc_358_msi_golden_excel(path: Path | str) -> Path:
@@ -230,6 +278,57 @@ def build_crc_358_msi_golden_excel(path: Path | str) -> Path:
         qc.to_excel(writer, sheet_name="QC", index=False, header=False)
         empty_cnv.to_excel(writer, sheet_name="Cnv", index=False)
         empty_fusion.to_excel(writer, sheet_name="Fusion", index=False)
+
+    return out
+
+
+def build_lung_methylation_golden_excel(path: Path | str) -> Path:
+    """Create a synthetic lung methylation workbook for M3 panel testing."""
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    meta = pd.DataFrame(
+        [
+            {
+                "患者姓名": "黄金甲基化患者",
+                "样本编号": "LUNG999001",
+                "报告编号": "MLJY-LUNG999001",
+                "性别": "女",
+                "年龄": 62,
+                "临床诊断": "肺癌",
+                "肿瘤类型": "肺癌",
+                "样本类型": "血浆",
+                "项目名称": "肺癌甲基化",
+                "检测项目": "肺癌甲基化",
+                "甲基化结果": "阳性",
+                "送检日期": "2026-02-01",
+                "报告日期": "2026-02-08",
+                "检测方法": "甲基化特异性测序",
+            }
+        ]
+    )
+    sites = pd.DataFrame(
+        [
+            {
+                "基因": "SHOX2",
+                "位点": "cg000001",
+                "甲基化水平": 78.5,
+                "阈值": 10.0,
+                "结果": "阳性",
+            },
+            {
+                "基因": "RASSF1A",
+                "位点": "cg000002",
+                "甲基化水平": 32.1,
+                "阈值": 8.0,
+                "结果": "阳性",
+            },
+        ]
+    )
+
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        meta.to_excel(writer, sheet_name="Meta", index=False)
+        sites.to_excel(writer, sheet_name="甲基化位点", index=False)
 
     return out
 
@@ -347,9 +446,18 @@ def _resolve_template_file(opts: GoldenCaseOptions) -> Path:
     if opts.template_file:
         template = Path(opts.template_file)
     else:
-        template = (
-            Path(opts.template_dir) / "aligned_template_with_cnv_fusion_hla_FIXED.docx"
-        )
+        template = None
+        try:
+            registration = get_panel_registry().get(_normalize_panel(opts.panel))
+            if registration and registration.package:
+                template = registration.package.resolve_template_file()
+        except Exception:
+            template = None
+        if template is None:
+            template = (
+                Path(opts.template_dir)
+                / "aligned_template_with_cnv_fusion_hla_FIXED.docx"
+            )
     template = template.resolve()
     if not template.exists():
         raise FileNotFoundError(f"Golden case template not found: {template}")

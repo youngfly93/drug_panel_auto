@@ -119,8 +119,10 @@ def _build_default_registry() -> PanelRegistry:
 
     # Legacy project types still intentionally run without CRC enhancement until
     # they get real panel packages/enhancers.
-    registry.register("mlf_result", _NOOP)
-    registry.register("lung_methylation", _NOOP)
+    if "mlf_result" not in loaded_packages:
+        registry.register("mlf_result", _NOOP)
+    if "lung_methylation" not in loaded_packages:
+        registry.register("lung_methylation", _NOOP)
     return registry
 
 

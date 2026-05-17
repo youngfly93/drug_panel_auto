@@ -31,8 +31,11 @@ from reportgen.core.field_provenance import (
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.golden_case import (
     CRC_358_MSI_EXPECTATIONS,
+    LUNG_METHYLATION_EXPECTATIONS,
     assert_golden_case_output,
     build_crc_358_msi_golden_excel,
+    build_lung_methylation_golden_excel,
+    run_golden_case,
 )
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.processors import ProcessorContext, run_processors
@@ -625,16 +628,20 @@ def test_detector_uses_trusted_filename_project_tokens(tmp_path):
 
     path_301 = tmp_path / "_MLS2600000001_结直肠癌301基因+MSI_终版.xlsx"
     path_358 = tmp_path / "_MLS2600000002_结直肠癌358基因+MSI_终版.xlsx"
+    path_lung = tmp_path / "_LUNG999001_肺癌甲基化_终版.xlsx"
     path_301.write_bytes(b"placeholder")
     path_358.write_bytes(b"placeholder")
+    path_lung.write_bytes(b"placeholder")
 
     assert detector.detect(str(path_301), excel_data=excel_data)["project_type"] == "crc_301_msi"
     assert detector.detect(str(path_358), excel_data=excel_data)["project_type"] == "crc_358_msi"
+    assert detector.detect(str(path_lung), excel_data=excel_data)["project_type"] == "lung_methylation"
 
 
 def test_crc_panel_enhancer_accepts_legacy_aliases():
     from reportgen.core.enhancer_registry import (
         CRC358Enhancer,
+        NoopEnhancer,
         UnknownPanelError,
         get_enhancer,
         get_panel_registry,
@@ -652,6 +659,9 @@ def test_crc_panel_enhancer_accepts_legacy_aliases():
     assert "crc_358_msi" in get_registered_project_types()
     assert get_panel_registry().get("crc_358").package.panel_id == "crc_358_msi"
     assert get_panel_registry().get("crc_301").package.panel_id == "crc_301_msi"
+    lung = get_panel_registry().get("lung_methylation")
+    assert isinstance(lung.enhancer, NoopEnhancer)
+    assert lung.package.panel_id == "lung_methylation"
     with pytest.raises(UnknownPanelError):
         get_enhancer("unknown_panel")
 
@@ -697,6 +707,7 @@ def test_panel_package_loader_loads_all_packages():
     assert {package.panel_id for package in packages} >= {
         "crc_301_msi",
         "crc_358_msi",
+        "lung_methylation",
     }
 
 
@@ -716,6 +727,19 @@ def test_panel_package_loader_reads_crc301_package():
         "ExistInsmall301",
         "ExistIn552",
     ]
+
+
+def test_panel_package_loader_reads_lung_methylation_package():
+    package = load_panel_package("lung_methylation", project_root=ROOT)
+
+    assert package.panel_id == "lung_methylation"
+    assert package.display_name == "肺癌甲基化"
+    assert package.default_template.template_id == "lung_methylation_minimal_v1"
+    assert package.resolve_template_file().exists()
+    assert package.resolve_rule_file("panel_rules").name == "lung_methylation.yaml"
+    assert package.input_contract["required_tables"] == ["甲基化位点"]
+    assert "methylation_sites" in package.template_contract["required_lists"]
+    assert package.golden_cases[0]["id"] == "lung_methylation_synthetic_positive"
 
 
 def test_panel_package_schema_rejects_missing_default_template():
@@ -2174,6 +2198,38 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert Path(result["output_file"]).exists()
     assert result["context"]["project_name"] == "结直肠癌301基因+MSI"
     assert result["template_contract"]["declared_contract"]["ok"] is True
+
+
+def test_lung_methylation_golden_excel_fixture_is_parseable(tmp_path):
+    xlsx_path = build_lung_methylation_golden_excel(
+        tmp_path / "LUNG999001_lung_methylation_golden.xlsx"
+    )
+
+    excel_data = ExcelReader(
+        config_dir=str(ROOT / "config"), log_level="ERROR"
+    ).read(str(xlsx_path), include_tables=True)
+
+    assert excel_data.metadata["sample_id_from_filename"] == "LUNG999001"
+    assert excel_data.single_values["患者姓名"] == "黄金甲基化患者"
+    assert excel_data.single_values["甲基化结果"] == "阳性"
+    rows = excel_data.get_table_data("甲基化位点")
+    assert len(rows) == 2
+    assert {row["基因"] for row in rows} == {"SHOX2", "RASSF1A"}
+
+
+def test_lung_methylation_golden_case_passes(tmp_path):
+    result = run_golden_case(
+        panel="lung_methylation",
+        config_dir=str(ROOT / "config"),
+        output_root=str(tmp_path / "lung_methylation_golden"),
+        log_level="ERROR",
+        template_contract_mode="fail",
+    )
+
+    assert result["ok"], result.get("errors")
+    assert result["qa_status"] == "PASS"
+    assert Path(result["output_file"]).exists()
+    assert result["panel"] == LUNG_METHYLATION_EXPECTATIONS["project_type"]
 
 
 def test_golden_case_assertions_pass_on_expected_report_shape(tmp_path):
