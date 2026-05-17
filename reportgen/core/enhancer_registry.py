@@ -26,6 +26,8 @@ class PanelEnhancer(Protocol):
         field_mapper: Any = None,
         gene_knowledge_provider: Any = None,
         base_path: Optional[str] = None,
+        project_type: Optional[str] = None,
+        panel_package: Any = None,
     ) -> ReportData: ...
 
 
@@ -44,6 +46,8 @@ class NoopEnhancer:
         field_mapper: Any = None,
         gene_knowledge_provider: Any = None,
         base_path: Optional[str] = None,
+        project_type: Optional[str] = None,
+        panel_package: Any = None,
     ) -> ReportData:
         return report_data
 
@@ -63,8 +67,17 @@ class CRC358Enhancer:
         field_mapper: Any = None,
         gene_knowledge_provider: Any = None,
         base_path: Optional[str] = None,
+        project_type: Optional[str] = None,
+        panel_package: Any = None,
     ) -> ReportData:
         from reportgen.core.template_bridge_358 import enhance_report_data
+
+        panel_config_path = None
+        if panel_package is not None:
+            try:
+                panel_config_path = str(panel_package.resolve_rule_file("panel_rules"))
+            except Exception:
+                panel_config_path = None
 
         return enhance_report_data(
             report_data,
@@ -72,6 +85,8 @@ class CRC358Enhancer:
             field_mapper=field_mapper,
             gene_knowledge_provider=gene_knowledge_provider,
             base_path=base_path,
+            panel_id=project_type,
+            panel_config_path=panel_config_path,
         )
 
 
@@ -99,7 +114,8 @@ def _build_default_registry() -> PanelRegistry:
 
     if "crc_358_msi" not in loaded_packages:
         registry.register("crc_358_msi", crc_enhancer, aliases=("crc_358",))
-    registry.register("crc_301_msi", crc_enhancer, aliases=("crc_301",))
+    if "crc_301_msi" not in loaded_packages:
+        registry.register("crc_301_msi", crc_enhancer, aliases=("crc_301",))
 
     # Legacy project types still intentionally run without CRC enhancement until
     # they get real panel packages/enhancers.

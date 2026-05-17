@@ -124,12 +124,20 @@ class TargetedDrugMixin:
         return out
 
     def _get_reviewed_variant_overrides(self) -> list[dict[str, Any]]:
-        """Load reviewed per-variant overrides from the CRC panel YAML."""
-        try:
-            cfg_path = Path(self.config_loader.config_dir) / "panels" / "crc_358.yaml"
-            cfg = self.config_loader.load_yaml(str(cfg_path))
-        except Exception:
-            return []
+        """Load reviewed per-variant overrides from CRC panel package rules."""
+        project_root = Path(getattr(self.config_loader, "project_root", "."))
+        candidates = [
+            project_root / "panels" / "crc_358_msi" / "rules" / "crc.yaml",
+            Path(self.config_loader.config_dir) / "panels" / "crc_358.yaml",
+        ]
+        cfg = {}
+        for cfg_path in candidates:
+            try:
+                if cfg_path.exists():
+                    cfg = self.config_loader.load_yaml(str(cfg_path))
+                    break
+            except Exception:
+                cfg = {}
         rows = cfg.get("reviewed_variant_overrides", []) if isinstance(cfg, dict) else []
         if not isinstance(rows, list):
             return []

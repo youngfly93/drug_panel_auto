@@ -647,9 +647,11 @@ def test_crc_panel_enhancer_accepts_legacy_aliases():
     assert isinstance(get_enhancer("crc_358"), CRC358Enhancer)
     assert normalize_project_type("crc_358") == "crc_358_msi"
     assert normalize_project_type("CRC358") == "crc_358_msi"
+    assert normalize_project_type("crc301") == "crc_301_msi"
     assert is_registered_project_type("crc_358")
     assert "crc_358_msi" in get_registered_project_types()
     assert get_panel_registry().get("crc_358").package.panel_id == "crc_358_msi"
+    assert get_panel_registry().get("crc_301").package.panel_id == "crc_301_msi"
     with pytest.raises(UnknownPanelError):
         get_enhancer("unknown_panel")
 
@@ -679,7 +681,8 @@ def test_panel_package_loader_reads_crc358_package():
     assert package.default_template.template_id == "crc_358_msi_standard_v1"
     assert package.resolve_template_file().exists()
     assert package.resolve_mapping_file().name == "mapping.yaml"
-    assert package.resolve_rule_file("panel_rules").name == "crc_358.yaml"
+    assert package.resolve_rule_file("panel_rules").name == "crc.yaml"
+    assert "panels/crc_358_msi/rules" in str(package.resolve_rule_file("panel_rules"))
     assert package.resolve_rule_file("panel_rules").exists()
     assert "variant_tables" in package.processors
     assert package.input_contract["required_tables"] == ["Variations"]
@@ -691,7 +694,28 @@ def test_panel_package_loader_loads_all_packages():
     loader = PanelPackageLoader(project_root=ROOT)
     packages = loader.load_all()
 
-    assert {package.panel_id for package in packages} >= {"crc_358_msi"}
+    assert {package.panel_id for package in packages} >= {
+        "crc_301_msi",
+        "crc_358_msi",
+    }
+
+
+def test_panel_package_loader_reads_crc301_package():
+    package = load_panel_package("crc_301_msi", project_root=ROOT)
+
+    assert package.panel_id == "crc_301_msi"
+    assert package.display_name == "结直肠癌301基因+MSI"
+    assert "crc_301" in package.aliases
+    assert package.default_template.template_id == "crc_301_msi_standard_v1"
+    assert package.resolve_template_file().exists()
+    assert package.resolve_rule_file("panel_rules").name == "crc.yaml"
+    assert "panels/crc_301_msi/rules" in str(package.resolve_rule_file("panel_rules"))
+    assert package.input_contract["required_columns"]["Variations"] == [
+        "Gene_Symbol",
+        "cHGVS",
+        "ExistInsmall301",
+        "ExistIn552",
+    ]
 
 
 def test_panel_package_schema_rejects_missing_default_template():
@@ -2104,6 +2128,52 @@ def test_crc358_golden_excel_fixture_is_synthetic_and_parseable(tmp_path):
         "ERBB2",
         "FBXW7",
     }
+
+
+def test_crc301_panel_package_basic_generation_passes(tmp_path):
+    from openpyxl import load_workbook
+
+    xlsx_path = build_crc_358_msi_golden_excel(
+        tmp_path / "LZ999301_crc_301_msi_basic.xlsx"
+    )
+    workbook = load_workbook(xlsx_path)
+
+    meta = workbook["Meta"]
+    meta_headers = {str(cell.value): idx for idx, cell in enumerate(meta[1], start=1)}
+    for field in ("项目名称", "检测项目"):
+        meta.cell(row=2, column=meta_headers[field]).value = "结直肠癌301基因+MSI"
+
+    variations = workbook["Variations"]
+    var_headers = {
+        str(cell.value): idx for idx, cell in enumerate(variations[1], start=1)
+    }
+    variations.cell(row=1, column=var_headers["ExistInsmall358"]).value = (
+        "ExistInsmall301"
+    )
+    workbook.save(xlsx_path)
+
+    result = ReportGenerator(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).generate(
+        excel_file=str(xlsx_path),
+        template_file=str(
+            ROOT / "templates" / "aligned_template_with_cnv_fusion_hla_FIXED.docx"
+        ),
+        output_dir=str(tmp_path / "out"),
+        output_filename="crc301_basic.docx",
+        strict_mode=True,
+        return_context=True,
+        template_contract_mode="fail",
+        project_type="crc_301",
+        project_name="结直肠癌301基因+MSI",
+    )
+
+    assert result["success"], result.get("errors")
+    assert result["qa_status"] == "PASS"
+    assert Path(result["output_file"]).exists()
+    assert result["context"]["project_name"] == "结直肠癌301基因+MSI"
+    assert result["template_contract"]["declared_contract"]["ok"] is True
 
 
 def test_golden_case_assertions_pass_on_expected_report_shape(tmp_path):

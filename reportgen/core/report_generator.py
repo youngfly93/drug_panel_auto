@@ -123,6 +123,10 @@ class ReportGenerator:
 
         try:
             canonical_project_type = normalize_project_type(project_type)
+            panel_registration = self._get_panel_registration(canonical_project_type)
+            panel_package = (
+                panel_registration.package if panel_registration is not None else None
+            )
 
             # 1. 读取Excel（支持复用外部已读取的数据，避免重复IO）
             if excel_data is None:
@@ -218,6 +222,8 @@ class ReportGenerator:
                 field_mapper=self.field_mapper,
                 gene_knowledge_provider=gene_knowledge_provider,
                 base_path=str(Path(self.config_dir).parent),
+                project_type=canonical_project_type,
+                panel_package=panel_package,
             )
             self._apply_clinical_diagnosis_for_display(report_data)
             self.logger.log_event(
@@ -332,9 +338,7 @@ class ReportGenerator:
 
             # 5. 构建模板上下文（用于可追溯产物/契约校验）
             template_context = self.template_renderer.build_context(report_data)
-            template_contract_spec = self._get_template_contract_spec(
-                canonical_project_type
-            )
+            template_contract_spec = self._get_template_contract_spec(panel_package)
 
             # 5.1 模板契约校验（可选）
             template_contract_mode = str(template_contract_mode or "none").lower()
@@ -487,18 +491,21 @@ class ReportGenerator:
             }
 
     @staticmethod
-    def _get_template_contract_spec(project_type: Optional[str]) -> Optional[dict]:
-        """Return the panel-declared template contract for a project type."""
+    def _get_panel_registration(project_type: Optional[str]):
+        """Return the panel registry entry for a canonical project type."""
         if not str(project_type or "").strip():
             return None
         try:
-            registration = get_panel_registry().get(project_type)
+            return get_panel_registry().get(project_type)
         except Exception:
             return None
-        package = registration.package if registration is not None else None
-        if package is None:
+
+    @staticmethod
+    def _get_template_contract_spec(panel_package) -> Optional[dict]:
+        """Return the panel-declared template contract for a package."""
+        if panel_package is None:
             return None
-        spec = package.raw.get("template_contract")
+        spec = getattr(panel_package, "template_contract", None)
         return dict(spec) if isinstance(spec, dict) else None
 
     def _generate_output_filename(self, excel_data, report_data: ReportData) -> str:

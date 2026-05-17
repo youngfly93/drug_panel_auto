@@ -1,36 +1,36 @@
 schema_version: "1.0"
-panel_id: "crc_358_msi"
-display_name: "结直肠癌358基因+MSI"
-version: "0.2.0"
+panel_id: "crc_301_msi"
+display_name: "结直肠癌301基因+MSI"
+version: "0.1.0"
 status: "active"
-description: "CRC 358 + MSI panel package for the report production pipeline."
+description: "CRC 301 + MSI panel package reusing the CRC report pipeline."
 
 aliases:
-  - "crc_358"
-  - "crc358"
-  - "colorectal_358_msi"
+  - "crc_301"
+  - "crc301"
+  - "colorectal_301_msi"
 
 project_detector_rules:
   keywords:
-    - "358基因"
-    - "结直肠癌358"
+    - "301基因"
+    - "结直肠癌301"
   keyword_groups:
     - any:
-        - "结直肠癌358"
-        - "358基因"
+        - "结直肠癌301"
+        - "301基因"
         - type: regex
-          pattern: "(^|\\D)358(\\D|$)"
+          pattern: "(^|\\D)301(\\D|$)"
       weight: 1
 
 enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
 
-default_template: "crc_358_msi_standard_v1"
+default_template: "crc_301_msi_standard_v1"
 templates:
-  - id: "crc_358_msi_standard_v1"
+  - id: "crc_301_msi_standard_v1"
     file: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
     version: "1.0.0"
     status: "active"
-    description: "Current aligned CRC template used by the legacy generator."
+    description: "Current aligned CRC template reused for CRC 301 + MSI."
 
 mappings:
   default: "config/mapping.yaml"
@@ -60,7 +60,7 @@ input_contract:
     Variations:
       - "Gene_Symbol"
       - "cHGVS"
-      - "ExistInsmall358"
+      - "ExistInsmall301"
       - "ExistIn552"
   biomarkers:
     tmb_value:
@@ -141,8 +141,8 @@ processors:
   - "underlines_and_styles"
 
 golden_cases:
-  - id: "crc_358_msi_synthetic_low_tmb_mss"
+  - id: "crc_301_msi_basic_generation"
     runner: "reportgen.core.golden_case:run_golden_case"
-    command: "reportgen qa run --panel crc_358_msi"
+    command: "pytest backend/tests/test_report_regression.py -q -k crc301"
     synthetic: true
     expected_qa_status: "PASS"

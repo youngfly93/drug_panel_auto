@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from reportgen.config.loader import ConfigLoader
+from reportgen.panels.loader import PanelPackageLoader
 from reportgen.utils.logger import get_logger
 
 
@@ -44,8 +45,62 @@ class ProjectDetector:
         self.config = self._config_loader.load_project_types_config()
         self.mapping_config = self._config_loader.load_mapping_config()
 
-        self.project_types = self.config.get("project_types", [])
+        self.project_types = self._merge_panel_project_types(
+            self.config.get("project_types", [])
+        )
         self.default_config = self.config.get("default", {})
+
+    def _merge_panel_project_types(
+        self,
+        configured_types: Iterable[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Merge project detector rules declared by panel packages.
+
+        Existing ``config/project_types.yaml`` entries stay as a compatibility
+        fallback, while package declarations become the canonical source for
+        active panel ids.
+        """
+        by_id = {
+            str(item.get("id") or "").strip(): dict(item)
+            for item in configured_types
+            if isinstance(item, dict) and str(item.get("id") or "").strip()
+        }
+        try:
+            packages = PanelPackageLoader(
+                project_root=self._config_loader.project_root
+            ).load_all()
+        except Exception:
+            return list(by_id.values())
+
+        for package in packages:
+            rules = package.project_detector_rules or {}
+            if not rules:
+                continue
+            entry = dict(by_id.get(package.panel_id, {}))
+            try:
+                template_file = str(package.resolve_template_file())
+            except Exception:
+                template_file = str(entry.get("template") or "")
+            entry.update(
+                {
+                    "id": package.panel_id,
+                    "name": package.display_name,
+                    "keywords": list(
+                        rules.get("keywords") or entry.get("keywords") or []
+                    ),
+                    "keyword_groups": list(
+                        rules.get("keyword_groups") or entry.get("keyword_groups") or []
+                    ),
+                    "template": template_file,
+                    "priority": rules.get("priority", entry.get("priority", 10)),
+                    "description": package.raw.get("description")
+                    or entry.get("description")
+                    or package.display_name,
+                }
+            )
+            by_id[package.panel_id] = entry
+
+        return list(by_id.values())
 
     def detect(
         self,

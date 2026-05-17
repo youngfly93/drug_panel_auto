@@ -32,8 +32,8 @@ from reportgen.utils.text_utils import norm_text as _norm_text
 # Panel gene definitions for 358-gene colorectal cancer panel.
 #
 # Defaults are kept in-code for backwards compatibility. For production, keep
-# the rule sets in `config/panels/crc_358.yaml` so that medical "口径" updates
-# do not require a code release.
+# the rule sets in `panels/<panel_id>/rules/crc.yaml` so that medical "口径"
+# updates do not require a code release.
 _DEFAULT_CLASS_I_GENES = {
     "KRAS",
     "NRAS",
@@ -246,29 +246,56 @@ class PanelConfig:
         )
 
 
-def _resolve_config_path(base_path: Optional[str] = None) -> Optional[Path]:
-    """Find the crc_358.yaml config file."""
+def _resolve_config_path(
+    base_path: Optional[str] = None,
+    *,
+    panel_id: Optional[str] = None,
+    config_path: Optional[str] = None,
+) -> Optional[Path]:
+    """Find the CRC panel config file, preferring panel-package rules."""
     candidates: List[Path] = []
+    if config_path:
+        candidates.append(Path(str(config_path)).expanduser())
+
+    panel_ids = [str(panel_id or "").strip()]
+    if "crc_358_msi" not in panel_ids:
+        panel_ids.append("crc_358_msi")
+
     if base_path:
         bp = Path(str(base_path)).expanduser().resolve()
+        for pid in panel_ids:
+            if pid:
+                candidates.append(bp / "panels" / pid / "rules" / "crc.yaml")
         candidates.append(bp / "config" / "panels" / "crc_358.yaml")
+    project_root = Path(__file__).resolve().parents[2]
+    for pid in panel_ids:
+        if pid:
+            candidates.append(project_root / "panels" / pid / "rules" / "crc.yaml")
+            candidates.append(Path("panels") / pid / "rules" / "crc.yaml")
     candidates.append(Path("config") / "panels" / "crc_358.yaml")
-    candidates.append(
-        Path(__file__).resolve().parents[2] / "config" / "panels" / "crc_358.yaml"
-    )
+    candidates.append(project_root / "config" / "panels" / "crc_358.yaml")
     for p in candidates:
         if p.exists() and p.is_file():
             return p.resolve()
     return None
 
 
-def load_panel_config(*, base_path: Optional[str] = None) -> PanelConfig:
-    """Load a PanelConfig instance from ``config/panels/crc_358.yaml``.
+def load_panel_config(
+    *,
+    base_path: Optional[str] = None,
+    panel_id: Optional[str] = None,
+    config_path: Optional[str] = None,
+) -> PanelConfig:
+    """Load a PanelConfig instance from the panel package or legacy config.
 
     Returns a *new* PanelConfig every call — no global mutation.
     Falls back to defaults when the config file is missing or invalid.
     """
-    cfg_path = _resolve_config_path(base_path)
+    cfg_path = _resolve_config_path(
+        base_path,
+        panel_id=panel_id,
+        config_path=config_path,
+    )
     if cfg_path is None:
         return PanelConfig()
 
@@ -338,15 +365,25 @@ _default_panel_config: Optional[PanelConfig] = None
 _default_panel_config_base_path: Optional[str] = None
 
 
-def get_default_panel_config(base_path: Optional[str] = None) -> PanelConfig:
+def get_default_panel_config(
+    base_path: Optional[str] = None,
+    *,
+    panel_id: Optional[str] = None,
+    config_path: Optional[str] = None,
+) -> PanelConfig:
     """Return a lazily-initialised default PanelConfig.
 
     Reloads if *base_path* changes from the previously cached value.
     """
     global _default_panel_config, _default_panel_config_base_path
-    if _default_panel_config is None or base_path != _default_panel_config_base_path:
-        _default_panel_config = load_panel_config(base_path=base_path)
-        _default_panel_config_base_path = base_path
+    cache_key = "|".join(str(x or "") for x in (base_path, panel_id, config_path))
+    if _default_panel_config is None or cache_key != _default_panel_config_base_path:
+        _default_panel_config = load_panel_config(
+            base_path=base_path,
+            panel_id=panel_id,
+            config_path=config_path,
+        )
+        _default_panel_config_base_path = cache_key
     return _default_panel_config
 
 
@@ -391,13 +428,13 @@ def load_crc_358_panel_config(*, base_path: Optional[str] = None) -> Optional[Pa
     """
     global _LOADED_CRC_358_CONFIG_PATH, _default_panel_config
 
-    cfg_path = _resolve_config_path(base_path)
+    cfg_path = _resolve_config_path(base_path, panel_id="crc_358_msi")
     if cfg_path is None:
         return None
     if _LOADED_CRC_358_CONFIG_PATH == cfg_path:
         return cfg_path
 
-    pc = load_panel_config(base_path=base_path)
+    pc = load_panel_config(base_path=base_path, panel_id="crc_358_msi")
     _sync_globals_from_config(pc)
     _default_panel_config = pc
     _LOADED_CRC_358_CONFIG_PATH = cfg_path
@@ -1035,6 +1072,8 @@ def _build_nccn_and_immune_fields(
     report_data: ReportData,
     all_variants: List[Dict[str, str]],
     excel_data: ExcelDataSource,
+    *,
+    panel_config: Optional[PanelConfig] = None,
 ) -> None:
     """为 T[5] NCCN 检测基因表和 T[6-8] 免疫基因表生成动态填充变量。
 
@@ -1104,7 +1143,7 @@ def _build_nccn_and_immune_fields(
         gene_class = _get_gene_class(
             g,
             r.get("ExistIn552"),
-            panel_config=get_default_panel_config(),
+            panel_config=panel_config,
             allow_gene_fallback=allow_gene_fallback,
         )
         if not gene_class:
@@ -1559,6 +1598,8 @@ def enhance_report_data(
     field_mapper: Optional[Any] = None,
     gene_knowledge_provider: Optional[GeneKnowledgeProvider] = None,
     base_path: Optional[str] = None,
+    panel_id: Optional[str] = None,
+    panel_config_path: Optional[str] = None,
 ) -> ReportData:
     """
     Enhance ReportData with template-specific fields for 358-gene panel.
@@ -1586,7 +1627,11 @@ def enhance_report_data(
         Enhanced ReportData
     """
     # Load panel config (instance-based, no global mutation)
-    pc = load_panel_config(base_path=base_path)
+    pc = load_panel_config(
+        base_path=base_path,
+        panel_id=panel_id,
+        config_path=panel_config_path,
+    )
     # Also sync globals for backward compatibility
     _sync_globals_from_config(pc)
 
@@ -1725,7 +1770,12 @@ def enhance_report_data(
     report_data.set_table("undetected_genes", undetected_genes)
 
     # ====== T[5] NCCN 检测基因表 + T[6-8] 免疫基因表 动态填充 ======
-    _build_nccn_and_immune_fields(report_data, all_variants, excel_data)
+    _build_nccn_and_immune_fields(
+        report_data,
+        all_variants,
+        excel_data,
+        panel_config=pc,
+    )
 
     # 2.1/摘要表中的人工复核变异覆盖口径由 panel YAML 配置驱动。
     _patch_reviewed_variant_override_rows(report_data, pc)

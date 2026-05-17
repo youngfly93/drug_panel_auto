@@ -1,0 +1,290 @@
+# CRC 358 + MSI panel rule sets (gene lists)
+#
+# This file contains *only* gene symbols / panel display metadata.
+# Do NOT put any patient-level identifiers or real reports into git.
+schema_version: "1.0"
+panel_id: "crc_358_msi"
+updated: "2026-05-17"
+notes:
+  - "CRC 358 + MSI panel package rules for gene set and reviewed override口径"
+  - "仅保留 gene symbol + 显示用 transcript/chr 信息，不包含任何患者数据"
+
+# Class I genes: primary drug targets and MSI genes
+class_i_genes:
+  - KRAS
+  - NRAS
+  - BRAF
+  - PIK3CA
+  - ERBB2
+  - HER2
+  - MLH1
+  - MSH2
+  - MSH6
+  - PMS2
+  - EPCAM
+
+# Class II genes: secondary targets and tumor suppressors
+class_ii_genes:
+  - APC
+  - TP53
+  - SMAD4
+  - PTEN
+  - STK11
+  - FBXW7
+
+# CRC important genes (main table shows only Class I/II within this set)
+crc_important_genes:
+  - KRAS
+  - NRAS
+  - BRAF
+  - MLH1
+  - MSH2
+  - MSH6
+  - PMS2
+  - HER2
+  - NTRK1
+  - NTRK2
+  - NTRK3
+  - TP53
+  - APC
+  - PIK3CA
+  - SMAD4
+  - FBXW7
+  - RNF43
+  - CTNNB1
+  - KMT2D
+  - ACVR2A
+  - TCF7L2
+  - ATM
+  - FAT4
+  - KMT2C
+  - ARID1A
+  - LRP1B
+  - PTEN
+  - FAT1
+  - ZFHX3
+  - AMER1
+  - GNAS
+  - ERBB3
+  - PTPRT
+  - NF1
+  - MUTYH
+  - ERBB2
+  - SETD2
+
+# Immune-related gene sets (only Class I/II shown in immune tables)
+immune_positive_genes:
+  - MLH1
+  - MSH2
+  - MSH6
+  - PMS2
+  - POLE
+  - POLD1
+  - CD274
+  - PDCD1LG2
+  - TET1
+  - PMS1
+  - ERCC2
+  - ERCC3
+  - ERCC4
+  - ERCC5
+  - BRCA1
+  - MRE11A
+  - NBN
+  - RAD50
+  - RAD51
+  - RAD51B
+  - RAD51D
+  - RAD52
+  - RAD54L
+  - BRCA2
+  - BRIP1
+  - FANCA
+  - FANCC
+  - PALB2
+  - RAD51C
+  - BLM
+  - ATM
+  - ATR
+  - CHEK1
+  - CHEK2
+  - MDC1
+  - MUTYH
+  - PARP1
+  - RECQL4
+  - ARID1A
+  - ATRX
+  - FANCM
+  - PRKDC
+  - CDK12
+  - MLH3
+  - MSH3
+  - FANCI
+  - ARID1B
+  - ARID2
+  - KRAS
+  - SERPINB3
+  - SERPINB4
+  - PBRM1
+  - TP53
+
+immune_negative_genes:
+  - PTEN
+  - JAK1
+  - JAK2
+  - B2M
+  - CTNNB1
+  - KEAP1
+  - EGFR
+  - ALK
+  - MET
+  - STK11
+  - IFNGR1
+  - IFNGR2
+
+immune_hyperprogression_genes:
+  - MDM2
+  - MDM4
+  - DNMT3A
+  - EGFR
+  - CCND1
+  - FGF3
+  - FGF4
+  - FGF19
+
+# Subset list used for "undetected genes" display in the template.
+panel_display_genes:
+  - name: BRAF
+    transcript: NM_004333.4
+    chromosome: "7"
+  - name: ERBB2
+    transcript: NM_004448.4
+    chromosome: "17"
+  - name: NRAS
+    transcript: NM_002524.5
+    chromosome: "1"
+  - name: PIK3CA
+    transcript: NM_006218.4
+    chromosome: "3"
+  - name: SMAD4
+    transcript: NM_005359.6
+    chromosome: "18"
+  - name: MLH1
+    transcript: NM_000249.4
+    chromosome: "3"
+  - name: MSH2
+    transcript: NM_000251.3
+    chromosome: "2"
+  - name: MSH6
+    transcript: NM_000179.3
+    chromosome: "2"
+  - name: PMS2
+    transcript: NM_000535.7
+    chromosome: "7"
+  - name: PTEN
+    transcript: NM_000314.8
+    chromosome: "10"
+  - name: AKT1
+    transcript: NM_001014431.2
+    chromosome: "14"
+  - name: EGFR
+    transcript: NM_005228.5
+    chromosome: "7"
+  - name: MET
+    transcript: NM_000245.4
+    chromosome: "7"
+  - name: RET
+    transcript: NM_020975.6
+    chromosome: "10"
+  - name: ROS1
+    transcript: NM_002944.2
+    chromosome: "6"
+  - name: ALK
+    transcript: NM_004304.5
+    chromosome: "2"
+  - name: KRAS
+    transcript: NM_033360.4
+    chromosome: "12"
+  - name: APC
+    transcript: NM_000038.6
+    chromosome: "5"
+  - name: TP53
+    transcript: NM_000546.6
+    chromosome: "17"
+
+# Reviewed variant-level overrides.
+# Use this only for lab-reviewed rules that should override the public/internal KB.
+reviewed_variant_overrides:
+  - gene: ERBB2
+    c_hgvs: "c.1979G>A"
+    p_hgvs:
+      - "p.G660D"
+      - "p.Gly660Asp"
+    clinical_significance: "致病"
+    variant_site: "c.1979G>A,\np.G660D"
+    benefit_drugs:
+      - "阿法替尼（C）"
+      - "曲妥珠单抗（C）"
+      - "恩美曲妥珠单抗（C）"
+      - "曲妥珠单抗+帕妥珠单抗（C）"
+      - "吡咯替尼（C）"
+      - "德曲妥珠单抗（C）"
+      - "曲妥珠单抗+图卡替尼（C）"
+      - "奈拉替尼+依维莫司（C）"
+      - "奈拉替尼+哌柏西利（C）"
+      - "奈拉替尼+曲美替尼（C）"
+      - "波齐替尼（C）"
+      - "吡咯替尼+曲妥珠单抗（C）"
+      - "德曲妥珠单抗+奈拉替尼（C）"
+      - "奈拉替尼±曲妥珠单抗（C）"
+      - "拉帕替尼（D）"
+    caution_drugs:
+      - "西妥昔单抗（D）"
+      - "帕尼单抗（D）"
+      - "奈拉替尼（D）"
+
+# CRC 2.2 fixed approved/backup targeted-drug table.
+# These rows are displayed in the "其它潜在获益上市药物提示" section.
+crc_approved_drugs:
+  - drug:
+      - "瑞戈非尼"
+      - "Regorafenib"
+      - "[拜万戈]"
+    gene: "RET、VEGFR1、VEGFR2、VEGFR3、KIT、PDGFRα、PDGFRβ、FGFR1、FGFR2、TIE2、DDR2、TrkA、EphA2、RAF1、BRAF、BRAF V600E、SAPK2、PTK5、ABL"
+    indication: "FDA和NMPA批准用于治疗结直肠癌、胃肠道间质瘤和肝癌。2022年结肠癌和直肠癌NCCN指南推荐瑞戈非尼为在所有可用方案进展的结直肠癌患者的治疗方案。2022年CSCO指南推荐瑞戈非尼作为化疗，或抗VEGF和抗EGFR靶向药物等现有标准治疗失败后的三线用药。"
+  - drug:
+      - "贝伐珠单抗"
+      - "Bevacizumab"
+      - "[安维汀]"
+    gene: "VEGF"
+    indication: "FDA批准用于治疗转移性结直肠癌、非鳞状非小细胞肺癌、胶质母细胞瘤、转移性肾细胞癌、宫颈癌、卵巢上皮癌、输卵管癌、原发性腹膜癌和肝细胞癌。NMPA批准用于治疗转移性结直肠癌、非鳞状非小细胞肺癌、胶质母细胞瘤、肝细胞癌、卵巢上皮癌、输卵管癌、原发性腹膜癌和宫颈癌。2022年结肠癌和直肠癌NCCN指南推荐多种化疗方案（FOLFIRI、FOLFOX、CAPEOX或FOLFOXIRI）联合贝伐珠单抗用于治疗结肠癌和直肠癌患者，TAS-102±贝伐珠单抗适用于接受过任意治疗方案进展的晚期结肠癌和直肠癌患者。2022年CSCO指南亦推荐多种化疗方案联合贝伐珠单抗用于治疗结肠癌和直肠癌患者。"
+  - drug:
+      - "雷莫西尤单抗"
+      - "Ramucirumab"
+      - "[希冉择]"
+    gene: "VEGFR2"
+    indication: "FDA批准用于治疗胃癌或胃食管交界处腺癌、非小细胞肺癌、结直肠癌、肝细胞癌。NMPA批准用于治疗胃癌或胃食管交界处腺癌。2022年结肠癌和直肠癌NCCN指南推荐FOLFIRI方案联合雷莫西尤单抗用于治疗结肠癌和直肠癌患者。"
+  - drug:
+      - "呋喹替尼"
+      - "Fruquintinib"
+      - "[爱优特]"
+    gene: "VEGFR1、VEGFR2、VEGFR3"
+    indication: "NMPA批准用于治疗既往接受过氟尿嘧啶类、奥沙利铂和伊立替康为基础的化疗，以及既往接受过或不适合接受抗血管内皮生长因子（VEGF）治疗、抗表皮生长因子受体（EGFR）治疗（RAS野生型）的转移性结直肠癌患者。2022年CSCO指南推荐呋喹替尼用于治疗标准治疗失败后的结肠癌和直肠癌患者。"
+  - drug:
+      - "阿柏西普"
+      - "Ziv-aflibercept"
+      - "[ZALTRAP]"
+    gene: "VEGF-A、VEGF-B、PIGF"
+    indication: "FDA批准阿柏西普联合5-氟尿嘧啶、亚叶酸钙、伊立替康（FOLFIRI）用于治疗奥沙利铂治疗后耐药或疾病进展的转移性结直肠癌（mCRC）患者。2022年结肠癌和直肠癌NCCN指南推荐阿柏西普联合化疗用于治疗结肠癌和直肠癌患者。"
+  - drug:
+      - "阿帕替尼"
+      - "Apatinib"
+      - "[艾坦]"
+    gene: "VEGFR2"
+    indication: "NMPA批准用于治疗胃腺癌或胃食管交界处腺癌、肝细胞癌。目前在国内的临床实践中，有将阿帕替尼应用于治疗结直肠癌患者的案例，并从中观察到比较好的疗效。"
+  - drug:
+      - "盐酸安罗替尼"
+      - "Anlotinib Hydrochloride"
+      - "[福可维]"
+    gene: "VEGFR1、VEGFR2、VEGFR3、c-KIT、PDGFR-β"
+    indication: "NMPA批准用于治疗小细胞肺癌、腺泡状软组织肉瘤、透明细胞肉瘤以及既往至少接受过含蒽环类化疗方案治疗后进展或复发的其它晚期软组织肉瘤、放射性碘难治性分化型甲状腺癌、甲状腺髓样癌、非小细胞肺癌。目前有将安罗替尼用于治疗结直肠癌患者的临床试验，正在招募患者。"
