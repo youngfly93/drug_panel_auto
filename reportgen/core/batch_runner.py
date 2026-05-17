@@ -341,6 +341,7 @@ def run_batch_generate_validate(
                 output_docx = str(Path(gen["output_file"]).resolve())
             ctx = gen.get("context") or {}
             patient_snapshot = _patient_snapshot_from_context(ctx)
+            post_processors = gen.get("post_processors") or []
             field_provenance = gen.get("field_provenance") or {}
             field_provenance_file = gen.get("field_provenance_file")
             if field_provenance_file:
@@ -532,6 +533,7 @@ def run_batch_generate_validate(
                 "issues": issues,
                 "template_contract": template_contract,
                 "input_validation_warnings": input_validation_warnings,
+                "post_processors": post_processors,
                 "field_provenance_file": (
                     public_path(Path(str(field_provenance_file)))
                     if field_provenance_file

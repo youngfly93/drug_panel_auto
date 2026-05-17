@@ -374,6 +374,9 @@ class ReportGenerator:
             final_output = self.template_renderer.render(
                 template_file, report_data, output_path
             )
+            processor_report = list(
+                getattr(self.template_renderer, "last_processor_report", []) or []
+            )
             self.logger.log_event("template_rendering_completed", output=final_output)
 
             # 7. 生成关键字段来源报告。M1 阶段只记录，不阻断出报告。
@@ -414,6 +417,7 @@ class ReportGenerator:
                     generation_id=Path(final_output).stem,
                     field_provenance=field_provenance,
                     field_provenance_file=field_provenance_file,
+                    processor_report=processor_report,
                 )
                 qa_report_file = write_docx_qa_report(qa_report, final_output)
                 self.logger.log_event(
@@ -441,6 +445,7 @@ class ReportGenerator:
                 "template_contract": template_contract_report,
                 "field_provenance": field_provenance,
                 "field_provenance_file": field_provenance_file,
+                "post_processors": processor_report,
                 "qa_report": qa_report,
                 "qa_report_file": qa_report_file,
                 "qa_status": qa_report.get("status") if qa_report else None,

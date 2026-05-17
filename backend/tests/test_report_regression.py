@@ -30,6 +30,7 @@ from reportgen.core.field_provenance import (
 )
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.project_detector import ProjectDetector
+from reportgen.core.processors import ProcessorContext, run_processors
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.report_generator import ReportGenerator
 from reportgen.core.template_bridge_358 import (
@@ -1649,6 +1650,80 @@ def test_qa_report_references_field_provenance(tmp_path):
         "sample_id": "filename",
         "patient_name": "form",
     }
+
+
+def test_processor_runner_records_skip_success_and_error():
+    class _Logger:
+        def __init__(self):
+            self.warnings = []
+
+        def warning(self, message, **kwargs):
+            self.warnings.append((message, kwargs))
+
+    class _Processor:
+        def __init__(self, name, status):
+            self.name = name
+            self.status = status
+            self.warning_message = f"{name} failed"
+
+        def enabled(self, _ctx):
+            return self.status != "skip"
+
+        def run(self, _ctx):
+            if self.status == "error":
+                raise RuntimeError("boom")
+
+    logger = _Logger()
+    ctx = ProcessorContext(
+        renderer=object(),
+        output_path="out.docx",
+        template_path="template.docx",
+        template_context={},
+        logger=logger,
+    )
+
+    results = run_processors(
+        [
+            _Processor("ok_processor", "ok"),
+            _Processor("skip_processor", "skip"),
+            _Processor("bad_processor", "error"),
+        ],
+        ctx,
+    )
+
+    assert [r.status for r in results] == ["OK", "SKIPPED", "ERROR"]
+    assert results[2].error == "boom"
+    assert logger.warnings[0][0] == "bad_processor failed"
+
+
+def test_template_renderer_default_processors_include_key_m1_processors():
+    renderer = TemplateRenderer(log_level="ERROR")
+    names = [processor.name for processor in renderer.build_post_render_processors()]
+
+    assert "bullet_lists" in names
+    assert "variant_tables" in names
+    assert "toc_refresh" in names
+    assert "blank_page_cleanup" in names
+    assert "underlines_and_styles" in names
+
+
+def test_qa_report_records_post_processor_errors(tmp_path):
+    docx_path = tmp_path / "clean.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        processor_report=[
+            {"name": "bullet_lists", "status": "OK"},
+            {"name": "toc_refresh", "status": "ERROR", "error": "refresh failed"},
+        ],
+    )
+
+    assert qa["status"] == "WARN"
+    assert qa["checks"]["post_processors"]["error_count"] == 1
+    assert any(i["code"] == "POST_PROCESSOR_ERRORS" for i in qa["issues"])
 
 
 def test_qa_report_detects_placeholder_residue(tmp_path):

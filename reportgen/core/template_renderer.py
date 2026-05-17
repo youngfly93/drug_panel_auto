@@ -9,6 +9,11 @@ from typing import Any, Optional
 
 from docx import Document
 
+from reportgen.core.processors import (
+    ProcessorContext,
+    build_default_docx_processors,
+    run_processors,
+)
 from reportgen.core.template_contract import (
     extract_template_contract,
     validate_contract,
@@ -36,6 +41,7 @@ class TemplateRenderer:
             log_level: 日志级别
         """
         self.logger = get_logger(log_file=log_file, level=log_level)
+        self.last_processor_report: list[dict[str, Any]] = []
 
     def render(
         self, template_path: str, report_data: ReportData, output_path: str
@@ -66,6 +72,7 @@ class TemplateRenderer:
         output_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
         self.logger.info("开始渲染模板", template=template_path, output=output_path)
+        self.last_processor_report = []
 
         try:
             try:
@@ -93,125 +100,7 @@ class TemplateRenderer:
             # 保存
             doc.save(output_path)
 
-            # 渲染后清理：移除完全空白的表格行（避免循环控制行残留导致的空行）
-            try:
-                self._cleanup_empty_table_rows(output_path)
-            except Exception:
-                # 清理失败不影响主流程
-                pass
-
-            # Part 3 后处理：将占位标记替换为格式化的基因解读段落
-            try:
-                self._render_part3_formatted(output_path, context)
-            except Exception as e:
-                self.logger.warning("Part 3 格式化渲染失败", error=str(e))
-
-            # 签名占位处理：有图片则插入，无图片至少不保留原始占位符
-            try:
-                self._render_signature_placeholder(output_path, context)
-            except Exception as e:
-                self.logger.warning("签名占位处理失败", error=str(e))
-
-            # 终版版式/内容后处理：封面日期、项目编码、致患者信、患者信息表等
-            try:
-                self._apply_report_content_fixes(output_path, context, template_path)
-                self._normalize_multiline_bullet_paragraphs(output_path)
-                self._remove_empty_numbered_paragraphs(output_path)
-            except Exception as e:
-                self.logger.warning("报告内容后处理失败", error=str(e))
-
-            # 签名区使用浮动图片，部分 Office/WPS/LibreOffice 组合会压到报告日期。
-            try:
-                self._normalize_signature_layout(output_path, context)
-            except Exception as e:
-                self.logger.warning("签名区布局修复失败", error=str(e))
-
-            # 清理封面模板残留的调试数字
-            try:
-                self._cleanup_cover_artifacts(output_path)
-            except Exception as e:
-                self.logger.warning("封面残留清理失败", error=str(e))
-
-            # 清理章节标题前残留的空白段落（#14）
-            try:
-                self._cleanup_section_spacing(output_path)
-            except Exception as e:
-                self.logger.warning("章节间距清理失败", error=str(e))
-
-            # 统一各节页边距，避免第三/第四部分版心突然变化
-            try:
-                self._normalize_final_section_layout(output_path)
-            except Exception as e:
-                self.logger.warning("页面布局统一失败", error=str(e))
-
-            # 压缩基因检测列表表格，避免最后只剩单个基因/页码的孤儿页
-            try:
-                self._compact_gene_list_tables(output_path, context)
-                self._normalize_quality_control_tables(output_path)
-            except Exception as e:
-                self.logger.warning("基因列表/质控表样式修复失败", error=str(e))
-
-            # 将超宽表格缩回版心，避免 2.1 表格撑出页面
-            try:
-                self._fit_tables_to_page_width(output_path)
-                self._optimize_variant_table_layout(output_path)
-            except Exception as e:
-                self.logger.warning("表格宽度压缩失败", error=str(e))
-
-            # 默认产品口径不展示尾部 HLA 表；如配置开启则保留。
-            if not self._truthy(context.get("show_hla_table")):
-                try:
-                    self._remove_trailing_hla_table(output_path)
-                except Exception as e:
-                    self.logger.warning("尾部HLA表移除失败", error=str(e))
-
-            # 删除文档末尾的空白分页，避免生成只有页码的最后一页
-            try:
-                self._cleanup_trailing_blank_page(output_path)
-            except Exception as e:
-                self.logger.warning("尾部空白页清理失败", error=str(e))
-
-            # 设置 updateFields=true，让 Word 打开时自动刷新目录/页码域
-            try:
-                self._set_update_fields(output_path)
-            except Exception:
-                pass
-
-            # 优先使用原生排版引擎刷新目录/页码；失败时回退
-            try:
-                self._refresh_fields_with_native_engine(output_path)
-                self._set_update_fields(output_path)
-            except Exception as e:
-                self.logger.warning("目录页码刷新失败", error=str(e))
-
-            # LibreOffice 刷新后可能重新写回末尾分页符，最终再清理一次。
-            try:
-                self._normalize_final_section_layout(output_path)
-                self._compact_gene_list_tables(output_path, context)
-                self._normalize_quality_control_tables(output_path)
-                self._optimize_variant_table_layout(output_path)
-                self._cleanup_trailing_blank_page(output_path)
-                # 最终布局清理可能改变分页；再刷新一次，避免目录页码停留在旧分页。
-                try:
-                    self._refresh_fields_with_native_engine(output_path)
-                    self._set_update_fields(output_path)
-                except Exception as refresh_err:
-                    self.logger.warning("最终目录页码刷新失败", error=str(refresh_err))
-                self._normalize_toc_decoration_layout(output_path)
-                self._restore_reviewed_body_headers(output_path)
-                self._populate_static_toc_page_numbers(output_path)
-            except Exception as e:
-                self.logger.warning("目录刷新后尾部空白页清理失败", error=str(e))
-
-            # 模板占位 run 可能带下划线，docxtpl 渲染后会继承到正式文本。
-            try:
-                self._remove_template_underlines(output_path)
-                self._restore_variant_summary_table_style(output_path)
-                self._restore_variant_detail_table_style(output_path)
-                self._restore_biomarker_table_style(output_path)
-                self._restore_detection_content_underlines(output_path)
-            except Exception as e:
-                self.logger.warning("模板下划线清理失败", error=str(e))
+            self._run_post_render_processors(output_path, context, template_path)
 
             # 验证生成的文件可以被正常打开
             try:
@@ -233,6 +122,33 @@ class TemplateRenderer:
                 "模板渲染失败", template=template_path, output=output_path, error=str(e)
             )
             raise ValueError(f"模板渲染失败: {e}")
+
+    def build_post_render_processors(self):
+        """Build the ordered DOCX post-render processor chain."""
+        return build_default_docx_processors()
+
+    def _run_post_render_processors(
+        self, output_path: str, context: dict, template_path: str
+    ) -> None:
+        """Run post-render processors and keep an execution report."""
+        processor_context = ProcessorContext(
+            renderer=self,
+            output_path=output_path,
+            template_path=template_path,
+            template_context=context,
+            logger=self.logger,
+        )
+        results = run_processors(
+            self.build_post_render_processors(), processor_context
+        )
+        self.last_processor_report = [result.to_dict() for result in results]
+
+        errors = [r for r in self.last_processor_report if r.get("status") == "ERROR"]
+        self.logger.info(
+            "DOCX后处理完成",
+            processors=len(self.last_processor_report),
+            errors=len(errors),
+        )
 
     def _normalize_template_context(self, obj):
         """Normalize template context.

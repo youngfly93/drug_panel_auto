@@ -36,6 +36,7 @@ def build_docx_qa_report(
     generation_id: Optional[str] = None,
     field_provenance: Optional[Mapping[str, Any]] = None,
     field_provenance_file: Optional[str] = None,
+    processor_report: Optional[list[Mapping[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Build a structured QA report for one generated DOCX file."""
     generated_at = datetime.now().isoformat()
@@ -147,6 +148,24 @@ def build_docx_qa_report(
             "message": "No field provenance report was provided.",
         }
 
+    processor_errors = [
+        row
+        for row in (processor_report or [])
+        if isinstance(row, Mapping) and row.get("status") == "ERROR"
+    ]
+    checks["post_processors"] = {
+        "status": "WARN" if processor_errors else ("PASS" if processor_report else "SKIP"),
+        "count": len(processor_report or []),
+        "error_count": len(processor_errors),
+        "errors": processor_errors,
+    }
+    if processor_errors:
+        issue(
+            "warning",
+            "POST_PROCESSOR_ERRORS",
+            "One or more DOCX post-render processors reported errors.",
+        )
+
     table_checks = _build_table_checks(table_metrics, project_type, context)
     checks.update(table_checks)
     for table_issue in _table_issues(table_checks):
@@ -165,6 +184,7 @@ def build_docx_qa_report(
         template_file=template_file,
         output_file=output_file,
         field_provenance_file=field_provenance_file,
+        processor_report=processor_report,
         checks=checks,
         metrics=metrics,
         issues=issues,
@@ -192,6 +212,7 @@ def _finalize_report(
     metrics: Mapping[str, Any],
     issues: List[Dict[str, str]],
     field_provenance_file: Optional[str] = None,
+    processor_report: Optional[list[Mapping[str, Any]]] = None,
 ) -> Dict[str, Any]:
     has_error = any(i.get("level") == "error" for i in issues)
     has_warning = any(i.get("level") == "warning" for i in issues)
@@ -208,6 +229,7 @@ def _finalize_report(
         "field_provenance_file": str(field_provenance_file)
         if field_provenance_file
         else None,
+        "post_processors": list(processor_report or []),
         "checks": dict(checks),
         "metrics": dict(metrics),
         "issues": issues,
