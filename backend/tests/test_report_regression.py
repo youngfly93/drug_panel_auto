@@ -1,6 +1,7 @@
 # ruff: noqa: E402, I001
 
 import sys
+import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -31,11 +32,13 @@ from reportgen.core.field_provenance import (
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.golden_case import (
     CRC_358_MSI_EXPECTATIONS,
+    GoldenCaseOptions,
     LUNG_METHYLATION_EXPECTATIONS,
     assert_golden_case_output,
     build_crc_358_msi_golden_excel,
     build_lung_methylation_golden_excel,
     run_golden_case,
+    run_visual_render,
 )
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.processors import ProcessorContext, run_processors
@@ -58,6 +61,7 @@ from reportgen.panels.loader import (
     validate_panel_package_config,
 )
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
+from reportgen.utils import docx_render
 
 
 def _excel(
@@ -2442,3 +2446,111 @@ def test_golden_case_assertions_pass_on_expected_report_shape(tmp_path):
     )
 
     assert assertion["ok"]
+
+
+def test_docx_render_uses_configured_tmp_dir_and_timeout(tmp_path, monkeypatch):
+    docx_path = tmp_path / "source.docx"
+    Document().save(docx_path)
+    render_tmp = tmp_path / "render_tmp"
+    output_dir = tmp_path / "pages"
+    calls = []
+
+    monkeypatch.setattr(
+        docx_render,
+        "_which_or_raise",
+        lambda name, *, hint: f"/bin/{name}",
+    )
+
+    def fake_run(cmd, *, timeout_seconds, stage):
+        calls.append((stage, list(cmd), timeout_seconds))
+        if stage == "docx_to_pdf":
+            outdir = Path(cmd[cmd.index("--outdir") + 1])
+            assert str(outdir).startswith(str(render_tmp))
+            assert Path(cmd[-1]).name == "input.docx"
+            (outdir / "input.pdf").write_bytes(b"%PDF-1.4\n")
+        elif stage == "pdf_to_png":
+            prefix = Path(cmd[-1])
+            prefix.parent.mkdir(parents=True, exist_ok=True)
+            Path(f"{prefix}-1.png").write_bytes(b"png")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(docx_render, "_run_checked", fake_run)
+    monkeypatch.setenv("REPORTGEN_RENDER_TMPDIR", str(render_tmp))
+
+    pngs = docx_render.render_docx_to_pngs(
+        docx_path,
+        output_dir=output_dir,
+        timeout_seconds=37,
+    )
+
+    assert [call[0] for call in calls] == ["docx_to_pdf", "pdf_to_png"]
+    assert {call[2] for call in calls} == {37}
+    assert pngs == [output_dir / "source-1.png"]
+
+
+def test_docx_render_timeout_reports_stage():
+    with pytest.raises(docx_render.DocxRenderError) as exc_info:
+        docx_render._run_checked(
+            [sys.executable, "-c", "import time; time.sleep(2)"],
+            timeout_seconds=1,
+            stage="docx_to_pdf",
+        )
+
+    assert exc_info.value.stage == "docx_to_pdf"
+    assert "timed out" in str(exc_info.value)
+
+
+def test_visual_render_optional_failure_is_reported_not_blocking(tmp_path, monkeypatch):
+    docx_path = tmp_path / "report.docx"
+    Document().save(docx_path)
+
+    def fail_render(*args, **kwargs):
+        raise RuntimeError("LibreOffice failed")
+
+    monkeypatch.setattr("reportgen.core.golden_case.render_docx_to_pngs", fail_render)
+
+    result = run_visual_render(
+        str(docx_path),
+        output_root=tmp_path,
+        mode="first",
+        required=False,
+    )
+
+    assert result["status"] == "WARN"
+    assert "LibreOffice failed" in result["error"]
+
+
+def test_visual_render_required_failure_blocks_golden_check(tmp_path, monkeypatch):
+    docx_path = tmp_path / "report.docx"
+    Document().save(docx_path)
+
+    monkeypatch.setattr(
+        "reportgen.core.golden_case.render_docx_to_pngs",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("render failed")),
+    )
+
+    result = run_visual_render(
+        str(docx_path),
+        output_root=tmp_path,
+        mode="all",
+        required=True,
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["requested"] == "all"
+
+
+def test_golden_case_options_accept_visual_render_controls():
+    opts = GoldenCaseOptions(
+        panel="crc_358_msi",
+        render="first",
+        render_dpi=140,
+        render_timeout_seconds=45,
+        render_required=True,
+        render_tmp_dir="/tmp/reportgen-render",
+    )
+
+    assert opts.render == "first"
+    assert opts.render_dpi == 140
+    assert opts.render_timeout_seconds == 45
+    assert opts.render_required is True

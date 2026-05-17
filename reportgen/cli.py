@@ -509,8 +509,47 @@ def qa():
     show_default=True,
     help="reportgen内部日志级别",
 )
+@click.option(
+    "--render",
+    type=click.Choice(["none", "first", "all"]),
+    default="none",
+    show_default=True,
+    help="是否把 golden DOCX 渲染为 PNG 页面做视觉验收",
+)
+@click.option("--render-dpi", type=int, default=120, show_default=True, help="渲染DPI")
+@click.option(
+    "--render-timeout",
+    type=int,
+    default=120,
+    show_default=True,
+    help="单个渲染阶段超时时间（秒）",
+)
+@click.option(
+    "--render-required/--render-optional",
+    default=False,
+    show_default=True,
+    help="渲染失败是否使 golden case 失败",
+)
+@click.option(
+    "--render-tmp-dir",
+    default=None,
+    type=click.Path(),
+    help="渲染临时目录；也可使用 REPORTGEN_RENDER_TMPDIR",
+)
 @click.pass_context
-def qa_run(ctx, panel, output_root, template_file, template_contract, log_level):
+def qa_run(
+    ctx,
+    panel,
+    output_root,
+    template_file,
+    template_contract,
+    log_level,
+    render,
+    render_dpi,
+    render_timeout,
+    render_required,
+    render_tmp_dir,
+):
     """运行单个 Panel 的端到端 golden case。"""
     from reportgen.core.golden_case import GoldenCaseOptions, run_golden_case
 
@@ -524,6 +563,11 @@ def qa_run(ctx, panel, output_root, template_file, template_contract, log_level)
         output_root=output_root,
         log_level=log_level,
         template_contract_mode=template_contract,
+        render=render,
+        render_dpi=int(render_dpi),
+        render_timeout_seconds=int(render_timeout),
+        render_required=bool(render_required),
+        render_tmp_dir=render_tmp_dir,
     )
 
     click.echo(f"🧪 Running golden case: {panel}")
@@ -536,6 +580,15 @@ def qa_run(ctx, panel, output_root, template_file, template_contract, log_level)
     click.echo(f"  output: {result.get('output_file')}")
     click.echo(f"  qa: {result.get('qa_report_file')} ({result.get('qa_status')})")
     click.echo(f"  report: {result.get('golden_report_file')}")
+    visual_render = result.get("visual_render") or {}
+    if visual_render.get("requested") != "none":
+        click.echo(
+            "  render: "
+            f"{visual_render.get('status')} "
+            f"({len(visual_render.get('rendered_pages') or [])} page images)"
+        )
+        if visual_render.get("output_dir"):
+            click.echo(f"  render_dir: {visual_render.get('output_dir')}")
 
     failed = [row for row in result.get("checks", []) if not row.get("passed")]
     if failed:

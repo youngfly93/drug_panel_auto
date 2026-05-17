@@ -9,16 +9,39 @@ Dependencies (system):
 
 Notes:
   - LibreOffice headless on macOS can be sensitive to non-ASCII paths for its
-    profile directory; we always use the system temp directory.
+    profile directory; the renderer copies input to an isolated ASCII filename.
+  - Set REPORTGEN_RENDER_TMPDIR, or pass tmp_dir, when the system temp volume is
+    small or unreliable.
 """
 
 from __future__ import annotations
 
+import os
 import shutil
+import signal
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence
+
+
+class DocxRenderError(RuntimeError):
+    """Raised when DOCX visual rendering fails at a known stage."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        stage: str,
+        command: Sequence[str],
+        stdout: str = "",
+        stderr: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.command = list(command)
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 def _which_or_raise(name: str, *, hint: str) -> str:
@@ -33,6 +56,59 @@ def _file_uri(path: Path) -> str:
     return f"file://{path.resolve().as_posix()}"
 
 
+def _render_tmp_root(output_dir: Path, tmp_dir: Optional[Path] = None) -> Path:
+    configured: Optional[Path] = None
+    if tmp_dir is not None:
+        configured = Path(tmp_dir)
+    elif os.environ.get("REPORTGEN_RENDER_TMPDIR"):
+        configured = Path(os.environ["REPORTGEN_RENDER_TMPDIR"])
+    if configured is not None:
+        configured.mkdir(parents=True, exist_ok=True)
+        return configured
+    output_tmp = output_dir.resolve().parent / ".reportgen_render_tmp"
+    output_tmp.mkdir(parents=True, exist_ok=True)
+    return output_tmp
+
+
+def _run_checked(
+    cmd: Sequence[str],
+    *,
+    timeout_seconds: int,
+    stage: str,
+) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.Popen(
+        list(cmd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=max(1, int(timeout_seconds)))
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except Exception:
+            proc.kill()
+        stdout, stderr = proc.communicate()
+        raise DocxRenderError(
+            f"DOCX render stage '{stage}' timed out after {timeout_seconds}s.",
+            stage=stage,
+            command=cmd,
+            stdout=stdout or "",
+            stderr=stderr or "",
+        ) from None
+    if proc.returncode != 0:
+        raise DocxRenderError(
+            f"DOCX render stage '{stage}' failed with exit code {proc.returncode}.",
+            stage=stage,
+            command=cmd,
+            stdout=stdout or "",
+            stderr=stderr or "",
+        )
+    return subprocess.CompletedProcess(list(cmd), proc.returncode, stdout, stderr)
+
+
 def render_docx_to_pngs(
     docx_path: Path,
     *,
@@ -41,6 +117,8 @@ def render_docx_to_pngs(
     keep_pdf: bool = False,
     first_page: Optional[int] = None,
     last_page: Optional[int] = None,
+    timeout_seconds: int = 120,
+    tmp_dir: Optional[Path] = None,
 ) -> List[Path]:
     """Render a .docx file to page PNGs via LibreOffice + Poppler."""
     docx_path = docx_path.resolve()
@@ -63,7 +141,10 @@ def render_docx_to_pngs(
         hint="Install Poppler (macOS: brew install poppler).",
     )
 
-    with tempfile.TemporaryDirectory(prefix="reportgen_render_") as workdir_str:
+    tmp_root = _render_tmp_root(output_dir, tmp_dir=tmp_dir)
+    with tempfile.TemporaryDirectory(
+        prefix="reportgen_render_", dir=str(tmp_root)
+    ) as workdir_str:
         workdir = Path(workdir_str)
         profile_dir = workdir / "lo_profile"
         profile_dir.mkdir(parents=True, exist_ok=True)
@@ -86,12 +167,10 @@ def render_docx_to_pngs(
             str(workdir),
             str(tmp_docx),
         ]
-        subprocess.run(
+        _run_checked(
             convert_cmd,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            timeout_seconds=timeout_seconds,
+            stage="docx_to_pdf",
         )
 
         pdf_path = workdir / "input.pdf"
@@ -119,12 +198,10 @@ def render_docx_to_pngs(
         if last_page is not None:
             ppm_cmd.extend(["-l", str(int(last_page))])
         ppm_cmd.extend([str(pdf_path), str(output_prefix)])
-        subprocess.run(
+        _run_checked(
             ppm_cmd,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            timeout_seconds=timeout_seconds,
+            stage="pdf_to_png",
         )
 
         pngs = sorted(output_dir.glob(f"{docx_path.stem}-*.png"))

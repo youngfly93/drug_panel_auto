@@ -21,6 +21,7 @@ from docx import Document
 from reportgen.core.enhancer_registry import get_panel_registry
 from reportgen.core.report_generator import ReportGenerator
 from reportgen.utils.artifacts import write_json
+from reportgen.utils.docx_render import render_docx_to_pngs
 
 
 SUPPORTED_PANELS = {
@@ -41,6 +42,11 @@ class GoldenCaseOptions:
     output_root: Optional[str] = None
     log_level: str = "ERROR"
     template_contract_mode: str = "fail"
+    render: str = "none"
+    render_dpi: int = 120
+    render_timeout_seconds: int = 120
+    render_required: bool = False
+    render_tmp_dir: Optional[str] = None
 
 
 CRC_358_MSI_EXPECTATIONS: Dict[str, Any] = {
@@ -141,11 +147,34 @@ def run_golden_case(
     )
 
     assertion = assert_golden_case_output(generation, expectations=expectations)
+    visual_render = run_visual_render(
+        generation.get("output_file"),
+        output_root=output_root,
+        mode=opts.render,
+        dpi=opts.render_dpi,
+        timeout_seconds=opts.render_timeout_seconds,
+        required=opts.render_required,
+        tmp_dir=opts.render_tmp_dir,
+    )
+    checks = list(assertion["checks"])
+    if visual_render["requested"] != "none":
+        checks.append(
+            {
+                "name": "visual_render",
+                "passed": visual_render["status"] == "PASS"
+                or not opts.render_required,
+                "message": visual_render["message"],
+                "details": visual_render,
+            }
+        )
+
     summary = {
         "schema_version": "1.0",
         "generated_at": datetime.now().isoformat(),
         "panel": panel,
-        "ok": bool(generation.get("success")) and assertion["ok"],
+        "ok": bool(generation.get("success"))
+        and assertion["ok"]
+        and (visual_render["status"] != "FAIL"),
         "input_excel": str(excel_file),
         "template_file": str(template_file),
         "output_root": str(output_root),
@@ -156,7 +185,8 @@ def run_golden_case(
         "duration": generation.get("duration"),
         "generation_errors": generation.get("errors") or [],
         "generation_warnings": generation.get("warnings") or [],
-        "checks": assertion["checks"],
+        "visual_render": visual_render,
+        "checks": checks,
     }
     summary["errors"] = [
         check["message"] for check in summary["checks"] if not check["passed"]
@@ -166,6 +196,94 @@ def run_golden_case(
     write_json(report_path, summary)
     summary["golden_report_file"] = str(report_path)
     return summary
+
+
+def run_visual_render(
+    output_file: Any,
+    *,
+    output_root: Path,
+    mode: str = "none",
+    dpi: int = 120,
+    timeout_seconds: int = 120,
+    required: bool = False,
+    tmp_dir: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Render a generated golden DOCX to PNG pages when requested."""
+    normalized_mode = str(mode or "none").strip().lower()
+    if normalized_mode not in {"none", "first", "all"}:
+        raise ValueError(f"Unsupported render mode: {mode!r}")
+
+    result: Dict[str, Any] = {
+        "requested": normalized_mode,
+        "required": bool(required),
+        "status": "SKIPPED",
+        "message": "visual rendering was not requested",
+        "rendered_pages": [],
+        "output_dir": None,
+        "error": None,
+    }
+    if normalized_mode == "none":
+        return result
+
+    if not output_file:
+        result.update(
+            {
+                "status": "FAIL" if required else "WARN",
+                "message": "visual rendering requested but no DOCX output exists",
+                "error": "missing_output_file",
+            }
+        )
+        return result
+
+    output_path = Path(str(output_file))
+    render_dir = output_root / "rendered_pages" / output_path.stem
+    first_page = 1 if normalized_mode == "first" else None
+    last_page = 1 if normalized_mode == "first" else None
+    try:
+        pngs = render_docx_to_pngs(
+            output_path,
+            output_dir=render_dir,
+            dpi=int(dpi),
+            first_page=first_page,
+            last_page=last_page,
+            keep_pdf=False,
+            timeout_seconds=int(timeout_seconds),
+            tmp_dir=Path(tmp_dir) if tmp_dir else None,
+        )
+    except Exception as exc:
+        result.update(
+            {
+                "status": "FAIL" if required else "WARN",
+                "message": f"visual rendering failed: {exc}",
+                "output_dir": str(render_dir),
+                "error": str(exc),
+            }
+        )
+        stage = getattr(exc, "stage", None)
+        if stage:
+            result["stage"] = stage
+        command = getattr(exc, "command", None)
+        if command:
+            result["command"] = list(command)
+        stdout = getattr(exc, "stdout", None)
+        stderr = getattr(exc, "stderr", None)
+        if stdout:
+            result["stdout_tail"] = str(stdout)[-2000:]
+        if stderr:
+            result["stderr_tail"] = str(stderr)[-2000:]
+        return result
+
+    result.update(
+        {
+            "status": "PASS" if pngs else ("FAIL" if required else "WARN"),
+            "message": "visual rendering produced PNG pages"
+            if pngs
+            else "visual rendering completed but produced no PNG pages",
+            "rendered_pages": [str(path) for path in pngs],
+            "output_dir": str(render_dir),
+        }
+    )
+    return result
 
 
 def _golden_case_spec(panel: str) -> Dict[str, Any]:
