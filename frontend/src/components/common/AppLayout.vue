@@ -102,7 +102,7 @@ const sidebarWidth = computed(() => {
   return collapsed.value ? '64px' : '220px'
 })
 
-const activeMenu = computed(() => route.path)
+const activeMenu = computed(() => (route.path.startsWith('/tasks/') ? '/tasks' : route.path))
 
 const titleMap: Record<string, string> = {
   '/generate': '生成报告',
@@ -111,7 +111,10 @@ const titleMap: Record<string, string> = {
   '/config': '配置管理',
   '/tasks': '任务队列',
 }
-const currentTitle = computed(() => titleMap[route.path] || '')
+const currentTitle = computed(() => {
+  if (route.path.startsWith('/tasks/')) return '任务质控详情'
+  return titleMap[route.path] || ''
+})
 
 function onResize() {
   windowWidth.value = window.innerWidth

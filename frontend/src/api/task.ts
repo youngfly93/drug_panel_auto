@@ -5,6 +5,8 @@ export interface TaskItem {
   task_type: string
   status: string
   project_type: string | null
+  qa_status?: string | null
+  qa_report_file?: string | null
   total_files: number
   completed_files: number
   failed_files: number
@@ -12,6 +14,8 @@ export interface TaskItem {
   started_at: string | null
   completed_at: string | null
   duration_seconds: number | null
+  output_path?: string | null
+  warnings?: string[]
   errors: string[]
 }
 

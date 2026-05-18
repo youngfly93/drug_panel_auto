@@ -41,6 +41,14 @@
         </template>
       </el-table-column>
       <el-table-column prop="project_type" label="项目类型" width="160" />
+      <el-table-column label="QA" width="90">
+        <template #default="{ row }">
+          <el-tag v-if="row.qa_status" :type="qaTagType(row.qa_status)" size="small">
+            {{ row.qa_status }}
+          </el-tag>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="进度" width="120">
         <template #default="{ row }">
           <span v-if="row.task_type === 'batch'">
@@ -60,8 +68,12 @@
           {{ row.created_at ? new Date(row.created_at).toLocaleString('zh-CN') : '-' }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
+      <el-table-column label="操作" width="210" fixed="right">
         <template #default="{ row }">
+          <el-button
+            text type="primary" size="small"
+            @click="openDetail(row.id)"
+          >详情</el-button>
           <el-button
             v-if="row.status === 'completed' && row.task_type === 'single'"
             text type="primary" size="small"
@@ -94,10 +106,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { taskApi, type TaskItem, type TaskStats } from '@/api/task'
 import { reportApi } from '@/api/report'
 
+const router = useRouter()
 const tasks = ref<TaskItem[]>([])
 const stats = ref<TaskStats>({ total: 0, completed: 0, failed: 0, running: 0, pending: 0 })
 const loading = ref(false)
@@ -127,6 +141,13 @@ function statusLabel(status: string) {
     pending: '待执行', cancelled: '已取消',
   }
   return map[status] || status
+}
+
+function qaTagType(status: string) {
+  const map: Record<string, string> = {
+    PASS: 'success', WARN: 'warning', FAIL: 'danger', SKIP: 'info',
+  }
+  return map[status] || 'info'
 }
 
 async function fetchTasks() {
@@ -161,6 +182,10 @@ async function cancelTask(taskId: string) {
 
 function downloadReport(taskId: string) {
   window.open(reportApi.getDownloadUrl(taskId), '_blank')
+}
+
+function openDetail(taskId: string) {
+  router.push(`/tasks/${taskId}`)
 }
 
 watch(statusFilter, () => { page.value = 1; fetchTasks() })

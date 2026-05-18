@@ -40,6 +40,24 @@ export interface TaskStatus {
   warnings: string[]
 }
 
+export interface RenderedPage {
+  filename: string
+  url: string
+}
+
+export interface VisualRenderResult {
+  requested: 'first' | 'all'
+  status: 'PASS' | 'WARN' | 'FAIL' | string
+  message: string
+  rendered_pages: RenderedPage[]
+  output_dir?: string | null
+  error?: string | null
+  stage?: string | null
+  command?: string[]
+  stdout_tail?: string
+  stderr_tail?: string
+}
+
 export const reportApi = {
   async generate(req: GenerateRequest): Promise<GenerateResult> {
     const { data } = await client.post('/reports/generate', req)
@@ -58,6 +76,14 @@ export const reportApi = {
 
   async getFieldProvenance(taskId: string): Promise<Record<string, any>> {
     const { data } = await client.get(`/reports/${taskId}/field-provenance`)
+    return data.data
+  },
+
+  async renderVisual(
+    taskId: string,
+    params: { mode?: 'first' | 'all'; dpi?: number; timeout_seconds?: number } = {},
+  ): Promise<VisualRenderResult> {
+    const { data } = await client.post(`/reports/${taskId}/visual-render`, null, { params })
     return data.data
   },
 

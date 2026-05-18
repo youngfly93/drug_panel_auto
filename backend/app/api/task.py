@@ -1,6 +1,8 @@
 """Task queue management endpoints."""
 
 import json
+from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -10,6 +12,23 @@ from app.models.task import Task
 from app.schemas.common import ApiResponse
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _qa_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    return Path(output_path).with_suffix(".qa.json")
+
+
+def _load_qa_summary(output_path: Optional[str]) -> tuple[str | None, str | None]:
+    qa_path = _qa_sidecar_path(output_path)
+    if not qa_path or not qa_path.exists():
+        return None, None
+    try:
+        payload = json.loads(qa_path.read_text(encoding="utf-8"))
+    except Exception:
+        return str(qa_path), None
+    return str(qa_path), payload.get("status")
 
 
 @router.get("", response_model=ApiResponse)
@@ -31,11 +50,14 @@ def list_tasks(
 
     items = []
     for t in tasks:
+        qa_report_file, qa_status = _load_qa_summary(t.output_path)
         items.append({
             "id": t.id,
             "task_type": t.task_type,
             "status": t.status,
             "project_type": t.project_type,
+            "qa_status": qa_status,
+            "qa_report_file": qa_report_file,
             "total_files": t.total_files,
             "completed_files": t.completed_files,
             "failed_files": t.failed_files,
@@ -71,6 +93,7 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    qa_report_file, qa_status = _load_qa_summary(task.output_path)
 
     return ApiResponse(data={
         "id": task.id,
@@ -81,6 +104,8 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
         "completed_files": task.completed_files,
         "failed_files": task.failed_files,
         "output_path": task.output_path,
+        "qa_status": qa_status,
+        "qa_report_file": qa_report_file,
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "started_at": task.started_at.isoformat() if task.started_at else None,
         "completed_at": task.completed_at.isoformat() if task.completed_at else None,

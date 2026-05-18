@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from app.schemas.common import ApiResponse
 from app.schemas.report import GenerateRequest, GenerateResponse, TaskStatus
 from app.services.file_manager import ensure_report_dir
 from app.services.reportgen_bridge import ReportGenBridge
+from reportgen.utils.docx_render import render_docx_to_pngs
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -45,6 +46,42 @@ def _load_qa_summary(
     except Exception:
         return str(qa_path), None, []
     return str(qa_path), payload.get("status"), payload.get("issues") or []
+
+
+def _visual_render_dir(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    path = Path(output_path)
+    return path.parent / "rendered_pages" / path.stem
+
+
+def _visual_render_page_path(output_path: Optional[str], filename: str) -> Optional[Path]:
+    render_dir = _visual_render_dir(output_path)
+    if not render_dir:
+        return None
+    candidate = (render_dir / filename).resolve()
+    try:
+        candidate.relative_to(render_dir.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+def _render_error_payload(exc: Exception) -> dict:
+    payload = {
+        "error": str(exc),
+        "stage": getattr(exc, "stage", None),
+    }
+    command = getattr(exc, "command", None)
+    if command:
+        payload["command"] = list(command)
+    stdout = getattr(exc, "stdout", None)
+    stderr = getattr(exc, "stderr", None)
+    if stdout:
+        payload["stdout_tail"] = str(stdout)[-2000:]
+    if stderr:
+        payload["stderr_tail"] = str(stderr)[-2000:]
+    return payload
 
 
 @router.post("/generate", response_model=ApiResponse[GenerateResponse])
@@ -186,6 +223,82 @@ def get_field_provenance(task_id: str, db: Session = Depends(get_db)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"字段来源报告读取失败: {exc}") from exc
     return ApiResponse(data=payload)
+
+
+@router.post("/{task_id}/visual-render", response_model=ApiResponse[dict])
+def render_report_pages(
+    task_id: str,
+    mode: str = Query("first", pattern="^(first|all)$"),
+    dpi: int = Query(120, ge=72, le=240),
+    timeout_seconds: int = Query(120, ge=5, le=600),
+    db: Session = Depends(get_db),
+):
+    """Render generated DOCX pages to PNGs on demand for visual QA."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not task.output_path:
+        raise HTTPException(status_code=404, detail="报告文件不存在")
+
+    docx_path = Path(task.output_path)
+    if not docx_path.exists():
+        raise HTTPException(status_code=404, detail="报告文件已被删除")
+
+    render_dir = _visual_render_dir(task.output_path)
+    if not render_dir:
+        raise HTTPException(status_code=404, detail="渲染目录不可用")
+    first_page = 1 if mode == "first" else None
+    last_page = 1 if mode == "first" else None
+
+    try:
+        pages = render_docx_to_pngs(
+            docx_path,
+            output_dir=render_dir,
+            dpi=dpi,
+            first_page=first_page,
+            last_page=last_page,
+            timeout_seconds=timeout_seconds,
+            keep_pdf=False,
+        )
+    except Exception as exc:
+        payload = {
+            "requested": mode,
+            "status": "WARN",
+            "message": f"视觉渲染失败: {exc}",
+            "rendered_pages": [],
+            "output_dir": str(render_dir),
+            **_render_error_payload(exc),
+        }
+        return ApiResponse(success=False, data=payload, error=payload["message"])
+
+    page_names = [path.name for path in pages if path.exists()]
+    return ApiResponse(
+        data={
+            "requested": mode,
+            "status": "PASS" if page_names else "WARN",
+            "message": "视觉渲染完成" if page_names else "视觉渲染未生成页面图片",
+            "rendered_pages": [
+                {
+                    "filename": name,
+                    "url": f"/api/v1/reports/{task_id}/visual-render/pages/{name}",
+                }
+                for name in page_names
+            ],
+            "output_dir": str(render_dir),
+        }
+    )
+
+
+@router.get("/{task_id}/visual-render/pages/{filename}")
+def get_rendered_page(task_id: str, filename: str, db: Session = Depends(get_db)):
+    """Return one rendered PNG page for a generated report."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    page_path = _visual_render_page_path(task.output_path, filename)
+    if not page_path or not page_path.exists() or page_path.suffix.lower() != ".png":
+        raise HTTPException(status_code=404, detail="页面图片不存在")
+    return FileResponse(path=str(page_path), media_type="image/png")
 
 
 @router.get("/{task_id}/download")

@@ -1,0 +1,488 @@
+<template>
+  <div class="task-detail">
+    <div class="page-head">
+      <div>
+        <el-button text :icon="ArrowLeft" @click="$router.push('/tasks')">返回任务队列</el-button>
+        <h2>任务质控详情</h2>
+        <p>{{ taskId }}</p>
+      </div>
+      <div class="head-actions">
+        <el-button :icon="Refresh" @click="fetchAll">刷新</el-button>
+        <el-button
+          v-if="task?.status === 'completed' && task.task_type === 'single'"
+          type="primary"
+          :icon="Download"
+          @click="downloadReport"
+        >
+          下载报告
+        </el-button>
+      </div>
+    </div>
+
+    <el-skeleton v-if="loading" :rows="8" animated />
+
+    <template v-else>
+      <section class="summary-band">
+        <div class="summary-item">
+          <span>任务状态</span>
+          <el-tag :type="statusTagType(task?.status || '')">{{ statusLabel(task?.status || '-') }}</el-tag>
+        </div>
+        <div class="summary-item">
+          <span>QA 状态</span>
+          <el-tag :type="qaTagType(task?.qa_status || qaReport?.status)">
+            {{ task?.qa_status || qaReport?.status || '未生成' }}
+          </el-tag>
+        </div>
+        <div class="summary-item">
+          <span>项目类型</span>
+          <strong>{{ task?.project_type || '-' }}</strong>
+        </div>
+        <div class="summary-item">
+          <span>耗时</span>
+          <strong>{{ task?.duration_seconds ? `${task.duration_seconds.toFixed(1)}s` : '-' }}</strong>
+        </div>
+      </section>
+
+      <el-alert
+        v-if="qaLoadError"
+        :title="qaLoadError"
+        type="warning"
+        show-icon
+        :closable="false"
+        class="section-gap"
+      />
+
+      <section class="qa-grid section-gap">
+        <div class="qa-panel issues-panel">
+          <div class="panel-title">
+            <span>问题列表</span>
+            <el-tag size="small" :type="issueRows.length ? 'danger' : 'success'">
+              {{ issueRows.length ? `${issueRows.length} 条` : '无问题' }}
+            </el-tag>
+          </div>
+          <el-empty v-if="!issueRows.length" description="当前 QA 未记录错误或警告" :image-size="70" />
+          <el-table v-else :data="issueRows" size="small" border>
+            <el-table-column label="级别" width="90">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.level === 'error' ? 'danger' : 'warning'">
+                  {{ row.level }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="code" label="代码" width="190" show-overflow-tooltip />
+            <el-table-column prop="message" label="说明" min-width="280" show-overflow-tooltip />
+          </el-table>
+        </div>
+
+        <div class="qa-panel render-panel">
+          <div class="panel-title">
+            <span>视觉渲染</span>
+            <el-tag size="small" :type="qaTagType(visualRender?.status)">
+              {{ visualRender?.status || '未运行' }}
+            </el-tag>
+          </div>
+          <div class="render-actions">
+            <el-button :loading="rendering" type="primary" plain @click="renderFirstPage">
+              渲染首页
+            </el-button>
+            <span>按需生成 PNG，用于检查页眉、表格边框、空白页和版式。</span>
+          </div>
+          <el-alert
+            v-if="visualRender?.message"
+            :title="visualRender.message"
+            :type="visualRender.status === 'PASS' ? 'success' : 'warning'"
+            show-icon
+            :closable="false"
+          />
+          <img
+            v-if="firstRenderedPage"
+            class="render-preview"
+            :src="firstRenderedPage.url"
+            alt="Rendered report page"
+          />
+          <el-collapse v-if="visualRender?.stderr_tail || visualRender?.command" class="debug-collapse">
+            <el-collapse-item title="渲染错误细节" name="render-debug">
+              <pre>{{ renderDebugText }}</pre>
+            </el-collapse-item>
+          </el-collapse>
+        </div>
+      </section>
+
+      <section class="qa-panel section-gap">
+        <div class="panel-title">
+          <span>QA 检查项</span>
+          <el-tag size="small">{{ checkRows.length }} 项</el-tag>
+        </div>
+        <el-table :data="checkRows" size="small" border>
+          <el-table-column prop="name" label="检查项" width="250" show-overflow-tooltip />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" :type="qaTagType(row.status)">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="summary" label="摘要" min-width="320" show-overflow-tooltip />
+        </el-table>
+      </section>
+
+      <section class="qa-panel section-gap">
+        <div class="panel-title">
+          <span>字段来源</span>
+          <el-tag size="small">{{ provenanceRows.length }} 个字段</el-tag>
+        </div>
+        <el-alert
+          v-if="provenanceLoadError"
+          :title="provenanceLoadError"
+          type="info"
+          show-icon
+          :closable="false"
+        />
+        <el-table v-else :data="provenanceRows" size="small" border>
+          <el-table-column prop="field" label="字段" width="170" />
+          <el-table-column prop="source" label="来源" width="120" />
+          <el-table-column prop="value" label="最终值" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="source_key" label="来源键" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="source_detail" label="说明" min-width="220" show-overflow-tooltip />
+          <el-table-column label="隐私" width="80">
+            <template #default="{ row }">
+              <el-tag v-if="row.sensitive" size="small" type="warning">已脱敏</el-tag>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
+
+      <section class="qa-panel section-gap">
+        <div class="panel-title">
+          <span>后处理器</span>
+          <el-tag size="small">{{ processorRows.length }} 个步骤</el-tag>
+        </div>
+        <el-table :data="processorRows" size="small" border>
+          <el-table-column prop="name" label="步骤" min-width="220" show-overflow-tooltip />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.status === 'ERROR' ? 'danger' : 'success'">
+                {{ row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="duration_ms" label="耗时(ms)" width="110" />
+          <el-table-column prop="error" label="错误" min-width="260" show-overflow-tooltip />
+        </el-table>
+      </section>
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { ArrowLeft, Download, Refresh } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { reportApi, type TaskStatus, type VisualRenderResult } from '@/api/report'
+
+const route = useRoute()
+const taskId = String(route.params.id || '')
+
+const loading = ref(false)
+const rendering = ref(false)
+const task = ref<TaskStatus | null>(null)
+const qaReport = ref<Record<string, any> | null>(null)
+const provenance = ref<Record<string, any> | null>(null)
+const visualRender = ref<VisualRenderResult | null>(null)
+const qaLoadError = ref('')
+const provenanceLoadError = ref('')
+
+const issueRows = computed(() => qaReport.value?.issues || [])
+const processorRows = computed(() => qaReport.value?.post_processors || [])
+
+const checkRows = computed(() => {
+  const checks = qaReport.value?.checks || {}
+  return Object.entries(checks).map(([name, value]) => {
+    const item = (value || {}) as Record<string, any>
+    return {
+      name,
+      status: item.status || '-',
+      summary: item.message || summarizeCheck(item),
+    }
+  })
+})
+
+const provenanceRows = computed(() => {
+  const fields = provenance.value?.fields || {}
+  return Object.entries(fields).map(([field, value]) => {
+    const item = (value || {}) as Record<string, any>
+    return {
+      field,
+      value: stringifyValue(item.value),
+      source: item.source || '-',
+      source_key: item.source_key || '-',
+      source_detail: item.source_detail || '-',
+      sensitive: Boolean(item.sensitive),
+    }
+  })
+})
+
+const firstRenderedPage = computed(() => visualRender.value?.rendered_pages?.[0] || null)
+
+const renderDebugText = computed(() => {
+  if (!visualRender.value) return ''
+  return JSON.stringify(
+    {
+      stage: visualRender.value.stage,
+      error: visualRender.value.error,
+      command: visualRender.value.command,
+      stderr_tail: visualRender.value.stderr_tail,
+      stdout_tail: visualRender.value.stdout_tail,
+    },
+    null,
+    2,
+  )
+})
+
+function summarizeCheck(item: Record<string, any>) {
+  const entries = Object.entries(item)
+    .filter(([key]) => key !== 'status')
+    .slice(0, 4)
+    .map(([key, value]) => `${key}: ${stringifyValue(value)}`)
+  return entries.join('；') || '-'
+}
+
+function stringifyValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'string') return value
+  return JSON.stringify(value)
+}
+
+function statusTagType(status: string) {
+  const map: Record<string, string> = {
+    completed: 'success',
+    failed: 'danger',
+    running: 'warning',
+    pending: 'info',
+    cancelled: 'info',
+  }
+  return map[status] || 'info'
+}
+
+function statusLabel(status: string) {
+  const map: Record<string, string> = {
+    completed: '已完成',
+    failed: '失败',
+    running: '运行中',
+    pending: '待执行',
+    cancelled: '已取消',
+  }
+  return map[status] || status
+}
+
+function qaTagType(status?: string | null) {
+  const map: Record<string, string> = {
+    PASS: 'success',
+    WARN: 'warning',
+    FAIL: 'danger',
+    SKIP: 'info',
+  }
+  return status ? map[status] || 'info' : 'info'
+}
+
+async function fetchAll() {
+  loading.value = true
+  qaLoadError.value = ''
+  provenanceLoadError.value = ''
+  try {
+    task.value = await reportApi.getTaskStatus(taskId)
+    try {
+      qaReport.value = await reportApi.getQaReport(taskId)
+    } catch (err: any) {
+      qaReport.value = null
+      qaLoadError.value = err.response?.data?.detail || 'QA 报告尚未生成'
+    }
+    try {
+      provenance.value = await reportApi.getFieldProvenance(taskId)
+    } catch (err: any) {
+      provenance.value = null
+      provenanceLoadError.value = err.response?.data?.detail || '字段来源报告尚未生成'
+    }
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '任务详情加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function renderFirstPage() {
+  rendering.value = true
+  try {
+    visualRender.value = await reportApi.renderVisual(taskId, {
+      mode: 'first',
+      dpi: 120,
+      timeout_seconds: 60,
+    })
+    if (visualRender.value.status === 'PASS') {
+      ElMessage.success('首页渲染完成')
+    } else {
+      ElMessage.warning(visualRender.value.message || '视觉渲染未通过')
+    }
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.error || '视觉渲染请求失败')
+  } finally {
+    rendering.value = false
+  }
+}
+
+function downloadReport() {
+  window.open(reportApi.getDownloadUrl(taskId), '_blank')
+}
+
+onMounted(fetchAll)
+</script>
+
+<style scoped>
+.task-detail {
+  color: #1f2933;
+}
+
+.page-head,
+.head-actions,
+.panel-title,
+.render-actions {
+  display: flex;
+  align-items: center;
+}
+
+.page-head {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.page-head h2 {
+  margin: 6px 0 4px;
+  font-size: 24px;
+  font-weight: 650;
+}
+
+.page-head p {
+  margin: 0;
+  color: #667085;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+}
+
+.head-actions {
+  gap: 8px;
+}
+
+.summary-band {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid #d9e2ec;
+  background: #f8fafc;
+}
+
+.summary-item {
+  min-height: 76px;
+  padding: 14px 16px;
+  border-right: 1px solid #d9e2ec;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.summary-item:last-child {
+  border-right: 0;
+}
+
+.summary-item span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.summary-item strong {
+  font-size: 16px;
+}
+
+.section-gap {
+  margin-top: 18px;
+}
+
+.qa-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  gap: 18px;
+}
+
+.qa-panel {
+  border: 1px solid #d9e2ec;
+  background: #fff;
+}
+
+.panel-title {
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 14px;
+  border-bottom: 1px solid #e6edf3;
+  font-weight: 650;
+}
+
+.issues-panel,
+.render-panel {
+  min-height: 240px;
+}
+
+.render-actions {
+  gap: 10px;
+  padding: 14px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.render-panel :deep(.el-alert) {
+  margin: 0 14px 14px;
+}
+
+.render-preview {
+  display: block;
+  width: calc(100% - 28px);
+  max-height: 680px;
+  object-fit: contain;
+  margin: 0 14px 14px;
+  border: 1px solid #d9e2ec;
+  background: #f8fafc;
+}
+
+.debug-collapse {
+  margin: 0 14px 14px;
+}
+
+pre {
+  max-height: 300px;
+  overflow: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #344054;
+}
+
+@media (max-width: 980px) {
+  .summary-band,
+  .qa-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-item {
+    border-right: 0;
+    border-bottom: 1px solid #d9e2ec;
+  }
+
+  .summary-item:last-child {
+    border-bottom: 0;
+  }
+
+  .page-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>
