@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
         settings.report_dir,
         settings.preview_dir,
         settings.signature_dir,
+        settings.reference_report_dir,
         settings.storage_root / "db",
     ]:
         d.mkdir(parents=True, exist_ok=True)

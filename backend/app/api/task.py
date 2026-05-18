@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.task import Task
 from app.schemas.common import ApiResponse
+from app.services import reference_report_service as diff_svc
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -51,6 +52,7 @@ def list_tasks(
     items = []
     for t in tasks:
         qa_report_file, qa_status = _load_qa_summary(t.output_path)
+        diff_summary = diff_svc.report_diff_summary(t.output_path)
         items.append({
             "id": t.id,
             "task_type": t.task_type,
@@ -58,6 +60,10 @@ def list_tasks(
             "project_type": t.project_type,
             "qa_status": qa_status,
             "qa_report_file": qa_report_file,
+            "diff_status": diff_summary.get("diff_status"),
+            "diff_gate_passed": diff_summary.get("diff_gate_passed"),
+            "diff_reference_id": diff_summary.get("diff_reference_id"),
+            "diff_reference_name": diff_summary.get("diff_reference_name"),
             "total_files": t.total_files,
             "completed_files": t.completed_files,
             "failed_files": t.failed_files,
@@ -94,6 +100,7 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     qa_report_file, qa_status = _load_qa_summary(task.output_path)
+    diff_summary = diff_svc.report_diff_summary(task.output_path)
 
     return ApiResponse(data={
         "id": task.id,
@@ -106,6 +113,12 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
         "output_path": task.output_path,
         "qa_status": qa_status,
         "qa_report_file": qa_report_file,
+        "diff_report_file": diff_summary.get("diff_report_file"),
+        "diff_markdown_file": diff_summary.get("diff_markdown_file"),
+        "diff_status": diff_summary.get("diff_status"),
+        "diff_gate_passed": diff_summary.get("diff_gate_passed"),
+        "diff_reference_id": diff_summary.get("diff_reference_id"),
+        "diff_reference_name": diff_summary.get("diff_reference_name"),
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "started_at": task.started_at.isoformat() if task.started_at else None,
         "completed_at": task.completed_at.isoformat() if task.completed_at else None,

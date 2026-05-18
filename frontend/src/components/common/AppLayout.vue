@@ -37,6 +37,10 @@
           <el-icon><Setting /></el-icon>
           <span>配置管理</span>
         </el-menu-item>
+        <el-menu-item index="/references">
+          <el-icon><Document /></el-icon>
+          <span>基准报告</span>
+        </el-menu-item>
         <el-menu-item index="/tasks">
           <el-icon><List /></el-icon>
           <span>任务队列</span>
@@ -109,6 +113,7 @@ const titleMap: Record<string, string> = {
   '/patients': '患者信息',
   '/knowledge': '知识库',
   '/config': '配置管理',
+  '/references': '基准报告',
   '/tasks': '任务队列',
 }
 const currentTitle = computed(() => {

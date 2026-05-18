@@ -18,12 +18,8 @@ from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.schemas.report import GenerateRequest, GenerateResponse, TaskStatus
 from app.services.file_manager import ensure_report_dir
+from app.services import reference_report_service as diff_svc
 from app.services.reportgen_bridge import ReportGenBridge
-from reportgen.core.report_diff import (
-    ReportDiffOptions,
-    compare_reports,
-    write_report_diff_outputs,
-)
 from reportgen.utils.docx_render import render_docx_to_pngs
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -74,23 +70,11 @@ def _visual_render_page_path(output_path: Optional[str], filename: str) -> Optio
 
 
 def _report_diff_dir(output_path: Optional[str]) -> Optional[Path]:
-    if not output_path:
-        return None
-    return Path(output_path).parent / "report_diff"
+    return diff_svc.report_diff_dir(output_path)
 
 
 def _report_diff_artifact_path(output_path: Optional[str], filename: str) -> Optional[Path]:
-    if filename not in {"report_diff.json", "report_diff.md"}:
-        return None
-    diff_dir = _report_diff_dir(output_path)
-    if not diff_dir:
-        return None
-    candidate = (diff_dir / filename).resolve()
-    try:
-        candidate.relative_to(diff_dir.resolve())
-    except ValueError:
-        return None
-    return candidate
+    return diff_svc.report_diff_artifact_path(output_path, filename)
 
 
 def _render_error_payload(exc: Exception) -> dict:
@@ -167,10 +151,23 @@ def generate_report(
         task.status = "completed" if success else "failed"
         task.output_path = result.get("output_file")
         task.duration_seconds = result.get("duration")
+        warnings = list(result.get("warnings", []) or [])
+        auto_diff_result = None
+        if success and task.output_path:
+            try:
+                auto_diff_result = diff_svc.run_auto_reference_diff(
+                    db,
+                    task,
+                    fail_on="fail",
+                    max_samples=50,
+                )
+            except Exception as exc:
+                warnings.append(f"自动基准对比失败: {exc}")
         task.errors = json.dumps(result.get("errors", []), ensure_ascii=False)
-        task.warnings = json.dumps(result.get("warnings", []), ensure_ascii=False)
+        task.warnings = json.dumps(warnings, ensure_ascii=False)
         task.completed_at = datetime.utcnow()
         db.commit()
+        diff_summary = diff_svc.report_diff_summary(task.output_path)
 
         return ApiResponse(
             data=GenerateResponse(
@@ -181,9 +178,14 @@ def generate_report(
                 qa_report_file=result.get("qa_report_file"),
                 qa_status=result.get("qa_status"),
                 qa_issues=(result.get("qa_report") or {}).get("issues") or [],
+                diff_status=diff_summary.get("diff_status"),
+                diff_gate_passed=diff_summary.get("diff_gate_passed"),
+                diff_reference_id=diff_summary.get("diff_reference_id"),
+                diff_reference_name=diff_summary.get("diff_reference_name"),
+                diff_auto_ran=auto_diff_result is not None,
                 duration_seconds=result.get("duration"),
                 errors=result.get("errors", []),
-                warnings=result.get("warnings", []),
+                warnings=warnings,
             )
         )
     except Exception as e:
@@ -209,6 +211,7 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="任务不存在")
     field_provenance_path = _field_provenance_sidecar_path(task.output_path)
     qa_report_file, qa_status, _qa_issues = _load_qa_summary(task.output_path)
+    diff_summary = diff_svc.report_diff_summary(task.output_path)
 
     return ApiResponse(
         data=TaskStatus(
@@ -225,6 +228,12 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             else None,
             qa_report_file=qa_report_file,
             qa_status=qa_status,
+            diff_report_file=diff_summary.get("diff_report_file"),
+            diff_markdown_file=diff_summary.get("diff_markdown_file"),
+            diff_status=diff_summary.get("diff_status"),
+            diff_gate_passed=diff_summary.get("diff_gate_passed"),
+            diff_reference_id=diff_summary.get("diff_reference_id"),
+            diff_reference_name=diff_summary.get("diff_reference_name"),
             created_at=task.created_at,
             started_at=task.started_at,
             completed_at=task.completed_at,
@@ -370,26 +379,49 @@ def diff_report_against_reference(
         except Exception:
             pass
 
-    result = compare_reports(
-        ReportDiffOptions(
-            reference_docx=str(reference_path),
-            candidate_docx=str(task.output_path),
-            output_dir=str(diff_dir),
-            max_samples=max_samples,
-        )
+    result = diff_svc.compare_task_with_reference_path(
+        task,
+        reference_docx=str(reference_path),
+        task_id=task_id,
+        fail_on=fail_on,
+        max_samples=max_samples,
+        reference_metadata={
+            "source": "uploaded",
+            "name": reference.filename,
+            "active": False,
+        },
     )
-    status = result.get("status")
-    gate_passed = status == "PASS" or (status == "WARN" and fail_on == "fail")
-    result["gate"] = {
-        "fail_on": fail_on,
-        "passed": bool(gate_passed),
-    }
-    result["download_urls"] = {
-        "json": f"/api/v1/reports/{task_id}/diff/download/report_diff.json",
-        "markdown": f"/api/v1/reports/{task_id}/diff/download/report_diff.md",
-    }
-    write_report_diff_outputs(result, diff_dir)
     return ApiResponse(data=result)
+
+
+@router.post("/{task_id}/diff/auto", response_model=ApiResponse[dict])
+def diff_report_against_registered_reference(
+    task_id: str,
+    fail_on: str = Query("fail", pattern="^(fail|warn)$"),
+    max_samples: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """Compare a generated report against the active panel/case reference report."""
+    task = _get_single_report_task(task_id, db)
+    result = diff_svc.run_auto_reference_diff(
+        db,
+        task,
+        fail_on=fail_on,
+        max_samples=max_samples,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="未找到匹配的启用基准报告")
+    return ApiResponse(data=result)
+
+
+@router.get("/{task_id}/diff", response_model=ApiResponse[dict])
+def get_report_diff(task_id: str, db: Session = Depends(get_db)):
+    """Return the latest report diff JSON for a task."""
+    task = _get_single_report_task(task_id, db)
+    payload = diff_svc.load_report_diff(task.output_path)
+    if not payload:
+        raise HTTPException(status_code=404, detail="报告对比结果不存在")
+    return ApiResponse(data=payload)
 
 
 @router.get("/{task_id}/diff/download/{filename}")

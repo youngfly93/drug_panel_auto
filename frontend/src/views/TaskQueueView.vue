@@ -49,6 +49,14 @@
           <span v-else>-</span>
         </template>
       </el-table-column>
+      <el-table-column label="Diff" width="120">
+        <template #default="{ row }">
+          <el-tag v-if="row.diff_status" :type="diffTagType(row)" size="small">
+            {{ row.diff_status }}
+          </el-tag>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="进度" width="120">
         <template #default="{ row }">
           <span v-if="row.task_type === 'batch'">
@@ -148,6 +156,11 @@ function qaTagType(status: string) {
     PASS: 'success', WARN: 'warning', FAIL: 'danger', SKIP: 'info',
   }
   return map[status] || 'info'
+}
+
+function diffTagType(row: TaskItem) {
+  if (row.diff_gate_passed === false) return 'danger'
+  return qaTagType(row.diff_status || '')
 }
 
 async function fetchTasks() {

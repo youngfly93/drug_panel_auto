@@ -17,6 +17,11 @@ export interface GenerateResult {
   qa_report_file?: string | null
   qa_status?: string | null
   qa_issues?: Array<Record<string, any>>
+  diff_status?: string | null
+  diff_gate_passed?: boolean | null
+  diff_reference_id?: string | null
+  diff_reference_name?: string | null
+  diff_auto_ran?: boolean
   duration_seconds: number | null
   errors: string[]
   warnings: string[]
@@ -34,6 +39,12 @@ export interface TaskStatus {
   field_provenance_file?: string | null
   qa_report_file?: string | null
   qa_status?: string | null
+  diff_report_file?: string | null
+  diff_markdown_file?: string | null
+  diff_status?: string | null
+  diff_gate_passed?: boolean | null
+  diff_reference_id?: string | null
+  diff_reference_name?: string | null
   created_at: string | null
   duration_seconds: number | null
   errors: string[]
@@ -82,6 +93,15 @@ export interface ReportDiffResult {
     fail_on: 'fail' | 'warn'
     passed: boolean
   }
+  reference_report?: {
+    id?: string
+    panel_id?: string
+    case_id?: string
+    name?: string
+    original_filename?: string
+    active?: boolean
+    source?: string
+  }
   download_urls?: {
     json?: string
     markdown?: string
@@ -128,6 +148,19 @@ export const reportApi = {
       params,
       headers: { 'Content-Type': 'multipart/form-data' },
     })
+    return data.data
+  },
+
+  async compareReportWithRegisteredReference(
+    taskId: string,
+    params: { fail_on?: 'fail' | 'warn'; max_samples?: number } = {},
+  ): Promise<ReportDiffResult> {
+    const { data } = await client.post(`/reports/${taskId}/diff/auto`, null, { params })
+    return data.data
+  },
+
+  async getReportDiff(taskId: string): Promise<ReportDiffResult> {
+    const { data } = await client.get(`/reports/${taskId}/diff`)
     return data.data
   },
 

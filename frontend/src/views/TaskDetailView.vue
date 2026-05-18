@@ -34,6 +34,12 @@
           </el-tag>
         </div>
         <div class="summary-item">
+          <span>Diff 门禁</span>
+          <el-tag :type="diffGateTagType">
+            {{ task?.diff_status || reportDiff?.status || '未运行' }}
+          </el-tag>
+        </div>
+        <div class="summary-item">
           <span>项目类型</span>
           <strong>{{ task?.project_type || '-' }}</strong>
         </div>
@@ -111,11 +117,20 @@
       <section class="qa-panel section-gap">
         <div class="panel-title">
           <span>报告对比</span>
-          <el-tag size="small" :type="qaTagType(reportDiff?.status)">
-            {{ reportDiff?.status || '未运行' }}
+          <el-tag size="small" :type="diffGateTagType">
+            {{ reportDiff?.status || task?.diff_status || '未运行' }}
           </el-tag>
         </div>
         <div class="diff-toolbar">
+          <el-button
+            type="primary"
+            plain
+            :loading="autoDiffing"
+            :disabled="!task?.output_path"
+            @click="compareRegisteredReference"
+          >
+            使用基准库对比
+          </el-button>
           <el-upload
             v-model:file-list="referenceFileList"
             accept=".docx"
@@ -151,6 +166,13 @@
           >
             JSON
           </el-button>
+        </div>
+        <div v-if="reportDiff?.reference_report" class="reference-strip">
+          <span>基准</span>
+          <strong>{{ reportDiff.reference_report.name || reportDiff.reference_report.id || '手动上传' }}</strong>
+          <em v-if="reportDiff.reference_report.panel_id">
+            {{ reportDiff.reference_report.panel_id }} / {{ reportDiff.reference_report.case_id }}
+          </em>
         </div>
         <el-alert
           v-if="reportDiff"
@@ -296,6 +318,7 @@ const taskId = String(route.params.id || '')
 const loading = ref(false)
 const rendering = ref(false)
 const diffing = ref(false)
+const autoDiffing = ref(false)
 const task = ref<TaskStatus | null>(null)
 const qaReport = ref<Record<string, any> | null>(null)
 const provenance = ref<Record<string, any> | null>(null)
@@ -339,6 +362,11 @@ const provenanceRows = computed(() => {
 
 const firstRenderedPage = computed(() => visualRender.value?.rendered_pages?.[0] || null)
 const diffIssueRows = computed(() => reportDiff.value?.issues || [])
+
+const diffGateTagType = computed(() => {
+  if (task.value?.diff_gate_passed === false || reportDiff.value?.gate?.passed === false) return 'danger'
+  return qaTagType(reportDiff.value?.status || task.value?.diff_status)
+})
 
 const diffSummaryTitle = computed(() => {
   if (!reportDiff.value) return ''
@@ -436,6 +464,11 @@ async function fetchAll() {
   try {
     task.value = await reportApi.getTaskStatus(taskId)
     try {
+      reportDiff.value = await reportApi.getReportDiff(taskId)
+    } catch {
+      reportDiff.value = null
+    }
+    try {
       qaReport.value = await reportApi.getQaReport(taskId)
     } catch (err: any) {
       qaReport.value = null
@@ -496,6 +529,7 @@ async function compareReport() {
       fail_on: diffFailOn.value,
       max_samples: 50,
     })
+    task.value = await reportApi.getTaskStatus(taskId)
     if (reportDiff.value.gate?.passed) {
       ElMessage.success('报告对比通过')
     } else {
@@ -505,6 +539,26 @@ async function compareReport() {
     ElMessage.error(err.response?.data?.detail || err.response?.data?.error || '报告对比失败')
   } finally {
     diffing.value = false
+  }
+}
+
+async function compareRegisteredReference() {
+  autoDiffing.value = true
+  try {
+    reportDiff.value = await reportApi.compareReportWithRegisteredReference(taskId, {
+      fail_on: diffFailOn.value,
+      max_samples: 50,
+    })
+    task.value = await reportApi.getTaskStatus(taskId)
+    if (reportDiff.value.gate?.passed) {
+      ElMessage.success('基准库对比通过')
+    } else {
+      ElMessage.warning('基准库对比存在阻断项')
+    }
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '未找到匹配基准报告')
+  } finally {
+    autoDiffing.value = false
   }
 }
 
@@ -542,6 +596,24 @@ onMounted(fetchAll)
 
 .diff-alert {
   margin: 0 14px 14px;
+}
+
+.reference-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px 12px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.reference-strip strong {
+  color: #1f2933;
+}
+
+.reference-strip em {
+  font-style: normal;
+  color: #475467;
 }
 
 .diff-metrics {
@@ -612,7 +684,7 @@ onMounted(fetchAll)
 
 .summary-band {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border: 1px solid #d9e2ec;
   background: #f8fafc;
 }

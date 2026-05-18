@@ -125,6 +125,14 @@
           style="margin-bottom: 8px"
         />
         <el-alert
+          v-if="result.diff_auto_ran"
+          :title="`自动 Diff：${result.diff_status || '-'}，基准：${result.diff_reference_name || result.diff_reference_id || '-'}`"
+          :type="result.diff_gate_passed === false ? 'error' : result.diff_status === 'WARN' ? 'warning' : 'success'"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 8px"
+        />
+        <el-alert
           v-for="(err, i) in result.errors"
           :key="i"
           :title="err"

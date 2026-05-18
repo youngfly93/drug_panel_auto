@@ -24,6 +24,11 @@ class GenerateResponse(BaseModel):
     qa_report_file: Optional[str] = None
     qa_status: Optional[str] = None
     qa_issues: list[dict[str, Any]] = []
+    diff_status: Optional[str] = None
+    diff_gate_passed: Optional[bool] = None
+    diff_reference_id: Optional[str] = None
+    diff_reference_name: Optional[str] = None
+    diff_auto_ran: bool = False
     duration_seconds: Optional[float] = None
     errors: list[str] = []
     warnings: list[str] = []
@@ -41,6 +46,12 @@ class TaskStatus(BaseModel):
     field_provenance_file: Optional[str] = None
     qa_report_file: Optional[str] = None
     qa_status: Optional[str] = None
+    diff_report_file: Optional[str] = None
+    diff_markdown_file: Optional[str] = None
+    diff_status: Optional[str] = None
+    diff_gate_passed: Optional[bool] = None
+    diff_reference_id: Optional[str] = None
+    diff_reference_name: Optional[str] = None
     created_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

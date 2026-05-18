@@ -38,6 +38,11 @@ const router = createRouter({
           component: () => import('@/views/ConfigEditorView.vue'),
         },
         {
+          path: 'references',
+          name: 'references',
+          component: () => import('@/views/ReferenceReportsView.vue'),
+        },
+        {
           path: 'tasks',
           name: 'tasks',
           component: () => import('@/views/TaskQueueView.vue'),
