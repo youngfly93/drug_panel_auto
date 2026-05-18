@@ -605,6 +605,99 @@ def qa_run(
     sys.exit(0)
 
 
+@qa.command("diff")
+@click.option(
+    "--reference",
+    "reference_docx",
+    required=True,
+    type=click.Path(exists=True),
+    help="基准/正确报告 DOCX",
+)
+@click.option(
+    "--candidate",
+    "candidate_docx",
+    required=True,
+    type=click.Path(exists=True),
+    help="候选/新生成报告 DOCX",
+)
+@click.option(
+    "--output-dir",
+    default=None,
+    type=click.Path(),
+    help="输出 report_diff.json 与 report_diff.md 的目录",
+)
+@click.option(
+    "--reference-qa",
+    default=None,
+    type=click.Path(exists=True),
+    help="基准报告 QA JSON；默认查找同名 .qa.json",
+)
+@click.option(
+    "--candidate-qa",
+    default=None,
+    type=click.Path(exists=True),
+    help="候选报告 QA JSON；默认查找同名 .qa.json",
+)
+@click.option(
+    "--max-samples",
+    default=30,
+    show_default=True,
+    type=int,
+    help="每类差异最多保留的样本数",
+)
+@click.option(
+    "--fail-on",
+    type=click.Choice(["fail", "warn"]),
+    default="fail",
+    show_default=True,
+    help="CLI 非零退出门槛",
+)
+def qa_diff(
+    reference_docx,
+    candidate_docx,
+    output_dir,
+    reference_qa,
+    candidate_qa,
+    max_samples,
+    fail_on,
+):
+    """对比基准报告和候选报告，输出机器可读与人工可读 diff。"""
+    from reportgen.core.report_diff import ReportDiffOptions, compare_reports
+
+    result = compare_reports(
+        ReportDiffOptions(
+            reference_docx=reference_docx,
+            candidate_docx=candidate_docx,
+            output_dir=output_dir,
+            reference_qa=reference_qa,
+            candidate_qa=candidate_qa,
+            max_samples=int(max_samples),
+        )
+    )
+
+    summary = result.get("summary") or {}
+    click.echo(f"🧾 Report diff status: {result.get('status')}")
+    click.echo(
+        "  failures: "
+        f"{summary.get('failures', 0)}, warnings: {summary.get('warnings', 0)}, "
+        f"text_similarity: {summary.get('text_similarity')}"
+    )
+    if result.get("json_file"):
+        click.echo(f"  json: {result.get('json_file')}")
+    if result.get("markdown_file"):
+        click.echo(f"  markdown: {result.get('markdown_file')}")
+    for issue in list(result.get("issues") or [])[: int(max_samples)]:
+        click.echo(
+            f"  - {str(issue.get('level')).upper()} "
+            f"{issue.get('section')}/{issue.get('code')}: {issue.get('message')}"
+        )
+
+    status = result.get("status")
+    if status == "FAIL" or (fail_on == "warn" and status == "WARN"):
+        sys.exit(1)
+    sys.exit(0)
+
+
 @cli.command()
 @click.option(
     "--template",

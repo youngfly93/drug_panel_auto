@@ -2,6 +2,7 @@
 
 import sys
 import subprocess
+import json
 from datetime import date
 from pathlib import Path
 
@@ -44,6 +45,7 @@ from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.processors import ProcessorContext, run_processors
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.report_generator import ReportGenerator
+from reportgen.core.report_diff import ReportDiffOptions, compare_reports
 from reportgen.core.template_bridge_358 import (
     build_targeted_drug_brand_summary,
     build_tmb_summary,
@@ -2554,3 +2556,114 @@ def test_golden_case_options_accept_visual_render_controls():
     assert opts.render_dpi == 140
     assert opts.render_timeout_seconds == 45
     assert opts.render_required is True
+
+
+def test_report_diff_passes_for_identical_docx(tmp_path):
+    reference = tmp_path / "reference.docx"
+    candidate = tmp_path / "candidate.docx"
+    doc = Document()
+    doc.add_paragraph("本次共检出体细胞变异：2 个")
+    table = doc.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "基因"
+    table.rows[0].cells[1].text = "位点"
+    table.rows[1].cells[0].text = "KRAS"
+    table.rows[1].cells[1].text = "c.34G>A"
+    doc.save(reference)
+    doc.save(candidate)
+
+    result = compare_reports(
+        ReportDiffOptions(
+            reference_docx=str(reference),
+            candidate_docx=str(candidate),
+        )
+    )
+
+    assert result["status"] == "PASS"
+    assert result["summary"]["failures"] == 0
+    assert result["sections"]["text"]["similarity"] == 1.0
+
+
+def test_report_diff_fails_on_table_shape_change_and_writes_outputs(tmp_path):
+    reference = tmp_path / "reference.docx"
+    candidate = tmp_path / "candidate.docx"
+    ref_doc = Document()
+    ref_doc.add_paragraph("报告摘要")
+    ref_table = ref_doc.add_table(rows=2, cols=2)
+    ref_table.rows[0].cells[0].text = "基因"
+    ref_table.rows[0].cells[1].text = "位点"
+    ref_table.rows[1].cells[0].text = "KRAS"
+    ref_table.rows[1].cells[1].text = "c.34G>A"
+    ref_doc.save(reference)
+
+    cand_doc = Document()
+    cand_doc.add_paragraph("报告摘要")
+    cand_table = cand_doc.add_table(rows=2, cols=3)
+    cand_table.rows[0].cells[0].text = "基因"
+    cand_table.rows[0].cells[1].text = "位点"
+    cand_table.rows[0].cells[2].text = "药物"
+    cand_table.rows[1].cells[0].text = "KRAS"
+    cand_table.rows[1].cells[1].text = "c.34G>A"
+    cand_table.rows[1].cells[2].text = "西妥昔单抗"
+    cand_doc.save(candidate)
+
+    result = compare_reports(
+        ReportDiffOptions(
+            reference_docx=str(reference),
+            candidate_docx=str(candidate),
+            output_dir=str(tmp_path / "diff"),
+        )
+    )
+
+    assert result["status"] == "FAIL"
+    assert any(i["code"] == "TABLE_SHAPE_DIFF" for i in result["issues"])
+    assert (tmp_path / "diff" / "report_diff.json").exists()
+    assert "TABLE_SHAPE_DIFF" in (tmp_path / "diff" / "report_diff.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_report_diff_warns_on_style_and_qa_changes(tmp_path):
+    reference = tmp_path / "reference.docx"
+    candidate = tmp_path / "candidate.docx"
+    ref_doc = Document()
+    ref_doc.add_paragraph("药物提示")
+    ref_doc.save(reference)
+
+    cand_doc = Document()
+    para = cand_doc.add_paragraph()
+    run = para.add_run("药物提示")
+    run.font.underline = True
+    cand_doc.save(candidate)
+
+    reference.with_suffix(".qa.json").write_text(
+        json.dumps({"status": "PASS", "issues": []}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    candidate.with_suffix(".qa.json").write_text(
+        json.dumps(
+            {
+                "status": "WARN",
+                "issues": [
+                    {
+                        "level": "warning",
+                        "code": "TOC_PAGE_NUMBERS_MISSING",
+                        "message": "目录页码缺失",
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = compare_reports(
+        ReportDiffOptions(
+            reference_docx=str(reference),
+            candidate_docx=str(candidate),
+        )
+    )
+
+    assert result["status"] == "WARN"
+    assert any(i["code"] == "STYLE_DIFF" for i in result["issues"])
+    assert any(i["code"] == "QA_STATUS_DIFF" for i in result["issues"])
+    assert result["sections"]["qa"]["candidate_status"] == "WARN"
