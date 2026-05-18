@@ -110,6 +110,111 @@
 
       <section class="qa-panel section-gap">
         <div class="panel-title">
+          <span>报告对比</span>
+          <el-tag size="small" :type="qaTagType(reportDiff?.status)">
+            {{ reportDiff?.status || '未运行' }}
+          </el-tag>
+        </div>
+        <div class="diff-toolbar">
+          <el-upload
+            v-model:file-list="referenceFileList"
+            accept=".docx"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleReferenceFileChange"
+            :on-remove="clearReferenceFile"
+          >
+            <el-button :icon="UploadFilled">选择正确报告 DOCX</el-button>
+          </el-upload>
+          <el-select v-model="diffFailOn" style="width: 150px">
+            <el-option label="仅 FAIL 阻断" value="fail" />
+            <el-option label="WARN 也阻断" value="warn" />
+          </el-select>
+          <el-button
+            type="primary"
+            :loading="diffing"
+            :disabled="!referenceFile || !task?.output_path"
+            @click="compareReport"
+          >
+            对比当前报告
+          </el-button>
+          <el-button
+            v-if="reportDiff"
+            :icon="Download"
+            @click="downloadDiff('report_diff.md')"
+          >
+            下载摘要
+          </el-button>
+          <el-button
+            v-if="reportDiff"
+            @click="downloadDiff('report_diff.json')"
+          >
+            JSON
+          </el-button>
+        </div>
+        <el-alert
+          v-if="reportDiff"
+          :title="diffSummaryTitle"
+          :type="reportDiff.status === 'PASS' ? 'success' : reportDiff.status === 'FAIL' ? 'error' : 'warning'"
+          show-icon
+          :closable="false"
+          class="diff-alert"
+        />
+        <div v-if="reportDiff" class="diff-metrics">
+          <div class="metric-box">
+            <span>门禁</span>
+            <strong :class="reportDiff.gate?.passed ? 'ok-text' : 'bad-text'">
+              {{ reportDiff.gate?.passed ? '通过' : '阻断' }}
+            </strong>
+          </div>
+          <div class="metric-box">
+            <span>失败</span>
+            <strong>{{ reportDiff.summary?.failures || 0 }}</strong>
+          </div>
+          <div class="metric-box">
+            <span>警告</span>
+            <strong>{{ reportDiff.summary?.warnings || 0 }}</strong>
+          </div>
+          <div class="metric-box">
+            <span>文本相似度</span>
+            <strong>{{ formatSimilarity(reportDiff.summary?.text_similarity) }}</strong>
+          </div>
+          <div class="metric-box">
+            <span>表格数</span>
+            <strong>
+              {{ reportDiff.summary?.table_count?.reference ?? '-' }}
+              →
+              {{ reportDiff.summary?.table_count?.candidate ?? '-' }}
+            </strong>
+          </div>
+        </div>
+        <el-table
+          v-if="diffIssueRows.length"
+          :data="diffIssueRows"
+          size="small"
+          border
+          class="diff-table"
+        >
+          <el-table-column label="级别" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.level === 'error' ? 'danger' : 'warning'">
+                {{ row.level }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="section" label="区域" width="100" />
+          <el-table-column prop="code" label="代码" width="190" show-overflow-tooltip />
+          <el-table-column prop="message" label="说明" min-width="360" show-overflow-tooltip />
+        </el-table>
+        <el-collapse v-if="reportDiff" class="debug-collapse">
+          <el-collapse-item title="差异样本" name="diff-samples">
+            <pre>{{ diffSampleText }}</pre>
+          </el-collapse-item>
+        </el-collapse>
+      </section>
+
+      <section class="qa-panel section-gap">
+        <div class="panel-title">
           <span>QA 检查项</span>
           <el-tag size="small">{{ checkRows.length }} 项</el-tag>
         </div>
@@ -176,19 +281,29 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, Download, Refresh } from '@element-plus/icons-vue'
+import { ArrowLeft, Download, Refresh, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { reportApi, type TaskStatus, type VisualRenderResult } from '@/api/report'
+import {
+  reportApi,
+  type ReportDiffResult,
+  type TaskStatus,
+  type VisualRenderResult,
+} from '@/api/report'
 
 const route = useRoute()
 const taskId = String(route.params.id || '')
 
 const loading = ref(false)
 const rendering = ref(false)
+const diffing = ref(false)
 const task = ref<TaskStatus | null>(null)
 const qaReport = ref<Record<string, any> | null>(null)
 const provenance = ref<Record<string, any> | null>(null)
 const visualRender = ref<VisualRenderResult | null>(null)
+const reportDiff = ref<ReportDiffResult | null>(null)
+const referenceFile = ref<File | null>(null)
+const referenceFileList = ref<any[]>([])
+const diffFailOn = ref<'fail' | 'warn'>('fail')
 const qaLoadError = ref('')
 const provenanceLoadError = ref('')
 
@@ -223,6 +338,30 @@ const provenanceRows = computed(() => {
 })
 
 const firstRenderedPage = computed(() => visualRender.value?.rendered_pages?.[0] || null)
+const diffIssueRows = computed(() => reportDiff.value?.issues || [])
+
+const diffSummaryTitle = computed(() => {
+  if (!reportDiff.value) return ''
+  const gate = reportDiff.value.gate?.passed ? '门禁通过' : '门禁阻断'
+  const failures = reportDiff.value.summary?.failures || 0
+  const warnings = reportDiff.value.summary?.warnings || 0
+  return `${gate}：${reportDiff.value.status}，失败 ${failures}，警告 ${warnings}`
+})
+
+const diffSampleText = computed(() => {
+  if (!reportDiff.value) return ''
+  const sections = reportDiff.value.sections || {}
+  return JSON.stringify(
+    {
+      text: sections.text?.samples || [],
+      tables: sections.tables?.samples || [],
+      styles: sections.styles?.samples || [],
+      qa: sections.qa?.samples || [],
+    },
+    null,
+    2,
+  )
+})
 
 const renderDebugText = computed(() => {
   if (!visualRender.value) return ''
@@ -251,6 +390,11 @@ function stringifyValue(value: unknown) {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'string') return value
   return JSON.stringify(value)
+}
+
+function formatSimilarity(value?: number | null) {
+  if (value === null || value === undefined) return '-'
+  return `${(value * 100).toFixed(2)}%`
 }
 
 function statusTagType(status: string) {
@@ -330,6 +474,44 @@ async function renderFirstPage() {
   }
 }
 
+function handleReferenceFileChange(file: any) {
+  referenceFile.value = file.raw || null
+  referenceFileList.value = [file]
+  reportDiff.value = null
+}
+
+function clearReferenceFile() {
+  referenceFile.value = null
+  referenceFileList.value = []
+}
+
+async function compareReport() {
+  if (!referenceFile.value) {
+    ElMessage.warning('请先选择正确报告 DOCX')
+    return
+  }
+  diffing.value = true
+  try {
+    reportDiff.value = await reportApi.compareReport(taskId, referenceFile.value, {
+      fail_on: diffFailOn.value,
+      max_samples: 50,
+    })
+    if (reportDiff.value.gate?.passed) {
+      ElMessage.success('报告对比通过')
+    } else {
+      ElMessage.warning('报告对比存在阻断项')
+    }
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || err.response?.data?.error || '报告对比失败')
+  } finally {
+    diffing.value = false
+  }
+}
+
+function downloadDiff(artifact: 'report_diff.json' | 'report_diff.md') {
+  window.open(reportApi.getDiffDownloadUrl(taskId, artifact), '_blank')
+}
+
 function downloadReport() {
   window.open(reportApi.getDownloadUrl(taskId), '_blank')
 }
@@ -348,6 +530,61 @@ onMounted(fetchAll)
 .render-actions {
   display: flex;
   align-items: center;
+}
+
+.diff-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px;
+}
+
+.diff-alert {
+  margin: 0 14px 14px;
+}
+
+.diff-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 0;
+  margin: 0 14px 14px;
+  border: 1px solid #d9e2ec;
+}
+
+.metric-box {
+  min-height: 64px;
+  padding: 10px 12px;
+  border-right: 1px solid #d9e2ec;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.metric-box:last-child {
+  border-right: 0;
+}
+
+.metric-box span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.metric-box strong {
+  font-size: 16px;
+}
+
+.ok-text {
+  color: #16803c;
+}
+
+.bad-text {
+  color: #b42318;
+}
+
+.diff-table {
+  margin-top: 0;
 }
 
 .page-head {
@@ -467,7 +704,8 @@ pre {
 
 @media (max-width: 980px) {
   .summary-band,
-  .qa-grid {
+  .qa-grid,
+  .diff-metrics {
     grid-template-columns: 1fr;
   }
 
@@ -477,6 +715,15 @@ pre {
   }
 
   .summary-item:last-child {
+    border-bottom: 0;
+  }
+
+  .metric-box {
+    border-right: 0;
+    border-bottom: 1px solid #d9e2ec;
+  }
+
+  .metric-box:last-child {
     border-bottom: 0;
   }
 

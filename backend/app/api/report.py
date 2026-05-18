@@ -1,12 +1,13 @@
 """Report generation and download endpoints."""
 
 import json
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,11 @@ from app.schemas.common import ApiResponse
 from app.schemas.report import GenerateRequest, GenerateResponse, TaskStatus
 from app.services.file_manager import ensure_report_dir
 from app.services.reportgen_bridge import ReportGenBridge
+from reportgen.core.report_diff import (
+    ReportDiffOptions,
+    compare_reports,
+    write_report_diff_outputs,
+)
 from reportgen.utils.docx_render import render_docx_to_pngs
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -67,6 +73,26 @@ def _visual_render_page_path(output_path: Optional[str], filename: str) -> Optio
     return candidate
 
 
+def _report_diff_dir(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    return Path(output_path).parent / "report_diff"
+
+
+def _report_diff_artifact_path(output_path: Optional[str], filename: str) -> Optional[Path]:
+    if filename not in {"report_diff.json", "report_diff.md"}:
+        return None
+    diff_dir = _report_diff_dir(output_path)
+    if not diff_dir:
+        return None
+    candidate = (diff_dir / filename).resolve()
+    try:
+        candidate.relative_to(diff_dir.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
 def _render_error_payload(exc: Exception) -> dict:
     payload = {
         "error": str(exc),
@@ -82,6 +108,20 @@ def _render_error_payload(exc: Exception) -> dict:
     if stderr:
         payload["stderr_tail"] = str(stderr)[-2000:]
     return payload
+
+
+def _get_single_report_task(task_id: str, db: Session) -> Task:
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.task_type != "single":
+        raise HTTPException(status_code=400, detail="报告对比仅支持单份任务")
+    if not task.output_path:
+        raise HTTPException(status_code=404, detail="报告文件不存在")
+    output_path = Path(task.output_path)
+    if not output_path.exists():
+        raise HTTPException(status_code=404, detail="报告文件已被删除")
+    return task
 
 
 @router.post("/generate", response_model=ApiResponse[GenerateResponse])
@@ -299,6 +339,76 @@ def get_rendered_page(task_id: str, filename: str, db: Session = Depends(get_db)
     if not page_path or not page_path.exists() or page_path.suffix.lower() != ".png":
         raise HTTPException(status_code=404, detail="页面图片不存在")
     return FileResponse(path=str(page_path), media_type="image/png")
+
+
+@router.post("/{task_id}/diff", response_model=ApiResponse[dict])
+def diff_report_against_reference(
+    task_id: str,
+    reference: UploadFile = File(...),
+    fail_on: str = Query("fail", pattern="^(fail|warn)$"),
+    max_samples: int = Query(30, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """Compare a generated report against an uploaded reference DOCX."""
+    task = _get_single_report_task(task_id, db)
+    if not reference.filename or not reference.filename.lower().endswith(".docx"):
+        raise HTTPException(status_code=400, detail="仅支持上传 .docx 基准报告")
+
+    diff_dir = _report_diff_dir(task.output_path)
+    if not diff_dir:
+        raise HTTPException(status_code=404, detail="报告对比目录不可用")
+    diff_dir.mkdir(parents=True, exist_ok=True)
+    reference_path = diff_dir / "reference.docx"
+    try:
+        with reference_path.open("wb") as fh:
+            shutil.copyfileobj(reference.file, fh)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"基准报告保存失败: {exc}") from exc
+    finally:
+        try:
+            reference.file.close()
+        except Exception:
+            pass
+
+    result = compare_reports(
+        ReportDiffOptions(
+            reference_docx=str(reference_path),
+            candidate_docx=str(task.output_path),
+            output_dir=str(diff_dir),
+            max_samples=max_samples,
+        )
+    )
+    status = result.get("status")
+    gate_passed = status == "PASS" or (status == "WARN" and fail_on == "fail")
+    result["gate"] = {
+        "fail_on": fail_on,
+        "passed": bool(gate_passed),
+    }
+    result["download_urls"] = {
+        "json": f"/api/v1/reports/{task_id}/diff/download/report_diff.json",
+        "markdown": f"/api/v1/reports/{task_id}/diff/download/report_diff.md",
+    }
+    write_report_diff_outputs(result, diff_dir)
+    return ApiResponse(data=result)
+
+
+@router.get("/{task_id}/diff/download/{filename}")
+def download_report_diff_artifact(
+    task_id: str,
+    filename: str,
+    db: Session = Depends(get_db),
+):
+    """Download report diff JSON or Markdown for a task."""
+    task = _get_single_report_task(task_id, db)
+    artifact_path = _report_diff_artifact_path(task.output_path, filename)
+    if not artifact_path or not artifact_path.exists():
+        raise HTTPException(status_code=404, detail="报告对比产物不存在")
+    media_type = "application/json" if filename.endswith(".json") else "text/markdown"
+    return FileResponse(
+        path=str(artifact_path),
+        filename=filename,
+        media_type=media_type,
+    )
 
 
 @router.get("/{task_id}/download")

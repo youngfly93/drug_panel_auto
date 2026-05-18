@@ -58,6 +58,36 @@ export interface VisualRenderResult {
   stderr_tail?: string
 }
 
+export interface ReportDiffIssue {
+  level: 'error' | 'warning' | string
+  section?: string
+  code: string
+  message: string
+}
+
+export interface ReportDiffResult {
+  status: 'PASS' | 'WARN' | 'FAIL' | string
+  summary: {
+    failures: number
+    warnings: number
+    text_similarity?: number | null
+    table_count?: {
+      reference?: number | null
+      candidate?: number | null
+    }
+  }
+  issues: ReportDiffIssue[]
+  sections: Record<string, any>
+  gate?: {
+    fail_on: 'fail' | 'warn'
+    passed: boolean
+  }
+  download_urls?: {
+    json?: string
+    markdown?: string
+  }
+}
+
 export const reportApi = {
   async generate(req: GenerateRequest): Promise<GenerateResult> {
     const { data } = await client.post('/reports/generate', req)
@@ -85,6 +115,24 @@ export const reportApi = {
   ): Promise<VisualRenderResult> {
     const { data } = await client.post(`/reports/${taskId}/visual-render`, null, { params })
     return data.data
+  },
+
+  async compareReport(
+    taskId: string,
+    reference: File,
+    params: { fail_on?: 'fail' | 'warn'; max_samples?: number } = {},
+  ): Promise<ReportDiffResult> {
+    const formData = new FormData()
+    formData.append('reference', reference)
+    const { data } = await client.post(`/reports/${taskId}/diff`, formData, {
+      params,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data.data
+  },
+
+  getDiffDownloadUrl(taskId: string, artifact: 'report_diff.json' | 'report_diff.md'): string {
+    return `/api/v1/reports/${taskId}/diff/download/${artifact}`
   },
 
   getDownloadUrl(taskId: string): string {
