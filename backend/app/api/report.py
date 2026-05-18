@@ -108,6 +108,18 @@ def _get_single_report_task(task_id: str, db: Session) -> Task:
     return task
 
 
+def _get_report_task_with_output(task_id: str, db: Session) -> Task:
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not task.output_path:
+        raise HTTPException(status_code=404, detail="报告文件不存在")
+    output_path = Path(task.output_path)
+    if not output_path.exists():
+        raise HTTPException(status_code=404, detail="报告文件已被删除")
+    return task
+
+
 @router.post("/generate", response_model=ApiResponse[GenerateResponse])
 def generate_report(
     req: GenerateRequest,
@@ -414,14 +426,90 @@ def diff_report_against_registered_reference(
     return ApiResponse(data=result)
 
 
+@router.post("/{task_id}/diff/batch/auto", response_model=ApiResponse[dict])
+def diff_batch_report_against_registered_references(
+    task_id: str,
+    fail_on: str = Query("fail", pattern="^(fail|warn)$"),
+    max_samples: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """Run reference diff for every generated report in a batch task."""
+    task = _get_report_task_with_output(task_id, db)
+    if task.task_type != "batch":
+        raise HTTPException(status_code=400, detail="仅批量任务支持该接口")
+    report_path = Path(task.output_path) / "validation_report.json"
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail="批量验证报告不存在")
+    try:
+        batch_report = json.loads(report_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"批量验证报告读取失败: {exc}") from exc
+    result = diff_svc.run_batch_reference_diff(
+        db,
+        task,
+        batch_report,
+        fail_on=fail_on,
+        max_samples=max_samples,
+    )
+    return ApiResponse(data=result)
+
+
 @router.get("/{task_id}/diff", response_model=ApiResponse[dict])
 def get_report_diff(task_id: str, db: Session = Depends(get_db)):
     """Return the latest report diff JSON for a task."""
-    task = _get_single_report_task(task_id, db)
-    payload = diff_svc.load_report_diff(task.output_path)
+    task = _get_report_task_with_output(task_id, db)
+    if task.task_type == "batch":
+        payload = diff_svc.load_batch_report_diff(task.output_path)
+    else:
+        payload = diff_svc.load_report_diff(task.output_path)
     if not payload:
         raise HTTPException(status_code=404, detail="报告对比结果不存在")
     return ApiResponse(data=payload)
+
+
+@router.get("/{task_id}/diff/batch/download/{filename}")
+def download_batch_report_diff_artifact(
+    task_id: str,
+    filename: str,
+    db: Session = Depends(get_db),
+):
+    """Download batch report diff JSON or Markdown for a task."""
+    task = _get_report_task_with_output(task_id, db)
+    if task.task_type != "batch":
+        raise HTTPException(status_code=400, detail="仅批量任务支持该产物")
+    artifact_path = diff_svc.batch_report_diff_artifact_path(task.output_path, filename)
+    if not artifact_path or not artifact_path.exists():
+        raise HTTPException(status_code=404, detail="批量报告对比产物不存在")
+    media_type = "application/json" if filename.endswith(".json") else "text/markdown"
+    return FileResponse(path=str(artifact_path), filename=filename, media_type=media_type)
+
+
+@router.get("/{task_id}/diff/batch/items/{item_key}/download/{filename}")
+def download_batch_report_diff_item_artifact(
+    task_id: str,
+    item_key: str,
+    filename: str,
+    db: Session = Depends(get_db),
+):
+    """Download one sample's batch report diff JSON or Markdown."""
+    task = _get_report_task_with_output(task_id, db)
+    if task.task_type != "batch":
+        raise HTTPException(status_code=400, detail="仅批量任务支持该产物")
+    if filename not in {"report_diff.json", "report_diff.md"}:
+        raise HTTPException(status_code=404, detail="报告对比产物不存在")
+    diff_dir = diff_svc.report_diff_dir(task.output_path)
+    if not diff_dir:
+        raise HTTPException(status_code=404, detail="报告对比目录不存在")
+    item_dir = (diff_dir / diff_svc.sanitize_path_segment(item_key)).resolve()
+    try:
+        item_dir.relative_to(diff_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="报告对比产物不存在") from None
+    artifact_path = (item_dir / filename).resolve()
+    if not artifact_path.exists():
+        raise HTTPException(status_code=404, detail="报告对比产物不存在")
+    media_type = "application/json" if filename.endswith(".json") else "text/markdown"
+    return FileResponse(path=str(artifact_path), filename=filename, media_type=media_type)
 
 
 @router.get("/{task_id}/diff/download/{filename}")

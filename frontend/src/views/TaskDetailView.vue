@@ -132,6 +132,7 @@
             使用基准库对比
           </el-button>
           <el-upload
+            v-if="!isBatchTask"
             v-model:file-list="referenceFileList"
             accept=".docx"
             :auto-upload="false"
@@ -146,6 +147,7 @@
             <el-option label="WARN 也阻断" value="warn" />
           </el-select>
           <el-button
+            v-if="!isBatchTask"
             type="primary"
             :loading="diffing"
             :disabled="!referenceFile || !task?.output_path"
@@ -183,33 +185,57 @@
           class="diff-alert"
         />
         <div v-if="reportDiff" class="diff-metrics">
-          <div class="metric-box">
-            <span>门禁</span>
-            <strong :class="reportDiff.gate?.passed ? 'ok-text' : 'bad-text'">
-              {{ reportDiff.gate?.passed ? '通过' : '阻断' }}
-            </strong>
-          </div>
-          <div class="metric-box">
-            <span>失败</span>
-            <strong>{{ reportDiff.summary?.failures || 0 }}</strong>
-          </div>
-          <div class="metric-box">
-            <span>警告</span>
-            <strong>{{ reportDiff.summary?.warnings || 0 }}</strong>
-          </div>
-          <div class="metric-box">
-            <span>文本相似度</span>
-            <strong>{{ formatSimilarity(reportDiff.summary?.text_similarity) }}</strong>
-          </div>
-          <div class="metric-box">
-            <span>表格数</span>
-            <strong>
-              {{ reportDiff.summary?.table_count?.reference ?? '-' }}
-              →
-              {{ reportDiff.summary?.table_count?.candidate ?? '-' }}
-            </strong>
+          <div v-for="metric in diffMetricCards" :key="metric.label" class="metric-box">
+            <span>{{ metric.label }}</span>
+            <strong :class="metric.className">{{ metric.value }}</strong>
           </div>
         </div>
+        <el-table
+          v-if="batchDiffRows.length"
+          :data="batchDiffRows"
+          size="small"
+          border
+          class="diff-table"
+        >
+          <el-table-column prop="index" label="#" width="70" />
+          <el-table-column prop="case_id" label="Case" width="140" show-overflow-tooltip />
+          <el-table-column prop="panel_id" label="Panel" width="140" show-overflow-tooltip />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.gate_passed === false ? 'danger' : qaTagType(row.status)">
+                {{ row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="reference_name" label="基准" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="message" label="说明" min-width="240" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ stringifyValue(row.message) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="产物" width="130">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.diff_key"
+                text
+                type="primary"
+                size="small"
+                @click="downloadBatchItemDiff(row.diff_key, 'report_diff.md')"
+              >
+                摘要
+              </el-button>
+              <el-button
+                v-if="row.diff_key"
+                text
+                type="primary"
+                size="small"
+                @click="downloadBatchItemDiff(row.diff_key, 'report_diff.json')"
+              >
+                JSON
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
         <el-table
           v-if="diffIssueRows.length"
           :data="diffIssueRows"
@@ -362,6 +388,9 @@ const provenanceRows = computed(() => {
 
 const firstRenderedPage = computed(() => visualRender.value?.rendered_pages?.[0] || null)
 const diffIssueRows = computed(() => reportDiff.value?.issues || [])
+const batchDiffRows = computed(() => reportDiff.value?.items || [])
+const isBatchTask = computed(() => task.value?.task_type === 'batch')
+const isBatchDiff = computed(() => Boolean(reportDiff.value?.items?.length))
 
 const diffGateTagType = computed(() => {
   if (task.value?.diff_gate_passed === false || reportDiff.value?.gate?.passed === false) return 'danger'
@@ -371,14 +400,46 @@ const diffGateTagType = computed(() => {
 const diffSummaryTitle = computed(() => {
   if (!reportDiff.value) return ''
   const gate = reportDiff.value.gate?.passed ? '门禁通过' : '门禁阻断'
+  if (isBatchDiff.value) {
+    const s = reportDiff.value.summary || {}
+    return `${gate}：${reportDiff.value.status}，命中 ${s.matched_references || 0}/${s.total_reports || 0}，阻断 ${s.blocked || 0}`
+  }
   const failures = reportDiff.value.summary?.failures || 0
   const warnings = reportDiff.value.summary?.warnings || 0
   return `${gate}：${reportDiff.value.status}，失败 ${failures}，警告 ${warnings}`
 })
 
+const diffMetricCards = computed(() => {
+  if (!reportDiff.value) return []
+  const s = reportDiff.value.summary || {}
+  const gatePassed = reportDiff.value.gate?.passed
+  if (isBatchDiff.value) {
+    return [
+      { label: '门禁', value: gatePassed ? '通过' : '阻断', className: gatePassed ? 'ok-text' : 'bad-text' },
+      { label: '命中基准', value: `${s.matched_references || 0}/${s.total_reports || 0}` },
+      { label: 'PASS/WARN/FAIL', value: `${s.pass || 0}/${s.warn || 0}/${s.fail || 0}` },
+      { label: '未匹配', value: String(s.skip || 0) },
+      { label: '阻断', value: String(s.blocked || 0), className: s.blocked ? 'bad-text' : 'ok-text' },
+    ]
+  }
+  return [
+    { label: '门禁', value: gatePassed ? '通过' : '阻断', className: gatePassed ? 'ok-text' : 'bad-text' },
+    { label: '失败', value: String(s.failures || 0) },
+    { label: '警告', value: String(s.warnings || 0) },
+    { label: '文本相似度', value: formatSimilarity(s.text_similarity) },
+    {
+      label: '表格数',
+      value: `${s.table_count?.reference ?? '-'} → ${s.table_count?.candidate ?? '-'}`,
+    },
+  ]
+})
+
 const diffSampleText = computed(() => {
   if (!reportDiff.value) return ''
   const sections = reportDiff.value.sections || {}
+  if (isBatchDiff.value) {
+    return JSON.stringify(reportDiff.value.items || [], null, 2)
+  }
   return JSON.stringify(
     {
       text: sections.text?.samples || [],
@@ -545,10 +606,10 @@ async function compareReport() {
 async function compareRegisteredReference() {
   autoDiffing.value = true
   try {
-    reportDiff.value = await reportApi.compareReportWithRegisteredReference(taskId, {
-      fail_on: diffFailOn.value,
-      max_samples: 50,
-    })
+    const params = { fail_on: diffFailOn.value, max_samples: 50 }
+    reportDiff.value = isBatchTask.value
+      ? await reportApi.compareBatchWithRegisteredReferences(taskId, params)
+      : await reportApi.compareReportWithRegisteredReference(taskId, params)
     task.value = await reportApi.getTaskStatus(taskId)
     if (reportDiff.value.gate?.passed) {
       ElMessage.success('基准库对比通过')
@@ -563,7 +624,16 @@ async function compareRegisteredReference() {
 }
 
 function downloadDiff(artifact: 'report_diff.json' | 'report_diff.md') {
+  if (isBatchTask.value) {
+    const batchArtifact = artifact === 'report_diff.json' ? 'batch_report_diff.json' : 'batch_report_diff.md'
+    window.open(reportApi.getBatchDiffDownloadUrl(taskId, batchArtifact), '_blank')
+    return
+  }
   window.open(reportApi.getDiffDownloadUrl(taskId, artifact), '_blank')
+}
+
+function downloadBatchItemDiff(itemKey: string, artifact: 'report_diff.json' | 'report_diff.md') {
+  window.open(reportApi.getBatchDiffItemDownloadUrl(taskId, itemKey, artifact), '_blank')
 }
 
 function downloadReport() {

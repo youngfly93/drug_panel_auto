@@ -79,16 +79,24 @@ export interface ReportDiffIssue {
 export interface ReportDiffResult {
   status: 'PASS' | 'WARN' | 'FAIL' | string
   summary: {
-    failures: number
-    warnings: number
+    failures?: number
+    warnings?: number
     text_similarity?: number | null
     table_count?: {
       reference?: number | null
       candidate?: number | null
     }
+    total_reports?: number
+    matched_references?: number
+    pass?: number
+    warn?: number
+    fail?: number
+    skip?: number
+    blocked?: number
   }
-  issues: ReportDiffIssue[]
-  sections: Record<string, any>
+  issues?: ReportDiffIssue[]
+  sections?: Record<string, any>
+  items?: Array<Record<string, any>>
   gate?: {
     fail_on: 'fail' | 'warn'
     passed: boolean
@@ -159,6 +167,14 @@ export const reportApi = {
     return data.data
   },
 
+  async compareBatchWithRegisteredReferences(
+    taskId: string,
+    params: { fail_on?: 'fail' | 'warn'; max_samples?: number } = {},
+  ): Promise<ReportDiffResult> {
+    const { data } = await client.post(`/reports/${taskId}/diff/batch/auto`, null, { params })
+    return data.data
+  },
+
   async getReportDiff(taskId: string): Promise<ReportDiffResult> {
     const { data } = await client.get(`/reports/${taskId}/diff`)
     return data.data
@@ -166,6 +182,18 @@ export const reportApi = {
 
   getDiffDownloadUrl(taskId: string, artifact: 'report_diff.json' | 'report_diff.md'): string {
     return `/api/v1/reports/${taskId}/diff/download/${artifact}`
+  },
+
+  getBatchDiffDownloadUrl(taskId: string, artifact: 'batch_report_diff.json' | 'batch_report_diff.md'): string {
+    return `/api/v1/reports/${taskId}/diff/batch/download/${artifact}`
+  },
+
+  getBatchDiffItemDownloadUrl(
+    taskId: string,
+    itemKey: string,
+    artifact: 'report_diff.json' | 'report_diff.md',
+  ): string {
+    return `/api/v1/reports/${taskId}/diff/batch/items/${encodeURIComponent(itemKey)}/download/${artifact}`
   },
 
   getDownloadUrl(taskId: string): string {

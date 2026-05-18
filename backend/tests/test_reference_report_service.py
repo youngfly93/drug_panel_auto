@@ -96,3 +96,70 @@ def test_auto_reference_diff_matches_task_sample_id(tmp_path, monkeypatch):
     summary = svc.report_diff_summary(str(candidate))
     assert summary["diff_status"] == "PASS"
     assert summary["diff_reference_id"] == reference.id
+
+
+def test_batch_reference_diff_writes_summary_and_per_sample_outputs(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    db = _session()
+    output_root = tmp_path / "batch"
+    output_root.mkdir()
+    report_1 = output_root / "report_001.docx"
+    report_2 = output_root / "report_002.docx"
+    report_1.write_bytes(_docx_bytes("same report"))
+    report_2.write_bytes(_docx_bytes("changed report"))
+
+    reference = svc.create_reference_report(
+        db,
+        panel_id="crc_358_msi",
+        case_id="CASE001",
+        name="case-001",
+        original_filename="case001.docx",
+        fileobj=io.BytesIO(_docx_bytes("same report")),
+        active=True,
+    )
+    task = Task(
+        id="batch-1",
+        task_type="batch",
+        status="completed",
+        project_type="crc_358_msi",
+        output_path=str(output_root),
+    )
+    db.add(task)
+    db.commit()
+    batch_report = {
+        "results": [
+            {
+                "index": 1,
+                "ok": True,
+                "output_docx": "report_001.docx",
+                "excel_filename": "case001.xlsx",
+                "patient_snapshot": {"sample_id": "CASE001"},
+            },
+            {
+                "index": 2,
+                "ok": True,
+                "output_docx": "report_002.docx",
+                "excel_filename": "case002.xlsx",
+                "patient_snapshot": {"sample_id": "CASE002"},
+            },
+        ]
+    }
+
+    result = svc.run_batch_reference_diff(db, task, batch_report)
+
+    assert result["status"] == "WARN"
+    assert result["gate"]["passed"] is True
+    assert result["summary"]["matched_references"] == 1
+    assert result["summary"]["pass"] == 1
+    assert result["summary"]["skip"] == 1
+    assert result["items"][0]["reference_id"] == reference.id
+    assert result["items"][0]["diff_key"] == "report_001"
+    assert result["items"][0]["download_urls"]["markdown"].endswith(
+        "/report_001/download/report_diff.md"
+    )
+    assert Path(result["items"][0]["diff_json"]).exists()
+
+    summary = svc.report_diff_summary(str(output_root))
+    assert summary["diff_status"] == "WARN"
+    assert summary["diff_gate_passed"] is True
+    assert "基准命中 1/2" in summary["diff_reference_name"]
