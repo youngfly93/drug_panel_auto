@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from docx import Document
 
+from reportgen.core.pipeline.summary import summarize_stage_results
 from reportgen.models.report_data import ReportData
 from reportgen.utils.artifacts import write_json
 
@@ -38,6 +39,8 @@ def build_docx_qa_report(
     field_provenance_file: Optional[str] = None,
     processor_report: Optional[list[Mapping[str, Any]]] = None,
     template_contract: Optional[Mapping[str, Any]] = None,
+    stage_results: Optional[list[Mapping[str, Any]]] = None,
+    stage_results_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a structured QA report for one generated DOCX file."""
     generated_at = datetime.now().isoformat()
@@ -62,17 +65,21 @@ def build_docx_qa_report(
 
     if not output_path.exists():
         issue("error", "DOCX_NOT_FOUND", f"Output DOCX not found: {output_file}")
-        return _finalize_report(
-            generated_at=generated_at,
-            generation_id=generation_id,
-            project_type=project_type,
-            project_name=project_name,
-            template_file=template_file,
-            output_file=output_file,
-            checks=checks,
-            metrics=metrics,
-            issues=issues,
-            template_contract=template_contract,
+        return attach_pipeline_summary(
+            _finalize_report(
+                generated_at=generated_at,
+                generation_id=generation_id,
+                project_type=project_type,
+                project_name=project_name,
+                template_file=template_file,
+                output_file=output_file,
+                checks=checks,
+                metrics=metrics,
+                issues=issues,
+                template_contract=template_contract,
+            ),
+            stage_results=stage_results,
+            stage_results_file=stage_results_file,
         )
 
     try:
@@ -81,17 +88,21 @@ def build_docx_qa_report(
     except Exception as exc:
         issue("error", "DOCX_OPEN_FAILED", f"DOCX cannot be opened: {exc}")
         checks["docx_openable"] = {"status": "FAIL", "value": False}
-        return _finalize_report(
-            generated_at=generated_at,
-            generation_id=generation_id,
-            project_type=project_type,
-            project_name=project_name,
-            template_file=template_file,
-            output_file=output_file,
-            checks=checks,
-            metrics=metrics,
-            issues=issues,
-            template_contract=template_contract,
+        return attach_pipeline_summary(
+            _finalize_report(
+                generated_at=generated_at,
+                generation_id=generation_id,
+                project_type=project_type,
+                project_name=project_name,
+                template_file=template_file,
+                output_file=output_file,
+                checks=checks,
+                metrics=metrics,
+                issues=issues,
+                template_contract=template_contract,
+            ),
+            stage_results=stage_results,
+            stage_results_file=stage_results_file,
         )
 
     paragraphs = list(_iter_all_paragraphs(doc))
@@ -187,19 +198,23 @@ def build_docx_qa_report(
     for business_issue in _business_issues(business_checks):
         issue(**business_issue)
 
-    return _finalize_report(
-        generated_at=generated_at,
-        generation_id=generation_id,
-        project_type=project_type,
-        project_name=project_name,
-        template_file=template_file,
-        output_file=output_file,
-        field_provenance_file=field_provenance_file,
-        processor_report=processor_report,
-        template_contract=template_contract,
-        checks=checks,
-        metrics=metrics,
-        issues=issues,
+    return attach_pipeline_summary(
+        _finalize_report(
+            generated_at=generated_at,
+            generation_id=generation_id,
+            project_type=project_type,
+            project_name=project_name,
+            template_file=template_file,
+            output_file=output_file,
+            field_provenance_file=field_provenance_file,
+            processor_report=processor_report,
+            template_contract=template_contract,
+            checks=checks,
+            metrics=metrics,
+            issues=issues,
+        ),
+        stage_results=stage_results,
+        stage_results_file=stage_results_file,
     )
 
 
@@ -210,6 +225,67 @@ def write_docx_qa_report(
     path = Path(qa_file) if qa_file else Path(output_file).with_suffix(".qa.json")
     write_json(path, dict(report))
     return str(path)
+
+
+def attach_pipeline_summary(
+    report: Mapping[str, Any],
+    *,
+    stage_results: Optional[list[Mapping[str, Any]]] = None,
+    stage_results_file: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Attach pipeline summary and fold it into QA status."""
+    result = dict(report)
+    pipeline = summarize_stage_results(
+        stage_results,
+        stage_results_file=stage_results_file,
+    )
+    checks = dict(result.get("checks") or {})
+    checks["pipeline"] = {
+        "status": pipeline["status"],
+        "message": _pipeline_message(pipeline),
+        "stage_count": pipeline["stage_count"],
+        "failed_stages": pipeline["failed_stages"],
+        "warning_stages": pipeline["warning_stages"],
+        "stage_results_file": pipeline["stage_results_file"],
+    }
+    issues = list(result.get("issues") or [])
+    if pipeline["status"] == "FAIL":
+        issues.append(
+            {
+                "level": "error",
+                "code": "PIPELINE_FAILED",
+                "message": _pipeline_message(pipeline),
+            }
+        )
+    elif pipeline["status"] == "WARN":
+        issues.append(
+            {
+                "level": "warning",
+                "code": "PIPELINE_WARN",
+                "message": _pipeline_message(pipeline),
+            }
+        )
+
+    has_error = any(i.get("level") == "error" for i in issues)
+    has_warning = any(i.get("level") == "warning" for i in issues)
+    result["pipeline"] = pipeline
+    result["checks"] = checks
+    result["issues"] = issues
+    result["status"] = "FAIL" if has_error else ("WARN" if has_warning else "PASS")
+    return result
+
+
+def _pipeline_message(pipeline: Mapping[str, Any]) -> str:
+    status = pipeline.get("status")
+    if status == "FAIL":
+        return "Generation pipeline failed: " + ", ".join(
+            pipeline.get("failed_stages") or []
+        )
+    if status == "WARN":
+        return "Generation pipeline completed with warnings: " + ", ".join(
+            pipeline.get("warning_stages") or []
+        )
+    return "Generation pipeline passed."
 
 
 def _finalize_report(

@@ -24,8 +24,17 @@ from reportgen.core.field_provenance import (
     write_field_provenance_report,
 )
 from reportgen.core.field_mapper import FieldMapper
-from reportgen.core.pipeline import GenerationContext, GenerationPipeline, StageHandle
-from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
+from reportgen.core.pipeline import (
+    GenerationContext,
+    GenerationPipeline,
+    StageHandle,
+    summarize_stage_results,
+)
+from reportgen.core.qa_report import (
+    attach_pipeline_summary,
+    build_docx_qa_report,
+    write_docx_qa_report,
+)
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
@@ -294,6 +303,20 @@ class ReportGenerator:
                 payload.setdefault("warnings", []).append(
                     f"生成阶段报告失败: {exc}"
                 )
+        if state.qa_report is not None and state.final_output and state.qa_report_file:
+            state.qa_report = attach_pipeline_summary(
+                state.qa_report,
+                stage_results=stage_results,
+                stage_results_file=state.stage_results_file,
+            )
+            state.qa_report_file = write_docx_qa_report(
+                state.qa_report,
+                state.final_output,
+                qa_file=state.qa_report_file,
+            )
+            payload["qa_report"] = state.qa_report
+            payload["qa_report_file"] = state.qa_report_file
+            payload["qa_status"] = state.qa_report.get("status")
         return payload
 
     @staticmethod
@@ -313,8 +336,13 @@ class ReportGenerator:
         else:
             raise ValueError("output_file or output_dir is required")
         payload = {
-            "generation_id": generation_id or (output_path.stem if output_path else "generation"),
+            "generation_id": generation_id
+            or (output_path.stem if output_path else "generation"),
             "output_file": str(output_path) if output_path else None,
+            "pipeline": summarize_stage_results(
+                stage_results,
+                stage_results_file=str(sidecar_path),
+            ),
             "stage_results": stage_results,
         }
         sidecar_path.parent.mkdir(parents=True, exist_ok=True)

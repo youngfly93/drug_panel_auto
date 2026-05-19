@@ -40,6 +40,12 @@
           </el-tag>
         </div>
         <div class="summary-item">
+          <span>生成流水线</span>
+          <el-tag :type="qaTagType(pipelineStatus)">
+            {{ pipelineStatus || '未记录' }}
+          </el-tag>
+        </div>
+        <div class="summary-item">
           <span>项目类型</span>
           <strong>{{ task?.project_type || '-' }}</strong>
         </div>
@@ -436,6 +442,15 @@ const stageRows = computed(() => {
     ...row,
     label: stageLabel(row.name),
   }))
+})
+
+const pipelineStatus = computed(() => {
+  if (stageReport.value?.pipeline?.status) return stageReport.value.pipeline.status
+  const failed = stageRows.value.some((row: Record<string, any>) => row.status === 'FAIL')
+  const warned = stageRows.value.some((row: Record<string, any>) => row.status === 'WARN')
+  if (failed) return 'FAIL'
+  if (warned) return 'WARN'
+  return stageRows.value.length ? 'PASS' : ''
 })
 
 const stageStatusCards = computed(() => {
@@ -928,7 +943,7 @@ onMounted(fetchAll)
 
 .summary-band {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   border: 1px solid #d9e2ec;
   background: #f8fafc;
 }

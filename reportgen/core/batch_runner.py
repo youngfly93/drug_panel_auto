@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from reportgen.config.loader import ConfigLoader
 from reportgen.core.excel_reader import ExcelReader
+from reportgen.core.pipeline import summarize_stage_results
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.report_generator import ReportGenerator
 from reportgen.core.validation import (
@@ -344,6 +345,14 @@ def run_batch_generate_validate(
             post_processors = gen.get("post_processors") or []
             stage_results = gen.get("stage_results") or []
             stage_results_file = gen.get("stage_results_file")
+            pipeline_summary = summarize_stage_results(
+                stage_results,
+                stage_results_file=(
+                    public_path(Path(str(stage_results_file)))
+                    if stage_results_file
+                    else None
+                ),
+            )
             panel_package_validation = gen.get("panel_package_validation")
             field_provenance = gen.get("field_provenance") or {}
             field_provenance_file = gen.get("field_provenance_file")
@@ -424,6 +433,10 @@ def run_batch_generate_validate(
                 issues.append("qa_failed")
             elif qa_status == "WARN":
                 issues.append("qa_warn")
+            if pipeline_summary.get("status") == "FAIL":
+                issues.append("pipeline_failed")
+            elif pipeline_summary.get("status") == "WARN":
+                issues.append("pipeline_warn")
 
             try:
                 doc = Document(output_docx)
@@ -542,6 +555,7 @@ def run_batch_generate_validate(
                 "panel_package_validation": panel_package_validation,
                 "input_validation_warnings": input_validation_warnings,
                 "post_processors": post_processors,
+                "pipeline": pipeline_summary,
                 "stage_results": stage_results,
                 "stage_results_file": (
                     public_path(Path(str(stage_results_file)))
@@ -567,6 +581,7 @@ def run_batch_generate_validate(
                 and doc_ok
                 and (not any(v > 0 for v in placeholder_counts.values()))
                 and (qa_status != "FAIL")
+                and (pipeline_summary.get("status") != "FAIL")
             )
 
         except Exception as e:

@@ -2154,6 +2154,27 @@ def test_qa_report_passes_basic_clean_docx(tmp_path):
     assert qa["checks"]["unrendered_placeholders"]["count"] == 0
 
 
+def test_qa_report_records_pipeline_summary(tmp_path):
+    docx_path = tmp_path / "pipeline.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        stage_results=[
+            {"name": "PanelResolutionStage", "status": "PASS"},
+            {"name": "TemplateContractStage", "status": "WARN"},
+        ],
+        stage_results_file=str(docx_path.with_suffix(".stage_results.json")),
+    )
+
+    assert qa["status"] == "WARN"
+    assert qa["pipeline"]["status"] == "WARN"
+    assert qa["checks"]["pipeline"]["warning_stages"] == ["TemplateContractStage"]
+    assert any(issue["code"] == "PIPELINE_WARN" for issue in qa["issues"])
+
+
 def test_field_provenance_masks_sensitive_values_and_records_sources(tmp_path):
     docx_path = tmp_path / "report.docx"
     doc = Document()
@@ -2563,7 +2584,12 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert stage_results_file.exists()
     stage_payload = json.loads(stage_results_file.read_text(encoding="utf-8"))
     assert stage_payload["generation_id"] == result["generation_id"]
+    assert stage_payload["pipeline"]["status"] == "PASS"
     assert stage_payload["stage_results"] == result["stage_results"]
+    assert result["qa_report"]["pipeline"]["status"] == "PASS"
+    assert result["qa_report"]["checks"]["pipeline"]["stage_results_file"] == str(
+        stage_results_file
+    )
     stage_names = [stage["name"] for stage in result["stage_results"]]
     assert stage_names[:3] == [
         "PanelResolutionStage",
