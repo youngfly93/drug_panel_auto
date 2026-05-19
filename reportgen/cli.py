@@ -4,13 +4,13 @@ CLI命令行接口
 提供reportgen命令行工具。
 """
 
+import json
 import sys
 from pathlib import Path
 
 import click
 
 from reportgen import __version__
-from reportgen.core.report_generator import ReportGenerator
 from reportgen.utils.logger import get_logger
 
 
@@ -225,6 +225,8 @@ def generate(ctx, excel, template, output, filename, strict, auto_detect,
         click.echo("")
 
     try:
+        from reportgen.core.report_generator import ReportGenerator
+
         # 初始化生成器
         generator = ReportGenerator(
             config_dir=config_dir,
@@ -269,6 +271,11 @@ def generate(ctx, excel, template, output, filename, strict, auto_detect,
         if result["success"]:
             click.echo("✅ 报告生成成功!")
             click.echo(f"📄 输出文件: {result['output_file']}")
+            if result.get("panel_package_validation"):
+                panel_status = (
+                    result["panel_package_validation"].get("status") or "UNKNOWN"
+                )
+                click.echo(f"🧬 Panel校验: {panel_status}")
             if result.get("field_provenance_file"):
                 click.echo(f"🧾 字段来源: {result['field_provenance_file']}")
             if result.get("qa_report_file"):
@@ -468,6 +475,88 @@ def batch_validate(
     click.echo(f"  output_root: {run.output_root}")
 
     sys.exit(0 if int(report_obj.get("failures") or 0) == 0 else 1)
+
+
+@cli.group()
+def panel():
+    """Panel package management commands."""
+
+
+@panel.command("validate")
+@click.argument("panel_id", required=False)
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(),
+    help="项目根目录，默认当前目录",
+)
+@click.option(
+    "--panels-dir",
+    default="panels",
+    show_default=True,
+    type=click.Path(),
+    help="Panel Package目录",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="输出格式",
+)
+@click.option(
+    "--fail-on",
+    type=click.Choice(["error", "warn"]),
+    default="error",
+    show_default=True,
+    help="CLI非零退出门槛",
+)
+def panel_validate(panel_id, project_root, panels_dir, output_format, fail_on):
+    """Validate one Panel Package or the whole registry."""
+    from reportgen.panels.validation import (
+        validate_panel_package,
+        validate_panel_registry,
+    )
+
+    if panel_id:
+        report = validate_panel_package(
+            panel_id,
+            project_root=project_root,
+            panels_dir=panels_dir,
+        )
+    else:
+        report = validate_panel_registry(
+            project_root=project_root,
+            panels_dir=panels_dir,
+        )
+
+    payload = report.to_dict()
+    if output_format == "json":
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"Panel validation: {payload['status']}")
+        click.echo(f"  scope: {payload['scope']}")
+        click.echo(f"  panels: {', '.join(payload['panels_checked']) or 'none'}")
+        summary = payload["summary"]
+        click.echo(
+            "  issues: "
+            f"{summary['errors']} errors, {summary['warnings']} warnings"
+        )
+        for issue in payload["issues"]:
+            click.echo(
+                f"  - {issue['level']} {issue['code']}"
+                f" [{issue.get('panel_id') or '-'}]: {issue['message']}"
+            )
+            if issue.get("path"):
+                click.echo(f"    path: {issue['path']}")
+            if issue.get("hint"):
+                click.echo(f"    hint: {issue['hint']}")
+
+    if report.errors or (fail_on == "warn" and report.warnings):
+        sys.exit(1)
+    sys.exit(0)
 
 
 @cli.group()

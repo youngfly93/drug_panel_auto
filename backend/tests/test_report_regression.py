@@ -5,6 +5,7 @@ import subprocess
 import json
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -61,6 +62,12 @@ from reportgen.panels.loader import (
     PanelPackageLoader,
     load_panel_package,
     validate_panel_package_config,
+)
+from reportgen.panels.registry import PanelRegistry
+from reportgen.panels.validation import (
+    validate_panel_package,
+    validate_panel_package_path,
+    validate_panel_registry,
 )
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
 from reportgen.utils import docx_render
@@ -688,6 +695,58 @@ def test_report_generator_rejects_unknown_project_type(tmp_path):
     assert any("未注册的Panel项目类型" in error for error in result["errors"])
 
 
+def _write_minimal_panel_package(
+    tmp_path: Path,
+    panel_id: str,
+    *,
+    directory_name=None,
+    aliases=None,
+) -> Path:
+    panel_dir = tmp_path / "panels" / (directory_name or panel_id)
+    (panel_dir / "templates").mkdir(parents=True)
+    (panel_dir / "rules").mkdir(parents=True)
+    (panel_dir / "templates" / "standard.docx").write_bytes(b"placeholder")
+    (panel_dir / "rules" / "panel.yaml").write_text("rules: []\n", encoding="utf-8")
+    (panel_dir / "mappings.yaml").write_text("mappings: {}\n", encoding="utf-8")
+    panel_yaml = panel_dir / "panel.yaml"
+    panel_yaml.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "1.0",
+                "panel_id": panel_id,
+                "display_name": panel_id.replace("_", " ").title(),
+                "version": "0.1.0",
+                "status": "draft",
+                "aliases": aliases or [],
+                "default_template": "standard",
+                "templates": [
+                    {
+                        "id": "standard",
+                        "file": "templates/standard.docx",
+                        "status": "draft",
+                    }
+                ],
+                "mappings": {"default": "mappings.yaml"},
+                "rules": {"panel_rules": "rules/panel.yaml"},
+                "input_contract": {"required_tables": ["Variations"]},
+                "template_contract": {"required_variables": ["patient_name"]},
+                "golden_cases": [
+                    {
+                        "id": f"{panel_id}_synthetic",
+                        "runner": "reportgen.core.golden_case:run_golden_case",
+                        "synthetic": True,
+                        "expected_qa_status": "PASS",
+                    }
+                ],
+            },
+            sort_keys=False,
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    return panel_yaml
+
+
 def test_panel_package_loader_reads_crc358_package():
     package = load_panel_package("crc_358_msi", project_root=ROOT)
 
@@ -746,6 +805,155 @@ def test_panel_package_loader_reads_lung_methylation_package():
     assert package.input_contract["required_tables"] == ["甲基化位点"]
     assert "methylation_sites" in package.template_contract["required_lists"]
     assert package.golden_cases[0]["id"] == "lung_methylation_synthetic_positive"
+
+
+def test_panel_package_registry_validator_accepts_builtin_packages():
+    report = validate_panel_registry(project_root=ROOT)
+
+    assert report.status == "PASS"
+    assert report.panels_checked == [
+        "crc_301_msi",
+        "crc_358_msi",
+        "lung_methylation",
+    ]
+    assert report.errors == []
+
+
+def test_panel_package_validator_accepts_alias_lookup():
+    report = validate_panel_package_path(
+        ROOT / "panels" / "crc_358_msi" / "panel.yaml",
+        project_root=ROOT,
+    )
+    alias_report = validate_panel_package("crc_358", project_root=ROOT)
+
+    assert report.status == "PASS"
+    assert alias_report.status == "PASS"
+
+
+def test_panel_package_validator_rejects_missing_declared_file(tmp_path):
+    panel_yaml = _write_minimal_panel_package(tmp_path, "bad_panel")
+    (panel_yaml.parent / "templates" / "standard.docx").unlink()
+
+    report = validate_panel_package_path(
+        panel_yaml,
+        project_root=tmp_path,
+        panels_dir=tmp_path / "panels",
+    )
+
+    assert report.status == "FAIL"
+    assert {issue.code for issue in report.errors} >= {"DECLARED_FILE_MISSING"}
+
+
+def test_panel_package_validator_rejects_directory_name_mismatch(tmp_path):
+    panel_yaml = _write_minimal_panel_package(
+        tmp_path,
+        "actual_panel",
+        directory_name="wrong_panel",
+    )
+
+    report = validate_panel_package_path(
+        panel_yaml,
+        project_root=tmp_path,
+        panels_dir=tmp_path / "panels",
+    )
+
+    assert report.status == "FAIL"
+    assert any(issue.code == "PANEL_DIR_NAME_MISMATCH" for issue in report.errors)
+
+
+def test_panel_registry_validator_rejects_alias_collisions(tmp_path):
+    _write_minimal_panel_package(tmp_path, "alpha_panel", aliases=["shared_alias"])
+    _write_minimal_panel_package(tmp_path, "beta_panel", aliases=["shared_alias"])
+
+    report = validate_panel_registry(
+        project_root=tmp_path,
+        panels_dir=tmp_path / "panels",
+    )
+
+    assert report.status == "FAIL"
+    assert any(issue.code == "REGISTRY_ALIAS_COLLISION" for issue in report.errors)
+
+
+def test_panel_registry_rejects_runtime_alias_collision():
+    registry = PanelRegistry()
+    registry.register("alpha_panel", object(), aliases=("shared_alias",))
+
+    with pytest.raises(ValueError, match="shared_alias"):
+        registry.register("beta_panel", object(), aliases=("shared_alias",))
+
+    with pytest.raises(ValueError, match="alias"):
+        registry.register("shared_alias", object())
+
+
+def test_report_generator_blocks_invalid_panel_package_before_excel_read(
+    tmp_path, monkeypatch
+):
+    panel_yaml = _write_minimal_panel_package(tmp_path, "bad_panel")
+    (panel_yaml.parent / "templates" / "standard.docx").unlink()
+    package = PanelPackageLoader(
+        project_root=tmp_path,
+        panels_dir=tmp_path / "panels",
+    ).load_file(panel_yaml)
+
+    import reportgen.core.report_generator as report_generator_module
+
+    monkeypatch.setattr(
+        report_generator_module,
+        "normalize_project_type",
+        lambda project_type: "bad_panel",
+    )
+    monkeypatch.setattr(
+        ReportGenerator,
+        "_get_panel_registration",
+        staticmethod(lambda project_type: SimpleNamespace(package=package)),
+    )
+
+    generator = ReportGenerator(config_dir=str(ROOT / "config"), log_level="ERROR")
+
+    def fail_read(*_args, **_kwargs):
+        raise AssertionError("excel should not be read when panel package is invalid")
+
+    monkeypatch.setattr(generator.excel_reader, "read", fail_read)
+
+    result = generator.generate(
+        excel_file=str(tmp_path / "missing.xlsx"),
+        template_file=str(tmp_path / "missing_template.docx"),
+        output_dir=str(tmp_path / "out"),
+        project_type="bad_panel",
+    )
+
+    assert result["success"] is False
+    assert "Panel Package校验失败" in result["errors"][0]
+    validation = result["panel_package_validation"]
+    assert validation["status"] == "FAIL"
+    assert any(
+        issue["code"] == "DECLARED_FILE_MISSING"
+        for issue in validation["issues"]
+    )
+
+
+def test_panel_validate_cli_reports_invalid_package(tmp_path):
+    panel_yaml = _write_minimal_panel_package(tmp_path, "bad_panel")
+    (panel_yaml.parent / "templates" / "standard.docx").unlink()
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "reportgen.cli",
+            "panel",
+            "validate",
+            "--project-root",
+            str(tmp_path),
+        ],
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    assert "DECLARED_FILE_MISSING" in proc.stdout
 
 
 def test_panel_package_schema_rejects_missing_default_template():
@@ -2336,6 +2544,7 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
 
     assert result["success"], result.get("errors")
     assert result["qa_status"] == "PASS"
+    assert result["panel_package_validation"]["status"] == "PASS"
     assert Path(result["output_file"]).exists()
     assert result["context"]["project_name"] == "结直肠癌301基因+MSI"
     assert result["template_contract"]["declared_contract"]["ok"] is True

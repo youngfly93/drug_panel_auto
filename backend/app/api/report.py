@@ -9,6 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from reportgen.utils.docx_render import render_docx_to_pngs
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -17,10 +18,9 @@ from app.models.task import Task
 from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.schemas.report import GenerateRequest, GenerateResponse, TaskStatus
-from app.services.file_manager import ensure_report_dir
 from app.services import reference_report_service as diff_svc
+from app.services.file_manager import ensure_report_dir
 from app.services.reportgen_bridge import ReportGenBridge
-from reportgen.utils.docx_render import render_docx_to_pngs
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -141,7 +141,11 @@ def generate_report(
         task_type="single",
         status="running",
         project_type=req.project_type or upload.detected_project_type,
-        clinical_info_snapshot=json.dumps(req.clinical_info, ensure_ascii=False) if req.clinical_info else None,
+        clinical_info_snapshot=(
+            json.dumps(req.clinical_info, ensure_ascii=False)
+            if req.clinical_info
+            else None
+        ),
         started_at=datetime.utcnow(),
     )
     db.add(task)
@@ -190,6 +194,7 @@ def generate_report(
                 qa_report_file=result.get("qa_report_file"),
                 qa_status=result.get("qa_status"),
                 qa_issues=(result.get("qa_report") or {}).get("issues") or [],
+                panel_package_validation=result.get("panel_package_validation"),
                 diff_status=diff_summary.get("diff_status"),
                 diff_gate_passed=diff_summary.get("diff_gate_passed"),
                 diff_reference_id=diff_summary.get("diff_reference_id"),

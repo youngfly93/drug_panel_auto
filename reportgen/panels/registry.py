@@ -44,12 +44,26 @@ class PanelRegistry:
             raise ValueError("panel_id is required")
         if not replace and canonical in self._registrations:
             raise ValueError(f"Panel {canonical!r} is already registered")
+        existing_alias_owner = self._aliases.get(canonical)
+        if existing_alias_owner and existing_alias_owner != canonical:
+            raise ValueError(
+                f"Panel id {canonical!r} is already used as an alias for "
+                f"{existing_alias_owner!r}"
+            )
 
         alias_tuple = tuple(
             alias
             for alias in (self._clean_panel_id(item) for item in aliases)
             if alias and alias != canonical
         )
+        for alias in alias_tuple:
+            existing_owner = self._aliases.get(alias)
+            if existing_owner and existing_owner != canonical:
+                raise ValueError(
+                    f"Alias {alias!r} is already registered for "
+                    f"{existing_owner!r}"
+                )
+
         self._registrations[canonical] = PanelRegistration(
             panel_id=canonical,
             enhancer=enhancer,
@@ -105,4 +119,3 @@ class PanelRegistry:
     @staticmethod
     def _clean_panel_id(panel_id: Optional[str]) -> str:
         return str(panel_id or "").strip().lower()
-

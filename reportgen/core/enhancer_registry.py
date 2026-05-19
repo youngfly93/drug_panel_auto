@@ -13,6 +13,7 @@ from typing import Any, Optional, Protocol
 from reportgen.models.report_data import ReportData
 from reportgen.panels.loader import PanelPackageLoader
 from reportgen.panels.registry import PanelRegistry, UnknownPanelError
+from reportgen.panels.validation import validate_panel_registry
 
 
 class PanelEnhancer(Protocol):
@@ -100,17 +101,22 @@ def _build_default_registry() -> PanelRegistry:
 
     crc_enhancer = CRC358Enhancer()
     loaded_packages: set[str] = set()
-    try:
-        for package in PanelPackageLoader(project_root=_PROJECT_ROOT).load_all():
-            registry.register(
-                package.panel_id,
-                _load_enhancer(package.enhancer, fallback=_NOOP),
-                aliases=package.aliases,
-                package=package,
-            )
-            loaded_packages.add(package.panel_id)
-    except Exception:
-        loaded_packages = set()
+    validation_report = validate_panel_registry(project_root=_PROJECT_ROOT)
+    if not validation_report.ok:
+        issue_lines = "\n".join(
+            f"- {issue.panel_id or 'registry'} {issue.code}: {issue.message}"
+            for issue in validation_report.errors
+        )
+        raise RuntimeError(f"Panel registry validation failed:\n{issue_lines}")
+
+    for package in PanelPackageLoader(project_root=_PROJECT_ROOT).load_all():
+        registry.register(
+            package.panel_id,
+            _load_enhancer(package.enhancer, fallback=_NOOP),
+            aliases=package.aliases,
+            package=package,
+        )
+        loaded_packages.add(package.panel_id)
 
     if "crc_358_msi" not in loaded_packages:
         registry.register("crc_358_msi", crc_enhancer, aliases=("crc_358",))

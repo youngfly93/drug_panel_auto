@@ -26,6 +26,7 @@ from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
+from reportgen.panels.validation import validate_panel_package_path
 from reportgen.utils.file_utils import (
     ensure_directory_exists,
     get_unique_filename,
@@ -130,6 +131,28 @@ class ReportGenerator:
             panel_package = (
                 panel_registration.package if panel_registration is not None else None
             )
+            panel_package_validation = self._validate_panel_package_for_generation(
+                panel_package
+            )
+            if panel_package_validation and not panel_package_validation.get("ok"):
+                duration = time.time() - start_time
+                error_msg = self._format_panel_validation_failure(
+                    canonical_project_type,
+                    panel_package_validation,
+                )
+                self.logger.error(
+                    "Panel Package校验失败，阻断生成",
+                    project_type=canonical_project_type,
+                    errors=panel_package_validation.get("issues") or [],
+                )
+                return {
+                    "success": False,
+                    "output_file": None,
+                    "duration": duration,
+                    "errors": [error_msg],
+                    "warnings": [],
+                    "panel_package_validation": panel_package_validation,
+                }
 
             # 1. 读取Excel（支持复用外部已读取的数据，避免重复IO）
             if excel_data is None:
@@ -388,6 +411,7 @@ class ReportGenerator:
                             "duration": duration,
                             "errors": [msg],
                             "warnings": report_data.validation_errors,
+                            "panel_package_validation": panel_package_validation,
                             "template_contract": template_contract_report,
                             **({"context": template_context} if return_context else {}),
                         }
@@ -468,6 +492,7 @@ class ReportGenerator:
                 "duration": duration,
                 "errors": [],
                 "warnings": report_data.validation_errors,
+                "panel_package_validation": panel_package_validation,
                 "template_contract": template_contract_report,
                 "field_provenance": field_provenance,
                 "field_provenance_file": field_provenance_file,
@@ -555,6 +580,53 @@ class ReportGenerator:
             return None
         spec = getattr(panel_package, "template_contract", None)
         return dict(spec) if isinstance(spec, dict) else None
+
+    @staticmethod
+    def _validate_panel_package_for_generation(panel_package) -> Optional[dict]:
+        """Run the strict package gate used by report generation."""
+        if panel_package is None:
+            return None
+        panel_yaml = Path(panel_package.root_dir) / "panel.yaml"
+        project_root = Path(panel_package.root_dir).resolve().parent.parent
+        panels_dir = Path(panel_package.root_dir).resolve().parent
+        try:
+            return validate_panel_package_path(
+                panel_yaml,
+                project_root=project_root,
+                panels_dir=panels_dir,
+            ).to_dict()
+        except Exception as exc:
+            return {
+                "scope": str(panel_yaml),
+                "status": "FAIL",
+                "ok": False,
+                "panels_checked": [getattr(panel_package, "panel_id", "")],
+                "summary": {"errors": 1, "warnings": 0, "issues": 1},
+                "issues": [
+                    {
+                        "level": "ERROR",
+                        "code": "PANEL_VALIDATION_GATE_ERROR",
+                        "message": f"Panel Package validation gate failed: {exc}",
+                        "panel_id": getattr(panel_package, "panel_id", ""),
+                        "path": str(panel_yaml),
+                        "hint": "",
+                    }
+                ],
+            }
+
+    @staticmethod
+    def _format_panel_validation_failure(
+        project_type: Optional[str], validation: dict
+    ) -> str:
+        """Build a concise human-readable generation gate failure."""
+        issues = list(validation.get("issues") or [])
+        summary = "; ".join(
+            f"{item.get('code')}: {item.get('message')}" for item in issues[:5]
+        )
+        if len(issues) > 5:
+            summary += f"; ... plus {len(issues) - 5} more"
+        panel = project_type or ",".join(validation.get("panels_checked") or [])
+        return f"Panel Package校验失败，已阻断生成：{panel}。{summary}"
 
     def _generate_output_filename(self, excel_data, report_data: ReportData) -> str:
         """

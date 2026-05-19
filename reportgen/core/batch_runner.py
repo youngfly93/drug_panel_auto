@@ -342,6 +342,7 @@ def run_batch_generate_validate(
             ctx = gen.get("context") or {}
             patient_snapshot = _patient_snapshot_from_context(ctx)
             post_processors = gen.get("post_processors") or []
+            panel_package_validation = gen.get("panel_package_validation")
             field_provenance = gen.get("field_provenance") or {}
             field_provenance_file = gen.get("field_provenance_file")
             if field_provenance_file:
@@ -532,6 +533,7 @@ def run_batch_generate_validate(
                 "rendered_pages": rendered_pages,
                 "issues": issues,
                 "template_contract": template_contract,
+                "panel_package_validation": panel_package_validation,
                 "input_validation_warnings": input_validation_warnings,
                 "post_processors": post_processors,
                 "field_provenance_file": (
