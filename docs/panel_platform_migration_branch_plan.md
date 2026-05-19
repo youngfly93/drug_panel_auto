@@ -3,6 +3,7 @@
 日期：2026-05-17
 当前基线分支：`codex/panel-platform-m1-baseline`
 PRD：`docs/prd_multi_panel_template_architecture.md`
+后续重构实施 PRD：`docs/prd_refactor_implementation_m6_m9.md`
 
 ## 分支树
 

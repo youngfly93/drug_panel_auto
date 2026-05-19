@@ -195,6 +195,7 @@ def generate_report(
                 qa_status=result.get("qa_status"),
                 qa_issues=(result.get("qa_report") or {}).get("issues") or [],
                 panel_package_validation=result.get("panel_package_validation"),
+                stage_results=result.get("stage_results") or [],
                 diff_status=diff_summary.get("diff_status"),
                 diff_gate_passed=diff_summary.get("diff_gate_passed"),
                 diff_reference_id=diff_summary.get("diff_reference_id"),

@@ -693,6 +693,9 @@ def test_report_generator_rejects_unknown_project_type(tmp_path):
 
     assert result["success"] is False
     assert any("未注册的Panel项目类型" in error for error in result["errors"])
+    assert result["stage_results"][0]["name"] == "PanelResolutionStage"
+    assert result["stage_results"][0]["status"] == "FAIL"
+    assert result["stage_results"][0]["duration_ms"] is not None
 
 
 def _write_minimal_panel_package(
@@ -924,6 +927,9 @@ def test_report_generator_blocks_invalid_panel_package_before_excel_read(
 
     assert result["success"] is False
     assert "Panel Package校验失败" in result["errors"][0]
+    stage_names = [stage["name"] for stage in result["stage_results"]]
+    assert stage_names == ["PanelResolutionStage", "PanelPackageValidationStage"]
+    assert result["stage_results"][-1]["status"] == "FAIL"
     validation = result["panel_package_validation"]
     assert validation["status"] == "FAIL"
     assert any(
@@ -1064,6 +1070,9 @@ def test_report_generator_fails_bad_panel_template_before_rendering(tmp_path):
     assert result["success"] is False
     assert result["output_file"] is None
     assert not (output_dir / "should_not_render.docx").exists()
+    stage_by_name = {stage["name"]: stage for stage in result["stage_results"]}
+    assert stage_by_name["TemplateContractStage"]["status"] == "FAIL"
+    assert "TemplateRenderStage" not in stage_by_name
     declared = result["template_contract"]["declared_contract"]
     assert "sample_id" in declared["missing_required_variables"]
     assert "variant_detail" in declared["missing_required_tables"]
@@ -2545,6 +2554,15 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert result["success"], result.get("errors")
     assert result["qa_status"] == "PASS"
     assert result["panel_package_validation"]["status"] == "PASS"
+    stage_names = [stage["name"] for stage in result["stage_results"]]
+    assert stage_names[:3] == [
+        "PanelResolutionStage",
+        "PanelPackageValidationStage",
+        "ExcelReadStage",
+    ]
+    assert "TemplateRenderStage" in stage_names
+    assert "QAStage" in stage_names
+    assert all(stage["duration_ms"] is not None for stage in result["stage_results"])
     assert Path(result["output_file"]).exists()
     assert result["context"]["project_name"] == "结直肠癌301基因+MSI"
     assert result["template_contract"]["declared_contract"]["ok"] is True

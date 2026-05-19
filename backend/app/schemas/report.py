@@ -25,6 +25,7 @@ class GenerateResponse(BaseModel):
     qa_status: Optional[str] = None
     qa_issues: list[dict[str, Any]] = []
     panel_package_validation: Optional[dict[str, Any]] = None
+    stage_results: list[dict[str, Any]] = []
     diff_status: Optional[str] = None
     diff_gate_passed: Optional[bool] = None
     diff_reference_id: Optional[str] = None
