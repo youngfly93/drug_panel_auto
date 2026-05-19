@@ -25,7 +25,9 @@ class GenerateResponse(BaseModel):
     qa_status: Optional[str] = None
     qa_issues: list[dict[str, Any]] = []
     panel_package_validation: Optional[dict[str, Any]] = None
+    generation_id: Optional[str] = None
     stage_results: list[dict[str, Any]] = []
+    stage_results_file: Optional[str] = None
     diff_status: Optional[str] = None
     diff_gate_passed: Optional[bool] = None
     diff_reference_id: Optional[str] = None
@@ -48,6 +50,9 @@ class TaskStatus(BaseModel):
     field_provenance_file: Optional[str] = None
     qa_report_file: Optional[str] = None
     qa_status: Optional[str] = None
+    generation_id: Optional[str] = None
+    stage_results_file: Optional[str] = None
+    stage_results: list[dict[str, Any]] = []
     diff_report_file: Optional[str] = None
     diff_markdown_file: Optional[str] = None
     diff_status: Optional[str] = None

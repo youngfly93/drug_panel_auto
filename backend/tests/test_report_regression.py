@@ -2554,6 +2554,12 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert result["success"], result.get("errors")
     assert result["qa_status"] == "PASS"
     assert result["panel_package_validation"]["status"] == "PASS"
+    assert result["generation_id"] == Path(result["output_file"]).stem
+    stage_results_file = Path(result["stage_results_file"])
+    assert stage_results_file.exists()
+    stage_payload = json.loads(stage_results_file.read_text(encoding="utf-8"))
+    assert stage_payload["generation_id"] == result["generation_id"]
+    assert stage_payload["stage_results"] == result["stage_results"]
     stage_names = [stage["name"] for stage in result["stage_results"]]
     assert stage_names[:3] == [
         "PanelResolutionStage",

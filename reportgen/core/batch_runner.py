@@ -343,6 +343,7 @@ def run_batch_generate_validate(
             patient_snapshot = _patient_snapshot_from_context(ctx)
             post_processors = gen.get("post_processors") or []
             stage_results = gen.get("stage_results") or []
+            stage_results_file = gen.get("stage_results_file")
             panel_package_validation = gen.get("panel_package_validation")
             field_provenance = gen.get("field_provenance") or {}
             field_provenance_file = gen.get("field_provenance_file")
@@ -354,6 +355,10 @@ def run_batch_generate_validate(
             qa_report_file = gen.get("qa_report_file")
             if qa_report_file:
                 artifacts["qa_report_json"] = public_path(Path(str(qa_report_file)))
+            if stage_results_file:
+                artifacts["stage_results_json"] = public_path(
+                    Path(str(stage_results_file))
+                )
 
             # --- artifacts: context/meta ---
             template_contract = gen.get("template_contract")
@@ -538,6 +543,11 @@ def run_batch_generate_validate(
                 "input_validation_warnings": input_validation_warnings,
                 "post_processors": post_processors,
                 "stage_results": stage_results,
+                "stage_results_file": (
+                    public_path(Path(str(stage_results_file)))
+                    if stage_results_file
+                    else None
+                ),
                 "field_provenance_file": (
                     public_path(Path(str(field_provenance_file)))
                     if field_provenance_file

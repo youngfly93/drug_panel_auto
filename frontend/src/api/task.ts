@@ -7,6 +7,8 @@ export interface TaskItem {
   project_type: string | null
   qa_status?: string | null
   qa_report_file?: string | null
+  generation_id?: string | null
+  stage_results_file?: string | null
   diff_status?: string | null
   diff_gate_passed?: boolean | null
   diff_reference_id?: string | null

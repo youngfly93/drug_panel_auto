@@ -4,10 +4,12 @@
 核心业务逻辑编排，协调所有组件生成报告。
 """
 
+import json
 import time
+from dataclasses import dataclass, field as dc_field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from reportgen.config.loader import ConfigLoader
 from reportgen.core.data_cleaner import DataCleaner
@@ -22,7 +24,7 @@ from reportgen.core.field_provenance import (
     write_field_provenance_report,
 )
 from reportgen.core.field_mapper import FieldMapper
-from reportgen.core.pipeline import GenerationContext, GenerationPipeline
+from reportgen.core.pipeline import GenerationContext, GenerationPipeline, StageHandle
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.models.excel_data import ExcelDataSource
@@ -34,6 +36,39 @@ from reportgen.utils.file_utils import (
     safe_filename,
 )
 from reportgen.utils.logger import get_logger
+
+
+@dataclass
+class _GenerationState:
+    """Mutable state passed between generation stages."""
+
+    excel_file: str
+    template_file: str
+    output_dir: str
+    output_filename: Optional[str] = None
+    strict_mode: bool = False
+    excel_data: Optional[ExcelDataSource] = None
+    return_context: bool = False
+    template_contract_mode: str = "warn"
+    project_type: Optional[str] = None
+    project_name: Optional[str] = None
+    canonical_project_type: Optional[str] = None
+    panel_registration: Any = None
+    panel_package: Any = None
+    panel_package_validation: Optional[dict[str, Any]] = None
+    report_data: Optional[ReportData] = None
+    report_content: dict[str, Any] = dc_field(default_factory=dict)
+    output_path: Optional[str] = None
+    final_output: Optional[str] = None
+    generation_id: Optional[str] = None
+    template_context: Optional[dict[str, Any]] = None
+    template_contract_report: Optional[dict[str, Any]] = None
+    processor_report: list[Any] = dc_field(default_factory=list)
+    field_provenance: Optional[dict[str, Any]] = None
+    field_provenance_file: Optional[str] = None
+    qa_report: Optional[dict[str, Any]] = None
+    qa_report_file: Optional[str] = None
+    stage_results_file: Optional[str] = None
 
 
 class ReportGenerator:
@@ -115,6 +150,18 @@ class ReportGenerator:
                 - errors: 错误列表
         """
         start_time = time.time()
+        state = _GenerationState(
+            excel_file=excel_file,
+            template_file=template_file,
+            output_dir=output_dir,
+            output_filename=output_filename,
+            strict_mode=strict_mode,
+            excel_data=excel_data,
+            return_context=return_context,
+            template_contract_mode=template_contract_mode,
+            project_type=project_type,
+            project_name=project_name,
+        )
         pipeline = GenerationPipeline(
             GenerationContext(
                 request={
@@ -130,10 +177,6 @@ class ReportGenerator:
             )
         )
 
-        def finish(payload: dict) -> dict:
-            payload["stage_results"] = pipeline.to_list()
-            return payload
-
         self.logger.info(
             "开始生成报告",
             excel_file=excel_file,
@@ -142,578 +185,694 @@ class ReportGenerator:
         )
 
         try:
-            with pipeline.stage("PanelResolutionStage") as stage:
-                canonical_project_type = normalize_project_type(project_type)
-                project_name = self._normalize_project_name(
-                    project_name, canonical_project_type
-                )
-                panel_registration = self._get_panel_registration(
-                    canonical_project_type
-                )
-                panel_package = (
-                    panel_registration.package
-                    if panel_registration is not None
-                    else None
-                )
-                stage.metrics.update(
-                    {
-                        "project_type": canonical_project_type,
-                        "project_name": project_name,
-                        "panel_id": (
-                            getattr(panel_package, "panel_id", None)
-                            if panel_package is not None
-                            else None
-                        ),
-                    }
-                )
+            pipeline.run_step(
+                "PanelResolutionStage", self._stage_panel_resolution, state
+            )
+            failure = pipeline.run_step(
+                "PanelPackageValidationStage",
+                self._stage_panel_package_validation,
+                state,
+                start_time,
+            )
+            if failure is not None:
+                return self._finish_generation(state, pipeline, failure)
 
-            panel_gate_failure = None
-            with pipeline.stage("PanelPackageValidationStage") as stage:
-                panel_package_validation = self._validate_panel_package_for_generation(
-                    panel_package
-                )
-                if panel_package_validation:
-                    stage.metrics.update(
-                        {
-                            "status": panel_package_validation.get("status"),
-                            "issue_count": len(
-                                panel_package_validation.get("issues") or []
-                            ),
-                        }
-                    )
-                else:
-                    stage.skip(
-                        message="No panel package is registered for this request."
-                    )
+            pipeline.run_step("ExcelReadStage", self._stage_excel_read, state)
+            pipeline.run_step(
+                "FieldResolutionStage", self._stage_field_resolution, state
+            )
+            pipeline.run_step(
+                "PanelRuleExecutionStage", self._stage_panel_rule_execution, state
+            )
+            failure = pipeline.run_step(
+                "InputContractValidationStage",
+                self._stage_input_contract_validation,
+                state,
+                start_time,
+            )
+            if failure is not None:
+                return self._finish_generation(state, pipeline, failure)
 
-                if panel_package_validation and not panel_package_validation.get("ok"):
-                    duration = time.time() - start_time
-                    error_msg = self._format_panel_validation_failure(
-                        canonical_project_type,
-                        panel_package_validation,
-                    )
-                    stage.fail(
-                        "PANEL_PACKAGE_VALIDATION_FAILED",
-                        error_msg,
-                        details={
-                            "project_type": canonical_project_type,
-                            "summary": panel_package_validation.get("summary"),
-                        },
-                    )
-                    self.logger.error(
-                        "Panel Package校验失败，阻断生成",
-                        project_type=canonical_project_type,
-                        errors=panel_package_validation.get("issues") or [],
-                    )
-                    panel_gate_failure = {
-                        "success": False,
-                        "output_file": None,
-                        "duration": duration,
-                        "errors": [error_msg],
-                        "warnings": [],
-                        "panel_package_validation": panel_package_validation,
-                    }
-            if panel_gate_failure is not None:
-                return finish(panel_gate_failure)
+            pipeline.run_step("OutputPathStage", self._stage_output_path, state)
+            failure = pipeline.run_step(
+                "TemplateContractStage",
+                self._stage_template_contract,
+                state,
+                start_time,
+            )
+            if failure is not None:
+                return self._finish_generation(state, pipeline, failure)
 
-            with pipeline.stage("ExcelReadStage") as stage:
-                # 支持复用外部已读取的数据，避免重复IO。
-                if excel_data is None:
-                    self.logger.log_event("excel_reading_started", file=excel_file)
-                    excel_data = self.excel_reader.read(excel_file)
-                    self.logger.log_event(
-                        "excel_reading_completed",
-                        file=excel_file,
-                        single_values=len(excel_data.single_values),
-                        tables=len(excel_data.table_data),
-                    )
-                    stage.metrics["source"] = "file"
-                else:
-                    if excel_file and str(excel_file) != str(excel_data.file_path):
-                        self.logger.warning(
-                            "传入的excel_data与excel_file路径不一致，优先使用excel_data.file_path",
-                            excel_file=excel_file,
-                            excel_data_path=excel_data.file_path,
-                        )
-                        stage.warn(
-                            "EXCEL_PATH_MISMATCH",
-                            "excel_data.file_path differs from excel_file; reused excel_data.",
-                            details={
-                                "excel_file": str(excel_file),
-                                "excel_data_path": str(excel_data.file_path),
-                            },
-                        )
-                    self.logger.log_event(
-                        "excel_reading_skipped",
-                        file=excel_data.file_path,
-                        single_values=len(excel_data.single_values),
-                        tables=len(excel_data.table_data),
-                    )
-                    stage.metrics["source"] = "provided_excel_data"
-                stage.metrics.update(
-                    {
-                        "single_values": len(excel_data.single_values),
-                        "tables": len(excel_data.table_data),
-                    }
-                )
-
-            with pipeline.stage("FieldResolutionStage") as stage:
-                self.logger.log_event("field_mapping_started")
-                report_data = self.field_mapper.map(excel_data)
-                self.logger.log_event(
-                    "field_mapping_completed",
-                    validation_errors=len(report_data.validation_errors),
-                )
-
-                self.logger.log_event("data_cleaning_started")
-                report_data = self.data_cleaner.validate_and_clean(report_data)
-                self.logger.log_event(
-                    "data_cleaning_completed",
-                    validation_errors=len(report_data.validation_errors),
-                )
-
-                if project_name and canonical_project_type:
-                    cur_pn = report_data.get_field("project_name")
-                    if cur_pn != project_name:
-                        report_data.set_field("project_name", project_name)
-                        self.logger.info(
-                            "项目检测结果覆盖project_name",
-                            old=cur_pn,
-                            new=project_name,
-                        )
-
-                report_content = (
-                    self.config_loader.get_setting("report_content", {}) or {}
-                )
-                if isinstance(report_content, dict):
-                    report_data.set_field("report_content", report_content)
-                panel_style = self._load_panel_style_config(panel_package)
-                if panel_style:
-                    report_data.set_field("panel_style", panel_style)
-                stage.metrics["validation_errors"] = len(
-                    report_data.validation_errors
-                )
-
-            with pipeline.stage("PanelRuleExecutionStage") as stage:
-                gene_knowledge_provider = None
-                try:
-                    kb_enabled = bool(
-                        self.config_loader.get_setting(
-                            "knowledge_bases.gene_knowledge_db.enabled", False
-                        )
-                    ) or bool(
-                        self.config_loader.get_setting(
-                            "knowledge_bases.gene_transcript_db.enabled", False
-                        )
-                    )
-                    if kb_enabled:
-                        from reportgen.knowledge import (  # lazy import
-                            GeneKnowledgeProvider,
-                        )
-
-                        kb_cfg = (
-                            self.config_loader.get_setting("knowledge_bases", {}) or {}
-                        )
-                        provider_cfg = {
-                            "enabled": True,
-                            "gene_knowledge_db": kb_cfg.get("gene_knowledge_db", {}),
-                            "gene_transcript_db": kb_cfg.get(
-                                "gene_transcript_db", {}
-                            ),
-                        }
-                        gene_knowledge_provider = GeneKnowledgeProvider(provider_cfg)
-                except Exception as kb_err:
-                    gene_knowledge_provider = None
-                    stage.warn(
-                        "GENE_KNOWLEDGE_PROVIDER_UNAVAILABLE",
-                        str(kb_err),
-                    )
-
-                self.logger.log_event(
-                    "template_enhancement_started",
-                    project_type=canonical_project_type,
-                )
-                enhancer = get_enhancer(canonical_project_type)
-                report_data = enhancer.enhance(
-                    report_data,
-                    excel_data,
-                    field_mapper=self.field_mapper,
-                    gene_knowledge_provider=gene_knowledge_provider,
-                    base_path=str(Path(self.config_dir).parent),
-                    project_type=canonical_project_type,
-                    panel_package=panel_package,
-                )
-                self._apply_clinical_diagnosis_for_display(report_data)
-                self.logger.log_event(
-                    "template_enhancement_completed",
-                    variants=len(report_data.get_table("variants") or []),
-                    summary_variants=len(
-                        report_data.get_table("summary_variants") or []
-                    ),
-                    undetected_genes=len(
-                        report_data.get_table("undetected_genes") or []
-                    ),
-                )
-
-                consultation_phone = str(
-                    report_content.get("consultation_phone", "")
-                    if isinstance(report_content, dict)
-                    else ""
-                    or ""
-                ).strip()
-                consultation_template = str(
-                    (
-                        report_content.get(
-                            "consultation_line_template",
-                            "咨询电话：{phone}。",
-                        )
-                        if isinstance(report_content, dict)
-                        else "咨询电话：{phone}。"
-                    )
-                    or ""
-                ).strip()
-                if consultation_phone and consultation_template:
-                    try:
-                        consultation_line = consultation_template.format(
-                            phone=consultation_phone
-                        )
-                    except Exception:
-                        consultation_line = consultation_template
-                    report_data.set_field("consultation_phone", consultation_phone)
-                    report_data.set_field("consultation_line", consultation_line)
-                report_data.set_field(
-                    "show_hla_table",
-                    bool(
-                        report_content.get("show_hla_table", False)
-                        if isinstance(report_content, dict)
-                        else False
-                    ),
-                )
-
-                self._set_patient_salutation(report_data)
-                stage.metrics.update(
-                    {
-                        "variants": len(report_data.get_table("variants") or []),
-                        "summary_variants": len(
-                            report_data.get_table("summary_variants") or []
-                        ),
-                        "undetected_genes": len(
-                            report_data.get_table("undetected_genes") or []
-                        ),
-                    }
-                )
-
-            input_contract_failure = None
-            with pipeline.stage("InputContractValidationStage") as stage:
-                if not report_data.is_valid():
-                    self.logger.warning(
-                        "报告数据验证失败", errors=report_data.validation_errors
-                    )
-                    stage.warn(
-                        "REPORT_DATA_VALIDATION_WARNINGS",
-                        "Report data has validation warnings.",
-                        details={"warnings": list(report_data.validation_errors)},
-                    )
-
-                if strict_mode:
-                    missing_critical = self._check_critical_fields(report_data)
-                    if missing_critical:
-                        duration = time.time() - start_time
-                        error_msg = (
-                            f"严格模式：缺失关键字段 {missing_critical}，阻断生成"
-                        )
-                        stage.fail(
-                            "STRICT_MODE_MISSING_CRITICAL_FIELDS",
-                            error_msg,
-                            details={"missing_fields": missing_critical},
-                        )
-                        self.logger.error(error_msg)
-                        input_contract_failure = {
-                            "success": False,
-                            "output_file": None,
-                            "duration": duration,
-                            "errors": [error_msg],
-                            "warnings": report_data.validation_errors,
-                            "panel_package_validation": panel_package_validation,
-                        }
-                    else:
-                        missing_important = self._check_important_fields(report_data)
-                        if missing_important:
-                            self.logger.warning(
-                                "严格模式：缺失重要字段（不阻断）",
-                                missing_fields=missing_important,
-                            )
-                            stage.warn(
-                                "STRICT_MODE_MISSING_IMPORTANT_FIELDS",
-                                "Important fields are missing but do not block generation.",
-                                details={"missing_fields": missing_important},
-                            )
-
-                rd = report_data.get_field("report_date")
-                if rd is None or (isinstance(rd, str) and rd.strip() == ""):
-                    self._mark_missing_report_date(report_data)
-                    stage.warn(
-                        "REPORT_DATE_MISSING",
-                        "report_date is missing and was marked as 未填写.",
-                    )
-            if input_contract_failure is not None:
-                return finish(input_contract_failure)
-
-            with pipeline.stage("OutputPathStage") as stage:
-                if not output_filename:
-                    output_filename = self._generate_output_filename(
-                        excel_data, report_data
-                    )
-
-                max_len = self.config_loader.get_setting(
-                    "naming.max_filename_length", 200
-                )
-                illegal_replace = self.config_loader.get_setting(
-                    "naming.illegal_chars_replace", "_"
-                )
-                output_filename = safe_filename(
-                    output_filename,
-                    max_length=int(max_len),
-                    replacement=str(illegal_replace),
-                )
-
-                ensure_directory_exists(output_dir)
-
-                overwrite_existing = bool(
-                    self.config_loader.get_setting(
-                        "generation.output.overwrite_existing", False
-                    )
-                )
-                if not overwrite_existing:
-                    output_filename = get_unique_filename(output_dir, output_filename)
-
-                output_path = str(Path(output_dir) / output_filename)
-                stage.artifacts["output_path"] = output_path
-                stage.metrics["overwrite_existing"] = overwrite_existing
-
-            template_contract_failure = None
-            with pipeline.stage("TemplateContractStage") as stage:
-                template_context = self.template_renderer.build_context(report_data)
-                template_contract_spec = self._get_template_contract_spec(
-                    panel_package
-                )
-
-                template_contract_mode = str(template_contract_mode or "none").lower()
-                if template_contract_mode not in {"none", "warn", "fail"}:
-                    raise ValueError(
-                        "template_contract_mode must be one of: none|warn|fail "
-                        f"(got {template_contract_mode!r})"
-                    )
-
-                template_contract_report = None
-                if template_contract_mode == "none":
-                    stage.skip(message="Template contract validation is disabled.")
-                else:
-                    template_contract_report = (
-                        self.template_renderer.validate_template_contract(
-                            template_file,
-                            template_context,
-                            contract_spec=template_contract_spec,
-                        )
-                    )
-                    stage.metrics["ok"] = bool(
-                        template_contract_report.get("ok", False)
-                    )
-                    if not template_contract_report.get("ok", False):
-                        missing_paths = template_contract_report.get("missing_paths")
-                        missing_lists = template_contract_report.get("missing_lists")
-                        missing_row_fields = template_contract_report.get(
-                            "missing_row_fields"
-                        )
-                        declared_contract = (
-                            template_contract_report.get("declared_contract") or {}
-                        )
-                        msg = (
-                            "模板契约校验失败：模板引用或声明式结构不满足要求。"
-                            f" missing_paths={missing_paths},"
-                            f" missing_lists={missing_lists},"
-                            f" missing_row_fields={missing_row_fields}"
-                            f" declared_contract={declared_contract}"
-                        )
-                        if template_contract_mode == "fail":
-                            duration = time.time() - start_time
-                            stage.fail(
-                                "TEMPLATE_CONTRACT_FAILED",
-                                msg,
-                                details={
-                                    "missing_paths": missing_paths,
-                                    "missing_lists": missing_lists,
-                                    "missing_row_fields": missing_row_fields,
-                                },
-                            )
-                            self.logger.error(msg)
-                            template_contract_failure = {
-                                "success": False,
-                                "output_file": None,
-                                "duration": duration,
-                                "errors": [msg],
-                                "warnings": report_data.validation_errors,
-                                "panel_package_validation": panel_package_validation,
-                                "template_contract": template_contract_report,
-                                **(
-                                    {"context": template_context}
-                                    if return_context
-                                    else {}
-                                ),
-                            }
-                        else:
-                            stage.warn(
-                                "TEMPLATE_CONTRACT_WARN",
-                                msg,
-                                details={
-                                    "missing_paths": missing_paths,
-                                    "missing_lists": missing_lists,
-                                    "missing_row_fields": missing_row_fields,
-                                },
-                            )
-                            self.logger.warning(msg)
-            if template_contract_failure is not None:
-                return finish(template_contract_failure)
-
-            with pipeline.stage("TemplateRenderStage") as stage:
-                self.logger.log_event("template_rendering_started", output=output_path)
-                final_output = self.template_renderer.render(
-                    template_file, report_data, output_path
-                )
-                processor_report = list(
-                    getattr(self.template_renderer, "last_processor_report", []) or []
-                )
-                self.logger.log_event(
-                    "template_rendering_completed", output=final_output
-                )
-                stage.artifacts["output_file"] = final_output
-                stage.metrics["post_processors"] = len(processor_report)
-
-            field_provenance = None
-            field_provenance_file = None
-            with pipeline.stage("FieldProvenanceStage") as stage:
-                try:
-                    field_provenance = build_field_provenance_report(
-                        output_file=final_output,
-                        report_data=report_data,
-                        excel_data=excel_data,
-                        config_loader=self.config_loader,
-                        project_type=canonical_project_type,
-                        project_name=project_name,
-                        template_file=template_file,
-                        generation_id=Path(final_output).stem,
-                    )
-                    field_provenance_file = write_field_provenance_report(
-                        field_provenance, final_output
-                    )
-                    self.logger.log_event(
-                        "field_provenance_generated",
-                        output=field_provenance_file,
-                        field_count=len(field_provenance.get("fields") or {}),
-                    )
-                    stage.artifacts["field_provenance_file"] = field_provenance_file
-                    stage.metrics["field_count"] = len(
-                        field_provenance.get("fields") or {}
-                    )
-                except Exception as provenance_err:
-                    self.logger.warning(
-                        "生成字段来源报告失败", error=str(provenance_err)
-                    )
-                    stage.warn(
-                        "FIELD_PROVENANCE_FAILED",
-                        str(provenance_err),
-                    )
-
-            qa_report = None
-            qa_report_file = None
-            with pipeline.stage("QAStage") as stage:
-                try:
-                    qa_report = build_docx_qa_report(
-                        output_file=final_output,
-                        report_data=report_data,
-                        project_type=canonical_project_type,
-                        project_name=project_name,
-                        template_file=template_file,
-                        generation_id=Path(final_output).stem,
-                        field_provenance=field_provenance,
-                        field_provenance_file=field_provenance_file,
-                        processor_report=processor_report,
-                        template_contract=template_contract_report,
-                    )
-                    qa_report_file = write_docx_qa_report(qa_report, final_output)
-                    self.logger.log_event(
-                        "qa_report_generated",
-                        output=qa_report_file,
-                        status=qa_report.get("status"),
-                        issue_count=len(qa_report.get("issues") or []),
-                    )
-                    stage.artifacts["qa_report_file"] = qa_report_file
-                    stage.metrics.update(
-                        {
-                            "qa_status": qa_report.get("status"),
-                            "issue_count": len(qa_report.get("issues") or []),
-                        }
-                    )
-                    if qa_report.get("status") == "FAIL":
-                        stage.fail(
-                            "QA_REPORT_FAILED",
-                            "Generated report QA status is FAIL.",
-                            details={"issue_count": len(qa_report.get("issues") or [])},
-                        )
-                    elif qa_report.get("status") == "WARN":
-                        stage.warn(
-                            "QA_REPORT_WARN",
-                            "Generated report QA status is WARN.",
-                            details={"issue_count": len(qa_report.get("issues") or [])},
-                        )
-                except Exception as qa_err:
-                    self.logger.warning("生成QA报告失败", error=str(qa_err))
-                    stage.warn("QA_REPORT_GENERATION_FAILED", str(qa_err))
+            pipeline.run_step("TemplateRenderStage", self._stage_template_render, state)
+            pipeline.run_step(
+                "FieldProvenanceStage", self._stage_field_provenance, state
+            )
+            pipeline.run_step("QAStage", self._stage_qa, state)
 
             duration = time.time() - start_time
-
             self.logger.info(
-                "报告生成成功", output=final_output, duration_seconds=f"{duration:.2f}"
+                "报告生成成功",
+                output=state.final_output,
+                duration_seconds=f"{duration:.2f}",
             )
-
-            return finish(
-                {
-                    "success": True,
-                    "output_file": final_output,
-                    "duration": duration,
-                    "errors": [],
-                    "warnings": report_data.validation_errors,
-                    "panel_package_validation": panel_package_validation,
-                    "template_contract": template_contract_report,
-                    "field_provenance": field_provenance,
-                    "field_provenance_file": field_provenance_file,
-                    "post_processors": processor_report,
-                    "qa_report": qa_report,
-                    "qa_report_file": qa_report_file,
-                    "qa_status": qa_report.get("status") if qa_report else None,
-                    **({"context": template_context} if return_context else {}),
-                }
+            return self._finish_generation(
+                state,
+                pipeline,
+                self._build_success_payload(state, duration),
             )
 
         except Exception as e:
             duration = time.time() - start_time
-
             self.logger.error(
                 "报告生成失败",
                 excel_file=excel_file,
                 error=str(e),
                 duration_seconds=f"{duration:.2f}",
             )
-
-            return finish(
+            return self._finish_generation(
+                state,
+                pipeline,
                 {
                     "success": False,
                     "output_file": None,
                     "duration": duration,
                     "errors": [str(e)],
                     "warnings": [],
+                },
+            )
+
+    def _finish_generation(
+        self,
+        state: _GenerationState,
+        pipeline: GenerationPipeline,
+        payload: dict,
+    ) -> dict:
+        """Attach common pipeline metadata and persist a stage sidecar if possible."""
+        stage_results = pipeline.to_list()
+        payload["stage_results"] = stage_results
+
+        output_file = payload.get("output_file") or state.final_output
+        generation_id = payload.get("generation_id") or state.generation_id
+        if not generation_id and output_file:
+            generation_id = Path(str(output_file)).stem
+        if generation_id:
+            payload["generation_id"] = generation_id
+
+        if output_file:
+            try:
+                stage_results_file = self._write_stage_results_report(
+                    output_file=str(output_file),
+                    generation_id=generation_id,
+                    stage_results=stage_results,
+                )
+                state.stage_results_file = stage_results_file
+                payload["stage_results_file"] = stage_results_file
+            except Exception as exc:
+                payload.setdefault("warnings", []).append(
+                    f"生成阶段报告失败: {exc}"
+                )
+        return payload
+
+    @staticmethod
+    def _write_stage_results_report(
+        *,
+        output_file: str,
+        generation_id: Optional[str],
+        stage_results: list[dict[str, Any]],
+    ) -> str:
+        """Write a sidecar JSON file containing the observable pipeline trace."""
+        output_path = Path(output_file)
+        sidecar_path = output_path.with_suffix(".stage_results.json")
+        payload = {
+            "generation_id": generation_id or output_path.stem,
+            "output_file": str(output_path),
+            "stage_results": stage_results,
+        }
+        sidecar_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return str(sidecar_path)
+
+    def _stage_panel_resolution(
+        self,
+        stage: StageHandle,
+        state: _GenerationState,
+    ) -> None:
+        state.canonical_project_type = normalize_project_type(state.project_type)
+        state.project_name = self._normalize_project_name(
+            state.project_name,
+            state.canonical_project_type,
+        )
+        state.panel_registration = self._get_panel_registration(
+            state.canonical_project_type
+        )
+        state.panel_package = (
+            state.panel_registration.package
+            if state.panel_registration is not None
+            else None
+        )
+        stage.metrics.update(
+            {
+                "project_type": state.canonical_project_type,
+                "project_name": state.project_name,
+                "panel_id": (
+                    getattr(state.panel_package, "panel_id", None)
+                    if state.panel_package is not None
+                    else None
+                ),
+            }
+        )
+
+    def _stage_panel_package_validation(
+        self,
+        stage: StageHandle,
+        state: _GenerationState,
+        start_time: float,
+    ) -> Optional[dict]:
+        state.panel_package_validation = self._validate_panel_package_for_generation(
+            state.panel_package
+        )
+        if state.panel_package_validation:
+            stage.metrics.update(
+                {
+                    "status": state.panel_package_validation.get("status"),
+                    "issue_count": len(
+                        state.panel_package_validation.get("issues") or []
+                    ),
                 }
             )
+        else:
+            stage.skip(message="No panel package is registered for this request.")
+
+        if state.panel_package_validation and not state.panel_package_validation.get(
+            "ok"
+        ):
+            duration = time.time() - start_time
+            error_msg = self._format_panel_validation_failure(
+                state.canonical_project_type,
+                state.panel_package_validation,
+            )
+            stage.fail(
+                "PANEL_PACKAGE_VALIDATION_FAILED",
+                error_msg,
+                details={
+                    "project_type": state.canonical_project_type,
+                    "summary": state.panel_package_validation.get("summary"),
+                },
+            )
+            self.logger.error(
+                "Panel Package校验失败，阻断生成",
+                project_type=state.canonical_project_type,
+                errors=state.panel_package_validation.get("issues") or [],
+            )
+            return {
+                "success": False,
+                "output_file": None,
+                "duration": duration,
+                "errors": [error_msg],
+                "warnings": [],
+                "panel_package_validation": state.panel_package_validation,
+            }
+        return None
+
+    def _stage_excel_read(self, stage: StageHandle, state: _GenerationState) -> None:
+        if state.excel_data is None:
+            self.logger.log_event("excel_reading_started", file=state.excel_file)
+            state.excel_data = self.excel_reader.read(state.excel_file)
+            self.logger.log_event(
+                "excel_reading_completed",
+                file=state.excel_file,
+                single_values=len(state.excel_data.single_values),
+                tables=len(state.excel_data.table_data),
+            )
+            stage.metrics["source"] = "file"
+        else:
+            if state.excel_file and str(state.excel_file) != str(
+                state.excel_data.file_path
+            ):
+                self.logger.warning(
+                    "传入的excel_data与excel_file路径不一致，优先使用excel_data.file_path",
+                    excel_file=state.excel_file,
+                    excel_data_path=state.excel_data.file_path,
+                )
+                stage.warn(
+                    "EXCEL_PATH_MISMATCH",
+                    "excel_data.file_path differs from excel_file; reused excel_data.",
+                    details={
+                        "excel_file": str(state.excel_file),
+                        "excel_data_path": str(state.excel_data.file_path),
+                    },
+                )
+            self.logger.log_event(
+                "excel_reading_skipped",
+                file=state.excel_data.file_path,
+                single_values=len(state.excel_data.single_values),
+                tables=len(state.excel_data.table_data),
+            )
+            stage.metrics["source"] = "provided_excel_data"
+        stage.metrics.update(
+            {
+                "single_values": len(state.excel_data.single_values),
+                "tables": len(state.excel_data.table_data),
+            }
+        )
+
+    def _stage_field_resolution(
+        self,
+        stage: StageHandle,
+        state: _GenerationState,
+    ) -> None:
+        if state.excel_data is None:
+            raise RuntimeError("Excel data is unavailable before field resolution.")
+
+        self.logger.log_event("field_mapping_started")
+        state.report_data = self.field_mapper.map(state.excel_data)
+        self.logger.log_event(
+            "field_mapping_completed",
+            validation_errors=len(state.report_data.validation_errors),
+        )
+
+        self.logger.log_event("data_cleaning_started")
+        state.report_data = self.data_cleaner.validate_and_clean(state.report_data)
+        self.logger.log_event(
+            "data_cleaning_completed",
+            validation_errors=len(state.report_data.validation_errors),
+        )
+
+        if state.project_name and state.canonical_project_type:
+            cur_pn = state.report_data.get_field("project_name")
+            if cur_pn != state.project_name:
+                state.report_data.set_field("project_name", state.project_name)
+                self.logger.info(
+                    "项目检测结果覆盖project_name",
+                    old=cur_pn,
+                    new=state.project_name,
+                )
+
+        report_content = self.config_loader.get_setting("report_content", {}) or {}
+        state.report_content = report_content if isinstance(report_content, dict) else {}
+        if state.report_content:
+            state.report_data.set_field("report_content", state.report_content)
+        panel_style = self._load_panel_style_config(state.panel_package)
+        if panel_style:
+            state.report_data.set_field("panel_style", panel_style)
+        stage.metrics["validation_errors"] = len(state.report_data.validation_errors)
+
+    def _stage_panel_rule_execution(
+        self,
+        stage: StageHandle,
+        state: _GenerationState,
+    ) -> None:
+        if state.excel_data is None or state.report_data is None:
+            raise RuntimeError("Report data is unavailable before panel rule execution.")
+
+        gene_knowledge_provider = None
+        try:
+            kb_enabled = bool(
+                self.config_loader.get_setting(
+                    "knowledge_bases.gene_knowledge_db.enabled", False
+                )
+            ) or bool(
+                self.config_loader.get_setting(
+                    "knowledge_bases.gene_transcript_db.enabled", False
+                )
+            )
+            if kb_enabled:
+                from reportgen.knowledge import GeneKnowledgeProvider  # lazy import
+
+                kb_cfg = self.config_loader.get_setting("knowledge_bases", {}) or {}
+                provider_cfg = {
+                    "enabled": True,
+                    "gene_knowledge_db": kb_cfg.get("gene_knowledge_db", {}),
+                    "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
+                }
+                gene_knowledge_provider = GeneKnowledgeProvider(provider_cfg)
+        except Exception as kb_err:
+            gene_knowledge_provider = None
+            stage.warn("GENE_KNOWLEDGE_PROVIDER_UNAVAILABLE", str(kb_err))
+
+        self.logger.log_event(
+            "template_enhancement_started",
+            project_type=state.canonical_project_type,
+        )
+        enhancer = get_enhancer(state.canonical_project_type)
+        state.report_data = enhancer.enhance(
+            state.report_data,
+            state.excel_data,
+            field_mapper=self.field_mapper,
+            gene_knowledge_provider=gene_knowledge_provider,
+            base_path=str(Path(self.config_dir).parent),
+            project_type=state.canonical_project_type,
+            panel_package=state.panel_package,
+        )
+        self._apply_clinical_diagnosis_for_display(state.report_data)
+        self.logger.log_event(
+            "template_enhancement_completed",
+            variants=len(state.report_data.get_table("variants") or []),
+            summary_variants=len(state.report_data.get_table("summary_variants") or []),
+            undetected_genes=len(state.report_data.get_table("undetected_genes") or []),
+        )
+
+        consultation_phone = str(
+            state.report_content.get("consultation_phone", "") or ""
+        ).strip()
+        consultation_template = str(
+            state.report_content.get(
+                "consultation_line_template",
+                "咨询电话：{phone}。",
+            )
+            or ""
+        ).strip()
+        if consultation_phone and consultation_template:
+            try:
+                consultation_line = consultation_template.format(
+                    phone=consultation_phone
+                )
+            except Exception:
+                consultation_line = consultation_template
+            state.report_data.set_field("consultation_phone", consultation_phone)
+            state.report_data.set_field("consultation_line", consultation_line)
+        state.report_data.set_field(
+            "show_hla_table",
+            bool(state.report_content.get("show_hla_table", False)),
+        )
+
+        self._set_patient_salutation(state.report_data)
+        stage.metrics.update(
+            {
+                "variants": len(state.report_data.get_table("variants") or []),
+                "summary_variants": len(
+                    state.report_data.get_table("summary_variants") or []
+                ),
+                "undetected_genes": len(
+                    state.report_data.get_table("undetected_genes") or []
+                ),
+            }
+        )
+
+    def _stage_input_contract_validation(
+        self,
+        stage: StageHandle,
+        state: _GenerationState,
+        start_time: float,
+    ) -> Optional[dict]:
+        if state.report_data is None:
+            raise RuntimeError("Report data is unavailable before input validation.")
+
+        if not state.report_data.is_valid():
+            self.logger.warning(
+                "报告数据验证失败", errors=state.report_data.validation_errors
+            )
+            stage.warn(
+                "REPORT_DATA_VALIDATION_WARNINGS",
+                "Report data has validation warnings.",
+                details={"warnings": list(state.report_data.validation_errors)},
+            )
+
+        if state.strict_mode:
+            missing_critical = self._check_critical_fields(state.report_data)
+            if missing_critical:
+                duration = time.time() - start_time
+                error_msg = f"严格模式：缺失关键字段 {missing_critical}，阻断生成"
+                stage.fail(
+                    "STRICT_MODE_MISSING_CRITICAL_FIELDS",
+                    error_msg,
+                    details={"missing_fields": missing_critical},
+                )
+                self.logger.error(error_msg)
+                return {
+                    "success": False,
+                    "output_file": None,
+                    "duration": duration,
+                    "errors": [error_msg],
+                    "warnings": state.report_data.validation_errors,
+                    "panel_package_validation": state.panel_package_validation,
+                }
+
+            missing_important = self._check_important_fields(state.report_data)
+            if missing_important:
+                self.logger.warning(
+                    "严格模式：缺失重要字段（不阻断）",
+                    missing_fields=missing_important,
+                )
+                stage.warn(
+                    "STRICT_MODE_MISSING_IMPORTANT_FIELDS",
+                    "Important fields are missing but do not block generation.",
+                    details={"missing_fields": missing_important},
+                )
+
+        rd = state.report_data.get_field("report_date")
+        if rd is None or (isinstance(rd, str) and rd.strip() == ""):
+            self._mark_missing_report_date(state.report_data)
+            stage.warn(
+                "REPORT_DATE_MISSING",
+                "report_date is missing and was marked as 未填写.",
+            )
+        return None
+
+    def _stage_output_path(self, stage: StageHandle, state: _GenerationState) -> None:
+        if state.excel_data is None or state.report_data is None:
+            raise RuntimeError("Report data is unavailable before output path setup.")
+
+        if not state.output_filename:
+            state.output_filename = self._generate_output_filename(
+                state.excel_data,
+                state.report_data,
+            )
+
+        max_len = self.config_loader.get_setting("naming.max_filename_length", 200)
+        illegal_replace = self.config_loader.get_setting(
+            "naming.illegal_chars_replace", "_"
+        )
+        state.output_filename = safe_filename(
+            state.output_filename,
+            max_length=int(max_len),
+            replacement=str(illegal_replace),
+        )
+
+        ensure_directory_exists(state.output_dir)
+
+        overwrite_existing = bool(
+            self.config_loader.get_setting("generation.output.overwrite_existing", False)
+        )
+        if not overwrite_existing:
+            state.output_filename = get_unique_filename(
+                state.output_dir,
+                state.output_filename,
+            )
+
+        state.output_path = str(Path(state.output_dir) / state.output_filename)
+        state.generation_id = Path(state.output_path).stem
+        stage.artifacts["output_path"] = state.output_path
+        stage.artifacts["generation_id"] = state.generation_id
+        stage.metrics["overwrite_existing"] = overwrite_existing
+
+    def _stage_template_contract(
+        self,
+        stage: StageHandle,
+        state: _GenerationState,
+        start_time: float,
+    ) -> Optional[dict]:
+        if state.report_data is None:
+            raise RuntimeError("Report data is unavailable before template contract.")
+
+        state.template_context = self.template_renderer.build_context(state.report_data)
+        template_contract_spec = self._get_template_contract_spec(state.panel_package)
+
+        state.template_contract_mode = str(
+            state.template_contract_mode or "none"
+        ).lower()
+        if state.template_contract_mode not in {"none", "warn", "fail"}:
+            raise ValueError(
+                "template_contract_mode must be one of: none|warn|fail "
+                f"(got {state.template_contract_mode!r})"
+            )
+
+        state.template_contract_report = None
+        if state.template_contract_mode == "none":
+            stage.skip(message="Template contract validation is disabled.")
+            return None
+
+        state.template_contract_report = self.template_renderer.validate_template_contract(
+            state.template_file,
+            state.template_context,
+            contract_spec=template_contract_spec,
+        )
+        stage.metrics["ok"] = bool(state.template_contract_report.get("ok", False))
+        if state.template_contract_report.get("ok", False):
+            return None
+
+        missing_paths = state.template_contract_report.get("missing_paths")
+        missing_lists = state.template_contract_report.get("missing_lists")
+        missing_row_fields = state.template_contract_report.get("missing_row_fields")
+        declared_contract = state.template_contract_report.get("declared_contract") or {}
+        msg = (
+            "模板契约校验失败：模板引用或声明式结构不满足要求。"
+            f" missing_paths={missing_paths},"
+            f" missing_lists={missing_lists},"
+            f" missing_row_fields={missing_row_fields}"
+            f" declared_contract={declared_contract}"
+        )
+        details = {
+            "missing_paths": missing_paths,
+            "missing_lists": missing_lists,
+            "missing_row_fields": missing_row_fields,
+        }
+        if state.template_contract_mode == "fail":
+            duration = time.time() - start_time
+            stage.fail("TEMPLATE_CONTRACT_FAILED", msg, details=details)
+            self.logger.error(msg)
+            return {
+                "success": False,
+                "output_file": None,
+                "duration": duration,
+                "errors": [msg],
+                "warnings": state.report_data.validation_errors,
+                "panel_package_validation": state.panel_package_validation,
+                "template_contract": state.template_contract_report,
+                **({"context": state.template_context} if state.return_context else {}),
+            }
+
+        stage.warn("TEMPLATE_CONTRACT_WARN", msg, details=details)
+        self.logger.warning(msg)
+        return None
+
+    def _stage_template_render(self, stage: StageHandle, state: _GenerationState) -> None:
+        if state.report_data is None or state.output_path is None:
+            raise RuntimeError("Report data is unavailable before template rendering.")
+
+        self.logger.log_event("template_rendering_started", output=state.output_path)
+        state.final_output = self.template_renderer.render(
+            state.template_file,
+            state.report_data,
+            state.output_path,
+        )
+        state.processor_report = list(
+            getattr(self.template_renderer, "last_processor_report", []) or []
+        )
+        self.logger.log_event("template_rendering_completed", output=state.final_output)
+        stage.artifacts["output_file"] = state.final_output
+        stage.metrics["post_processors"] = len(state.processor_report)
+
+    def _stage_field_provenance(
+        self,
+        stage: StageHandle,
+        state: _GenerationState,
+    ) -> None:
+        if (
+            state.final_output is None
+            or state.report_data is None
+            or state.excel_data is None
+        ):
+            raise RuntimeError("Rendered report is unavailable before provenance.")
+
+        try:
+            state.field_provenance = build_field_provenance_report(
+                output_file=state.final_output,
+                report_data=state.report_data,
+                excel_data=state.excel_data,
+                config_loader=self.config_loader,
+                project_type=state.canonical_project_type,
+                project_name=state.project_name,
+                template_file=state.template_file,
+                generation_id=state.generation_id or Path(state.final_output).stem,
+            )
+            state.field_provenance_file = write_field_provenance_report(
+                state.field_provenance,
+                state.final_output,
+            )
+            self.logger.log_event(
+                "field_provenance_generated",
+                output=state.field_provenance_file,
+                field_count=len(state.field_provenance.get("fields") or {}),
+            )
+            stage.artifacts["field_provenance_file"] = state.field_provenance_file
+            stage.metrics["field_count"] = len(
+                state.field_provenance.get("fields") or {}
+            )
+        except Exception as provenance_err:
+            self.logger.warning("生成字段来源报告失败", error=str(provenance_err))
+            stage.warn("FIELD_PROVENANCE_FAILED", str(provenance_err))
+
+    def _stage_qa(self, stage: StageHandle, state: _GenerationState) -> None:
+        if state.final_output is None or state.report_data is None:
+            raise RuntimeError("Rendered report is unavailable before QA.")
+
+        try:
+            state.qa_report = build_docx_qa_report(
+                output_file=state.final_output,
+                report_data=state.report_data,
+                project_type=state.canonical_project_type,
+                project_name=state.project_name,
+                template_file=state.template_file,
+                generation_id=state.generation_id or Path(state.final_output).stem,
+                field_provenance=state.field_provenance,
+                field_provenance_file=state.field_provenance_file,
+                processor_report=state.processor_report,
+                template_contract=state.template_contract_report,
+            )
+            state.qa_report_file = write_docx_qa_report(
+                state.qa_report,
+                state.final_output,
+            )
+            self.logger.log_event(
+                "qa_report_generated",
+                output=state.qa_report_file,
+                status=state.qa_report.get("status"),
+                issue_count=len(state.qa_report.get("issues") or []),
+            )
+            stage.artifacts["qa_report_file"] = state.qa_report_file
+            stage.metrics.update(
+                {
+                    "qa_status": state.qa_report.get("status"),
+                    "issue_count": len(state.qa_report.get("issues") or []),
+                }
+            )
+            if state.qa_report.get("status") == "FAIL":
+                stage.fail(
+                    "QA_REPORT_FAILED",
+                    "Generated report QA status is FAIL.",
+                    details={
+                        "issue_count": len(state.qa_report.get("issues") or [])
+                    },
+                )
+            elif state.qa_report.get("status") == "WARN":
+                stage.warn(
+                    "QA_REPORT_WARN",
+                    "Generated report QA status is WARN.",
+                    details={
+                        "issue_count": len(state.qa_report.get("issues") or [])
+                    },
+                )
+        except Exception as qa_err:
+            self.logger.warning("生成QA报告失败", error=str(qa_err))
+            stage.warn("QA_REPORT_GENERATION_FAILED", str(qa_err))
+
+    def _build_success_payload(
+        self,
+        state: _GenerationState,
+        duration: float,
+    ) -> dict:
+        if state.report_data is None:
+            raise RuntimeError("Report data is unavailable when building result.")
+        return {
+            "success": True,
+            "output_file": state.final_output,
+            "duration": duration,
+            "errors": [],
+            "warnings": state.report_data.validation_errors,
+            "panel_package_validation": state.panel_package_validation,
+            "template_contract": state.template_contract_report,
+            "field_provenance": state.field_provenance,
+            "field_provenance_file": state.field_provenance_file,
+            "post_processors": state.processor_report,
+            "qa_report": state.qa_report,
+            "qa_report_file": state.qa_report_file,
+            "qa_status": state.qa_report.get("status") if state.qa_report else None,
+            "generation_id": state.generation_id,
+            **({"context": state.template_context} if state.return_context else {}),
+        }
 
     @staticmethod
     def _get_panel_registration(project_type: Optional[str]):

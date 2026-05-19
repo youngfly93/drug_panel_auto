@@ -37,6 +37,12 @@ def _field_provenance_sidecar_path(output_path: Optional[str]) -> Optional[Path]
     return Path(output_path).with_suffix(".field_provenance.json")
 
 
+def _stage_results_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    return Path(output_path).with_suffix(".stage_results.json")
+
+
 def _load_qa_summary(
     output_path: Optional[str],
 ) -> tuple[Optional[str], Optional[str], list[dict]]:
@@ -48,6 +54,23 @@ def _load_qa_summary(
     except Exception:
         return str(qa_path), None, []
     return str(qa_path), payload.get("status"), payload.get("issues") or []
+
+
+def _load_stage_results(
+    output_path: Optional[str],
+) -> tuple[Optional[str], Optional[str], list[dict]]:
+    stage_path = _stage_results_sidecar_path(output_path)
+    if not stage_path or not stage_path.exists():
+        return None, None, []
+    try:
+        payload = json.loads(stage_path.read_text(encoding="utf-8"))
+    except Exception:
+        return str(stage_path), None, []
+    return (
+        str(stage_path),
+        payload.get("generation_id"),
+        payload.get("stage_results") or [],
+    )
 
 
 def _visual_render_dir(output_path: Optional[str]) -> Optional[Path]:
@@ -195,7 +218,9 @@ def generate_report(
                 qa_status=result.get("qa_status"),
                 qa_issues=(result.get("qa_report") or {}).get("issues") or [],
                 panel_package_validation=result.get("panel_package_validation"),
+                generation_id=result.get("generation_id"),
                 stage_results=result.get("stage_results") or [],
+                stage_results_file=result.get("stage_results_file"),
                 diff_status=diff_summary.get("diff_status"),
                 diff_gate_passed=diff_summary.get("diff_gate_passed"),
                 diff_reference_id=diff_summary.get("diff_reference_id"),
@@ -229,6 +254,9 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="任务不存在")
     field_provenance_path = _field_provenance_sidecar_path(task.output_path)
     qa_report_file, qa_status, _qa_issues = _load_qa_summary(task.output_path)
+    stage_results_file, generation_id, stage_results = _load_stage_results(
+        task.output_path
+    )
     diff_summary = diff_svc.report_diff_summary(task.output_path)
 
     return ApiResponse(
@@ -246,6 +274,9 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             else None,
             qa_report_file=qa_report_file,
             qa_status=qa_status,
+            generation_id=generation_id,
+            stage_results_file=stage_results_file,
+            stage_results=stage_results,
             diff_report_file=diff_summary.get("diff_report_file"),
             diff_markdown_file=diff_summary.get("diff_markdown_file"),
             diff_status=diff_summary.get("diff_status"),
@@ -289,6 +320,24 @@ def get_field_provenance(task_id: str, db: Session = Depends(get_db)):
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"字段来源报告读取失败: {exc}") from exc
+    return ApiResponse(data=payload)
+
+
+@router.get("/{task_id}/stage-results", response_model=ApiResponse[dict])
+def get_stage_results(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    stage_path = _stage_results_sidecar_path(task.output_path)
+    if not stage_path or not stage_path.exists():
+        raise HTTPException(status_code=404, detail="生成阶段报告不存在")
+    try:
+        payload = json.loads(stage_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"生成阶段报告读取失败: {exc}",
+        ) from exc
     return ApiResponse(data=payload)
 
 

@@ -17,6 +17,9 @@ export interface GenerateResult {
   qa_report_file?: string | null
   qa_status?: string | null
   qa_issues?: Array<Record<string, any>>
+  generation_id?: string | null
+  stage_results?: Array<Record<string, any>>
+  stage_results_file?: string | null
   diff_status?: string | null
   diff_gate_passed?: boolean | null
   diff_reference_id?: string | null
@@ -39,6 +42,9 @@ export interface TaskStatus {
   field_provenance_file?: string | null
   qa_report_file?: string | null
   qa_status?: string | null
+  generation_id?: string | null
+  stage_results_file?: string | null
+  stage_results?: Array<Record<string, any>>
   diff_report_file?: string | null
   diff_markdown_file?: string | null
   diff_status?: string | null
@@ -134,6 +140,11 @@ export const reportApi = {
 
   async getFieldProvenance(taskId: string): Promise<Record<string, any>> {
     const { data } = await client.get(`/reports/${taskId}/field-provenance`)
+    return data.data
+  },
+
+  async getStageResults(taskId: string): Promise<Record<string, any>> {
+    const { data } = await client.get(`/reports/${taskId}/stage-results`)
     return data.data
   },
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from reportgen.core.pipeline.context import GenerationContext
 from reportgen.core.pipeline.result import StageResult
@@ -96,3 +96,13 @@ class GenerationPipeline:
     def to_list(self) -> List[Dict[str, Any]]:
         return [result.to_dict() for result in self._stage_results]
 
+    def run_step(
+        self,
+        name: str,
+        func: Callable[..., Any],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        """Run one named stage and record its result."""
+        with self.stage(name) as stage:
+            return func(stage, *args, **kwargs)
