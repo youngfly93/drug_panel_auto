@@ -2,8 +2,8 @@
 
 # Install all dependencies
 install:
+	pip install -r requirements.txt
 	cd backend && pip install -e ".[dev]"
-	cd ../基因组panel自动化系统 && pip install -e .
 	cd frontend && npm install
 
 # Development: run backend + frontend in parallel
