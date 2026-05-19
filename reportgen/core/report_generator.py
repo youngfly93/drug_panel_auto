@@ -275,13 +275,16 @@ class ReportGenerator:
         generation_id = payload.get("generation_id") or state.generation_id
         if not generation_id and output_file:
             generation_id = Path(str(output_file)).stem
+        if not generation_id:
+            generation_id = "generation"
         if generation_id:
             payload["generation_id"] = generation_id
 
-        if output_file:
+        if output_file or state.output_dir:
             try:
                 stage_results_file = self._write_stage_results_report(
-                    output_file=str(output_file),
+                    output_file=str(output_file) if output_file else None,
+                    output_dir=state.output_dir,
                     generation_id=generation_id,
                     stage_results=stage_results,
                 )
@@ -296,18 +299,25 @@ class ReportGenerator:
     @staticmethod
     def _write_stage_results_report(
         *,
-        output_file: str,
+        output_file: Optional[str],
+        output_dir: Optional[str],
         generation_id: Optional[str],
         stage_results: list[dict[str, Any]],
     ) -> str:
         """Write a sidecar JSON file containing the observable pipeline trace."""
-        output_path = Path(output_file)
-        sidecar_path = output_path.with_suffix(".stage_results.json")
+        output_path = Path(output_file) if output_file else None
+        if output_path:
+            sidecar_path = output_path.with_suffix(".stage_results.json")
+        elif output_dir:
+            sidecar_path = Path(output_dir) / "generation.stage_results.json"
+        else:
+            raise ValueError("output_file or output_dir is required")
         payload = {
-            "generation_id": generation_id or output_path.stem,
-            "output_file": str(output_path),
+            "generation_id": generation_id or (output_path.stem if output_path else "generation"),
+            "output_file": str(output_path) if output_path else None,
             "stage_results": stage_results,
         }
+        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
         sidecar_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",

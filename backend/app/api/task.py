@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.task import Task
 from app.schemas.common import ApiResponse
@@ -27,6 +28,10 @@ def _stage_results_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
     return Path(output_path).with_suffix(".stage_results.json")
 
 
+def _fallback_stage_results_sidecar_path(task_id: str) -> Path:
+    return settings.report_dir / task_id / "generation.stage_results.json"
+
+
 def _load_qa_summary(output_path: Optional[str]) -> tuple[str | None, str | None]:
     qa_path = _qa_sidecar_path(output_path)
     if not qa_path or not qa_path.exists():
@@ -40,8 +45,11 @@ def _load_qa_summary(output_path: Optional[str]) -> tuple[str | None, str | None
 
 def _load_stage_results_summary(
     output_path: Optional[str],
+    task_id: Optional[str] = None,
 ) -> tuple[str | None, str | None]:
     stage_path = _stage_results_sidecar_path(output_path)
+    if (not stage_path or not stage_path.exists()) and task_id:
+        stage_path = _fallback_stage_results_sidecar_path(task_id)
     if not stage_path or not stage_path.exists():
         return None, None
     try:
@@ -71,7 +79,10 @@ def list_tasks(
     items = []
     for t in tasks:
         qa_report_file, qa_status = _load_qa_summary(t.output_path)
-        stage_results_file, generation_id = _load_stage_results_summary(t.output_path)
+        stage_results_file, generation_id = _load_stage_results_summary(
+            t.output_path,
+            task_id=t.id,
+        )
         diff_summary = diff_svc.report_diff_summary(t.output_path)
         items.append({
             "id": t.id,
@@ -122,7 +133,10 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     qa_report_file, qa_status = _load_qa_summary(task.output_path)
-    stage_results_file, generation_id = _load_stage_results_summary(task.output_path)
+    stage_results_file, generation_id = _load_stage_results_summary(
+        task.output_path,
+        task_id=task.id,
+    )
     diff_summary = diff_svc.report_diff_summary(task.output_path)
 
     return ApiResponse(data={

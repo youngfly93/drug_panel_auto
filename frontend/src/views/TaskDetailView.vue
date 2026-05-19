@@ -116,6 +116,76 @@
 
       <section class="qa-panel section-gap">
         <div class="panel-title">
+          <span>生成阶段</span>
+          <div class="stage-title-meta">
+            <el-tag size="small" type="info">{{ task?.generation_id || stageReport?.generation_id || '-' }}</el-tag>
+            <el-tag size="small" :type="stageRows.length ? 'success' : 'info'">
+              {{ stageRows.length ? `${stageRows.length} 步` : '未记录' }}
+            </el-tag>
+          </div>
+        </div>
+        <el-alert
+          v-if="stageLoadError"
+          :title="stageLoadError"
+          type="info"
+          show-icon
+          :closable="false"
+          class="stage-alert"
+        />
+        <div v-if="stageRows.length" class="stage-summary">
+          <div v-for="item in stageStatusCards" :key="item.label" class="stage-summary-item">
+            <span>{{ item.label }}</span>
+            <strong :class="item.className">{{ item.value }}</strong>
+          </div>
+        </div>
+        <el-table
+          v-if="stageRows.length"
+          :data="stageRows"
+          size="small"
+          border
+          class="stage-table"
+        >
+          <el-table-column label="阶段" min-width="190" show-overflow-tooltip>
+            <template #default="{ row }">
+              <div class="stage-name">
+                <strong>{{ row.label }}</strong>
+                <span>{{ row.name }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="105">
+            <template #default="{ row }">
+              <el-tag size="small" :type="qaTagType(row.status)">
+                {{ row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="耗时" width="110">
+            <template #default="{ row }">
+              {{ formatDurationMs(row.duration_ms) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="摘要" min-width="260" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ stageSummary(row) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="问题" min-width="300" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ stageIssueSummary(row) }}
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-else description="未找到生成阶段记录" :image-size="70" />
+        <el-collapse v-if="stageRows.length" class="debug-collapse">
+          <el-collapse-item title="生成阶段 JSON" name="stage-json">
+            <pre>{{ stageDebugText }}</pre>
+          </el-collapse-item>
+        </el-collapse>
+      </section>
+
+      <section class="qa-panel section-gap">
+        <div class="panel-title">
           <span>报告对比</span>
           <el-tag size="small" :type="diffGateTagType">
             {{ reportDiff?.status || task?.diff_status || '未运行' }}
@@ -348,6 +418,7 @@ const autoDiffing = ref(false)
 const task = ref<TaskStatus | null>(null)
 const qaReport = ref<Record<string, any> | null>(null)
 const provenance = ref<Record<string, any> | null>(null)
+const stageReport = ref<Record<string, any> | null>(null)
 const visualRender = ref<VisualRenderResult | null>(null)
 const reportDiff = ref<ReportDiffResult | null>(null)
 const referenceFile = ref<File | null>(null)
@@ -355,9 +426,34 @@ const referenceFileList = ref<any[]>([])
 const diffFailOn = ref<'fail' | 'warn'>('fail')
 const qaLoadError = ref('')
 const provenanceLoadError = ref('')
+const stageLoadError = ref('')
 
 const issueRows = computed(() => qaReport.value?.issues || [])
 const processorRows = computed(() => qaReport.value?.post_processors || [])
+const stageRows = computed(() => {
+  const rows = stageReport.value?.stage_results || task.value?.stage_results || []
+  return rows.map((row: Record<string, any>) => ({
+    ...row,
+    label: stageLabel(row.name),
+  }))
+})
+
+const stageStatusCards = computed(() => {
+  const counts = stageRows.value.reduce(
+    (acc: Record<string, number>, row: Record<string, any>) => {
+      const key = String(row.status || 'UNKNOWN')
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    },
+    {},
+  )
+  return [
+    { label: 'PASS', value: String(counts.PASS || 0), className: 'ok-text' },
+    { label: 'WARN', value: String(counts.WARN || 0), className: counts.WARN ? 'warn-text' : '' },
+    { label: 'FAIL', value: String(counts.FAIL || 0), className: counts.FAIL ? 'bad-text' : '' },
+    { label: 'SKIPPED', value: String(counts.SKIPPED || 0) },
+  ]
+})
 
 const checkRows = computed(() => {
   const checks = qaReport.value?.checks || {}
@@ -467,6 +563,17 @@ const renderDebugText = computed(() => {
   )
 })
 
+const stageDebugText = computed(() => {
+  return JSON.stringify(
+    stageReport.value || {
+      generation_id: task.value?.generation_id,
+      stage_results: task.value?.stage_results || [],
+    },
+    null,
+    2,
+  )
+})
+
 function summarizeCheck(item: Record<string, any>) {
   const entries = Object.entries(item)
     .filter(([key]) => key !== 'status')
@@ -484,6 +591,53 @@ function stringifyValue(value: unknown) {
 function formatSimilarity(value?: number | null) {
   if (value === null || value === undefined) return '-'
   return `${(value * 100).toFixed(2)}%`
+}
+
+function formatDurationMs(value?: number | null) {
+  if (value === null || value === undefined) return '-'
+  if (value >= 1000) return `${(value / 1000).toFixed(2)}s`
+  return `${Number(value).toFixed(1)}ms`
+}
+
+function stageLabel(name?: string) {
+  const map: Record<string, string> = {
+    PanelResolutionStage: '识别检测项目',
+    PanelPackageValidationStage: '校验 Panel 包',
+    ExcelReadStage: '读取 Excel',
+    FieldResolutionStage: '解析字段',
+    PanelRuleExecutionStage: '执行 Panel 规则',
+    InputContractValidationStage: '校验输入契约',
+    OutputPathStage: '准备输出文件',
+    TemplateContractStage: '校验模板契约',
+    TemplateRenderStage: '渲染 Word 报告',
+    FieldProvenanceStage: '生成字段来源',
+    QAStage: '报告质量检查',
+  }
+  return map[name || ''] || name || '-'
+}
+
+function stageSummary(row: Record<string, any>) {
+  const metrics = row.metrics || {}
+  const artifacts = row.artifacts || {}
+  const parts: string[] = []
+  if (metrics.project_type) parts.push(`项目 ${metrics.project_type}`)
+  if (metrics.single_values !== undefined) parts.push(`单值 ${metrics.single_values}`)
+  if (metrics.tables !== undefined) parts.push(`表 ${metrics.tables}`)
+  if (metrics.variants !== undefined) parts.push(`变异 ${metrics.variants}`)
+  if (metrics.qa_status) parts.push(`QA ${metrics.qa_status}`)
+  if (metrics.issue_count !== undefined) parts.push(`问题 ${metrics.issue_count}`)
+  if (artifacts.output_file) parts.push('已生成报告')
+  if (artifacts.qa_report_file) parts.push('已生成 QA')
+  if (artifacts.field_provenance_file) parts.push('已生成字段来源')
+  return parts.join('；') || '-'
+}
+
+function stageIssueSummary(row: Record<string, any>) {
+  const issues = row.issues || []
+  if (!issues.length) return '-'
+  return issues
+    .map((item: Record<string, any>) => `${item.code || item.level}: ${item.message || '-'}`)
+    .join('；')
 }
 
 function statusTagType(status: string) {
@@ -514,6 +668,7 @@ function qaTagType(status?: string | null) {
     WARN: 'warning',
     FAIL: 'danger',
     SKIP: 'info',
+    SKIPPED: 'info',
   }
   return status ? map[status] || 'info' : 'info'
 }
@@ -522,8 +677,15 @@ async function fetchAll() {
   loading.value = true
   qaLoadError.value = ''
   provenanceLoadError.value = ''
+  stageLoadError.value = ''
   try {
     task.value = await reportApi.getTaskStatus(taskId)
+    stageReport.value = task.value?.stage_results?.length
+      ? {
+          generation_id: task.value.generation_id,
+          stage_results: task.value.stage_results,
+        }
+      : null
     try {
       reportDiff.value = await reportApi.getReportDiff(taskId)
     } catch {
@@ -540,6 +702,14 @@ async function fetchAll() {
     } catch (err: any) {
       provenance.value = null
       provenanceLoadError.value = err.response?.data?.detail || '字段来源报告尚未生成'
+    }
+    try {
+      stageReport.value = await reportApi.getStageResults(taskId)
+    } catch (err: any) {
+      if (!stageRows.value.length) {
+        stageReport.value = null
+        stageLoadError.value = err.response?.data?.detail || '生成阶段报告尚未生成'
+      }
     }
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || '任务详情加载失败')
@@ -725,6 +895,10 @@ onMounted(fetchAll)
   color: #b42318;
 }
 
+.warn-text {
+  color: #b54708;
+}
+
 .diff-table {
   margin-top: 0;
 }
@@ -805,6 +979,67 @@ onMounted(fetchAll)
   font-weight: 650;
 }
 
+.stage-title-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stage-alert {
+  margin: 14px;
+}
+
+.stage-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  border-bottom: 1px solid #e6edf3;
+}
+
+.stage-summary-item {
+  min-height: 58px;
+  padding: 10px 14px;
+  border-right: 1px solid #e6edf3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.stage-summary-item:last-child {
+  border-right: 0;
+}
+
+.stage-summary-item span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.stage-summary-item strong {
+  font-size: 18px;
+}
+
+.stage-table {
+  margin-top: 0;
+}
+
+.stage-name {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.stage-name strong {
+  font-weight: 650;
+}
+
+.stage-name span {
+  color: #667085;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
 .issues-panel,
 .render-panel {
   min-height: 240px;
@@ -851,6 +1086,10 @@ pre {
     grid-template-columns: 1fr;
   }
 
+  .stage-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .summary-item {
     border-right: 0;
     border-bottom: 1px solid #d9e2ec;
@@ -867,6 +1106,10 @@ pre {
 
   .metric-box:last-child {
     border-bottom: 0;
+  }
+
+  .stage-summary-item {
+    border-bottom: 1px solid #e6edf3;
   }
 
   .page-head {

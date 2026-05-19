@@ -927,6 +927,10 @@ def test_report_generator_blocks_invalid_panel_package_before_excel_read(
 
     assert result["success"] is False
     assert "Panel Package校验失败" in result["errors"][0]
+    assert result["generation_id"] == "generation"
+    failure_stage_file = Path(result["stage_results_file"])
+    assert failure_stage_file.name == "generation.stage_results.json"
+    assert failure_stage_file.exists()
     stage_names = [stage["name"] for stage in result["stage_results"]]
     assert stage_names == ["PanelResolutionStage", "PanelPackageValidationStage"]
     assert result["stage_results"][-1]["status"] == "FAIL"

@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from reportgen.utils.docx_render import render_docx_to_pngs
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_bridge
 from app.models.task import Task
@@ -43,6 +44,10 @@ def _stage_results_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
     return Path(output_path).with_suffix(".stage_results.json")
 
 
+def _fallback_stage_results_sidecar_path(task_id: str) -> Path:
+    return settings.report_dir / task_id / "generation.stage_results.json"
+
+
 def _load_qa_summary(
     output_path: Optional[str],
 ) -> tuple[Optional[str], Optional[str], list[dict]]:
@@ -58,8 +63,11 @@ def _load_qa_summary(
 
 def _load_stage_results(
     output_path: Optional[str],
+    task_id: Optional[str] = None,
 ) -> tuple[Optional[str], Optional[str], list[dict]]:
     stage_path = _stage_results_sidecar_path(output_path)
+    if (not stage_path or not stage_path.exists()) and task_id:
+        stage_path = _fallback_stage_results_sidecar_path(task_id)
     if not stage_path or not stage_path.exists():
         return None, None, []
     try:
@@ -255,7 +263,8 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
     field_provenance_path = _field_provenance_sidecar_path(task.output_path)
     qa_report_file, qa_status, _qa_issues = _load_qa_summary(task.output_path)
     stage_results_file, generation_id, stage_results = _load_stage_results(
-        task.output_path
+        task.output_path,
+        task_id=task.id,
     )
     diff_summary = diff_svc.report_diff_summary(task.output_path)
 
@@ -329,6 +338,8 @@ def get_stage_results(task_id: str, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     stage_path = _stage_results_sidecar_path(task.output_path)
+    if not stage_path or not stage_path.exists():
+        stage_path = _fallback_stage_results_sidecar_path(task.id)
     if not stage_path or not stage_path.exists():
         raise HTTPException(status_code=404, detail="生成阶段报告不存在")
     try:
