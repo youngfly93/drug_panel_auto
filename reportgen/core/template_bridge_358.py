@@ -201,6 +201,45 @@ _DEFAULT_PANEL_DISPLAY_GENES = [
     {"name": "TP53", "transcript": "NM_000546.6", "chromosome": "17"},
 ]
 
+_DEFAULT_NCCN_RESULT_ROWS = [
+    {"key": "EGFR_EX18", "genes": ["EGFR"], "match": "外显子18"},
+    {"key": "EGFR_EX19", "genes": ["EGFR"], "match": "外显子19"},
+    {"key": "EGFR_EX20", "genes": ["EGFR"], "match": "外显子20"},
+    {"key": "EGFR_EX21", "genes": ["EGFR"], "match": "外显子21"},
+    {"key": "KRAS_EX2", "genes": ["KRAS"], "match": "外显子2"},
+    {"key": "KRAS_EX3", "genes": ["KRAS"], "match": "外显子3"},
+    {"key": "KRAS_EX4", "genes": ["KRAS"], "match": "外显子4"},
+    {"key": "ALK_FUSION", "genes": ["ALK"], "match": "融合"},
+    {"key": "ROS1_FUSION", "genes": ["ROS1"], "match": "融合"},
+    {"key": "RET_FUSION", "genes": ["RET"], "match": "融合"},
+    {"key": "ERBB2_MUT", "genes": ["ERBB2"], "match": "突变"},
+    {"key": "ERBB2_AMP", "genes": ["ERBB2"], "match": "扩增"},
+    {"key": "PIK3CA_EX10", "genes": ["PIK3CA"], "match": "外显子10"},
+    {"key": "PIK3CA_EX21", "genes": ["PIK3CA"], "match": "外显子21"},
+    {"key": "MET_EX14SKIP", "genes": ["MET"], "match": "外显子14跳跃"},
+    {"key": "MET_AMP", "genes": ["MET"], "match": "扩增"},
+    {"key": "NRAS_EX2", "genes": ["NRAS"], "match": "外显子2"},
+    {"key": "NRAS_EX3", "genes": ["NRAS"], "match": "外显子3"},
+    {"key": "NRAS_EX4", "genes": ["NRAS"], "match": "外显子4"},
+    {"key": "BRAF_V600", "genes": ["BRAF"], "match": "密码子600"},
+    {"key": "FGFR123_MUT", "genes": ["FGFR1", "FGFR2", "FGFR3"], "match": "突变"},
+    {
+        "key": "FGFR123_FUSION",
+        "genes": ["FGFR1", "FGFR2", "FGFR3"],
+        "match": "融合",
+    },
+    {"key": "NTRK123_FUSION", "genes": ["NTRK1", "NTRK2", "NTRK3"], "match": "融合"},
+    {"key": "KIT_EX9", "genes": ["KIT"], "match": "外显子9"},
+    {"key": "KIT_EX11", "genes": ["KIT"], "match": "外显子11"},
+    {"key": "KIT_EX13", "genes": ["KIT"], "match": "外显子13"},
+    {"key": "KIT_EX17", "genes": ["KIT"], "match": "外显子17"},
+    {"key": "PDGFRA_EX12", "genes": ["PDGFRA"], "match": "外显子12"},
+    {"key": "PDGFRA_EX14", "genes": ["PDGFRA"], "match": "外显子14"},
+    {"key": "PDGFRA_EX18", "genes": ["PDGFRA"], "match": "外显子18"},
+    {"key": "BRCA12_MUT", "genes": ["BRCA1", "BRCA2"], "match": "突变"},
+    {"key": "IDH12_MUT", "genes": ["IDH1", "IDH2"], "match": "突变"},
+]
+
 # ---------------------------------------------------------------------------
 # PanelConfig: immutable, instance-based gene classification container
 # ---------------------------------------------------------------------------
@@ -236,6 +275,9 @@ class PanelConfig:
     )
     reviewed_variant_overrides: List[Dict[str, Any]] = field(default_factory=list)
     approved_drug_rows: List[Dict[str, str]] = field(default_factory=list)
+    nccn_result_rows: List[Dict[str, Any]] = field(
+        default_factory=lambda: [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS]
+    )
 
     @property
     def all_immune_genes(self) -> Set[str]:
@@ -278,6 +320,90 @@ def _resolve_config_path(
         if p.exists() and p.is_file():
             return p.resolve()
     return None
+
+
+def _resolve_guideline_tables_path(
+    base_path: Optional[str] = None,
+    *,
+    panel_id: Optional[str] = None,
+    config_path: Optional[Path] = None,
+) -> Optional[Path]:
+    """Find the guideline table rule file next to a panel package."""
+    candidates: List[Path] = []
+    if config_path is not None:
+        candidates.append(config_path.parent / "guideline_tables.yaml")
+
+    panel_ids = [str(panel_id or "").strip()]
+    if "crc_358_msi" not in panel_ids:
+        panel_ids.append("crc_358_msi")
+
+    if base_path:
+        bp = Path(str(base_path)).expanduser().resolve()
+        for pid in panel_ids:
+            if pid:
+                candidates.append(bp / "panels" / pid / "rules" / "guideline_tables.yaml")
+
+    project_root = Path(__file__).resolve().parents[2]
+    for pid in panel_ids:
+        if pid:
+            candidates.append(project_root / "panels" / pid / "rules" / "guideline_tables.yaml")
+            candidates.append(Path("panels") / pid / "rules" / "guideline_tables.yaml")
+
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return path.resolve()
+    return None
+
+
+def _load_guideline_tables_rule(
+    *,
+    base_path: Optional[str],
+    panel_id: Optional[str],
+    config_path: Optional[Path],
+) -> Dict[str, Any]:
+    path = _resolve_guideline_tables_path(
+        base_path,
+        panel_id=panel_id,
+        config_path=config_path,
+    )
+    if path is None:
+        return {}
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _normalize_nccn_result_rows(raw: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return []
+    tables = raw.get("guideline_tables")
+    if not isinstance(tables, dict):
+        return []
+    nccn = tables.get("nccn_results")
+    if not isinstance(nccn, dict):
+        return []
+    rows = nccn.get("rows")
+    if not isinstance(rows, list):
+        return []
+
+    normalized: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("key") or "").strip()
+        genes = row.get("genes")
+        match = str(row.get("match") or row.get("exon_filter") or "").strip()
+        if isinstance(genes, str):
+            genes = [genes]
+        if not key or not isinstance(genes, list):
+            continue
+        clean_genes = [str(g).strip().upper() for g in genes if str(g).strip()]
+        if not clean_genes:
+            continue
+        normalized.append({"key": key, "genes": clean_genes, "match": match})
+    return normalized
 
 
 def load_panel_config(
@@ -343,6 +469,13 @@ def load_panel_config(
             return []
         return [dict(row) for row in value if isinstance(row, dict)]
 
+    guideline_rule = _load_guideline_tables_rule(
+        base_path=base_path,
+        panel_id=panel_id,
+        config_path=cfg_path,
+    )
+    nccn_rows = _normalize_nccn_result_rows(guideline_rule)
+
     pc = PanelConfig(
         class_i_genes=as_gene_set("class_i_genes", set(_DEFAULT_CLASS_I_GENES)),
         class_ii_genes=as_gene_set("class_ii_genes", set(_DEFAULT_CLASS_II_GENES)),
@@ -354,6 +487,7 @@ def load_panel_config(
         ),
         reviewed_variant_overrides=as_dict_list("reviewed_variant_overrides"),
         approved_drug_rows=as_dict_list("crc_approved_drugs"),
+        nccn_result_rows=nccn_rows or [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS],
     )
     if panel_display is not None:
         pc.panel_display_genes = panel_display
@@ -1080,27 +1214,8 @@ def _build_nccn_and_immune_fields(
     逻辑：遍历 all_variants，按基因+外显子/检测内容匹配，
     检出时填入 cHGVS，pHGVS；未检出时填"未检出"/"未检出有害变异"。
     """
-    nccn_map = {
-        "EGFR_EX18": ("EGFR", "外显子18"), "EGFR_EX19": ("EGFR", "外显子19"),
-        "EGFR_EX20": ("EGFR", "外显子20"), "EGFR_EX21": ("EGFR", "外显子21"),
-        "KRAS_EX2": ("KRAS", "外显子2"), "KRAS_EX3": ("KRAS", "外显子3"),
-        "KRAS_EX4": ("KRAS", "外显子4"),
-        "ALK_FUSION": ("ALK", "融合"), "ROS1_FUSION": ("ROS1", "融合"),
-        "RET_FUSION": ("RET", "融合"),
-        "ERBB2_MUT": ("ERBB2", "突变"), "ERBB2_AMP": ("ERBB2", "扩增"),
-        "PIK3CA_EX10": ("PIK3CA", "外显子10"), "PIK3CA_EX21": ("PIK3CA", "外显子21"),
-        "MET_EX14SKIP": ("MET", "外显子14跳跃"), "MET_AMP": ("MET", "扩增"),
-        "NRAS_EX2": ("NRAS", "外显子2"), "NRAS_EX3": ("NRAS", "外显子3"),
-        "NRAS_EX4": ("NRAS", "外显子4"),
-        "BRAF_V600": ("BRAF", "密码子600"),
-        "FGFR123_MUT": ("FGFR1", "突变"), "FGFR123_FUSION": ("FGFR1", "融合"),
-        "NTRK123_FUSION": ("NTRK1", "融合"),
-        "KIT_EX9": ("KIT", "外显子9"), "KIT_EX11": ("KIT", "外显子11"),
-        "KIT_EX13": ("KIT", "外显子13"), "KIT_EX17": ("KIT", "外显子17"),
-        "PDGFRA_EX12": ("PDGFRA", "外显子12"), "PDGFRA_EX14": ("PDGFRA", "外显子14"),
-        "PDGFRA_EX18": ("PDGFRA", "外显子18"),
-        "BRCA12_MUT": ("BRCA1", "突变"), "IDH12_MUT": ("IDH1", "突变"),
-    }
+    pc = panel_config or PanelConfig()
+    nccn_rows = pc.nccn_result_rows or [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS]
     imm_pos_keys = [
         "MLH1", "MSH2", "MSH6", "PMS2", "POLE", "POLD1",
         "CD274", "PDCD1LG2", "PBRM1", "KRAS", "KRAS_TP53",
@@ -1117,8 +1232,10 @@ def _build_nccn_and_immune_fields(
     ]
 
     # 先打固定默认值，避免 2.3/3.3 因任何解析缺口出现空白单元格。
-    for key in nccn_map:
-        report_data.set_field(f"nccn_{key}", "未检出")
+    for row in nccn_rows:
+        key = str(row.get("key") or "").strip()
+        if key:
+            report_data.set_field(f"nccn_{key}", "未检出")
     for key in imm_pos_keys:
         report_data.set_field(f"imm_pos_{key}", "未检出有害变异")
     for key in imm_neg_keys:
@@ -1283,25 +1400,16 @@ def _build_nccn_and_immune_fields(
         return default
 
     # ===== T[5] NCCN 检测基因表 =====
-    for key, (gene, exon_filter) in nccn_map.items():
-        # FGFR1/2/3 和 NTRK1/2/3 需要合并多个基因
-        if key == "FGFR123_MUT":
-            results = [_format_result(g, "突变") for g in ("FGFR1", "FGFR2", "FGFR3")]
-            val = _first_detected(results, "未检出")
-        elif key == "FGFR123_FUSION":
-            results = [_format_result(g, "融合") for g in ("FGFR1", "FGFR2", "FGFR3")]
-            val = _first_detected(results, "未检出")
-        elif key == "NTRK123_FUSION":
-            results = [_format_result(g, "融合") for g in ("NTRK1", "NTRK2", "NTRK3")]
-            val = _first_detected(results, "未检出")
-        elif key == "BRCA12_MUT":
-            results = [_format_result(g, "突变") for g in ("BRCA1", "BRCA2")]
-            val = _first_detected(results, "未检出")
-        elif key == "IDH12_MUT":
-            results = [_format_result(g, "突变") for g in ("IDH1", "IDH2")]
-            val = _first_detected(results, "未检出")
-        else:
-            val = _format_result(gene, exon_filter)
+    for row in nccn_rows:
+        key = str(row.get("key") or "").strip()
+        genes = row.get("genes") or []
+        match = str(row.get("match") or "").strip()
+        if not key:
+            continue
+        if isinstance(genes, str):
+            genes = [genes]
+        results = [_format_result(str(g), match) for g in genes if str(g).strip()]
+        val = _first_detected(results, "未检出")
         report_data.set_field(f"nccn_{key}", val)
 
     # ===== T[6] 免疫正相关基因 =====

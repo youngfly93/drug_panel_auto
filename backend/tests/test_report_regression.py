@@ -48,6 +48,8 @@ from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.report_generator import ReportGenerator
 from reportgen.core.report_diff import ReportDiffOptions, compare_reports
 from reportgen.core.template_bridge_358 import (
+    PanelConfig,
+    _build_nccn_and_immune_fields,
     build_targeted_drug_brand_summary,
     build_tmb_summary,
     build_variants_for_template,
@@ -223,6 +225,63 @@ def test_nccn_mutation_rows_do_not_include_cnv_or_fusion(tmp_path):
     assert report_data.get_field("nccn_FGFR123_MUT") == "未检出"
     assert report_data.get_field("nccn_FGFR123_FUSION") == "融合:BICC1-FGFR2"
     assert report_data.get_field("imm_hyper_EGFR_AMP") == "CNV:扩增"
+
+
+def test_nccn_result_rows_are_driven_by_guideline_rules(tmp_path):
+    excel_data = _excel(
+        tmp_path,
+        variations=[
+            {
+                "Gene_Symbol": "EGFR",
+                "Transcript": "NM_005228.5",
+                "Chr": "7",
+                "ExIn_ID": "EX21",
+                "cHGVS": "c.2573T>G",
+                "pHGVS_S": "p.L858R",
+                "ExistIn552": "Ⅱ类",
+            }
+        ],
+    )
+    report_data = ReportData()
+    panel_config = PanelConfig(
+        nccn_result_rows=[
+            {
+                "key": "CUSTOM_EGFR_EX21",
+                "genes": ["EGFR"],
+                "match": "外显子21",
+            }
+        ]
+    )
+
+    _build_nccn_and_immune_fields(
+        report_data,
+        [
+            {
+                "gene": "EGFR",
+                "cHGVS": "c.2573T>G",
+                "pHGVS": "p.L858R",
+                "exon": "EX21",
+                "gene_class": "Ⅱ类",
+            }
+        ],
+        excel_data,
+        panel_config=panel_config,
+    )
+
+    assert report_data.get_field("nccn_CUSTOM_EGFR_EX21") == "c.2573T>G，p.L858R"
+    assert report_data.get_field("nccn_EGFR_EX21") is None
+
+
+def test_crc_guideline_rule_contains_active_nccn_rows():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    rule = PanelRuleEngine.from_panel_package(package).get("guideline_tables")
+    rows = rule["guideline_tables"]["nccn_results"]["rows"]
+
+    assert rule["version"] == "0.2.0"
+    assert rule["status"] == "active"
+    assert len(rows) >= 30
+    assert any(row["key"] == "KRAS_EX2" for row in rows)
+    assert any(row["key"] == "FGFR123_FUSION" for row in rows)
 
 
 def test_field_mapper_adds_legacy_fusion_aliases(tmp_path):
