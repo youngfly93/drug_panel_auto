@@ -192,6 +192,10 @@ def generate_report(
             project_name=req.project_name or upload.detected_project_name,
             strict_mode=req.strict_mode,
             template_contract_mode=req.template_contract_mode,
+            qa_visual_render=req.qa_visual_render,
+            qa_visual_render_required=req.qa_visual_render_required,
+            qa_visual_render_dpi=req.qa_visual_render_dpi,
+            qa_visual_render_timeout_seconds=req.qa_visual_render_timeout_seconds,
         )
 
         success = result.get("success", False)
@@ -225,6 +229,9 @@ def generate_report(
                 qa_report_file=result.get("qa_report_file"),
                 qa_status=result.get("qa_status"),
                 qa_issues=(result.get("qa_report") or {}).get("issues") or [],
+                visual_render=((result.get("qa_report") or {}).get("checks") or {}).get(
+                    "visual_render"
+                ),
                 panel_package_validation=result.get("panel_package_validation"),
                 generation_id=result.get("generation_id"),
                 stage_results=result.get("stage_results") or [],

@@ -2513,6 +2513,73 @@ def test_qa_report_passes_basic_clean_docx(tmp_path):
     assert qa["status"] == "PASS"
     assert qa["checks"]["docx_openable"]["status"] == "PASS"
     assert qa["checks"]["unrendered_placeholders"]["count"] == 0
+    assert qa["checks"]["visual_render"]["status"] == "SKIP"
+
+
+def test_qa_report_visual_render_passes_with_nonblank_png(tmp_path, monkeypatch):
+    docx_path = tmp_path / "visual_pass.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+
+    def fake_render(docx_path, *, output_dir, **_kwargs):
+        from PIL import Image, ImageDraw
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        page = output_dir / f"{Path(docx_path).stem}-1.png"
+        image = Image.new("RGB", (200, 200), "white")
+        ImageDraw.Draw(image).rectangle((20, 20, 180, 180), fill="black")
+        image.save(page)
+        return [page]
+
+    monkeypatch.setattr("reportgen.core.qa_report.render_docx_to_pngs", fake_render)
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        visual_render="first",
+        visual_render_output_dir=str(tmp_path / "rendered"),
+    )
+
+    assert qa["status"] == "PASS"
+    assert qa["checks"]["visual_render"]["status"] == "PASS"
+    assert qa["checks"]["blank_page_detection"]["status"] == "PASS"
+    assert qa["metrics"]["visual_render_page_count"] == 1
+
+
+def test_qa_report_visual_render_optional_failure_warns(tmp_path, monkeypatch):
+    docx_path = tmp_path / "visual_warn.docx"
+    Document().save(docx_path)
+
+    def fail_render(*_args, **_kwargs):
+        raise RuntimeError("LibreOffice failed")
+
+    monkeypatch.setattr("reportgen.core.qa_report.render_docx_to_pngs", fail_render)
+
+    qa = build_docx_qa_report(output_file=str(docx_path), visual_render="first")
+
+    assert qa["status"] == "WARN"
+    assert qa["checks"]["visual_render"]["status"] == "WARN"
+    assert any(issue["code"] == "VISUAL_RENDER_FAILED" for issue in qa["issues"])
+
+
+def test_qa_report_visual_render_required_failure_fails(tmp_path, monkeypatch):
+    docx_path = tmp_path / "visual_fail.docx"
+    Document().save(docx_path)
+
+    monkeypatch.setattr(
+        "reportgen.core.qa_report.render_docx_to_pngs",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("render failed")),
+    )
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        visual_render="all",
+        visual_render_required=True,
+    )
+
+    assert qa["status"] == "FAIL"
+    assert qa["checks"]["visual_render"]["status"] == "FAIL"
+    assert any(issue["code"] == "VISUAL_RENDER_FAILED" for issue in qa["issues"])
 
 
 def test_qa_report_records_pipeline_summary(tmp_path):

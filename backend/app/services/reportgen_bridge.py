@@ -252,6 +252,10 @@ class ReportGenBridge:
         project_name: Optional[str] = None,
         strict_mode: bool = False,
         template_contract_mode: str = "warn",
+        qa_visual_render: Optional[str] = None,
+        qa_visual_render_required: Optional[bool] = None,
+        qa_visual_render_dpi: Optional[int] = None,
+        qa_visual_render_timeout_seconds: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         Generate a single report.
@@ -348,6 +352,10 @@ class ReportGenBridge:
             template_contract_mode=template_contract_mode,
             project_type=project_type,
             project_name=project_name,
+            qa_visual_render=qa_visual_render,
+            qa_visual_render_required=qa_visual_render_required,
+            qa_visual_render_dpi=qa_visual_render_dpi,
+            qa_visual_render_timeout_seconds=qa_visual_render_timeout_seconds,
         )
 
         # Post-process: inject signature image if provided

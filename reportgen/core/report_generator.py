@@ -5,6 +5,7 @@
 """
 
 import json
+import os
 import time
 from dataclasses import dataclass, field as dc_field
 from datetime import datetime
@@ -82,6 +83,12 @@ class _GenerationState:
     qa_report: Optional[dict[str, Any]] = None
     qa_report_file: Optional[str] = None
     stage_results_file: Optional[str] = None
+    qa_visual_render: Optional[str] = None
+    qa_visual_render_required: Optional[bool] = None
+    qa_visual_render_dpi: Optional[int] = None
+    qa_visual_render_timeout_seconds: Optional[int] = None
+    qa_visual_render_output_dir: Optional[str] = None
+    qa_visual_render_tmp_dir: Optional[str] = None
 
 
 class ReportGenerator:
@@ -144,6 +151,12 @@ class ReportGenerator:
         template_contract_mode: str = "warn",
         project_type: Optional[str] = None,
         project_name: Optional[str] = None,
+        qa_visual_render: Optional[str] = None,
+        qa_visual_render_required: Optional[bool] = None,
+        qa_visual_render_dpi: Optional[int] = None,
+        qa_visual_render_timeout_seconds: Optional[int] = None,
+        qa_visual_render_output_dir: Optional[str] = None,
+        qa_visual_render_tmp_dir: Optional[str] = None,
     ) -> dict:
         """
         生成单个报告
@@ -174,6 +187,12 @@ class ReportGenerator:
             template_contract_mode=template_contract_mode,
             project_type=project_type,
             project_name=project_name,
+            qa_visual_render=qa_visual_render,
+            qa_visual_render_required=qa_visual_render_required,
+            qa_visual_render_dpi=qa_visual_render_dpi,
+            qa_visual_render_timeout_seconds=qa_visual_render_timeout_seconds,
+            qa_visual_render_output_dir=qa_visual_render_output_dir,
+            qa_visual_render_tmp_dir=qa_visual_render_tmp_dir,
         )
         pipeline = GenerationPipeline(
             GenerationContext(
@@ -186,6 +205,8 @@ class ReportGenerator:
                     "template_contract_mode": template_contract_mode,
                     "project_type": project_type,
                     "project_name": project_name,
+                    "qa_visual_render": qa_visual_render,
+                    "qa_visual_render_required": qa_visual_render_required,
                 }
             )
         )
@@ -858,6 +879,7 @@ class ReportGenerator:
             raise RuntimeError("Rendered report is unavailable before QA.")
 
         try:
+            visual_opts = self._resolve_visual_qa_options(state)
             state.qa_report = build_docx_qa_report(
                 output_file=state.final_output,
                 report_data=state.report_data,
@@ -870,6 +892,12 @@ class ReportGenerator:
                 processor_report=state.processor_report,
                 template_contract=state.template_contract_report,
                 rule_provenance=state.rule_provenance,
+                visual_render=visual_opts["mode"],
+                visual_render_required=visual_opts["required"],
+                visual_render_dpi=visual_opts["dpi"],
+                visual_render_timeout_seconds=visual_opts["timeout_seconds"],
+                visual_render_output_dir=visual_opts["output_dir"],
+                visual_render_tmp_dir=visual_opts["tmp_dir"],
             )
             state.qa_report_file = write_docx_qa_report(
                 state.qa_report,
@@ -943,6 +971,74 @@ class ReportGenerator:
             return get_panel_registry().get(project_type)
         except Exception:
             return None
+
+    @staticmethod
+    def _resolve_visual_qa_options(state: _GenerationState) -> dict[str, Any]:
+        """Resolve optional visual QA controls from args, then environment."""
+
+        def first(value: Any, env_name: str, default: Any) -> Any:
+            if value is not None:
+                return value
+            return os.environ.get(env_name, default)
+
+        def as_int(value: Any, default: int) -> int:
+            try:
+                return int(value)
+            except Exception:
+                return default
+
+        def as_bool(value: Any, default: bool = False) -> bool:
+            if value is None:
+                return default
+            if isinstance(value, bool):
+                return value
+            text = str(value).strip().lower()
+            if text in {"1", "true", "yes", "y", "on"}:
+                return True
+            if text in {"0", "false", "no", "n", "off"}:
+                return False
+            return default
+
+        return {
+            "mode": first(
+                state.qa_visual_render,
+                "REPORTGEN_QA_VISUAL_RENDER",
+                "none",
+            ),
+            "required": as_bool(
+                first(
+                    state.qa_visual_render_required,
+                    "REPORTGEN_QA_VISUAL_RENDER_REQUIRED",
+                    False,
+                )
+            ),
+            "dpi": as_int(
+                first(
+                    state.qa_visual_render_dpi,
+                    "REPORTGEN_QA_VISUAL_RENDER_DPI",
+                    120,
+                ),
+                120,
+            ),
+            "timeout_seconds": as_int(
+                first(
+                    state.qa_visual_render_timeout_seconds,
+                    "REPORTGEN_QA_VISUAL_RENDER_TIMEOUT",
+                    120,
+                ),
+                120,
+            ),
+            "output_dir": first(
+                state.qa_visual_render_output_dir,
+                "REPORTGEN_QA_VISUAL_RENDER_OUTPUT_DIR",
+                None,
+            ),
+            "tmp_dir": first(
+                state.qa_visual_render_tmp_dir,
+                "REPORTGEN_QA_VISUAL_RENDER_TMPDIR",
+                None,
+            ),
+        }
 
     @staticmethod
     def _normalize_project_name(

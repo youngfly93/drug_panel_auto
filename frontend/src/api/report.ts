@@ -7,6 +7,10 @@ export interface GenerateRequest {
   template_name?: string | null
   strict_mode?: boolean
   template_contract_mode?: string
+  qa_visual_render?: 'none' | 'first' | 'all' | null
+  qa_visual_render_required?: boolean | null
+  qa_visual_render_dpi?: number | null
+  qa_visual_render_timeout_seconds?: number | null
 }
 
 export interface GenerateResult {
@@ -17,6 +21,7 @@ export interface GenerateResult {
   qa_report_file?: string | null
   qa_status?: string | null
   qa_issues?: Array<Record<string, any>>
+  visual_render?: Record<string, any> | null
   generation_id?: string | null
   stage_results?: Array<Record<string, any>>
   stage_results_file?: string | null

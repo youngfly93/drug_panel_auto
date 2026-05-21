@@ -107,9 +107,49 @@ def cli(ctx, config_dir, log_file, verbose):
     default=None,
     help="显式指定项目名称（覆盖 patient_info 全局默认值）",
 )
+@click.option(
+    "--qa-visual-render",
+    type=click.Choice(["none", "first", "all"]),
+    default=None,
+    help="生成后可选执行视觉QA渲染（默认读取 REPORTGEN_QA_VISUAL_RENDER 或 none）",
+)
+@click.option(
+    "--qa-visual-render-required",
+    is_flag=True,
+    default=None,
+    help="视觉QA失败时是否阻断生成QA状态",
+)
+@click.option("--qa-visual-render-dpi", type=int, default=None, help="视觉QA渲染DPI")
+@click.option(
+    "--qa-visual-render-timeout",
+    type=int,
+    default=None,
+    help="视觉QA渲染超时时间（秒）",
+)
+@click.option(
+    "--qa-visual-render-tmp-dir",
+    default=None,
+    type=click.Path(),
+    help="视觉QA渲染临时目录",
+)
 @click.pass_context
-def generate(ctx, excel, template, output, filename, strict, auto_detect,
-             template_contract, project_type, project_name):
+def generate(
+    ctx,
+    excel,
+    template,
+    output,
+    filename,
+    strict,
+    auto_detect,
+    template_contract,
+    project_type,
+    project_name,
+    qa_visual_render,
+    qa_visual_render_required,
+    qa_visual_render_dpi,
+    qa_visual_render_timeout,
+    qa_visual_render_tmp_dir,
+):
     """
     生成单个报告
 
@@ -266,6 +306,11 @@ def generate(ctx, excel, template, output, filename, strict, auto_detect,
             project_type=detected_project_type,
             project_name=detected_project_name,
             template_contract_mode=contract_mode,
+            qa_visual_render=qa_visual_render,
+            qa_visual_render_required=qa_visual_render_required,
+            qa_visual_render_dpi=qa_visual_render_dpi,
+            qa_visual_render_timeout_seconds=qa_visual_render_timeout,
+            qa_visual_render_tmp_dir=qa_visual_render_tmp_dir,
         )
 
         if result["success"]:

@@ -14,6 +14,10 @@ class GenerateRequest(BaseModel):
     template_name: Optional[str] = None
     strict_mode: bool = False
     template_contract_mode: str = "warn"
+    qa_visual_render: Optional[str] = None
+    qa_visual_render_required: Optional[bool] = None
+    qa_visual_render_dpi: Optional[int] = None
+    qa_visual_render_timeout_seconds: Optional[int] = None
 
 
 class GenerateResponse(BaseModel):
@@ -24,6 +28,7 @@ class GenerateResponse(BaseModel):
     qa_report_file: Optional[str] = None
     qa_status: Optional[str] = None
     qa_issues: list[dict[str, Any]] = []
+    visual_render: Optional[dict[str, Any]] = None
     panel_package_validation: Optional[dict[str, Any]] = None
     generation_id: Optional[str] = None
     stage_results: list[dict[str, Any]] = []

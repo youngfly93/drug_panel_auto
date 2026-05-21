@@ -18,6 +18,7 @@ from docx import Document
 from reportgen.core.pipeline.summary import summarize_stage_results
 from reportgen.models.report_data import ReportData
 from reportgen.utils.artifacts import write_json
+from reportgen.utils.docx_render import render_docx_to_pngs
 
 
 PLACEHOLDER_RE = re.compile(
@@ -42,6 +43,12 @@ def build_docx_qa_report(
     rule_provenance: Optional[Mapping[str, Any]] = None,
     stage_results: Optional[list[Mapping[str, Any]]] = None,
     stage_results_file: Optional[str] = None,
+    visual_render: Optional[str] = None,
+    visual_render_required: bool = False,
+    visual_render_dpi: int = 120,
+    visual_render_timeout_seconds: int = 120,
+    visual_render_output_dir: Optional[str] = None,
+    visual_render_tmp_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a structured QA report for one generated DOCX file."""
     generated_at = datetime.now().isoformat()
@@ -157,7 +164,24 @@ def build_docx_qa_report(
     if toc["status"] == "WARN":
         issue("warning", "TOC_PAGE_NUMBERS_MISSING", toc["message"])
 
-    checks["blank_page_detection"] = {
+    checks["visual_render"] = _build_visual_render_check(
+        output_path,
+        mode=visual_render,
+        required=visual_render_required,
+        dpi=visual_render_dpi,
+        timeout_seconds=visual_render_timeout_seconds,
+        output_dir=visual_render_output_dir,
+        tmp_dir=visual_render_tmp_dir,
+    )
+    for visual_issue in _visual_render_issues(checks["visual_render"]):
+        issue(**visual_issue)
+    metrics["visual_render_page_count"] = len(
+        checks["visual_render"].get("rendered_pages") or []
+    )
+
+    checks["blank_page_detection"] = _blank_page_detection_check(
+        checks["visual_render"]
+    ) or {
         "status": "SKIP",
         "message": "DOCX-level QA cannot reliably identify visual blank pages; use PDF/PNG render QA for this check.",
     }
@@ -409,6 +433,286 @@ def _rule_provenance_check(
             if ok
             else f"Panel rule validation failed with {len(issues)} issue(s)."
         ),
+    }
+
+
+def _build_visual_render_check(
+    output_path: Path,
+    *,
+    mode: Optional[str],
+    required: bool,
+    dpi: int,
+    timeout_seconds: int,
+    output_dir: Optional[str],
+    tmp_dir: Optional[str],
+) -> Dict[str, Any]:
+    normalized_mode = str(mode or "none").strip().lower()
+    result: Dict[str, Any] = {
+        "status": "SKIP",
+        "requested": normalized_mode,
+        "required": bool(required),
+        "message": "Visual render QA was not requested.",
+        "rendered_pages": [],
+        "output_dir": None,
+        "error": None,
+    }
+    if normalized_mode == "none":
+        return result
+    if normalized_mode not in {"first", "all"}:
+        result.update(
+            {
+                "status": "FAIL" if required else "WARN",
+                "message": f"Unsupported visual render mode: {mode!r}.",
+                "error": "unsupported_mode",
+            }
+        )
+        return result
+
+    render_dir = (
+        Path(output_dir)
+        if output_dir
+        else output_path.parent / "rendered_pages" / output_path.stem
+    )
+    first_page = 1 if normalized_mode == "first" else None
+    last_page = 1 if normalized_mode == "first" else None
+
+    try:
+        pngs = render_docx_to_pngs(
+            output_path,
+            output_dir=render_dir,
+            dpi=int(dpi),
+            first_page=first_page,
+            last_page=last_page,
+            keep_pdf=False,
+            timeout_seconds=int(timeout_seconds),
+            tmp_dir=Path(tmp_dir) if tmp_dir else None,
+        )
+    except Exception as exc:
+        result.update(
+            {
+                "status": "FAIL" if required else "WARN",
+                "message": f"Visual render failed: {exc}",
+                "output_dir": str(render_dir),
+                "error": str(exc),
+            }
+        )
+        for attr in ("stage", "command", "stdout", "stderr"):
+            value = getattr(exc, attr, None)
+            if not value:
+                continue
+            if attr == "command":
+                result[attr] = list(value)
+            elif attr in {"stdout", "stderr"}:
+                result[f"{attr}_tail"] = str(value)[-2000:]
+            else:
+                result[attr] = value
+        return result
+
+    result.update(
+        {
+            "rendered_pages": [str(path) for path in pngs],
+            "output_dir": str(render_dir),
+        }
+    )
+    if not pngs:
+        result.update(
+            {
+                "status": "FAIL" if required else "WARN",
+                "message": "Visual render completed but produced no PNG pages.",
+                "error": "no_rendered_pages",
+            }
+        )
+        return result
+
+    pixel_check = _inspect_rendered_png_pages(pngs)
+    result["pixel_check"] = pixel_check
+    if pixel_check["status"] in {"WARN", "FAIL"}:
+        result.update(
+            {
+                "status": "FAIL" if required else "WARN",
+                "message": pixel_check["message"],
+            }
+        )
+        return result
+
+    result.update(
+        {
+            "status": "PASS",
+            "message": "Visual render produced inspectable PNG pages.",
+        }
+    )
+    return result
+
+
+def _visual_render_issues(check: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
+    status = check.get("status")
+    if status not in {"WARN", "FAIL"}:
+        return
+
+    level = "error" if status == "FAIL" else "warning"
+    error = str(check.get("error") or "")
+    pixel_check = check.get("pixel_check")
+    if isinstance(pixel_check, Mapping):
+        if pixel_check.get("blank_pages"):
+            code = "VISUAL_RENDER_BLANK_PAGES"
+        elif pixel_check.get("low_content_pages"):
+            code = "VISUAL_RENDER_LOW_CONTENT"
+        elif pixel_check.get("unreadable_pages"):
+            code = "VISUAL_RENDER_UNREADABLE_PAGES"
+        else:
+            code = "VISUAL_RENDER_WARN"
+    elif error == "no_rendered_pages":
+        code = "VISUAL_RENDER_NO_PAGES"
+    elif error == "unsupported_mode":
+        code = "VISUAL_RENDER_UNSUPPORTED_MODE"
+    else:
+        code = "VISUAL_RENDER_FAILED"
+
+    yield {
+        "level": level,
+        "code": code,
+        "message": str(check.get("message") or "Visual render QA reported an issue."),
+    }
+
+
+def _blank_page_detection_check(
+    visual_check: Mapping[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if visual_check.get("requested") == "none":
+        return None
+
+    pixel_check = visual_check.get("pixel_check")
+    if not isinstance(pixel_check, Mapping):
+        return {
+            "status": "SKIP",
+            "message": "Visual render did not produce inspectable page pixels.",
+        }
+    if pixel_check.get("status") == "SKIP":
+        return {
+            "status": "SKIP",
+            "message": str(
+                pixel_check.get("message")
+                or "Rendered page pixel inspection was skipped."
+            ),
+        }
+
+    blank_pages = list(pixel_check.get("blank_pages") or [])
+    low_content_pages = list(pixel_check.get("low_content_pages") or [])
+    unreadable_pages = list(pixel_check.get("unreadable_pages") or [])
+    if blank_pages or low_content_pages or unreadable_pages:
+        return {
+            "status": visual_check.get("status") or "WARN",
+            "message": "Visual page inspection found blank or low-content page images.",
+            "blank_pages": blank_pages,
+            "low_content_pages": low_content_pages,
+            "unreadable_pages": unreadable_pages,
+            "thresholds": pixel_check.get("thresholds") or {},
+        }
+    return {
+        "status": "PASS",
+        "message": "Visual page inspection did not find blank rendered pages.",
+        "checked_pages": pixel_check.get("checked_pages") or 0,
+        "thresholds": pixel_check.get("thresholds") or {},
+    }
+
+
+def _inspect_rendered_png_pages(pngs: Iterable[Path]) -> Dict[str, Any]:
+    thresholds = {
+        "blank_nonwhite_ratio": 0.001,
+        "blank_dark_ratio": 0.0002,
+        "low_content_dark_ratio": 0.0015,
+    }
+    try:
+        from PIL import Image
+    except Exception as exc:
+        return {
+            "status": "SKIP",
+            "message": f"Pillow is unavailable; skipped rendered PNG pixel checks: {exc}",
+            "checked_pages": 0,
+            "thresholds": thresholds,
+        }
+
+    pages: List[Dict[str, Any]] = []
+    unreadable: List[str] = []
+    for path in pngs:
+        try:
+            pages.append(_rendered_png_page_metrics(Path(path), Image, thresholds))
+        except Exception as exc:
+            unreadable.append(f"{path}: {exc}")
+
+    blank_pages = [row["path"] for row in pages if row.get("blank")]
+    low_content_pages = [row["path"] for row in pages if row.get("low_content")]
+    if unreadable or blank_pages or low_content_pages:
+        parts: List[str] = []
+        if unreadable:
+            parts.append(f"{len(unreadable)} rendered PNG page(s) could not be read")
+        if blank_pages:
+            parts.append(f"{len(blank_pages)} rendered page(s) look blank")
+        if low_content_pages:
+            parts.append(f"{len(low_content_pages)} rendered page(s) look low-content")
+        return {
+            "status": "WARN",
+            "message": "; ".join(parts) + ".",
+            "checked_pages": len(pages),
+            "pages": pages,
+            "blank_pages": blank_pages,
+            "low_content_pages": low_content_pages,
+            "unreadable_pages": unreadable,
+            "thresholds": thresholds,
+        }
+
+    return {
+        "status": "PASS",
+        "message": "Rendered PNG pixel checks passed.",
+        "checked_pages": len(pages),
+        "pages": pages,
+        "blank_pages": [],
+        "low_content_pages": [],
+        "unreadable_pages": [],
+        "thresholds": thresholds,
+    }
+
+
+def _rendered_png_page_metrics(
+    path: Path,
+    image_module: Any,
+    thresholds: Mapping[str, float],
+) -> Dict[str, Any]:
+    with image_module.open(path) as image:
+        original_size = [int(image.width), int(image.height)]
+        sampled = image.convert("RGBA")
+        sampled.thumbnail((300, 300))
+        pixels = list(sampled.getdata())
+
+    visible = [pixel for pixel in pixels if pixel[3] > 10]
+    visible_count = len(visible) or 1
+    nonwhite_count = sum(
+        1 for red, green, blue, _alpha in visible if min(red, green, blue) < 248
+    )
+    dark_count = sum(
+        1
+        for red, green, blue, _alpha in visible
+        if (red + green + blue) / 3 < 210
+    )
+    nonwhite_ratio = nonwhite_count / visible_count
+    dark_ratio = dark_count / visible_count
+    blank = (
+        nonwhite_ratio < float(thresholds["blank_nonwhite_ratio"])
+        and dark_ratio < float(thresholds["blank_dark_ratio"])
+    )
+    low_content = (
+        not blank
+        and dark_ratio < float(thresholds["low_content_dark_ratio"])
+    )
+    return {
+        "path": str(path),
+        "file_size_bytes": path.stat().st_size,
+        "image_size": original_size,
+        "sampled_pixels": visible_count,
+        "nonwhite_ratio": round(nonwhite_ratio, 6),
+        "dark_ratio": round(dark_ratio, 6),
+        "blank": blank,
+        "low_content": low_content,
     }
 
 
