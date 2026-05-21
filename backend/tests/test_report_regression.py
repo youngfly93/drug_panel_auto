@@ -2875,6 +2875,130 @@ def test_qa_report_checks_crc_tables_and_counts(tmp_path):
     assert qa["checks"]["drug_related_count_text"]["status"] == "PASS"
 
 
+def _add_crc_style_qa_tables(doc: Document) -> None:
+    summary = doc.add_table(rows=2, cols=4)
+    for idx, text in enumerate(
+        ["基因", "突变位点", "潜在获益靶向药物", "可能耐药或慎重药物"]
+    ):
+        summary.rows[0].cells[idx].text = text
+    for idx, text in enumerate(["KRAS", "c.34G>A", "司美替尼（C）", "西妥昔单抗（A）"]):
+        summary.rows[1].cells[idx].text = text
+
+    detail = doc.add_table(rows=3, cols=9)
+    row0 = [
+        "基因名称",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "靶向药物信息",
+        "靶向药物信息",
+    ]
+    row1 = [
+        "基因名称",
+        "转录本号",
+        "染色体",
+        "外显子",
+        "位点",
+        "突变类型",
+        "频率",
+        "潜在获益靶向药物",
+        "可能耐药或慎重药物",
+    ]
+    row2 = [
+        "KRAS",
+        "NM_004985.5",
+        "12",
+        "2",
+        "c.34G>A",
+        "点突变",
+        "46.29",
+        "司美替尼（C）",
+        "西妥昔单抗（A）",
+    ]
+    for row, values in zip(detail.rows, [row0, row1, row2]):
+        for idx, value in enumerate(values):
+            row.cells[idx].text = value
+
+    biomarker = doc.add_table(rows=2, cols=3)
+    biomarker.rows[0].cells[0].text = "TMB/MSI/其它生物标志物检测结果"
+    biomarker.rows[0].cells[1].text = "TMB/MSI/其它生物标志物检测结果"
+    biomarker.rows[0].cells[2].text = "用药提示"
+    biomarker.rows[1].cells[0].text = "MSI"
+    biomarker.rows[1].cells[1].text = "MSS"
+    biomarker.rows[1].cells[2].text = "研究表明，MSI-H的实体瘤通常具有免疫原性"
+
+
+def _crc_panel_style() -> dict:
+    return ReportGenerator._load_panel_style_config(
+        load_panel_package("crc_358_msi", project_root=ROOT)
+    )
+
+
+def test_qa_report_checks_crc_style_rules_pass_after_postprocessing(tmp_path):
+    docx_path = tmp_path / "crc_style_pass.docx"
+    doc = Document()
+    doc.add_paragraph("本次共检出体细胞变异：1 个")
+    doc.add_paragraph("与靶向药物用药相关的变异有：1 个")
+    doc.add_paragraph("TMB-L；MSS")
+    _add_crc_style_qa_tables(doc)
+    doc.save(docx_path)
+
+    context = {"panel_style": _crc_panel_style()}
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._restore_variant_summary_table_style(str(docx_path), context)
+    renderer._restore_variant_detail_table_style(str(docx_path), context)
+    renderer._restore_biomarker_table_style(str(docx_path), context)
+
+    report_data = ReportData(context=context)
+    report_data.set_field("total_variants_count", 1)
+    report_data.set_field("drug_related_count", 1)
+    report_data.set_field("tmb_status", "TMB-L")
+    report_data.set_field("msi_status", "MSS")
+    report_data.set_table("variants", [{"gene": "KRAS"}])
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        project_type="crc_358_msi",
+    )
+
+    assert qa["status"] == "PASS"
+    assert qa["checks"]["docx_style_rules"]["status"] == "PASS"
+    assert qa["checks"]["docx_style_rules"]["checked_table_count"] == 3
+
+
+def test_qa_report_flags_crc_style_rule_violations(tmp_path):
+    docx_path = tmp_path / "crc_style_fail.docx"
+    doc = Document()
+    doc.add_paragraph("本次共检出体细胞变异：1 个")
+    doc.add_paragraph("与靶向药物用药相关的变异有：1 个")
+    doc.add_paragraph("TMB-L；MSS")
+    _add_crc_style_qa_tables(doc)
+    run = doc.tables[0].rows[1].cells[0].paragraphs[0].runs[0]
+    run.font.underline = True
+    doc.save(docx_path)
+
+    report_data = ReportData(context={"panel_style": _crc_panel_style()})
+    report_data.set_field("total_variants_count", 1)
+    report_data.set_field("drug_related_count", 1)
+    report_data.set_field("tmb_status", "TMB-L")
+    report_data.set_field("msi_status", "MSS")
+    report_data.set_table("variants", [{"gene": "KRAS"}])
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        project_type="crc_358_msi",
+    )
+
+    assert qa["status"] == "FAIL"
+    assert qa["checks"]["docx_style_rules"]["status"] == "FAIL"
+    assert any(i["code"] == "DOCX_STYLE_RULES" for i in qa["issues"])
+
+
 def test_qa_report_flags_crc_missing_required_tables(tmp_path):
     docx_path = tmp_path / "crc_missing_tables.docx"
     doc = Document()
@@ -2989,6 +3113,7 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert stage_payload["stage_results"] == result["stage_results"]
     assert result["qa_report"]["pipeline"]["status"] == "PASS"
     assert result["qa_report"]["rules"]["status"] == "PASS"
+    assert result["qa_report"]["checks"]["docx_style_rules"]["status"] == "PASS"
     assert result["qa_report"]["checks"]["rules"]["file_count"] >= 6
     assert result["qa_report"]["checks"]["pipeline"]["stage_results_file"] == str(
         stage_results_file

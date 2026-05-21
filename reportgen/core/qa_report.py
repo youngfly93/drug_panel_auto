@@ -199,6 +199,11 @@ def build_docx_qa_report(
     for table_issue in _table_issues(table_checks):
         issue(**table_issue)
 
+    style_checks = _build_style_checks(doc, project_type, context)
+    checks.update(style_checks)
+    for style_issue in _style_issues(style_checks):
+        issue(**style_issue)
+
     business_checks = _build_business_checks(compact_text, context, project_type)
     checks.update(business_checks)
     for business_issue in _business_issues(business_checks):
@@ -605,6 +610,416 @@ def _table_issues(checks: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
     for key, check in checks.items():
         if check.get("status") == "FAIL":
             yield {"level": "error", "code": key.upper(), "message": messages[key]}
+
+
+def _build_style_checks(
+    doc: Any,
+    project_type: Optional[str],
+    context: Mapping[str, Any],
+) -> Dict[str, Any]:
+    if not _is_crc(project_type):
+        return {}
+
+    style = context.get("panel_style")
+    if not isinstance(style, Mapping):
+        return {
+            "docx_style_rules": {
+                "status": "SKIP",
+                "message": "No panel_style rules were provided in report context.",
+                "checked_table_count": 0,
+                "failures": [],
+            }
+        }
+
+    failures: List[Dict[str, Any]] = []
+    checked = 0
+    table_counts = {
+        "variant_summary_table": 0,
+        "variant_detail_table": 0,
+        "biomarker_table": 0,
+    }
+
+    for table_idx, table in enumerate(doc.tables):
+        if _is_variant_summary_style_table(table):
+            table_counts["variant_summary_table"] += 1
+            checked += 1
+            failures.extend(
+                _check_variant_summary_table_style(
+                    table,
+                    table_idx=table_idx,
+                    style=_style_config(style, "variant_summary_table"),
+                )
+            )
+        if _is_variant_detail_style_table(table):
+            table_counts["variant_detail_table"] += 1
+            checked += 1
+            failures.extend(
+                _check_variant_detail_table_style(
+                    table,
+                    table_idx=table_idx,
+                    style=_style_config(style, "variant_detail_table"),
+                )
+            )
+        if _is_biomarker_style_table(table):
+            table_counts["biomarker_table"] += 1
+            checked += 1
+            failures.extend(
+                _check_biomarker_table_style(
+                    table,
+                    table_idx=table_idx,
+                    style=_style_config(style, "biomarker_table"),
+                )
+            )
+
+    if not checked:
+        return {
+            "docx_style_rules": {
+                "status": "SKIP",
+                "message": "No style-managed CRC tables were detected.",
+                "checked_table_count": 0,
+                "table_counts": table_counts,
+                "failures": [],
+            }
+        }
+
+    return {
+        "docx_style_rules": {
+            "status": "FAIL" if failures else "PASS",
+            "message": (
+                f"DOCX style QA found {len(failures)} issue(s)."
+                if failures
+                else "DOCX style QA passed."
+            ),
+            "checked_table_count": checked,
+            "table_counts": table_counts,
+            "failures": failures[:30],
+            "failure_count": len(failures),
+        }
+    }
+
+
+def _style_issues(checks: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
+    check = checks.get("docx_style_rules")
+    if isinstance(check, Mapping) and check.get("status") == "FAIL":
+        yield {
+            "level": "error",
+            "code": "DOCX_STYLE_RULES",
+            "message": str(check.get("message") or "DOCX style rules failed."),
+        }
+
+
+def _style_config(root: Mapping[str, Any], table_name: str) -> Dict[str, Any]:
+    defaults = root.get("defaults")
+    merged = dict(defaults) if isinstance(defaults, Mapping) else {}
+    table = root.get(table_name)
+    if isinstance(table, Mapping):
+        merged.update(table)
+    return merged
+
+
+def _hex_color(value: Any, default: str) -> str:
+    text = str(value or default).strip().lstrip("#").upper()
+    if len(text) != 6 or not all(ch in "0123456789ABCDEF" for ch in text):
+        return default.upper()
+    return text
+
+
+def _bool_style(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _is_variant_summary_style_table(table: Any) -> bool:
+    if _table_col_count(table) != 4 or not table.rows:
+        return False
+    header = _compact(" ".join(cell.text for cell in table.rows[0].cells))
+    return all(
+        token in header
+        for token in ("基因", "突变位点", "潜在获益靶向药物", "可能耐药")
+    )
+
+
+def _is_variant_detail_style_table(table: Any) -> bool:
+    if _table_col_count(table) != 9 or len(table.rows) < 2:
+        return False
+    row0 = _compact(" ".join(cell.text for cell in table.rows[0].cells))
+    row1 = _compact(" ".join(cell.text for cell in table.rows[1].cells))
+    return all(token in row0 for token in ("基因名称", "基因突变信息", "靶向药物信息")) and all(
+        token in row1 for token in ("转录本号", "潜在获益靶向药物")
+    )
+
+
+def _is_biomarker_style_table(table: Any) -> bool:
+    if _table_col_count(table) != 3 or not table.rows:
+        return False
+    text = _compact("\n".join(cell.text for row in table.rows for cell in row.cells))
+    return all(token in text for token in ("TMB", "MSI", "用药提示"))
+
+
+def _check_variant_summary_table_style(
+    table: Any,
+    *,
+    table_idx: int,
+    style: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    expected = {
+        "header_fill": _hex_color(style.get("header_fill"), "00C4D8"),
+        "header_font_color": _hex_color(style.get("header_font_color"), "FFFFFF"),
+        "body_font_color": _hex_color(style.get("body_font_color"), "000000"),
+        "link_color": _hex_color(style.get("link_color"), "0000FF"),
+        "link_underline": _bool_style(style.get("link_underline"), True),
+    }
+    failures = _check_header_style(
+        table,
+        table_idx=table_idx,
+        table_name="variant_summary_table",
+        header_rows={0},
+        expected_fill=expected["header_fill"],
+        expected_font_color=expected["header_font_color"],
+    )
+    for row_idx, row in enumerate(table.rows[1:], start=1):
+        for col_idx, cell in enumerate(row.cells):
+            dash_only = (cell.text or "").strip() in {"", "-", "--", "—"}
+            link_cell = col_idx == 0 or (col_idx in {2, 3} and not dash_only)
+            failures.extend(
+                _check_cell_runs(
+                    cell,
+                    table_idx=table_idx,
+                    row_idx=row_idx,
+                    col_idx=col_idx,
+                    table_name="variant_summary_table",
+                    expected_color=expected["link_color"] if link_cell else expected["body_font_color"],
+                    expected_underline=expected["link_underline"] if link_cell else False,
+                )
+            )
+    return failures
+
+
+def _check_variant_detail_table_style(
+    table: Any,
+    *,
+    table_idx: int,
+    style: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    expected = {
+        "header_fill": _hex_color(style.get("header_fill"), "00C4D8"),
+        "header_font_color": _hex_color(style.get("header_font_color"), "F9FBFA"),
+        "body_font_color": _hex_color(style.get("body_font_color"), "000000"),
+        "link_color": _hex_color(style.get("link_color"), "0000FF"),
+        "link_underline": _bool_style(style.get("link_underline"), True),
+    }
+    failures = _check_header_style(
+        table,
+        table_idx=table_idx,
+        table_name="variant_detail_table",
+        header_rows={0, 1},
+        expected_fill=expected["header_fill"],
+        expected_font_color=expected["header_font_color"],
+    )
+    for row_idx, row in enumerate(table.rows[2:], start=2):
+        for col_idx, cell in enumerate(row.cells):
+            dash_only = (cell.text or "").strip() in {"", "-", "--", "—"}
+            link_cell = col_idx == 0 or (col_idx in {7, 8} and not dash_only)
+            failures.extend(
+                _check_cell_runs(
+                    cell,
+                    table_idx=table_idx,
+                    row_idx=row_idx,
+                    col_idx=col_idx,
+                    table_name="variant_detail_table",
+                    expected_color=expected["link_color"] if link_cell else expected["body_font_color"],
+                    expected_underline=expected["link_underline"] if link_cell else False,
+                )
+            )
+    return failures
+
+
+def _check_biomarker_table_style(
+    table: Any,
+    *,
+    table_idx: int,
+    style: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    expected = {
+        "header_fill": _hex_color(style.get("header_fill"), "00C4D8"),
+        "header_font_color": _hex_color(style.get("header_font_color"), "F9FBFA"),
+        "body_font_color": _hex_color(style.get("body_font_color"), "000000"),
+    }
+    failures = _check_header_style(
+        table,
+        table_idx=table_idx,
+        table_name="biomarker_table",
+        header_rows={0},
+        expected_fill=expected["header_fill"],
+        expected_font_color=expected["header_font_color"],
+    )
+    for row_idx, row in enumerate(table.rows[1:], start=1):
+        for col_idx, cell in enumerate(row.cells):
+            failures.extend(
+                _check_cell_runs(
+                    cell,
+                    table_idx=table_idx,
+                    row_idx=row_idx,
+                    col_idx=col_idx,
+                    table_name="biomarker_table",
+                    expected_color=expected["body_font_color"],
+                    expected_underline=False,
+                )
+            )
+    return failures
+
+
+def _check_header_style(
+    table: Any,
+    *,
+    table_idx: int,
+    table_name: str,
+    header_rows: set[int],
+    expected_fill: str,
+    expected_font_color: str,
+) -> List[Dict[str, Any]]:
+    failures: List[Dict[str, Any]] = []
+    for row_idx in header_rows:
+        if row_idx >= len(table.rows):
+            continue
+        for col_idx, cell in enumerate(table.rows[row_idx].cells):
+            actual_fill = _cell_fill(cell)
+            if actual_fill and actual_fill != expected_fill:
+                failures.append(
+                    _style_failure(
+                        table_name,
+                        table_idx,
+                        row_idx,
+                        col_idx,
+                        "header_fill",
+                        expected_fill,
+                        actual_fill,
+                    )
+                )
+            elif not actual_fill:
+                failures.append(
+                    _style_failure(
+                        table_name,
+                        table_idx,
+                        row_idx,
+                        col_idx,
+                        "header_fill",
+                        expected_fill,
+                        None,
+                    )
+                )
+            failures.extend(
+                _check_cell_runs(
+                    cell,
+                    table_idx=table_idx,
+                    row_idx=row_idx,
+                    col_idx=col_idx,
+                    table_name=table_name,
+                    expected_color=expected_font_color,
+                    expected_underline=False,
+                )
+            )
+    return failures
+
+
+def _check_cell_runs(
+    cell: Any,
+    *,
+    table_idx: int,
+    row_idx: int,
+    col_idx: int,
+    table_name: str,
+    expected_color: str,
+    expected_underline: bool,
+) -> List[Dict[str, Any]]:
+    failures: List[Dict[str, Any]] = []
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            if not (run.text or "").strip():
+                continue
+            actual_color = _run_color(run)
+            if actual_color and actual_color != expected_color:
+                failures.append(
+                    _style_failure(
+                        table_name,
+                        table_idx,
+                        row_idx,
+                        col_idx,
+                        "font_color",
+                        expected_color,
+                        actual_color,
+                    )
+                )
+            elif not actual_color:
+                failures.append(
+                    _style_failure(
+                        table_name,
+                        table_idx,
+                        row_idx,
+                        col_idx,
+                        "font_color",
+                        expected_color,
+                        None,
+                    )
+                )
+            actual_underline = bool(run.font.underline)
+            if actual_underline != expected_underline:
+                failures.append(
+                    _style_failure(
+                        table_name,
+                        table_idx,
+                        row_idx,
+                        col_idx,
+                        "underline",
+                        expected_underline,
+                        actual_underline,
+                    )
+                )
+    return failures
+
+
+def _style_failure(
+    table_name: str,
+    table_idx: int,
+    row_idx: int,
+    col_idx: int,
+    property_name: str,
+    expected: Any,
+    actual: Any,
+) -> Dict[str, Any]:
+    return {
+        "table": table_name,
+        "table_index": table_idx,
+        "row": row_idx,
+        "col": col_idx,
+        "property": property_name,
+        "expected": expected,
+        "actual": actual,
+    }
+
+
+def _cell_fill(cell: Any) -> Optional[str]:
+    from docx.oxml.ns import qn
+
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = tc_pr.find(qn("w:shd"))
+    if shd is None:
+        return None
+    value = shd.get(qn("w:fill"))
+    return str(value).upper() if value else None
+
+
+def _run_color(run: Any) -> Optional[str]:
+    value = run.font.color.rgb
+    return str(value).upper() if value is not None else None
 
 
 def _build_business_checks(
