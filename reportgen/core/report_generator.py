@@ -968,23 +968,33 @@ class ReportGenerator:
 
     @staticmethod
     def _load_panel_style_config(panel_package) -> dict:
-        """Load optional panel-level visual style rules from panel_rules YAML."""
+        """Load optional panel-level visual style rules from style.yaml.
+
+        Legacy panel packages may still keep a ``style`` block in panel_rules;
+        keep that as a fallback while M7 migrates rules into dedicated files.
+        """
         if panel_package is None:
             return {}
         try:
             import yaml
-
-            rule_file = panel_package.resolve_rule_file("panel_rules")
-            if not rule_file.exists():
-                return {}
-            with rule_file.open("r", encoding="utf-8") as fh:
-                rules = yaml.safe_load(fh) or {}
         except Exception:
             return {}
-        if not isinstance(rules, dict):
-            return {}
-        style = rules.get("style")
-        return style if isinstance(style, dict) else {}
+
+        for rule_name in ("style", "panel_rules"):
+            try:
+                rule_file = panel_package.resolve_rule_file(rule_name)
+                if not rule_file.exists():
+                    continue
+                with rule_file.open("r", encoding="utf-8") as fh:
+                    rules = yaml.safe_load(fh) or {}
+            except Exception:
+                continue
+            if not isinstance(rules, dict):
+                continue
+            style = rules.get("style")
+            if isinstance(style, dict):
+                return style
+        return {}
 
     @staticmethod
     def _get_template_contract_spec(panel_package) -> Optional[dict]:

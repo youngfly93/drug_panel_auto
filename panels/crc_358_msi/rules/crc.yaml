@@ -12,14 +12,6 @@ notes:
   - "CRC 358 + MSI panel package rules for gene set and reviewed override口径"
   - "仅保留 gene symbol + 显示用 transcript/chr 信息，不包含任何患者数据"
 
-style:
-  variant_summary_table:
-    link_underline: false
-    link_color: "000000"
-  variant_detail_table:
-    link_underline: false
-    link_color: "000000"
-
 # Class I genes: primary drug targets and MSI genes
 class_i_genes:
   - KRAS

@@ -1,18 +1,47 @@
 schema_version: "1.0"
 panel_id: "crc_301_msi"
 rule_id: "style"
-version: "0.1.0"
+version: "0.2.0"
 updated: "2026-05-21"
-status: "draft"
-description: "CRC table style tokens prepared for M8 processor governance."
+status: "active"
+description: "CRC table style tokens used by the DOCX post-render processors."
 
 style:
+  defaults:
+    font_name: "微软雅黑"
+    header_fill: "00B7C7"
+    header_font_color: "FFFFFF"
+    body_font_color: "000000"
+    border_color: "000000"
+    border_size: "6"
   variant_summary_table:
+    font_name: "微软雅黑"
+    header_fill: "00B7C7"
+    header_font_color: "FFFFFF"
+    body_font_color: "000000"
+    body_font_size: 9
+    header_font_size: 9
+    border_color: "000000"
+    border_size: "6"
     link_underline: false
     link_color: "000000"
   variant_detail_table:
+    font_name: "微软雅黑"
+    header_fill: "00B7C7"
+    header_font_color: "FFFFFF"
+    body_font_color: "000000"
+    body_font_size: 9
+    header_font_size: 9
+    border_color: "000000"
+    border_size: "6"
     link_underline: false
     link_color: "000000"
   biomarker_table:
     header_fill: "00B7C7"
     header_font_color: "FFFFFF"
+    body_font_color: "000000"
+    font_name: "微软雅黑"
+    body_font_size: 9
+    header_font_size: 10
+    border_color: "000000"
+    border_size: "6"

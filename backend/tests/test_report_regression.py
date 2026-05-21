@@ -1089,6 +1089,29 @@ def test_crc_report_text_rule_contains_active_tmb_msi_copy():
     ]
 
 
+def test_crc_style_rule_contains_active_table_tokens():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    engine = PanelRuleEngine.from_panel_package(package)
+    rule = engine.get("style")
+    style = rule["style"]
+
+    assert rule["version"] == "0.2.0"
+    assert rule["status"] == "active"
+    assert style["variant_summary_table"]["link_underline"] is False
+    assert style["variant_detail_table"]["link_color"] == "000000"
+    assert style["biomarker_table"]["header_fill"] == "00B7C7"
+    assert "style" not in engine.get("panel_rules")
+
+
+def test_report_generator_loads_panel_style_from_style_rule():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    style = ReportGenerator._load_panel_style_config(package)
+
+    assert style["variant_summary_table"]["link_underline"] is False
+    assert style["variant_detail_table"]["link_color"] == "000000"
+    assert style["biomarker_table"]["header_fill"] == "00B7C7"
+
+
 def test_panel_package_validator_rejects_missing_report_text_rule(tmp_path):
     panel_yaml = _write_minimal_panel_package(tmp_path, "bad_panel")
     (panel_yaml.parent / "rules" / "report_text.yaml").unlink()
@@ -1949,6 +1972,46 @@ def test_biomarker_table_restores_template_typography(tmp_path):
     assert body_run.font.underline is False
     assert str(body_run.font.color.rgb) == "000000"
     assert table.rows[1].cells[2].paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.CENTER
+
+
+def test_biomarker_table_uses_panel_style_tokens(tmp_path):
+    docx_path = tmp_path / "biomarker_panel_style.docx"
+    doc = Document()
+    table = doc.add_table(rows=2, cols=3)
+    table.rows[0].cells[0].text = "TMB/MSI/其它生物标志物检测结果"
+    table.rows[0].cells[1].text = "TMB/MSI/其它生物标志物检测结果"
+    table.rows[0].cells[2].text = "用药提示"
+    table.rows[1].cells[0].text = "微卫星不稳定性（MSI）"
+    table.rows[1].cells[1].text = "MSS"
+    table.rows[1].cells[2].text = "研究表明，MSI-H的实体瘤通常具有免疫原性"
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._restore_biomarker_table_style(
+        str(docx_path),
+        {
+            "panel_style": {
+                "biomarker_table": {
+                    "header_fill": "00B7C7",
+                    "header_font_color": "FFFFFF",
+                    "body_font_color": "000000",
+                    "font_name": "微软雅黑",
+                    "header_font_size": 10,
+                    "body_font_size": 9,
+                    "border_color": "000000",
+                    "border_size": "6",
+                }
+            }
+        },
+    )
+
+    table = Document(docx_path).tables[0]
+    header_cell = table.rows[0].cells[2]
+    header_run = header_cell.paragraphs[0].runs[0]
+    shd = header_cell._tc.get_or_add_tcPr().find(qn("w:shd"))
+
+    assert shd is not None
+    assert shd.get(qn("w:fill")) == "00B7C7"
+    assert str(header_run.font.color.rgb) == "FFFFFF"
 
 
 def test_report_content_fixes_remove_tmb_h_only_notes_when_tmb_low(tmp_path):
@@ -2941,6 +3004,12 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert all(stage["duration_ms"] is not None for stage in result["stage_results"])
     assert Path(result["output_file"]).exists()
     assert result["context"]["project_name"] == "结直肠癌301基因+MSI"
+    assert result["context"]["panel_style"]["variant_summary_table"][
+        "link_underline"
+    ] is False
+    assert result["context"]["panel_style"]["biomarker_table"]["header_fill"] == (
+        "00B7C7"
+    )
     chemotherapy = result["context"]["chemotherapy"]
     assert len(chemotherapy) == 7
     assert "瑞戈非尼" in chemotherapy[0]["Drug"]

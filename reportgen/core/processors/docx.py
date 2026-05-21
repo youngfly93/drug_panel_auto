@@ -179,5 +179,5 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     ctx.renderer._restore_variant_detail_table_style(
         ctx.output_path, ctx.template_context
     )
-    ctx.renderer._restore_biomarker_table_style(ctx.output_path)
+    ctx.renderer._restore_biomarker_table_style(ctx.output_path, ctx.template_context)
     ctx.renderer._restore_detection_content_underlines(ctx.output_path)

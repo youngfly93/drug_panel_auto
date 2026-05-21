@@ -205,7 +205,11 @@ class TemplateRenderer:
         if not isinstance(root, dict):
             return {}
         table_cfg = root.get(table_name)
-        return table_cfg if isinstance(table_cfg, dict) else {}
+        defaults = root.get("defaults")
+        merged = dict(defaults) if isinstance(defaults, dict) else {}
+        if isinstance(table_cfg, dict):
+            merged.update(table_cfg)
+        return merged
 
     @staticmethod
     def _bool_config(value: Any, default: bool) -> bool:
@@ -221,11 +225,42 @@ class TemplateRenderer:
         return default
 
     @staticmethod
+    def _hex_color_config(value: Any, default: str) -> str:
+        text = str(value or default).strip().lstrip("#").upper()
+        if len(text) != 6 or not all(ch in "0123456789ABCDEF" for ch in text):
+            return default.upper()
+        return text
+
+    @staticmethod
     def _float_config(value: Any, default: float) -> float:
         try:
             return float(value)
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _int_text_config(value: Any, default: str) -> str:
+        try:
+            return str(int(value))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _set_run_font_name(run, font_name: str) -> None:
+        if not font_name:
+            return
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        run.font.name = font_name
+        r_pr = run._element.get_or_add_rPr()
+        r_fonts = r_pr.rFonts
+        if r_fonts is None:
+            r_fonts = OxmlElement("w:rFonts")
+            r_pr.append(r_fonts)
+        r_fonts.set(qn("w:ascii"), font_name)
+        r_fonts.set(qn("w:hAnsi"), font_name)
+        r_fonts.set(qn("w:eastAsia"), font_name)
 
     @staticmethod
     def _format_static_text(text: str, values: dict[str, Any]) -> str:
@@ -481,11 +516,22 @@ class TemplateRenderer:
         doc = Document(file_path)
         changed = False
         style_cfg = self._panel_style_config(context, "variant_summary_table")
+        font_name = str(style_cfg.get("font_name") or "微软雅黑").strip()
+        header_font_size = self._float_config(style_cfg.get("header_font_size"), 9.0)
+        body_font_size = self._float_config(style_cfg.get("body_font_size"), 9.0)
+        header_fill = self._hex_color_config(style_cfg.get("header_fill"), "00C4D8")
+        header_font_color = RGBColor.from_string(
+            self._hex_color_config(style_cfg.get("header_font_color"), "FFFFFF")
+        )
+        body_font_color = RGBColor.from_string(
+            self._hex_color_config(style_cfg.get("body_font_color"), "000000")
+        )
+        border_color = self._hex_color_config(style_cfg.get("border_color"), "000000")
+        border_size = self._int_text_config(style_cfg.get("border_size"), "6")
         link_underline = self._bool_config(style_cfg.get("link_underline"), True)
-        link_color_hex = str(style_cfg.get("link_color") or "0000FF").strip().lstrip("#")
-        if len(link_color_hex) != 6:
-            link_color_hex = "0000FF"
-        link_color = RGBColor.from_string(link_color_hex.upper())
+        link_color = RGBColor.from_string(
+            self._hex_color_config(style_cfg.get("link_color"), "0000FF")
+        )
 
         def is_variant_summary_table(table) -> bool:
             if len(table.columns) != 4 or not table.rows:
@@ -518,9 +564,9 @@ class TemplateRenderer:
                     border = OxmlElement(f"w:{side}")
                     borders.append(border)
                 border.set(qn("w:val"), "single")
-                border.set(qn("w:sz"), "6")
+                border.set(qn("w:sz"), border_size)
                 border.set(qn("w:space"), "0")
-                border.set(qn("w:color"), "000000")
+                border.set(qn("w:color"), border_color)
 
         def style_cell(cell, row_idx: int, col_idx: int) -> None:
             header = row_idx == 0
@@ -530,7 +576,7 @@ class TemplateRenderer:
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
             set_cell_borders(cell)
             if header:
-                set_cell_shading(cell, "00C4D8")
+                set_cell_shading(cell, header_fill)
 
             for paragraph in cell.paragraphs:
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -538,11 +584,12 @@ class TemplateRenderer:
                 paragraph.paragraph_format.space_after = Pt(0)
                 paragraph.paragraph_format.line_spacing = 1.0
                 for run in paragraph.runs:
-                    run.font.size = Pt(9)
+                    self._set_run_font_name(run, font_name)
+                    run.font.size = Pt(header_font_size if header else body_font_size)
                     if header:
                         run.font.bold = True
                         run.font.underline = False
-                        run.font.color.rgb = RGBColor(255, 255, 255)
+                        run.font.color.rgb = header_font_color
                     elif link_cell:
                         run.font.bold = False
                         run.font.underline = link_underline
@@ -550,7 +597,7 @@ class TemplateRenderer:
                     else:
                         run.font.bold = False
                         run.font.underline = False
-                        run.font.color.rgb = RGBColor(0, 0, 0)
+                        run.font.color.rgb = body_font_color
 
         for table in doc.tables:
             if not is_variant_summary_table(table):
@@ -581,11 +628,22 @@ class TemplateRenderer:
         doc = Document(file_path)
         changed = False
         style_cfg = self._panel_style_config(context, "variant_detail_table")
+        font_name = str(style_cfg.get("font_name") or "微软雅黑").strip()
+        header_font_size = self._float_config(style_cfg.get("header_font_size"), 9.0)
+        body_font_size = self._float_config(style_cfg.get("body_font_size"), 9.0)
+        header_fill = self._hex_color_config(style_cfg.get("header_fill"), "00C4D8")
+        header_font_color = RGBColor.from_string(
+            self._hex_color_config(style_cfg.get("header_font_color"), "F9FBFA")
+        )
+        body_font_color = RGBColor.from_string(
+            self._hex_color_config(style_cfg.get("body_font_color"), "000000")
+        )
+        border_color = self._hex_color_config(style_cfg.get("border_color"), "000000")
+        border_size = self._int_text_config(style_cfg.get("border_size"), "6")
         link_underline = self._bool_config(style_cfg.get("link_underline"), True)
-        link_color_hex = str(style_cfg.get("link_color") or "0000FF").strip().lstrip("#")
-        if len(link_color_hex) != 6:
-            link_color_hex = "0000FF"
-        link_color = RGBColor.from_string(link_color_hex.upper())
+        link_color = RGBColor.from_string(
+            self._hex_color_config(style_cfg.get("link_color"), "0000FF")
+        )
 
         def is_variant_detail_table(table) -> bool:
             if len(table.columns) != 9 or len(table.rows) < 2:
@@ -620,31 +678,23 @@ class TemplateRenderer:
                     border = OxmlElement(f"w:{side}")
                     borders.append(border)
                 border.set(qn("w:val"), "single")
-                border.set(qn("w:sz"), "6")
+                border.set(qn("w:sz"), border_size)
                 border.set(qn("w:space"), "0")
-                border.set(qn("w:color"), "000000")
+                border.set(qn("w:color"), border_color)
 
         def set_run_font(run, *, header: bool, link: bool) -> None:
-            run.font.name = "微软雅黑"
-            run.font.size = Pt(9)
+            self._set_run_font_name(run, font_name)
+            run.font.size = Pt(header_font_size if header else body_font_size)
             run.font.bold = True if header else False
-            r_pr = run._element.get_or_add_rPr()
-            r_fonts = r_pr.rFonts
-            if r_fonts is None:
-                r_fonts = OxmlElement("w:rFonts")
-                r_pr.append(r_fonts)
-            r_fonts.set(qn("w:ascii"), "微软雅黑")
-            r_fonts.set(qn("w:hAnsi"), "微软雅黑")
-            r_fonts.set(qn("w:eastAsia"), "微软雅黑")
             if header:
                 run.font.underline = False
-                run.font.color.rgb = RGBColor(249, 251, 250)
+                run.font.color.rgb = header_font_color
             elif link:
                 run.font.underline = link_underline
                 run.font.color.rgb = link_color
             else:
                 run.font.underline = False
-                run.font.color.rgb = RGBColor(0, 0, 0)
+                run.font.color.rgb = body_font_color
 
         for table in doc.tables:
             if not is_variant_detail_table(table):
@@ -659,7 +709,7 @@ class TemplateRenderer:
                     cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
                     set_cell_borders(cell)
                     if header:
-                        set_cell_shading(cell, "00C4D8")
+                        set_cell_shading(cell, header_fill)
                     for paragraph in cell.paragraphs:
                         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                         paragraph.paragraph_format.space_before = Pt(0)
@@ -672,7 +722,9 @@ class TemplateRenderer:
         if changed:
             doc.save(file_path)
 
-    def _restore_biomarker_table_style(self, file_path: str) -> None:
+    def _restore_biomarker_table_style(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
         """Restore template typography for the TMB/MSI biomarker result table."""
         from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
         from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -682,6 +734,19 @@ class TemplateRenderer:
 
         doc = Document(file_path)
         changed = False
+        style_cfg = self._panel_style_config(context, "biomarker_table")
+        font_name = str(style_cfg.get("font_name") or "微软雅黑").strip()
+        header_font_size = self._float_config(style_cfg.get("header_font_size"), 10.0)
+        body_font_size = self._float_config(style_cfg.get("body_font_size"), 9.0)
+        header_fill = self._hex_color_config(style_cfg.get("header_fill"), "00C4D8")
+        header_font_color = RGBColor.from_string(
+            self._hex_color_config(style_cfg.get("header_font_color"), "F9FBFA")
+        )
+        body_font_color = RGBColor.from_string(
+            self._hex_color_config(style_cfg.get("body_font_color"), "000000")
+        )
+        border_color = self._hex_color_config(style_cfg.get("border_color"), "000000")
+        border_size = self._int_text_config(style_cfg.get("border_size"), "6")
 
         def is_biomarker_table(table) -> bool:
             if len(table.columns) != 3 or not table.rows:
@@ -709,24 +774,16 @@ class TemplateRenderer:
                     border = OxmlElement(f"w:{side}")
                     borders.append(border)
                 border.set(qn("w:val"), "single")
-                border.set(qn("w:sz"), "6")
+                border.set(qn("w:sz"), border_size)
                 border.set(qn("w:space"), "0")
-                border.set(qn("w:color"), "000000")
+                border.set(qn("w:color"), border_color)
 
         def apply_font(run, *, header: bool) -> None:
-            run.font.name = "微软雅黑"
-            run.font.size = Pt(10 if header else 9)
+            self._set_run_font_name(run, font_name)
+            run.font.size = Pt(header_font_size if header else body_font_size)
             run.font.bold = True if header else False
             run.font.underline = False
-            run.font.color.rgb = RGBColor(249, 251, 250) if header else RGBColor(0, 0, 0)
-            r_pr = run._element.get_or_add_rPr()
-            r_fonts = r_pr.rFonts
-            if r_fonts is None:
-                r_fonts = OxmlElement("w:rFonts")
-                r_pr.append(r_fonts)
-            r_fonts.set(qn("w:ascii"), "微软雅黑")
-            r_fonts.set(qn("w:hAnsi"), "微软雅黑")
-            r_fonts.set(qn("w:eastAsia"), "微软雅黑")
+            run.font.color.rgb = header_font_color if header else body_font_color
 
         for table in doc.tables:
             if not is_biomarker_table(table):
@@ -737,7 +794,7 @@ class TemplateRenderer:
                     cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
                     set_cell_borders(cell)
                     if header:
-                        set_cell_shading(cell, "00C4D8")
+                        set_cell_shading(cell, header_fill)
                     for paragraph in cell.paragraphs:
                         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                         paragraph.paragraph_format.space_before = Pt(0)
