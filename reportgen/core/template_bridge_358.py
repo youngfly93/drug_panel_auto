@@ -375,6 +375,68 @@ def _load_guideline_tables_rule(
     return raw if isinstance(raw, dict) else {}
 
 
+def _resolve_drugs_rule_path(
+    base_path: Optional[str] = None,
+    *,
+    panel_id: Optional[str] = None,
+    config_path: Optional[Path] = None,
+) -> Optional[Path]:
+    """Find the drug-display rule file next to a panel package."""
+    candidates: List[Path] = []
+    if config_path is not None:
+        candidates.append(config_path.parent / "drugs.yaml")
+
+    panel_ids = [str(panel_id or "").strip()]
+    if "crc_358_msi" not in panel_ids:
+        panel_ids.append("crc_358_msi")
+
+    if base_path:
+        bp = Path(str(base_path)).expanduser().resolve()
+        for pid in panel_ids:
+            if pid:
+                candidates.append(bp / "panels" / pid / "rules" / "drugs.yaml")
+
+    project_root = Path(__file__).resolve().parents[2]
+    for pid in panel_ids:
+        if pid:
+            candidates.append(project_root / "panels" / pid / "rules" / "drugs.yaml")
+            candidates.append(Path("panels") / pid / "rules" / "drugs.yaml")
+
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return path.resolve()
+    return None
+
+
+def _load_drugs_rule(
+    *,
+    base_path: Optional[str],
+    panel_id: Optional[str],
+    config_path: Optional[Path],
+) -> Dict[str, Any]:
+    path = _resolve_drugs_rule_path(
+        base_path,
+        panel_id=panel_id,
+        config_path=config_path,
+    )
+    if path is None:
+        return {}
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _normalize_approved_drug_rows(raw: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return []
+    rows = raw.get("approved_drug_rows")
+    if not isinstance(rows, list):
+        return []
+    return [dict(row) for row in rows if isinstance(row, dict)]
+
+
 def _normalize_nccn_result_rows(raw: Any) -> List[Dict[str, Any]]:
     if not isinstance(raw, dict):
         return []
@@ -475,6 +537,12 @@ def load_panel_config(
         config_path=cfg_path,
     )
     nccn_rows = _normalize_nccn_result_rows(guideline_rule)
+    drugs_rule = _load_drugs_rule(
+        base_path=base_path,
+        panel_id=panel_id,
+        config_path=cfg_path,
+    )
+    approved_drug_rows = _normalize_approved_drug_rows(drugs_rule)
 
     pc = PanelConfig(
         class_i_genes=as_gene_set("class_i_genes", set(_DEFAULT_CLASS_I_GENES)),
@@ -486,7 +554,7 @@ def load_panel_config(
             "immune_hyperprogression_genes", set(_DEFAULT_IMMUNE_HYPERPROGRESSION_GENES)
         ),
         reviewed_variant_overrides=as_dict_list("reviewed_variant_overrides"),
-        approved_drug_rows=as_dict_list("crc_approved_drugs"),
+        approved_drug_rows=approved_drug_rows or as_dict_list("crc_approved_drugs"),
         nccn_result_rows=nccn_rows or [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS],
     )
     if panel_display is not None:

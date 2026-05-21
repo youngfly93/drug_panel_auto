@@ -284,6 +284,29 @@ def test_crc_guideline_rule_contains_active_nccn_rows():
     assert any(row["key"] == "FGFR123_FUSION" for row in rows)
 
 
+def test_crc_drug_rule_contains_active_approved_rows():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    engine = PanelRuleEngine.from_panel_package(package)
+    rule = engine.get("drugs")
+    rows = rule["approved_drug_rows"]
+
+    assert rule["version"] == "0.2.0"
+    assert rule["status"] == "active"
+    assert len(rows) == 7
+    assert "瑞戈非尼" in rows[0]["drug"]
+    assert rule["drug_rules"]["approved_drug_rows_source"] == (
+        "drugs.yaml:approved_drug_rows"
+    )
+    assert "crc_approved_drugs" not in engine.get("panel_rules")
+
+
+def test_load_panel_config_prefers_drugs_yaml_approved_rows():
+    panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_358_msi")
+
+    assert len(panel_config.approved_drug_rows) == 7
+    assert "瑞戈非尼" in panel_config.approved_drug_rows[0]["drug"]
+
+
 def test_field_mapper_adds_legacy_fusion_aliases(tmp_path):
     excel_data = _excel(
         tmp_path,
@@ -2844,6 +2867,10 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert all(stage["duration_ms"] is not None for stage in result["stage_results"])
     assert Path(result["output_file"]).exists()
     assert result["context"]["project_name"] == "结直肠癌301基因+MSI"
+    chemotherapy = result["context"]["chemotherapy"]
+    assert len(chemotherapy) == 7
+    assert "瑞戈非尼" in chemotherapy[0]["Drug"]
+    assert "结直肠癌" in chemotherapy[0]["药物适应情况"]
     assert result["context"]["report_text_rule_keys"]["immuno_tips"] == (
         "tmb_table_immuno_tips"
     )

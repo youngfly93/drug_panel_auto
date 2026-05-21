@@ -113,7 +113,7 @@ guideline_tables:
         match: "突变"
   chemotherapy:
     output_table: "chemotherapy"
-    row_source: "crc.yaml:crc_approved_drugs"
+    row_source: "drugs.yaml:approved_drug_rows"
     required_columns:
       - "药物名称"
       - "相关基因"
