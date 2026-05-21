@@ -1,0 +1,18 @@
+schema_version: "1.0"
+panel_id: "crc_358_msi"
+rule_id: "style"
+version: "0.1.0"
+updated: "2026-05-21"
+status: "draft"
+description: "CRC table style tokens prepared for M8 processor governance."
+
+style:
+  variant_summary_table:
+    link_underline: false
+    link_color: "000000"
+  variant_detail_table:
+    link_underline: false
+    link_color: "000000"
+  biomarker_table:
+    header_fill: "00B7C7"
+    header_font_color: "FFFFFF"

@@ -69,6 +69,7 @@ from reportgen.panels.validation import (
     validate_panel_package_path,
     validate_panel_registry,
 )
+from reportgen.rules import load_rule_package
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
 from reportgen.utils import docx_render
 
@@ -709,7 +710,36 @@ def _write_minimal_panel_package(
     (panel_dir / "templates").mkdir(parents=True)
     (panel_dir / "rules").mkdir(parents=True)
     (panel_dir / "templates" / "standard.docx").write_bytes(b"placeholder")
-    (panel_dir / "rules" / "panel.yaml").write_text("rules: []\n", encoding="utf-8")
+    (panel_dir / "rules" / "panel.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "1.0",
+                "panel_id": panel_id,
+                "rule_id": "panel_rules",
+                "version": "0.1.0",
+                "status": "draft",
+                "rules": [],
+            },
+            sort_keys=False,
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    (panel_dir / "rules" / "report_text.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "1.0",
+                "panel_id": panel_id,
+                "rule_id": "report_text",
+                "version": "0.1.0",
+                "status": "draft",
+                "texts": {"summary": "synthetic"},
+            },
+            sort_keys=False,
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
     (panel_dir / "mappings.yaml").write_text("mappings: {}\n", encoding="utf-8")
     panel_yaml = panel_dir / "panel.yaml"
     panel_yaml.write_text(
@@ -730,7 +760,10 @@ def _write_minimal_panel_package(
                     }
                 ],
                 "mappings": {"default": "mappings.yaml"},
-                "rules": {"panel_rules": "rules/panel.yaml"},
+                "rules": {
+                    "panel_rules": "rules/panel.yaml",
+                    "report_text": "rules/report_text.yaml",
+                },
                 "input_contract": {"required_tables": ["Variations"]},
                 "template_contract": {"required_variables": ["patient_name"]},
                 "golden_cases": [
@@ -831,6 +864,71 @@ def test_panel_package_validator_accepts_alias_lookup():
 
     assert report.status == "PASS"
     assert alias_report.status == "PASS"
+
+
+def test_rule_package_loader_records_crc_rule_provenance():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    report = load_rule_package(package)
+    provenance = report.to_provenance()
+
+    assert report.ok
+    assert provenance["status"] == "PASS"
+    rule_names = {item["rule_name"] for item in provenance["files"]}
+    assert {
+        "panel_rules",
+        "report_text",
+        "biomarkers",
+        "guideline_tables",
+        "drugs",
+        "style",
+    } <= rule_names
+    report_text = next(
+        item for item in provenance["files"] if item["rule_name"] == "report_text"
+    )
+    assert report_text["version"] == "0.1.0"
+    assert report_text["sha256"]
+
+
+def test_panel_package_validator_rejects_missing_report_text_rule(tmp_path):
+    panel_yaml = _write_minimal_panel_package(tmp_path, "bad_panel")
+    (panel_yaml.parent / "rules" / "report_text.yaml").unlink()
+
+    report = validate_panel_package_path(
+        panel_yaml,
+        project_root=tmp_path,
+        panels_dir=tmp_path / "panels",
+    )
+
+    assert report.status == "FAIL"
+    assert any(issue.code == "DECLARED_FILE_MISSING" for issue in report.errors)
+
+
+def test_panel_package_validator_rejects_duplicate_rule_key(tmp_path):
+    panel_yaml = _write_minimal_panel_package(tmp_path, "bad_panel")
+    (panel_yaml.parent / "rules" / "report_text.yaml").write_text(
+        "\n".join(
+            [
+                'schema_version: "1.0"',
+                'panel_id: "bad_panel"',
+                'rule_id: "report_text"',
+                'version: "0.1.0"',
+                "texts:",
+                '  summary: "first"',
+                "texts:",
+                '  summary: "second"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report = validate_panel_package_path(
+        panel_yaml,
+        project_root=tmp_path,
+        panels_dir=tmp_path / "panels",
+    )
+
+    assert report.status == "FAIL"
+    assert any(issue.code == "RULE_DUPLICATE_KEY" for issue in report.errors)
 
 
 def test_panel_package_validator_rejects_missing_declared_file(tmp_path):
@@ -2175,6 +2273,44 @@ def test_qa_report_records_pipeline_summary(tmp_path):
     assert any(issue["code"] == "PIPELINE_WARN" for issue in qa["issues"])
 
 
+def test_qa_report_records_rule_provenance(tmp_path):
+    docx_path = tmp_path / "rules.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+
+    rule_provenance = {
+        "schema_version": "1.0",
+        "panel_id": "crc_358_msi",
+        "status": "PASS",
+        "ok": True,
+        "file_count": 1,
+        "files": [
+            {
+                "rule_name": "report_text",
+                "rule_id": "report_text",
+                "schema_version": "1.0",
+                "version": "0.1.0",
+                "status": "draft",
+                "updated": "2026-05-21",
+                "path": "panels/crc_358_msi/rules/report_text.yaml",
+                "sha256": "abc",
+            }
+        ],
+        "issues": [],
+    }
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        rule_provenance=rule_provenance,
+    )
+
+    assert qa["status"] == "PASS"
+    assert qa["rules"]["panel_id"] == "crc_358_msi"
+    assert qa["checks"]["rules"]["status"] == "PASS"
+    assert qa["checks"]["rules"]["files"][0]["version"] == "0.1.0"
+
+
 def test_field_provenance_masks_sensitive_values_and_records_sources(tmp_path):
     docx_path = tmp_path / "report.docx"
     doc = Document()
@@ -2579,6 +2715,8 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert result["success"], result.get("errors")
     assert result["qa_status"] == "PASS"
     assert result["panel_package_validation"]["status"] == "PASS"
+    assert result["rule_provenance"]["status"] == "PASS"
+    assert result["rule_provenance"]["file_count"] >= 6
     assert result["generation_id"] == Path(result["output_file"]).stem
     stage_results_file = Path(result["stage_results_file"])
     assert stage_results_file.exists()
@@ -2587,6 +2725,8 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert stage_payload["pipeline"]["status"] == "PASS"
     assert stage_payload["stage_results"] == result["stage_results"]
     assert result["qa_report"]["pipeline"]["status"] == "PASS"
+    assert result["qa_report"]["rules"]["status"] == "PASS"
+    assert result["qa_report"]["checks"]["rules"]["file_count"] >= 6
     assert result["qa_report"]["checks"]["pipeline"]["stage_results_file"] == str(
         stage_results_file
     )

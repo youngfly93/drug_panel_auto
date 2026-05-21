@@ -37,6 +37,11 @@ mappings:
 
 rules:
   panel_rules: "rules/crc.yaml"
+  report_text: "rules/report_text.yaml"
+  biomarkers: "rules/biomarkers.yaml"
+  guideline_tables: "rules/guideline_tables.yaml"
+  drugs: "rules/drugs.yaml"
+  style: "rules/style.yaml"
   filtering: "config/filtering.yaml"
   drug_brands: "config/drug_brands.yaml"
 

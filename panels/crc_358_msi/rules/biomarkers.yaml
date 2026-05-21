@@ -1,0 +1,25 @@
+schema_version: "1.0"
+panel_id: "crc_358_msi"
+rule_id: "biomarkers"
+version: "0.1.0"
+updated: "2026-05-21"
+status: "draft"
+description: "CRC biomarker display rules prepared for M7 migration."
+
+biomarkers:
+  tmb:
+    field: "tmb_summary"
+    low_label: "TMB-L"
+    high_label: "TMB-H"
+    reference_threshold: "10 mutations/Mb"
+  msi:
+    field: "msi_summary"
+    allowed_values:
+      - "MSS"
+      - "MSI-L"
+      - "MSI-H"
+      - "未检测"
+  immune_gene_tables:
+    positive_source: "crc.yaml:immune_positive_genes"
+    negative_source: "crc.yaml:immune_negative_genes"
+    hyperprogression_source: "crc.yaml:immune_hyperprogression_genes"

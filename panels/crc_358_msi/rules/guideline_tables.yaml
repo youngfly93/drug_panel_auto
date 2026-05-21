@@ -1,0 +1,21 @@
+schema_version: "1.0"
+panel_id: "crc_358_msi"
+rule_id: "guideline_tables"
+version: "0.1.0"
+updated: "2026-05-21"
+status: "draft"
+description: "CRC guideline table declarations prepared for M7 migration."
+
+guideline_tables:
+  nccn_results:
+    output_table: "nccn_results"
+    required_columns:
+      - "检测基因"
+      - "检测内容"
+      - "检测结果"
+  chemotherapy:
+    output_table: "chemotherapy"
+    required_columns:
+      - "药物名称"
+      - "相关基因"
+      - "药物适应情况"

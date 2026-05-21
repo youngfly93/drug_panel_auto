@@ -1,5 +1,7 @@
 schema_version: "1.0"
 panel_id: "lung_methylation"
+rule_id: "lung_methylation"
+version: "0.1.0"
 updated: "2026-05-17"
 status: "pilot"
 notes:

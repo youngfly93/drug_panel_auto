@@ -39,6 +39,7 @@ from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
 from reportgen.panels.validation import validate_panel_package_path
+from reportgen.rules import PanelRuleEngine
 from reportgen.utils.file_utils import (
     ensure_directory_exists,
     get_unique_filename,
@@ -75,6 +76,7 @@ class _GenerationState:
     processor_report: list[Any] = dc_field(default_factory=list)
     field_provenance: Optional[dict[str, Any]] = None
     field_provenance_file: Optional[str] = None
+    rule_provenance: Optional[dict[str, Any]] = None
     qa_report: Optional[dict[str, Any]] = None
     qa_report_file: Optional[str] = None
     stage_results_file: Optional[str] = None
@@ -431,6 +433,14 @@ class ReportGenerator:
                 "errors": [error_msg],
                 "warnings": [],
                 "panel_package_validation": state.panel_package_validation,
+            }
+        state.rule_provenance = self._load_rule_provenance(state.panel_package)
+        if state.rule_provenance:
+            stage.metrics["rule_file_count"] = state.rule_provenance.get("file_count")
+            stage.artifacts["rule_provenance"] = {
+                "panel_id": state.rule_provenance.get("panel_id"),
+                "status": state.rule_provenance.get("status"),
+                "file_count": state.rule_provenance.get("file_count"),
             }
         return None
 
@@ -849,6 +859,7 @@ class ReportGenerator:
                 field_provenance_file=state.field_provenance_file,
                 processor_report=state.processor_report,
                 template_contract=state.template_contract_report,
+                rule_provenance=state.rule_provenance,
             )
             state.qa_report_file = write_docx_qa_report(
                 state.qa_report,
@@ -901,6 +912,7 @@ class ReportGenerator:
             "errors": [],
             "warnings": state.report_data.validation_errors,
             "panel_package_validation": state.panel_package_validation,
+            "rule_provenance": state.rule_provenance,
             "template_contract": state.template_contract_report,
             "field_provenance": state.field_provenance,
             "field_provenance_file": state.field_provenance_file,
@@ -1000,6 +1012,34 @@ class ReportGenerator:
                         "message": f"Panel Package validation gate failed: {exc}",
                         "panel_id": getattr(panel_package, "panel_id", ""),
                         "path": str(panel_yaml),
+                        "hint": "",
+                    }
+                ],
+            }
+
+    @staticmethod
+    def _load_rule_provenance(panel_package) -> Optional[dict[str, Any]]:
+        """Load panel-local rule files and return provenance for QA reports."""
+        if panel_package is None:
+            return None
+        try:
+            return PanelRuleEngine.from_panel_package(panel_package).provenance
+        except Exception as exc:
+            return {
+                "schema_version": "1.0",
+                "panel_id": getattr(panel_package, "panel_id", ""),
+                "status": "FAIL",
+                "ok": False,
+                "file_count": 0,
+                "files": [],
+                "issues": [
+                    {
+                        "level": "ERROR",
+                        "code": "RULE_PROVENANCE_LOAD_FAILED",
+                        "message": f"Panel rule provenance cannot be loaded: {exc}",
+                        "path": str(Path(panel_package.root_dir) / "panel.yaml"),
+                        "rule_name": "",
+                        "rule_id": "",
                         "hint": "",
                     }
                 ],

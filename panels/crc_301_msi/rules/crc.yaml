@@ -4,7 +4,10 @@
 # Do NOT put any patient-level identifiers or real reports into git.
 schema_version: "1.0"
 panel_id: "crc_301_msi"
+rule_id: "crc"
+version: "0.1.0"
 updated: "2026-05-17"
+status: "active"
 notes:
   - "CRC 301 + MSI panel package rules; currently reuses CRC report gene set口径"
   - "仅保留 gene symbol + 显示用 transcript/chr 信息，不包含任何患者数据"

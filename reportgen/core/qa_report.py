@@ -39,6 +39,7 @@ def build_docx_qa_report(
     field_provenance_file: Optional[str] = None,
     processor_report: Optional[list[Mapping[str, Any]]] = None,
     template_contract: Optional[Mapping[str, Any]] = None,
+    rule_provenance: Optional[Mapping[str, Any]] = None,
     stage_results: Optional[list[Mapping[str, Any]]] = None,
     stage_results_file: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -62,6 +63,9 @@ def build_docx_qa_report(
             "TEMPLATE_CONTRACT_FAILED",
             checks["template_contract"]["message"],
         )
+    checks["rules"] = _rule_provenance_check(rule_provenance)
+    if checks["rules"]["status"] == "FAIL":
+        issue("error", "RULE_PROVENANCE_FAILED", checks["rules"]["message"])
 
     if not output_path.exists():
         issue("error", "DOCX_NOT_FOUND", f"Output DOCX not found: {output_file}")
@@ -77,6 +81,7 @@ def build_docx_qa_report(
                 metrics=metrics,
                 issues=issues,
                 template_contract=template_contract,
+                rule_provenance=rule_provenance,
             ),
             stage_results=stage_results,
             stage_results_file=stage_results_file,
@@ -100,6 +105,7 @@ def build_docx_qa_report(
                 metrics=metrics,
                 issues=issues,
                 template_contract=template_contract,
+                rule_provenance=rule_provenance,
             ),
             stage_results=stage_results,
             stage_results_file=stage_results_file,
@@ -209,6 +215,7 @@ def build_docx_qa_report(
             field_provenance_file=field_provenance_file,
             processor_report=processor_report,
             template_contract=template_contract,
+            rule_provenance=rule_provenance,
             checks=checks,
             metrics=metrics,
             issues=issues,
@@ -302,6 +309,7 @@ def _finalize_report(
     field_provenance_file: Optional[str] = None,
     processor_report: Optional[list[Mapping[str, Any]]] = None,
     template_contract: Optional[Mapping[str, Any]] = None,
+    rule_provenance: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     has_error = any(i.get("level") == "error" for i in issues)
     has_warning = any(i.get("level") == "warning" for i in issues)
@@ -320,6 +328,7 @@ def _finalize_report(
         else None,
         "post_processors": list(processor_report or []),
         "template_contract": dict(template_contract) if template_contract else None,
+        "rules": dict(rule_provenance) if rule_provenance else None,
         "checks": dict(checks),
         "metrics": dict(metrics),
         "issues": issues,
@@ -366,6 +375,34 @@ def _template_contract_check(
             f"missing_required_lists={missing_required_lists}, "
             f"missing_required_tables={missing_required_tables}, "
             f"table_errors={table_errors}"
+        ),
+    }
+
+
+def _rule_provenance_check(
+    rule_provenance: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    if not rule_provenance:
+        return {
+            "status": "SKIP",
+            "message": "No panel rule provenance was provided.",
+            "file_count": 0,
+            "files": [],
+        }
+
+    ok = bool(rule_provenance.get("ok", True))
+    files = list(rule_provenance.get("files") or [])
+    issues = list(rule_provenance.get("issues") or [])
+    return {
+        "status": "PASS" if ok else "FAIL",
+        "panel_id": rule_provenance.get("panel_id"),
+        "file_count": len(files),
+        "files": files,
+        "issues": issues,
+        "message": (
+            f"Panel rules loaded: {len(files)} file(s)."
+            if ok
+            else f"Panel rule validation failed with {len(issues)} issue(s)."
         ),
     }
 

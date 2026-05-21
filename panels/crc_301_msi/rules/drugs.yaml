@@ -1,0 +1,18 @@
+schema_version: "1.0"
+panel_id: "crc_301_msi"
+rule_id: "drugs"
+version: "0.1.0"
+updated: "2026-05-21"
+status: "draft"
+description: "CRC drug-display rule declarations prepared for M7 migration."
+
+drug_rules:
+  approved_drug_rows_source: "crc.yaml:crc_approved_drugs"
+  brand_lookup_source: "config/drug_brands.yaml"
+  immunotherapy_brand_list_source: "config/drug_brands.yaml"
+  evidence_levels:
+    allowed:
+      - "A"
+      - "B"
+      - "C"
+      - "D"

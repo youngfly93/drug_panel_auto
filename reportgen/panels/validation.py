@@ -20,6 +20,7 @@ from reportgen.panels.loader import (
     PanelPackageLoader,
     validate_panel_package_config,
 )
+from reportgen.rules.loader import load_rule_package
 
 
 PANEL_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]*$")
@@ -76,6 +77,7 @@ class PanelValidationReport:
     scope: str
     issues: list[PanelValidationIssue] = field(default_factory=list)
     panels_checked: list[str] = field(default_factory=list)
+    rule_packages: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def errors(self) -> list[PanelValidationIssue]:
@@ -123,6 +125,7 @@ class PanelValidationReport:
         for panel_id in other.panels_checked:
             if panel_id not in self.panels_checked:
                 self.panels_checked.append(panel_id)
+        self.rule_packages.extend(other.rule_packages)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -135,6 +138,7 @@ class PanelValidationReport:
                 "warnings": len(self.warnings),
                 "issues": len(self.issues),
             },
+            "rule_packages": list(self.rule_packages),
             "issues": [issue.to_dict() for issue in self.issues],
         }
 
@@ -332,6 +336,7 @@ class PanelPackageValidator:
             section="rules",
             allowed_suffixes=YAML_SUFFIXES,
         )
+        self._validate_panel_rules(package, report)
         self._validate_declared_file_map(
             package,
             package.mappings,
@@ -566,6 +571,24 @@ class PanelPackageValidator:
                     panel_id=package.panel_id,
                     path=package.root_dir / "panel.yaml",
                 )
+
+    def _validate_panel_rules(
+        self, package: PanelPackage, report: PanelValidationReport
+    ) -> None:
+        rule_report = load_rule_package(package)
+        payload = rule_report.to_dict()
+        if payload["file_count"] or payload["issues"]:
+            report.rule_packages.append(payload)
+
+        for issue in rule_report.issues:
+            report.add(
+                "ERROR" if issue.level == "ERROR" else "WARN",
+                issue.code,
+                issue.message,
+                panel_id=package.panel_id,
+                path=issue.path,
+                hint=issue.hint,
+            )
 
     def _validate_contracts(
         self,

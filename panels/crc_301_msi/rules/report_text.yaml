@@ -1,0 +1,18 @@
+schema_version: "1.0"
+panel_id: "crc_301_msi"
+rule_id: "report_text"
+version: "0.1.0"
+updated: "2026-05-21"
+status: "draft"
+description: "CRC report wording rules prepared for M7 text migration."
+
+texts:
+  tmb_education:
+    purpose: "TMB/MSI result table and 3.1 chapter educational wording."
+    source: "legacy_crc_template_alignment"
+  msi_education:
+    purpose: "MSI result table educational wording."
+    source: "legacy_crc_template_alignment"
+  patient_letter:
+    purpose: "Patient letter panel-name wording."
+    source: "legacy_crc_template_alignment"
