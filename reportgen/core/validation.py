@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from reportgen.models.excel_data import ExcelDataSource
 
@@ -72,6 +72,22 @@ def _to_float(value: Any) -> Optional[float]:
         return None
 
 
+def _text_rule(
+    text_rules: Optional[Mapping[str, Any]],
+    key: str,
+    default: str,
+) -> str:
+    if not text_rules:
+        return default
+    value = text_rules.get(key)
+    if isinstance(value, Mapping):
+        value = value.get("text") or value.get("value")
+    if value is None:
+        return default
+    text = str(value)
+    return text if text.strip() else default
+
+
 def tmb_threshold_for_sample(sample_type: Any) -> int:
     """Return the reporting TMB threshold for the sample type."""
     sample_type_text = str(sample_type or "组织")
@@ -85,7 +101,12 @@ def _sample_type_label(sample_type: Any, threshold: int) -> str:
     return "血液样本" if threshold == 16 else "组织样本"
 
 
-def build_tmb_fields(tmb_raw: Any, *, sample_type: Any = "组织") -> Dict[str, Any]:
+def build_tmb_fields(
+    tmb_raw: Any,
+    *,
+    sample_type: Any = "组织",
+    text_rules: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
     """Normalize TMB fields for every report-generation path.
 
     Missing TMB and malformed TMB are intentionally distinct. A malformed value
@@ -136,8 +157,12 @@ def build_tmb_fields(tmb_raw: Any, *, sample_type: Any = "组织") -> Dict[str, 
         f"在本次检测范围内，该样本肿瘤突变负荷为{tmb:.1f}{unit}，"
         f"TMB水平较{tmb_level_cn}。"
     )
-    detail_interpretation = TMB_DETAIL_INTERPRETATION_TEXT
-    drug_note = TMB_DRUG_NOTE_TEXT
+    detail_interpretation = _text_rule(
+        text_rules,
+        "tmb_detail_interpretation",
+        TMB_DETAIL_INTERPRETATION_TEXT,
+    )
+    drug_note = _text_rule(text_rules, "tmb_drug_note", TMB_DRUG_NOTE_TEXT)
 
     return {
         "tmb_value": f"{tmb:.1f}",
@@ -154,27 +179,41 @@ def build_tmb_fields(tmb_raw: Any, *, sample_type: Any = "组织") -> Dict[str, 
     }
 
 
-def build_msi_fields(msi_raw: Any) -> Dict[str, str]:
+def build_msi_fields(
+    msi_raw: Any,
+    *,
+    text_rules: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, str]:
     """Normalize MSI fields and patient-specific MSI narrative text."""
     msi_status = str(msi_raw).strip() if msi_raw is not None else ""
     if not msi_status:
         msi_status = "未检测"
 
     up = msi_status.upper()
+    crc_interpretation = _text_rule(
+        text_rules,
+        "msi_crc_interpretation",
+        MSI_CRC_INTERPRETATION_TEXT,
+    )
+    educational_tips = _text_rule(
+        text_rules,
+        "msi_educational_tips",
+        MSI_EDUCATIONAL_TIPS,
+    )
     if up == "MSS":
         msi_status = "MSS"
         msi_status_cn = "微卫星稳定型，MSS"
         msi_summary = "微卫星稳定型，MSS"
         detail_sentence = "依据本次检测结果，该肿瘤样本为微卫星稳定（MSS）型。"
-        detail_interpretation = MSI_CRC_INTERPRETATION_TEXT
-        msi_tips = MSI_EDUCATIONAL_TIPS
+        detail_interpretation = crc_interpretation
+        msi_tips = educational_tips
     elif up == "MSI-H":
         msi_status = "MSI-H"
         msi_status_cn = "微卫星高度不稳定，MSI-H"
         msi_summary = "微卫星不稳定型，MSI-H"
         detail_sentence = "依据本次检测结果，该肿瘤样本为微卫星高度不稳定（MSI-H）型。"
-        detail_interpretation = MSI_CRC_INTERPRETATION_TEXT
-        msi_tips = MSI_EDUCATIONAL_TIPS
+        detail_interpretation = crc_interpretation
+        msi_tips = educational_tips
     elif up == "MSI-L":
         msi_status = "MSI-L"
         msi_status_cn = "微卫星低度不稳定，MSI-L"
@@ -184,7 +223,7 @@ def build_msi_fields(msi_raw: Any) -> Dict[str, str]:
             "MSI-L通常不等同于MSI-H/dMMR免疫治疗获益人群；治疗决策需结合"
             "临床病理、免疫组化及其他检测结果综合判断。"
         )
-        msi_tips = MSI_EDUCATIONAL_TIPS
+        msi_tips = educational_tips
     elif up.startswith("MSI"):
         msi_status_cn = msi_status
         msi_summary = f"微卫星不稳定型，{msi_status}"

@@ -40,6 +40,7 @@ from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
 from reportgen.panels.validation import validate_panel_package_path
 from reportgen.rules import PanelRuleEngine
+from reportgen.rules.evaluators import apply_report_text_rules, collect_report_texts
 from reportgen.utils.file_utils import (
     ensure_directory_exists,
     get_unique_filename,
@@ -77,6 +78,7 @@ class _GenerationState:
     field_provenance: Optional[dict[str, Any]] = None
     field_provenance_file: Optional[str] = None
     rule_provenance: Optional[dict[str, Any]] = None
+    report_text_rules: dict[str, str] = dc_field(default_factory=dict)
     qa_report: Optional[dict[str, Any]] = None
     qa_report_file: Optional[str] = None
     stage_results_file: Optional[str] = None
@@ -525,6 +527,14 @@ class ReportGenerator:
         panel_style = self._load_panel_style_config(state.panel_package)
         if panel_style:
             state.report_data.set_field("panel_style", panel_style)
+        state.report_text_rules = self._load_report_text_rules(state.panel_package)
+        applied_text_rules = apply_report_text_rules(
+            state.report_data,
+            state.report_text_rules,
+        )
+        if applied_text_rules:
+            state.report_data.set_field("report_text_rule_keys", applied_text_rules)
+            stage.metrics["report_text_rule_count"] = len(applied_text_rules)
         stage.metrics["validation_errors"] = len(state.report_data.validation_errors)
 
     def _stage_panel_rule_execution(
@@ -1044,6 +1054,17 @@ class ReportGenerator:
                     }
                 ],
             }
+
+    @staticmethod
+    def _load_report_text_rules(panel_package) -> dict[str, str]:
+        """Load configured report wording from panel report_text rules."""
+        if panel_package is None:
+            return {}
+        try:
+            rule_engine = PanelRuleEngine.from_panel_package(panel_package)
+            return collect_report_texts(rule_engine.get("report_text"))
+        except Exception:
+            return {}
 
     @staticmethod
     def _format_panel_validation_failure(

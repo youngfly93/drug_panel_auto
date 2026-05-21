@@ -69,7 +69,8 @@ from reportgen.panels.validation import (
     validate_panel_package_path,
     validate_panel_registry,
 )
-from reportgen.rules import load_rule_package
+from reportgen.rules import PanelRuleEngine, load_rule_package
+from reportgen.rules.evaluators import apply_report_text_rules, collect_report_texts
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
 from reportgen.utils import docx_render
 
@@ -885,8 +886,51 @@ def test_rule_package_loader_records_crc_rule_provenance():
     report_text = next(
         item for item in provenance["files"] if item["rule_name"] == "report_text"
     )
-    assert report_text["version"] == "0.1.0"
+    assert report_text["version"] == "0.2.0"
     assert report_text["sha256"]
+
+
+def test_report_text_rules_drive_tmb_msi_copy():
+    report_data = ReportData(
+        context={
+            "tmb_value": "6.5",
+            "tmb_status": "L",
+            "sample_type": "组织",
+            "msi_status": "MSS",
+        }
+    )
+    text_rules = {
+        "tmb_table_immuno_tips": "自定义TMB表格提示",
+        "tmb_detail_interpretation": "自定义TMB章节科普",
+        "tmb_drug_note": "自定义TMB药物清单",
+        "msi_educational_tips": "自定义MSI表格提示",
+        "msi_crc_interpretation": "自定义MSI章节解读",
+    }
+
+    applied = apply_report_text_rules(report_data, text_rules)
+
+    assert applied["immuno_tips"] == "tmb_table_immuno_tips"
+    assert report_data.get_field("immuno_tips") == "自定义TMB表格提示"
+    assert report_data.get_field("tmb_detail_interpretation") == "自定义TMB章节科普"
+    assert report_data.get_field("tmb_drug_note") == "自定义TMB药物清单"
+    assert report_data.get_field("msi_tips") == "自定义MSI表格提示"
+    assert report_data.get_field("msi_detail_interpretation") == "自定义MSI章节解读"
+
+
+def test_crc_report_text_rule_contains_active_tmb_msi_copy():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    rule = PanelRuleEngine.from_panel_package(package).get("report_text")
+    text_rules = collect_report_texts(rule)
+
+    assert rule["version"] == "0.2.0"
+    assert rule["status"] == "active"
+    assert "TMB-H的肿瘤" in text_rules["tmb_table_immuno_tips"]
+    assert "2020年6月，FDA批准帕博利珠单抗" in text_rules[
+        "tmb_detail_interpretation"
+    ]
+    assert "MSI-H的实体瘤通常具有免疫原性" in text_rules[
+        "msi_educational_tips"
+    ]
 
 
 def test_panel_package_validator_rejects_missing_report_text_rule(tmp_path):
@@ -2741,6 +2785,14 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert all(stage["duration_ms"] is not None for stage in result["stage_results"])
     assert Path(result["output_file"]).exists()
     assert result["context"]["project_name"] == "结直肠癌301基因+MSI"
+    assert result["context"]["report_text_rule_keys"]["immuno_tips"] == (
+        "tmb_table_immuno_tips"
+    )
+    assert "TMB-H的肿瘤" in result["context"]["immuno_tips"]
+    assert "2020年6月，FDA批准帕博利珠单抗" in result["context"][
+        "tmb_detail_interpretation"
+    ]
+    assert "MSI-H的实体瘤通常具有免疫原性" in result["context"]["msi_tips"]
     assert result["template_contract"]["declared_contract"]["ok"] is True
 
 
