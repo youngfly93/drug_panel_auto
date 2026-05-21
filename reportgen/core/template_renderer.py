@@ -5,13 +5,13 @@
 """
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from docx import Document
 
 from reportgen.core.processors import (
     ProcessorContext,
-    build_default_docx_processors,
+    build_docx_processors,
     run_processors,
 )
 from reportgen.core.template_contract import (
@@ -46,7 +46,11 @@ class TemplateRenderer:
         self.last_processor_report: list[dict[str, Any]] = []
 
     def render(
-        self, template_path: str, report_data: ReportData, output_path: str
+        self,
+        template_path: str,
+        report_data: ReportData,
+        output_path: str,
+        post_processor_names: Optional[Sequence[str]] = None,
     ) -> str:
         """
         渲染模板并保存
@@ -102,7 +106,12 @@ class TemplateRenderer:
             # 保存
             doc.save(output_path)
 
-            self._run_post_render_processors(output_path, context, template_path)
+            self._run_post_render_processors(
+                output_path,
+                context,
+                template_path,
+                processor_names=post_processor_names,
+            )
 
             # 验证生成的文件可以被正常打开
             try:
@@ -125,12 +134,18 @@ class TemplateRenderer:
             )
             raise ValueError(f"模板渲染失败: {e}")
 
-    def build_post_render_processors(self):
+    def build_post_render_processors(
+        self, processor_names: Optional[Sequence[str]] = None
+    ):
         """Build the ordered DOCX post-render processor chain."""
-        return build_default_docx_processors()
+        return build_docx_processors(processor_names)
 
     def _run_post_render_processors(
-        self, output_path: str, context: dict, template_path: str
+        self,
+        output_path: str,
+        context: dict,
+        template_path: str,
+        processor_names: Optional[Sequence[str]] = None,
     ) -> None:
         """Run post-render processors and keep an execution report."""
         processor_context = ProcessorContext(
@@ -141,7 +156,7 @@ class TemplateRenderer:
             logger=self.logger,
         )
         results = run_processors(
-            self.build_post_render_processors(), processor_context
+            self.build_post_render_processors(processor_names), processor_context
         )
         self.last_processor_report = [result.to_dict() for result in results]
 

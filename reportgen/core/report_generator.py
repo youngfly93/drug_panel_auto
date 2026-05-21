@@ -826,6 +826,7 @@ class ReportGenerator:
             state.template_file,
             state.report_data,
             state.output_path,
+            post_processor_names=self._get_panel_processor_names(state.panel_package),
         )
         state.processor_report = list(
             getattr(self.template_renderer, "last_processor_report", []) or []
@@ -833,6 +834,9 @@ class ReportGenerator:
         self.logger.log_event("template_rendering_completed", output=state.final_output)
         stage.artifacts["output_file"] = state.final_output
         stage.metrics["post_processors"] = len(state.processor_report)
+        stage.metrics["declared_processors"] = list(
+            self._get_panel_processor_names(state.panel_package) or []
+        )
 
     def _stage_field_provenance(
         self,
@@ -971,6 +975,21 @@ class ReportGenerator:
             return get_panel_registry().get(project_type)
         except Exception:
             return None
+
+    @staticmethod
+    def _get_panel_processor_names(panel_package) -> Optional[tuple[str, ...]]:
+        """Return panel-declared processor names.
+
+        ``None`` means legacy/default chain. An empty tuple is intentional and
+        disables post-render processors for packages that do not need DOCX
+        surgery.
+        """
+        if panel_package is None:
+            return None
+        processors = getattr(panel_package, "processors", None)
+        if processors is None:
+            return None
+        return tuple(str(name) for name in processors)
 
     @staticmethod
     def _resolve_visual_qa_options(state: _GenerationState) -> dict[str, Any]:

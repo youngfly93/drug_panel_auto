@@ -200,14 +200,17 @@ def build_docx_qa_report(
             "message": "No field provenance report was provided.",
         }
 
+    processor_rows = list(processor_report or [])
     processor_errors = [
         row
-        for row in (processor_report or [])
+        for row in processor_rows
         if isinstance(row, Mapping) and row.get("status") == "ERROR"
     ]
     checks["post_processors"] = {
-        "status": "WARN" if processor_errors else ("PASS" if processor_report else "SKIP"),
-        "count": len(processor_report or []),
+        "status": "WARN"
+        if processor_errors
+        else ("PASS" if processor_report is not None else "SKIP"),
+        "count": len(processor_rows),
         "error_count": len(processor_errors),
         "errors": processor_errors,
     }

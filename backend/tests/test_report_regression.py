@@ -1012,6 +1012,31 @@ def test_panel_package_registry_validator_accepts_builtin_packages():
     assert report.errors == []
 
 
+def test_panel_package_validator_rejects_processor_order_and_dependencies(tmp_path):
+    panel_yaml = _write_minimal_panel_package(tmp_path, "bad_processors")
+    payload = yaml.safe_load(panel_yaml.read_text(encoding="utf-8"))
+    payload["processors"] = [
+        "underlines_and_styles",
+        "toc_refresh",
+        "blank_page_cleanup",
+    ]
+    panel_yaml.write_text(
+        yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    report = validate_panel_package_path(
+        panel_yaml,
+        project_root=tmp_path,
+        panels_dir=tmp_path / "panels",
+    )
+
+    codes = {issue.code for issue in report.errors}
+    assert "PROCESSOR_ORDER_INVALID" in codes
+    assert "PROCESSOR_DEPENDENCY_MISSING" in codes
+    assert "PROCESSOR_DEPENDENCY_ORDER" in codes
+
+
 def test_panel_package_validator_accepts_alias_lookup():
     report = validate_panel_package_path(
         ROOT / "panels" / "crc_358_msi" / "panel.yaml",
@@ -2810,6 +2835,67 @@ def test_template_renderer_default_processors_include_key_m1_processors():
     assert "toc_refresh" in names
     assert "blank_page_cleanup" in names
     assert "underlines_and_styles" in names
+
+
+def test_template_renderer_can_build_panel_declared_processors_only():
+    renderer = TemplateRenderer(log_level="ERROR")
+    processors = renderer.build_post_render_processors(["bullet_lists"])
+
+    assert [processor.name for processor in processors] == ["bullet_lists"]
+
+
+def test_template_renderer_can_disable_panel_processors(tmp_path):
+    docx_path = tmp_path / "no_processors.docx"
+    doc = Document()
+    p = doc.add_paragraph("")
+    ppr = p._p.get_or_add_pPr()
+    num_pr = OxmlElement("w:numPr")
+    num_id = OxmlElement("w:numId")
+    num_id.set(qn("w:val"), "1")
+    num_pr.append(num_id)
+    ppr.append(num_pr)
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._run_post_render_processors(
+        str(docx_path),
+        {},
+        str(docx_path),
+        processor_names=[],
+    )
+
+    rendered = Document(docx_path)
+    assert rendered.paragraphs[0]._p.pPr is not None
+    assert renderer.last_processor_report == []
+
+
+def test_bullet_list_processor_is_idempotent(tmp_path):
+    docx_path = tmp_path / "bullet_idempotent.docx"
+    doc = Document()
+    p = doc.add_paragraph("")
+    ppr = p._p.get_or_add_pPr()
+    num_pr = OxmlElement("w:numPr")
+    num_id = OxmlElement("w:numId")
+    num_id.set(qn("w:val"), "1")
+    num_pr.append(num_id)
+    ppr.append(num_pr)
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    for _ in range(2):
+        renderer._run_post_render_processors(
+            str(docx_path),
+            {},
+            str(docx_path),
+            processor_names=["bullet_lists"],
+    )
+
+    rendered = Document(docx_path)
+    assert not any(
+        paragraph._p.pPr is not None and paragraph._p.pPr.numPr is not None
+        for paragraph in rendered.paragraphs
+    )
+    assert [row["name"] for row in renderer.last_processor_report] == ["bullet_lists"]
 
 
 def test_qa_report_records_post_processor_errors(tmp_path):

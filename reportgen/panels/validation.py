@@ -28,24 +28,6 @@ VALID_PACKAGE_STATUSES = {"draft", "pilot", "active", "deprecated"}
 VALID_TEMPLATE_STATUSES = {"draft", "pilot", "active", "deprecated"}
 YAML_SUFFIXES = {".yaml", ".yml"}
 DOCX_SUFFIXES = {".docx"}
-KNOWN_DOCX_PROCESSORS = {
-    "empty_table_rows",
-    "part3_formatted_sections",
-    "signature_placeholder",
-    "report_content",
-    "bullet_lists",
-    "signature_layout",
-    "cover_artifacts",
-    "section_spacing",
-    "page_layout",
-    "gene_list_and_qc",
-    "variant_tables",
-    "hla_tail",
-    "blank_page_cleanup",
-    "toc_refresh",
-    "final_refresh_cleanup",
-    "underlines_and_styles",
-}
 
 
 @dataclass(frozen=True)
@@ -571,6 +553,16 @@ class PanelPackageValidator:
                     panel_id=package.panel_id,
                     path=package.root_dir / "panel.yaml",
                 )
+        for issue in _validate_processor_sequence(package.processors):
+            if issue.get("code") in {"PROCESSOR_UNKNOWN", "PROCESSOR_DUPLICATED"}:
+                continue
+            report.add(
+                "ERROR",
+                str(issue.get("code") or "PROCESSOR_INVALID"),
+                str(issue.get("message") or "Invalid DOCX processor sequence."),
+                panel_id=package.panel_id,
+                path=package.root_dir / "panel.yaml",
+            )
 
     def _validate_panel_rules(
         self, package: PanelPackage, report: PanelValidationReport
@@ -732,7 +724,15 @@ def validate_panel_registry(
 def _known_processor_names() -> set[str]:
     # Keep this module import-light: panel validate must work even when the
     # runtime registry cannot be built because a package is invalid.
-    return set(KNOWN_DOCX_PROCESSORS)
+    from reportgen.core.processors.registry import known_docx_processor_names
+
+    return known_docx_processor_names()
+
+
+def _validate_processor_sequence(names: Iterable[str]) -> list[dict[str, Any]]:
+    from reportgen.core.processors.registry import validate_docx_processor_sequence
+
+    return validate_docx_processor_sequence(names)
 
 
 def _is_within_any(path: Path, roots: Iterable[Path]) -> bool:
