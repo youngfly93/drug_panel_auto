@@ -307,6 +307,80 @@ def test_load_panel_config_prefers_drugs_yaml_approved_rows():
     assert "瑞戈非尼" in panel_config.approved_drug_rows[0]["drug"]
 
 
+def test_crc_biomarker_rule_contains_active_immune_tables():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    engine = PanelRuleEngine.from_panel_package(package)
+    rule = engine.get("biomarkers")
+    tables = rule["biomarkers"]["immune_gene_tables"]
+
+    assert rule["version"] == "0.2.0"
+    assert rule["status"] == "active"
+    assert len(tables["positive"]["genes"]) == 53
+    assert len(tables["negative"]["genes"]) == 12
+    assert len(tables["hyperprogression"]["genes"]) == 8
+    assert {row["key"] for row in tables["positive"]["rows"]} >= {
+        "KRAS_TP53",
+        "DDR",
+    }
+    assert {row["key"] for row in tables["negative"]["rows"]} >= {
+        "EGFR_L858R",
+        "KRAS_STK11",
+    }
+    assert {row["key"] for row in tables["hyperprogression"]["rows"]} >= {
+        "EGFR_AMP"
+    }
+    assert "immune_positive_genes" not in engine.get("panel_rules")
+    assert "immune_negative_genes" not in engine.get("panel_rules")
+    assert "immune_hyperprogression_genes" not in engine.get("panel_rules")
+
+
+def test_load_panel_config_prefers_biomarkers_yaml_immune_tables():
+    panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_358_msi")
+
+    assert "TP53" in panel_config.immune_positive_genes
+    assert "PTEN" in panel_config.immune_negative_genes
+    assert "EGFR" in panel_config.immune_hyperprogression_genes
+    assert {row["key"] for row in panel_config.immune_positive_rows} >= {
+        "KRAS_TP53",
+        "DDR",
+    }
+    assert {row["key"] for row in panel_config.immune_negative_rows} >= {
+        "EGFR_L858R",
+        "KRAS_STK11",
+    }
+    assert {row["key"] for row in panel_config.immune_hyperprogression_rows} >= {
+        "EGFR_AMP"
+    }
+
+
+def test_immune_table_rows_are_driven_by_biomarker_rules(tmp_path):
+    report_data = ReportData()
+    panel_config = PanelConfig(
+        nccn_result_rows=[],
+        immune_positive_rows=[
+            {"key": "CUSTOM_ATM", "genes": ["ATM"], "mode": "direct"},
+        ],
+        immune_negative_rows=[],
+        immune_hyperprogression_rows=[],
+    )
+
+    _build_nccn_and_immune_fields(
+        report_data,
+        [
+            {
+                "gene": "ATM",
+                "cHGVS": "c.6874C>T",
+                "pHGVS": "p.Q2292*",
+                "gene_class": "Ⅱ类",
+            }
+        ],
+        _excel(tmp_path),
+        panel_config=panel_config,
+    )
+
+    assert report_data.get_field("imm_pos_CUSTOM_ATM") == "c.6874C>T，p.Q2292*"
+
+
 def test_field_mapper_adds_legacy_fusion_aliases(tmp_path):
     excel_data = _excel(
         tmp_path,

@@ -179,6 +179,75 @@ _DEFAULT_IMMUNE_HYPERPROGRESSION_GENES = {
     "FGF19",
 }
 
+_DEFAULT_IMMUNE_POSITIVE_ROWS = [
+    {"key": "MLH1", "genes": ["MLH1"], "mode": "direct"},
+    {"key": "MSH2", "genes": ["MSH2"], "mode": "direct"},
+    {"key": "MSH6", "genes": ["MSH6"], "mode": "direct"},
+    {"key": "PMS2", "genes": ["PMS2"], "mode": "direct"},
+    {"key": "POLE", "genes": ["POLE"], "mode": "direct"},
+    {"key": "POLD1", "genes": ["POLD1"], "mode": "direct"},
+    {"key": "CD274", "genes": ["CD274"], "mode": "direct"},
+    {"key": "PDCD1LG2", "genes": ["PDCD1LG2"], "mode": "direct"},
+    {"key": "PBRM1", "genes": ["PBRM1"], "mode": "direct"},
+    {"key": "KRAS", "genes": ["KRAS"], "mode": "direct"},
+    {"key": "KRAS_TP53", "genes": ["TP53", "KRAS"], "mode": "co_mutation"},
+    {"key": "TET1", "genes": ["TET1"], "mode": "direct"},
+    {"key": "SERPINB3", "genes": ["SERPINB3"], "mode": "direct"},
+    {"key": "SERPINB4", "genes": ["SERPINB4"], "mode": "direct"},
+    {
+        "key": "DDR",
+        "genes": [
+            "ATM",
+            "ATR",
+            "BRCA1",
+            "BRCA2",
+            "PALB2",
+            "CHEK2",
+            "ARID1A",
+            "ATRX",
+            "CDK12",
+            "FANCI",
+            "FANCM",
+            "MRE11A",
+            "NBN",
+            "RAD50",
+            "RAD51",
+        ],
+        "mode": "gene_group",
+    },
+]
+
+_DEFAULT_IMMUNE_NEGATIVE_ROWS = [
+    {"key": "PTEN", "genes": ["PTEN"], "mode": "direct"},
+    {"key": "JAK1", "genes": ["JAK1"], "mode": "direct"},
+    {"key": "JAK2", "genes": ["JAK2"], "mode": "direct"},
+    {"key": "B2M", "genes": ["B2M"], "mode": "direct"},
+    {"key": "CTNNB1", "genes": ["CTNNB1"], "mode": "direct"},
+    {
+        "key": "EGFR_L858R",
+        "genes": ["EGFR"],
+        "mode": "variant_pattern",
+        "patterns": ["L858R", "EX19"],
+    },
+    {"key": "ALK", "genes": ["ALK"], "mode": "direct"},
+    {"key": "MET", "genes": ["MET"], "mode": "direct"},
+    {"key": "STK11", "genes": ["STK11"], "mode": "direct"},
+    {"key": "KRAS_STK11", "genes": ["KRAS", "STK11"], "mode": "co_mutation"},
+    {"key": "KEAP1", "genes": ["KEAP1"], "mode": "direct"},
+    {"key": "IFNGR12", "genes": ["IFNGR1", "IFNGR2"], "mode": "gene_group"},
+]
+
+_DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS = [
+    {"key": "MDM2", "genes": ["MDM2"], "mode": "direct"},
+    {"key": "MDM4", "genes": ["MDM4"], "mode": "direct"},
+    {"key": "DNMT3A", "genes": ["DNMT3A"], "mode": "direct"},
+    {"key": "EGFR_AMP", "genes": ["EGFR"], "mode": "cnv_amp", "match": "扩增"},
+    {"key": "CCND1", "genes": ["CCND1"], "mode": "direct"},
+    {"key": "FGF3", "genes": ["FGF3"], "mode": "direct"},
+    {"key": "FGF4", "genes": ["FGF4"], "mode": "direct"},
+    {"key": "FGF19", "genes": ["FGF19"], "mode": "direct"},
+]
+
 _DEFAULT_PANEL_DISPLAY_GENES = [
     {"name": "BRAF", "transcript": "NM_004333.4", "chromosome": "7"},
     {"name": "ERBB2", "transcript": "NM_004448.4", "chromosome": "17"},
@@ -269,6 +338,17 @@ class PanelConfig:
     )
     immune_hyperprogression_genes: Set[str] = field(
         default_factory=lambda: set(_DEFAULT_IMMUNE_HYPERPROGRESSION_GENES)
+    )
+    immune_positive_rows: List[Dict[str, Any]] = field(
+        default_factory=lambda: [dict(x) for x in _DEFAULT_IMMUNE_POSITIVE_ROWS]
+    )
+    immune_negative_rows: List[Dict[str, Any]] = field(
+        default_factory=lambda: [dict(x) for x in _DEFAULT_IMMUNE_NEGATIVE_ROWS]
+    )
+    immune_hyperprogression_rows: List[Dict[str, Any]] = field(
+        default_factory=lambda: [
+            dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS
+        ]
     )
     panel_display_genes: List[Dict[str, str]] = field(
         default_factory=lambda: [dict(x) for x in _DEFAULT_PANEL_DISPLAY_GENES]
@@ -428,6 +508,121 @@ def _load_drugs_rule(
     return raw if isinstance(raw, dict) else {}
 
 
+def _resolve_biomarkers_rule_path(
+    base_path: Optional[str] = None,
+    *,
+    panel_id: Optional[str] = None,
+    config_path: Optional[Path] = None,
+) -> Optional[Path]:
+    """Find the biomarker rule file next to a panel package."""
+    candidates: List[Path] = []
+    if config_path is not None:
+        candidates.append(config_path.parent / "biomarkers.yaml")
+
+    panel_ids = [str(panel_id or "").strip()]
+    if "crc_358_msi" not in panel_ids:
+        panel_ids.append("crc_358_msi")
+
+    if base_path:
+        bp = Path(str(base_path)).expanduser().resolve()
+        for pid in panel_ids:
+            if pid:
+                candidates.append(bp / "panels" / pid / "rules" / "biomarkers.yaml")
+
+    project_root = Path(__file__).resolve().parents[2]
+    for pid in panel_ids:
+        if pid:
+            candidates.append(project_root / "panels" / pid / "rules" / "biomarkers.yaml")
+            candidates.append(Path("panels") / pid / "rules" / "biomarkers.yaml")
+
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return path.resolve()
+    return None
+
+
+def _load_biomarkers_rule(
+    *,
+    base_path: Optional[str],
+    panel_id: Optional[str],
+    config_path: Optional[Path],
+) -> Dict[str, Any]:
+    path = _resolve_biomarkers_rule_path(
+        base_path,
+        panel_id=panel_id,
+        config_path=config_path,
+    )
+    if path is None:
+        return {}
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _as_upper_gene_list(value: Any) -> List[str]:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    return [str(x).strip().upper() for x in value if str(x).strip()]
+
+
+def _extract_immune_gene_tables(raw: Any) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    biomarkers = raw.get("biomarkers")
+    if not isinstance(biomarkers, dict):
+        return {}
+    tables = biomarkers.get("immune_gene_tables")
+    return tables if isinstance(tables, dict) else {}
+
+
+def _normalize_immune_rows(tables: Dict[str, Any], category: str) -> List[Dict[str, Any]]:
+    section = tables.get(category)
+    if not isinstance(section, dict):
+        return []
+    rows = section.get("rows")
+    if not isinstance(rows, list):
+        return []
+
+    normalized: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("key") or "").strip()
+        genes = _as_upper_gene_list(row.get("genes"))
+        if not key or not genes:
+            continue
+        item: Dict[str, Any] = {
+            "key": key,
+            "genes": genes,
+            "mode": str(row.get("mode") or "direct").strip() or "direct",
+        }
+        if row.get("match") is not None:
+            item["match"] = str(row.get("match") or "").strip()
+        patterns = row.get("patterns")
+        if isinstance(patterns, str):
+            patterns = [patterns]
+        if isinstance(patterns, list):
+            item["patterns"] = [str(x).strip() for x in patterns if str(x).strip()]
+        normalized.append(item)
+    return normalized
+
+
+def _normalize_immune_gene_sets(tables: Dict[str, Any]) -> Dict[str, Set[str]]:
+    normalized: Dict[str, Set[str]] = {}
+    for category in ("positive", "negative", "hyperprogression"):
+        section = tables.get(category)
+        if not isinstance(section, dict):
+            continue
+        genes = _as_upper_gene_list(section.get("genes"))
+        if genes:
+            normalized[category] = set(genes)
+    return normalized
+
+
 def _normalize_approved_drug_rows(raw: Any) -> List[Dict[str, Any]]:
     if not isinstance(raw, dict):
         return []
@@ -543,16 +738,39 @@ def load_panel_config(
         config_path=cfg_path,
     )
     approved_drug_rows = _normalize_approved_drug_rows(drugs_rule)
+    biomarkers_rule = _load_biomarkers_rule(
+        base_path=base_path,
+        panel_id=panel_id,
+        config_path=cfg_path,
+    )
+    immune_tables = _extract_immune_gene_tables(biomarkers_rule)
+    immune_gene_sets = _normalize_immune_gene_sets(immune_tables)
+    immune_positive_rows = _normalize_immune_rows(immune_tables, "positive")
+    immune_negative_rows = _normalize_immune_rows(immune_tables, "negative")
+    immune_hyperprogression_rows = _normalize_immune_rows(
+        immune_tables,
+        "hyperprogression",
+    )
 
     pc = PanelConfig(
         class_i_genes=as_gene_set("class_i_genes", set(_DEFAULT_CLASS_I_GENES)),
         class_ii_genes=as_gene_set("class_ii_genes", set(_DEFAULT_CLASS_II_GENES)),
         crc_important_genes=as_gene_set("crc_important_genes", set(_DEFAULT_CRC_IMPORTANT_GENES)),
-        immune_positive_genes=as_gene_set("immune_positive_genes", set(_DEFAULT_IMMUNE_POSITIVE_GENES)),
-        immune_negative_genes=as_gene_set("immune_negative_genes", set(_DEFAULT_IMMUNE_NEGATIVE_GENES)),
-        immune_hyperprogression_genes=as_gene_set(
-            "immune_hyperprogression_genes", set(_DEFAULT_IMMUNE_HYPERPROGRESSION_GENES)
+        immune_positive_genes=immune_gene_sets.get("positive")
+        or as_gene_set("immune_positive_genes", set(_DEFAULT_IMMUNE_POSITIVE_GENES)),
+        immune_negative_genes=immune_gene_sets.get("negative")
+        or as_gene_set("immune_negative_genes", set(_DEFAULT_IMMUNE_NEGATIVE_GENES)),
+        immune_hyperprogression_genes=immune_gene_sets.get("hyperprogression")
+        or as_gene_set(
+            "immune_hyperprogression_genes",
+            set(_DEFAULT_IMMUNE_HYPERPROGRESSION_GENES),
         ),
+        immune_positive_rows=immune_positive_rows
+        or [dict(x) for x in _DEFAULT_IMMUNE_POSITIVE_ROWS],
+        immune_negative_rows=immune_negative_rows
+        or [dict(x) for x in _DEFAULT_IMMUNE_NEGATIVE_ROWS],
+        immune_hyperprogression_rows=immune_hyperprogression_rows
+        or [dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS],
         reviewed_variant_overrides=as_dict_list("reviewed_variant_overrides"),
         approved_drug_rows=approved_drug_rows or as_dict_list("crc_approved_drugs"),
         nccn_result_rows=nccn_rows or [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS],
@@ -1284,19 +1502,14 @@ def _build_nccn_and_immune_fields(
     """
     pc = panel_config or PanelConfig()
     nccn_rows = pc.nccn_result_rows or [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS]
-    imm_pos_keys = [
-        "MLH1", "MSH2", "MSH6", "PMS2", "POLE", "POLD1",
-        "CD274", "PDCD1LG2", "PBRM1", "KRAS", "KRAS_TP53",
-        "TET1", "SERPINB3", "SERPINB4", "DDR",
+    imm_pos_rows = pc.immune_positive_rows or [
+        dict(x) for x in _DEFAULT_IMMUNE_POSITIVE_ROWS
     ]
-    imm_neg_keys = [
-        "PTEN", "JAK1", "JAK2", "B2M", "CTNNB1",
-        "EGFR_L858R", "ALK", "MET", "STK11", "KRAS_STK11",
-        "KEAP1", "IFNGR12",
+    imm_neg_rows = pc.immune_negative_rows or [
+        dict(x) for x in _DEFAULT_IMMUNE_NEGATIVE_ROWS
     ]
-    imm_hyper_keys = [
-        "MDM2", "MDM4", "DNMT3A", "EGFR_AMP",
-        "CCND1", "FGF3", "FGF4", "FGF19",
+    imm_hyper_rows = pc.immune_hyperprogression_rows or [
+        dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS
     ]
 
     # 先打固定默认值，避免 2.3/3.3 因任何解析缺口出现空白单元格。
@@ -1304,12 +1517,33 @@ def _build_nccn_and_immune_fields(
         key = str(row.get("key") or "").strip()
         if key:
             report_data.set_field(f"nccn_{key}", "未检出")
-    for key in imm_pos_keys:
-        report_data.set_field(f"imm_pos_{key}", "未检出有害变异")
-    for key in imm_neg_keys:
-        report_data.set_field(f"imm_neg_{key}", "未检出有害变异")
-    for key in imm_hyper_keys:
-        report_data.set_field(f"imm_hyper_{key}", "未检出有害变异")
+    for row in imm_pos_rows:
+        key = str(row.get("key") or "").strip()
+        if key:
+            report_data.set_field(f"imm_pos_{key}", "未检出有害变异")
+    for row in imm_neg_rows:
+        key = str(row.get("key") or "").strip()
+        if key:
+            report_data.set_field(f"imm_neg_{key}", "未检出有害变异")
+    for row in imm_hyper_rows:
+        key = str(row.get("key") or "").strip()
+        if key:
+            report_data.set_field(f"imm_hyper_{key}", "未检出有害变异")
+
+    # Legacy templates may still contain these fields even if a custom rule omits
+    # them, so keep defaults available until template contracts are panel-scoped.
+    for row in _DEFAULT_IMMUNE_POSITIVE_ROWS:
+        key = str(row.get("key") or "").strip()
+        if key and report_data.get_field(f"imm_pos_{key}") is None:
+            report_data.set_field(f"imm_pos_{key}", "未检出有害变异")
+    for row in _DEFAULT_IMMUNE_NEGATIVE_ROWS:
+        key = str(row.get("key") or "").strip()
+        if key and report_data.get_field(f"imm_neg_{key}") is None:
+            report_data.set_field(f"imm_neg_{key}", "未检出有害变异")
+    for row in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS:
+        key = str(row.get("key") or "").strip()
+        if key and report_data.get_field(f"imm_hyper_{key}") is None:
+            report_data.set_field(f"imm_hyper_{key}", "未检出有害变异")
 
     # 构建基因→变异映射（同一基因可能有多个变异）
     gene_variants: Dict[str, List[Dict[str, str]]] = {}
@@ -1460,6 +1694,70 @@ def _build_nccn_and_immune_fields(
                 parts.append(c)
         return "\n".join(parts) if parts else "未检出有害变异"
 
+    def _genes_from_row(row: Dict[str, Any]) -> List[str]:
+        return _as_upper_gene_list(row.get("genes"))
+
+    def _format_gene_prefixed_variants(
+        variants: List[Dict[str, str]],
+    ) -> str:
+        found = []
+        for v in variants:
+            c = v.get("cHGVS", "")
+            p = v.get("pHGVS", "")
+            g = v.get("gene", "")
+            if p and p not in ("--", "*", ""):
+                found.append(f"{g}：{c}，{p}")
+            elif c:
+                found.append(f"{g}：{c}")
+        return "\n".join(found) if found else "未检出有害变异"
+
+    def _immune_variants_for_genes(genes: List[str]) -> List[Dict[str, str]]:
+        variants: List[Dict[str, str]] = []
+        for gene in genes:
+            variants.extend(_immune_eligible_variants(gene))
+        return variants
+
+    def _immune_row_result(row: Dict[str, Any]) -> str:
+        genes = _genes_from_row(row)
+        mode = str(row.get("mode") or "direct").strip() or "direct"
+        if not genes:
+            return "未检出有害变异"
+
+        if mode == "co_mutation":
+            grouped = [_immune_eligible_variants(gene) for gene in genes]
+            if not grouped or any(not variants for variants in grouped):
+                return "未检出有害变异"
+            return _format_gene_prefixed_variants(
+                [variant for variants in grouped for variant in variants]
+            )
+
+        if mode == "gene_group":
+            return _format_gene_prefixed_variants(_immune_variants_for_genes(genes))
+
+        if mode == "variant_pattern":
+            patterns = [str(x) for x in row.get("patterns") or [] if str(x)]
+            matched = []
+            for gene in genes:
+                for variant in gene_variants.get(gene.upper(), []):
+                    haystack = " ".join(
+                        str(variant.get(key) or "")
+                        for key in ("cHGVS", "pHGVS", "exon")
+                    )
+                    if any(pattern in haystack for pattern in patterns):
+                        matched.append(variant)
+            return (
+                "\n".join(str(v.get("cHGVS") or "") for v in matched if v.get("cHGVS"))
+                or "未检出有害变异"
+            )
+
+        if mode == "cnv_amp":
+            val = _format_result(genes[0], str(row.get("match") or "扩增"))
+            return "未检出有害变异" if val == "未检出" else val
+
+        if len(genes) == 1:
+            return _immune_result(genes[0])
+        return _format_gene_prefixed_variants(_immune_variants_for_genes(genes))
+
     def _first_detected(results: List[str], default: str) -> str:
         for result in results:
             value = str(result or "").strip()
@@ -1481,94 +1779,27 @@ def _build_nccn_and_immune_fields(
         report_data.set_field(f"nccn_{key}", val)
 
     # ===== T[6] 免疫正相关基因 =====
-    for key in imm_pos_keys:
-        if key == "KRAS_TP53":
-            # 共突变：两者都检出才算
-            k_var = _immune_eligible_variants("KRAS")
-            t_var = _immune_eligible_variants("TP53")
-            if k_var and t_var:
-                found = []
-                for v in t_var + k_var:
-                    c = v.get("cHGVS", "")
-                    p = v.get("pHGVS", "")
-                    g = v.get("gene", "")
-                    if p and p not in ("--", "*", ""):
-                        found.append(f"{g}：{c}，{p}")
-                    elif c:
-                        found.append(f"{g}：{c}")
-                val = "\n".join(found) if found else "未检出有害变异"
-            else:
-                val = "未检出有害变异"
-        elif key == "DDR":
-            # DDR 基因组（多个 DNA 损伤修复基因合并）
-            ddr_genes = [
-                "ATM", "ATR", "BRCA1", "BRCA2", "PALB2", "CHEK2",
-                "ARID1A", "ATRX", "CDK12", "FANCI", "FANCM",
-                "MRE11A", "NBN", "RAD50", "RAD51",
-            ]
-            found = []
-            for dg in ddr_genes:
-                vs = _immune_eligible_variants(dg)
-                for v in vs:
-                    c = v.get("cHGVS", "")
-                    p = v.get("pHGVS", "")
-                    if p and p not in ("--", "*", ""):
-                        found.append(f"{dg}：{c}，{p}")
-                    elif c:
-                        found.append(f"{dg}：{c}")
-            val = "\n".join(found) if found else "未检出有害变异"
-        else:
-            val = _immune_result(key)
+    for row in imm_pos_rows:
+        key = str(row.get("key") or "").strip()
+        if not key:
+            continue
+        val = _immune_row_result(row)
         report_data.set_field(f"imm_pos_{key}", val)
 
     # ===== T[7] 免疫负相关基因 =====
-    for key in imm_neg_keys:
-        if key == "EGFR_L858R":
-            # EGFR L858R 或 EX19del 特定突变
-            vs = gene_variants.get("EGFR", [])
-            found = [v for v in vs if "L858R" in (v.get("pHGVS", "") or "") or "EX19" in (v.get("cHGVS", "") or "")]
-            val = "\n".join(f"{v.get('cHGVS','')}" for v in found) if found else "未检出有害变异"
-        elif key == "KRAS_STK11":
-            k_var = _immune_eligible_variants("KRAS")
-            s_var = _immune_eligible_variants("STK11")
-            if k_var and s_var:
-                found = []
-                for v in k_var + s_var:
-                    c = v.get("cHGVS", "")
-                    p = v.get("pHGVS", "")
-                    g = v.get("gene", "")
-                    if p and p not in ("--", "*", ""):
-                        found.append(f"{g}：{c}，{p}")
-                    elif c:
-                        found.append(f"{g}：{c}")
-                val = "\n".join(found) if found else "未检出有害变异"
-            else:
-                val = "未检出有害变异"
-        elif key == "IFNGR12":
-            r1 = _immune_eligible_variants("IFNGR1")
-            r2 = _immune_eligible_variants("IFNGR2")
-            found = []
-            for v in r1 + r2:
-                c = v.get("cHGVS", "")
-                p = v.get("pHGVS", "")
-                g = v.get("gene", "")
-                if p and p not in ("--", "*", ""):
-                    found.append(f"{g}：{c}，{p}")
-                elif c:
-                    found.append(f"{g}：{c}")
-            val = "\n".join(found) if found else "未检出有害变异"
-        else:
-            val = _immune_result(key)
+    for row in imm_neg_rows:
+        key = str(row.get("key") or "").strip()
+        if not key:
+            continue
+        val = _immune_row_result(row)
         report_data.set_field(f"imm_neg_{key}", val)
 
     # ===== T[8] 免疫超进展基因 =====
-    for key in imm_hyper_keys:
-        if key == "EGFR_AMP":
-            val = _format_result("EGFR", "扩增")  # 扩增检测
-            if val == "未检出":
-                val = "未检出有害变异"
-        else:
-            val = _immune_result(key)
+    for row in imm_hyper_rows:
+        key = str(row.get("key") or "").strip()
+        if not key:
+            continue
+        val = _immune_row_result(row)
         report_data.set_field(f"imm_hyper_{key}", val)
 
 
