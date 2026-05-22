@@ -4,18 +4,23 @@
 # 目标服务器: JD Cloud (117.72.75.45)
 # 用法: ssh root@117.72.75.45 后粘贴执行，或上传后 bash deploy.sh
 # ============================================================
-set -e
+set -euo pipefail
 
-APP_DIR="/opt/reportgen-web"
-REPO_URL="https://github.com/youngfly93/drug_panel_auto.git"
-DOMAIN="117.72.75.45"
+APP_DIR="${APP_DIR:-/opt/reportgen-web}"
+REPO_URL="${REPO_URL:-https://github.com/youngfly93/drug_panel_auto.git}"
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+DOMAIN="${DOMAIN:-117.72.75.45}"
+RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
+SKIP_PREFLIGHT="${SKIP_PREFLIGHT:-0}"
+PREFLIGHT_OUTPUT_ROOT="${PREFLIGHT_OUTPUT_ROOT:-$APP_DIR/tmp/deploy_qa_gate}"
+PREFLIGHT_ARGS="${PREFLIGHT_ARGS:-}"
 
 echo "============================================"
 echo "  基因组Panel自动化报告系统 - 部署开始"
 echo "============================================"
 
 # ---- 1. 系统依赖 ----
-echo "[1/7] 安装系统依赖..."
+echo "[1/8] 安装系统依赖..."
 if command -v apt-get &>/dev/null; then
     apt-get update -qq
     apt-get install -y -qq python3 python3-pip python3-venv nodejs npm nginx git curl
@@ -40,30 +45,48 @@ echo "  Nginx: $(nginx -v 2>&1 | head -1)"
 
 # ---- 2. 拉取代码 ----
 echo ""
-echo "[2/7] 拉取代码..."
+echo "[2/8] 拉取代码..."
 if [ -d "$APP_DIR/.git" ]; then
     cd "$APP_DIR"
-    git pull origin main
+    git fetch origin "$DEPLOY_BRANCH"
+    git checkout "$DEPLOY_BRANCH"
+    git pull --ff-only origin "$DEPLOY_BRANCH"
 else
     rm -rf "$APP_DIR"
-    git clone "$REPO_URL" "$APP_DIR"
+    git clone --branch "$DEPLOY_BRANCH" "$REPO_URL" "$APP_DIR"
     cd "$APP_DIR"
 fi
+echo "  Branch: $(git branch --show-current)"
+echo "  Commit: $(git rev-parse --short HEAD)"
 
 # ---- 3. Python 虚拟环境 + 依赖 ----
 echo ""
-echo "[3/7] 安装 Python 依赖..."
+echo "[3/8] 安装 Python 依赖..."
 python3 -m venv "$APP_DIR/venv" 2>/dev/null || python3 -m virtualenv "$APP_DIR/venv"
 source "$APP_DIR/venv/bin/activate"
 pip install --upgrade pip -q
 pip install -r "$APP_DIR/requirements.txt" -q
+pip install pytest ruff lxml -q
 # Install the backend package
 pip install -e "$APP_DIR/backend" -q
 echo "  Python deps installed"
 
-# ---- 4. 前端构建 ----
+# ---- 4. 部署前质量门禁 ----
 echo ""
-echo "[4/7] 构建前端..."
+echo "[4/8] 运行部署前质量门禁..."
+if [ "$SKIP_PREFLIGHT" = "1" ] || [ "$RUN_PREFLIGHT" = "0" ]; then
+    echo "  ⚠ 跳过 preflight gate（仅应急使用）"
+else
+    mkdir -p "$PREFLIGHT_OUTPUT_ROOT"
+    echo "  Output: $PREFLIGHT_OUTPUT_ROOT"
+    # shellcheck disable=SC2086
+    python -m reportgen.cli qa gate --output-root "$PREFLIGHT_OUTPUT_ROOT" $PREFLIGHT_ARGS
+    echo "  ✅ preflight gate passed"
+fi
+
+# ---- 5. 前端构建 ----
+echo ""
+echo "[5/8] 构建前端..."
 cd "$APP_DIR/frontend"
 npm install --no-audit --no-fund 2>&1 | tail -1
 npm run build 2>&1 | tail -3
@@ -72,9 +95,9 @@ rm -rf "$APP_DIR/backend/static"
 cp -r "$APP_DIR/frontend/dist" "$APP_DIR/backend/static"
 echo "  Frontend built and copied to backend/static/"
 
-# ---- 5. 创建存储目录 + 环境配置 ----
+# ---- 6. 创建存储目录 + 环境配置 ----
 echo ""
-echo "[5/7] 配置环境..."
+echo "[6/8] 配置环境..."
 mkdir -p "$APP_DIR/storage"/{uploads,reports,previews,db}
 
 # Generate a random secret key
@@ -90,9 +113,9 @@ RG_WEB_MAX_WORKERS=2
 ENVEOF
 echo "  .env created (admin password: panel2026)"
 
-# ---- 6. Systemd 服务 ----
+# ---- 7. Systemd 服务 ----
 echo ""
-echo "[6/7] 配置系统服务..."
+echo "[7/8] 配置系统服务..."
 cat > /etc/systemd/system/reportgen-web.service << SVCEOF
 [Unit]
 Description=Genomic Panel Report Web Platform
@@ -125,9 +148,9 @@ else
     journalctl -u reportgen-web --no-pager -n 20
 fi
 
-# ---- 7. Nginx 反向代理 ----
+# ---- 8. Nginx 反向代理 ----
 echo ""
-echo "[7/7] 配置 Nginx 反向代理..."
+echo "[8/8] 配置 Nginx 反向代理..."
 
 cat > /etc/nginx/conf.d/reportgen-web.conf << 'NGXEOF'
 server {
