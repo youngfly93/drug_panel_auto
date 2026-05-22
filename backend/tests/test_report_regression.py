@@ -3841,3 +3841,53 @@ def test_report_diff_warns_on_style_and_qa_changes(tmp_path):
     assert any(i["code"] == "STYLE_DIFF" for i in result["issues"])
     assert any(i["code"] == "QA_STATUS_DIFF" for i in result["issues"])
     assert result["sections"]["qa"]["candidate_status"] == "WARN"
+
+
+def test_quality_gate_can_run_panel_validation_only(tmp_path):
+    from reportgen.core.qa_gate import QualityGateOptions, run_quality_gate
+
+    result = run_quality_gate(
+        QualityGateOptions(
+            project_root=str(ROOT),
+            output_root=str(tmp_path / "gate"),
+            run_lint=False,
+            run_pytest=False,
+            run_golden=False,
+        )
+    )
+
+    assert result["status"] == "PASS"
+    assert result["summary"]["failed"] == 0
+    assert result["steps"][0]["name"] == "panel_validate"
+    assert Path(result["report_file"]).exists()
+
+
+def test_quality_gate_fails_when_panel_validation_has_warnings(tmp_path, monkeypatch):
+    from reportgen.core import qa_gate
+
+    class FakeReport:
+        errors = []
+        warnings = [{"code": "WARN"}]
+
+        def to_dict(self):
+            return {
+                "summary": {"errors": 0, "warnings": 1},
+                "panels_checked": ["demo_panel"],
+                "issues": [{"level": "warning", "code": "WARN", "message": "demo"}],
+            }
+
+    monkeypatch.setattr(qa_gate, "validate_panel_registry", lambda project_root: FakeReport())
+
+    result = qa_gate.run_quality_gate(
+        qa_gate.QualityGateOptions(
+            project_root=str(ROOT),
+            output_root=str(tmp_path / "gate_warn"),
+            run_lint=False,
+            run_pytest=False,
+            run_golden=False,
+            fail_on_warn=True,
+        )
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["steps"][0]["status"] == "FAIL"

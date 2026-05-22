@@ -832,6 +832,164 @@ def qa_diff(
     sys.exit(0)
 
 
+@qa.command("gate")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(),
+    help="项目根目录，默认当前目录",
+)
+@click.option(
+    "--output-root",
+    default=None,
+    type=click.Path(),
+    help="门禁产物输出目录（默认写入 tmp/qa_gate/）",
+)
+@click.option(
+    "--panel",
+    "panels",
+    multiple=True,
+    help="要运行的 golden panel，可重复或用逗号分隔；默认运行核心 panel",
+)
+@click.option(
+    "--lint/--skip-lint",
+    "run_lint",
+    default=True,
+    show_default=True,
+    help="是否运行 ruff 检查",
+)
+@click.option(
+    "--pytest/--skip-pytest",
+    "run_pytest",
+    default=True,
+    show_default=True,
+    help="是否运行 pytest 回归",
+)
+@click.option(
+    "--golden/--skip-golden",
+    "run_golden",
+    default=True,
+    show_default=True,
+    help="是否运行 golden case",
+)
+@click.option(
+    "--diff/--skip-diff",
+    "run_diff",
+    default=True,
+    show_default=True,
+    help="是否对重复 golden 结果执行结构 diff",
+)
+@click.option(
+    "--pytest-args",
+    default="backend/tests/test_report_regression.py -q",
+    show_default=True,
+    help="pytest 参数字符串",
+)
+@click.option(
+    "--fail-on",
+    type=click.Choice(["fail", "warn"]),
+    default="warn",
+    show_default=True,
+    help="门禁非零退出门槛",
+)
+@click.option(
+    "--render",
+    type=click.Choice(["none", "first", "all"]),
+    default="none",
+    show_default=True,
+    help="golden case 可选视觉渲染模式",
+)
+@click.option(
+    "--render-required/--render-optional",
+    default=False,
+    show_default=True,
+    help="视觉渲染失败是否阻断门禁",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    default="ERROR",
+    show_default=True,
+    help="reportgen内部日志级别",
+)
+def qa_gate(
+    project_root,
+    output_root,
+    panels,
+    run_lint,
+    run_pytest,
+    run_golden,
+    run_diff,
+    pytest_args,
+    fail_on,
+    render,
+    render_required,
+    log_level,
+):
+    """运行 CI / 部署前质量门禁。"""
+    import shlex
+
+    from reportgen.core.qa_gate import (
+        DEFAULT_GATE_PANELS,
+        QualityGateOptions,
+        run_quality_gate,
+    )
+
+    selected_panels = []
+    for item in panels:
+        selected_panels.extend(
+            part.strip() for part in str(item).split(",") if part.strip()
+        )
+    if not selected_panels:
+        selected_panels = list(DEFAULT_GATE_PANELS)
+
+    click.echo("🧱 Running reportgen QA gate")
+    result = run_quality_gate(
+        QualityGateOptions(
+            project_root=project_root,
+            output_root=output_root,
+            panels=tuple(selected_panels),
+            run_lint=bool(run_lint),
+            run_pytest=bool(run_pytest),
+            run_golden=bool(run_golden),
+            run_diff=bool(run_diff),
+            fail_on_warn=(fail_on == "warn"),
+            pytest_args=tuple(shlex.split(pytest_args)),
+            render=render,
+            render_required=bool(render_required),
+            log_level=log_level,
+        )
+    )
+
+    click.echo(f"  status: {result.get('status')}")
+    click.echo(f"  report: {result.get('report_file')}")
+    click.echo(f"  output_root: {result.get('output_root')}")
+    for step in result.get("steps") or []:
+        icon = {
+            "PASS": "✅",
+            "WARN": "⚠️",
+            "FAIL": "❌",
+            "SKIPPED": "⏭️",
+        }.get(step.get("status"), "•")
+        click.echo(
+            f"  {icon} {step.get('name')}: {step.get('status')} "
+            f"({step.get('duration_seconds')}s)"
+        )
+        if step.get("status") == "FAIL":
+            if step.get("error"):
+                click.echo(f"      error: {step.get('error')}", err=True)
+            for issue in list(step.get("issues") or [])[:5]:
+                click.echo(
+                    f"      issue: {issue.get('code')} {issue.get('message')}",
+                    err=True,
+                )
+            if step.get("log_file"):
+                click.echo(f"      log: {step.get('log_file')}", err=True)
+
+    sys.exit(0 if result.get("status") == "PASS" else 1)
+
+
 @cli.command()
 @click.option(
     "--template",

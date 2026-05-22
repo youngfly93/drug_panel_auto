@@ -1,0 +1,38 @@
+name: Reportgen QA Gate
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+  pull_request:
+
+jobs:
+  qa-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest ruff lxml
+
+      - name: Run reportgen QA gate
+        run: python -m reportgen.cli qa gate --output-root tmp/ci_qa_gate
+
+      - name: Upload QA gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportgen-qa-gate
+          path: tmp/ci_qa_gate
+          if-no-files-found: ignore

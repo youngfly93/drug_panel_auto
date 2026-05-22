@@ -1,4 +1,4 @@
-.PHONY: dev dev-backend dev-frontend build test install clean
+.PHONY: dev dev-backend dev-frontend build test qa-gate preflight install clean
 
 # Install all dependencies
 install:
@@ -29,6 +29,12 @@ build:
 # Run tests
 test:
 	cd backend && pytest tests/ -v
+
+# Run report generation pre-deploy quality gate
+qa-gate:
+	python -m reportgen.cli qa gate
+
+preflight: qa-gate
 
 # Clean generated files
 clean:
