@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Set, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
 from docx import Document
 
@@ -50,6 +50,28 @@ class TemplateContract:
 
 
 @dataclass(frozen=True)
+class TemplateTableExpectation:
+    """Declared table structure that a template must contain."""
+
+    name: str
+    required_headers: Tuple[str, ...] = ()
+    columns: Optional[int] = None
+    min_columns: Optional[int] = None
+    max_columns: Optional[int] = None
+    required: bool = True
+    max_preview_rows: int = 4
+
+
+@dataclass(frozen=True)
+class DeclaredTemplateContract:
+    """Panel-declared template contract loaded from panel.yaml."""
+
+    required_variables: Tuple[str, ...] = ()
+    required_lists: Tuple[str, ...] = ()
+    table_structures: Tuple[TemplateTableExpectation, ...] = ()
+
+
+@dataclass(frozen=True)
 class ContractValidation:
     ok: bool
     missing_paths: Tuple[str, ...]
@@ -58,6 +80,16 @@ class ContractValidation:
     missing_row_examples: Dict[
         str, Dict[str, int]
     ]  # list_name -> field -> first missing row index (0-based)
+
+
+@dataclass(frozen=True)
+class DeclaredContractValidation:
+    ok: bool
+    missing_required_variables: Tuple[str, ...]
+    missing_required_lists: Tuple[str, ...]
+    missing_required_tables: Tuple[str, ...]
+    table_errors: Dict[str, Tuple[str, ...]]
+    table_matches: Dict[str, Dict[str, Any]]
 
 
 def _iter_doc_text(doc: Document) -> Iterable[str]:
@@ -164,6 +196,178 @@ def extract_template_contract(template_path: str) -> TemplateContract:
     )
 
 
+def parse_declared_template_contract(spec: Any) -> DeclaredTemplateContract:
+    """Parse a panel.yaml ``template_contract`` section.
+
+    The accepted YAML shape is intentionally small and portable:
+
+    template_contract:
+      required_variables: [patient_name, sample_id]
+      required_lists: [variants_2_1]
+      required_table_structures:
+        variant_detail_table:
+          columns: 9
+          required_headers: [基因名称, 转录本号]
+    """
+    if not isinstance(spec, Mapping):
+        return DeclaredTemplateContract()
+
+    table_specs: List[TemplateTableExpectation] = []
+    raw_tables = (
+        spec.get("required_table_structures")
+        or spec.get("table_structures")
+        or spec.get("tables")
+        or {}
+    )
+    if isinstance(raw_tables, Mapping):
+        items = []
+        for name, raw in raw_tables.items():
+            raw_map = dict(raw) if isinstance(raw, Mapping) else {}
+            raw_map.setdefault("name", str(name))
+            items.append(raw_map)
+    elif isinstance(raw_tables, list):
+        items = [item for item in raw_tables if isinstance(item, Mapping)]
+    else:
+        items = []
+
+    for item in items:
+        name = str(item.get("name") or item.get("id") or "").strip()
+        if not name:
+            continue
+        table_specs.append(
+            TemplateTableExpectation(
+                name=name,
+                required_headers=tuple(_str_list(item.get("required_headers"))),
+                columns=_int_or_none(item.get("columns")),
+                min_columns=_int_or_none(item.get("min_columns")),
+                max_columns=_int_or_none(item.get("max_columns")),
+                required=bool(item.get("required", True)),
+                max_preview_rows=int(item.get("max_preview_rows") or 4),
+            )
+        )
+
+    required_variables = (
+        spec.get("required_variables")
+        or spec.get("required_paths")
+        or spec.get("variables")
+        or []
+    )
+    required_lists = (
+        spec.get("required_lists")
+        or spec.get("required_loop_lists")
+        or spec.get("lists")
+        or []
+    )
+
+    return DeclaredTemplateContract(
+        required_variables=tuple(sorted(set(_str_list(required_variables)))),
+        required_lists=tuple(sorted(set(_str_list(required_lists)))),
+        table_structures=tuple(table_specs),
+    )
+
+
+def validate_declared_contract(
+    template_path: str,
+    extracted_contract: TemplateContract,
+    declared_contract: Any,
+) -> DeclaredContractValidation:
+    """Validate a template against the panel-declared contract."""
+    declared = parse_declared_template_contract(declared_contract)
+    actual_variables = set(extracted_contract.required_paths)
+    actual_lists = set(extracted_contract.required_lists)
+
+    missing_variables = tuple(
+        sorted(
+            variable
+            for variable in declared.required_variables
+            if variable not in actual_variables
+        )
+    )
+    missing_lists = tuple(
+        sorted(list_name for list_name in declared.required_lists if list_name not in actual_lists)
+    )
+
+    table_snapshots = _inspect_template_tables(
+        template_path,
+        max_rows=max(
+            [table.max_preview_rows for table in declared.table_structures] or [4]
+        ),
+    )
+    missing_tables: List[str] = []
+    table_errors: Dict[str, Tuple[str, ...]] = {}
+    table_matches: Dict[str, Dict[str, Any]] = {}
+
+    for expected in declared.table_structures:
+        candidates = [
+            table
+            for table in table_snapshots
+            if _table_matches_headers(table, expected.required_headers)
+        ]
+        if not candidates:
+            if expected.required:
+                missing_tables.append(expected.name)
+            continue
+
+        # Prefer the widest match so a merged header row does not hide a valid
+        # detail row further down in the table.
+        best = max(candidates, key=lambda item: int(item.get("cols") or 0))
+        table_matches[expected.name] = best
+
+        errors: List[str] = []
+        cols = int(best.get("cols") or 0)
+        if expected.columns is not None and cols != expected.columns:
+            errors.append(f"expected {expected.columns} columns, found {cols}")
+        if expected.min_columns is not None and cols < expected.min_columns:
+            errors.append(f"expected at least {expected.min_columns} columns, found {cols}")
+        if expected.max_columns is not None and cols > expected.max_columns:
+            errors.append(f"expected at most {expected.max_columns} columns, found {cols}")
+        if errors:
+            table_errors[expected.name] = tuple(errors)
+
+    ok = not (
+        missing_variables or missing_lists or missing_tables or table_errors
+    )
+    return DeclaredContractValidation(
+        ok=ok,
+        missing_required_variables=missing_variables,
+        missing_required_lists=missing_lists,
+        missing_required_tables=tuple(sorted(missing_tables)),
+        table_errors=table_errors,
+        table_matches=table_matches,
+    )
+
+
+def declared_validation_to_dict(
+    validation: DeclaredContractValidation,
+    declared_contract: Any,
+) -> Dict[str, Any]:
+    """Return a JSON-serializable declared-contract validation report."""
+    declared = parse_declared_template_contract(declared_contract)
+    return {
+        "ok": bool(validation.ok),
+        "required_variables": list(declared.required_variables),
+        "required_lists": list(declared.required_lists),
+        "required_table_structures": [
+            {
+                "name": table.name,
+                "required_headers": list(table.required_headers),
+                "columns": table.columns,
+                "min_columns": table.min_columns,
+                "max_columns": table.max_columns,
+                "required": table.required,
+            }
+            for table in declared.table_structures
+        ],
+        "missing_required_variables": list(validation.missing_required_variables),
+        "missing_required_lists": list(validation.missing_required_lists),
+        "missing_required_tables": list(validation.missing_required_tables),
+        "table_errors": {
+            name: list(errors) for name, errors in validation.table_errors.items()
+        },
+        "table_matches": validation.table_matches,
+    }
+
+
 def _get_by_path(obj: Any, path: str) -> bool:
     """Best-effort dotted-path resolver for dict-like contexts."""
     if not path:
@@ -236,3 +440,66 @@ def validate_contract(
         missing_row_fields=missing_row_fields_sorted,
         missing_row_examples=missing_row_examples,
     )
+
+
+def _str_list(value: Any) -> List[str]:
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    result: List[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def _int_or_none(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _inspect_template_tables(template_path: str, *, max_rows: int = 4) -> List[Dict[str, Any]]:
+    doc = Document(str(template_path))
+    snapshots: List[Dict[str, Any]] = []
+    for idx, table in enumerate(doc.tables):
+        preview = _table_preview(table, max_rows=max_rows)
+        snapshots.append(
+            {
+                "index": idx,
+                "rows": len(table.rows),
+                "cols": _table_col_count(table),
+                "preview": preview,
+                "compact_preview": _compact_text(preview),
+            }
+        )
+    return snapshots
+
+
+def _table_matches_headers(table: Mapping[str, Any], headers: Tuple[str, ...]) -> bool:
+    if not headers:
+        return True
+    compact_preview = str(table.get("compact_preview") or "")
+    return all(_compact_text(header) in compact_preview for header in headers)
+
+
+def _table_col_count(table: Any) -> int:
+    if not table.rows:
+        return 0
+    return max((len(row.cells) for row in table.rows), default=0)
+
+
+def _table_preview(table: Any, *, max_rows: int) -> str:
+    rows: List[str] = []
+    for row in table.rows[:max_rows]:
+        rows.append(" ".join((cell.text or "").strip() for cell in row.cells))
+    return "\n".join(rows)
+
+
+def _compact_text(value: str) -> str:
+    return re.sub(r"\s+", "", value or "")

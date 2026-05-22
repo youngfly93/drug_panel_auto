@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from reportgen.config.loader import ConfigLoader
+from reportgen.panels.loader import PanelPackageLoader
 from reportgen.utils.logger import get_logger
 
 
@@ -44,8 +45,62 @@ class ProjectDetector:
         self.config = self._config_loader.load_project_types_config()
         self.mapping_config = self._config_loader.load_mapping_config()
 
-        self.project_types = self.config.get("project_types", [])
+        self.project_types = self._merge_panel_project_types(
+            self.config.get("project_types", [])
+        )
         self.default_config = self.config.get("default", {})
+
+    def _merge_panel_project_types(
+        self,
+        configured_types: Iterable[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Merge project detector rules declared by panel packages.
+
+        Existing ``config/project_types.yaml`` entries stay as a compatibility
+        fallback, while package declarations become the canonical source for
+        active panel ids.
+        """
+        by_id = {
+            str(item.get("id") or "").strip(): dict(item)
+            for item in configured_types
+            if isinstance(item, dict) and str(item.get("id") or "").strip()
+        }
+        try:
+            packages = PanelPackageLoader(
+                project_root=self._config_loader.project_root
+            ).load_all()
+        except Exception:
+            return list(by_id.values())
+
+        for package in packages:
+            rules = package.project_detector_rules or {}
+            if not rules:
+                continue
+            entry = dict(by_id.get(package.panel_id, {}))
+            try:
+                template_file = str(package.resolve_template_file())
+            except Exception:
+                template_file = str(entry.get("template") or "")
+            entry.update(
+                {
+                    "id": package.panel_id,
+                    "name": package.display_name,
+                    "keywords": list(
+                        rules.get("keywords") or entry.get("keywords") or []
+                    ),
+                    "keyword_groups": list(
+                        rules.get("keyword_groups") or entry.get("keyword_groups") or []
+                    ),
+                    "template": template_file,
+                    "priority": rules.get("priority", entry.get("priority", 10)),
+                    "description": package.raw.get("description")
+                    or entry.get("description")
+                    or package.display_name,
+                }
+            )
+            by_id[package.panel_id] = entry
+
+        return list(by_id.values())
 
     def detect(
         self,
@@ -566,25 +621,11 @@ class ProjectDetector:
                 except Exception:
                     pass
 
-        parts: list[str] = [str(single_values)]
-
-        # 将 sheet_names（若存在）也纳入识别文本：常见项目会在sheet名或表头出现关键标识
-        sheet_names = getattr(excel_data, "sheet_names", None)
-        if isinstance(sheet_names, list) and sheet_names:
-            parts.append(" ".join(str(s) for s in sheet_names if s is not None))
-
-        # 纳入关键表的列名（避免把整表转成超大字符串）
-        table_data = getattr(excel_data, "table_data", None)
-        if isinstance(table_data, dict) and table_data:
-            for sheet in ("Variations", "TMB", "Msisensor"):
-                rows = table_data.get(sheet)
-                if isinstance(rows, list) and rows:
-                    first = rows[0]
-                    if isinstance(first, dict) and first:
-                        cols = [str(k) for k in first.keys() if k is not None]
-                        parts.append(" ".join(cols[:60]))
-
-        return "\n".join([p for p in parts if p and str(p).strip()])
+        # Do not fall back to the full single_values dict, sheet names, or table
+        # columns. Generic columns such as ExistInsmall358 contain panel numbers
+        # and caused false CRC project detection. If no trusted project field is
+        # available, project detection should rely on the filename or user input.
+        return None
 
     def get_available_project_types(self) -> List[Dict[str, str]]:
         """

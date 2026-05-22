@@ -45,6 +45,7 @@ backend/static/
 # But DO commit templates and knowledge bases needed for deployment
 *.pdf
 !templates/**/*.docx
+!panels/**/*.docx
 !data/knowledge_bases/processed/*.xlsx
 
 # macOS metadata

@@ -1,0 +1,88 @@
+schema_version: "1.0"
+panel_id: "lung_methylation"
+display_name: "肺癌甲基化"
+version: "0.1.0"
+status: "pilot"
+description: "M3 pilot package for lung methylation report generation."
+
+aliases:
+  - "lung_methylation_panel"
+  - "lung_methylation_test"
+  - "肺癌甲基化"
+
+project_detector_rules:
+  keywords:
+    - "肺癌"
+    - "甲基化"
+    - "methylation"
+    - "lung"
+  keyword_groups:
+    - any:
+        - "肺癌"
+        - "lung"
+      weight: 1
+    - any:
+        - "甲基化"
+        - "methylation"
+      weight: 1
+
+enhancer: ""
+
+default_template: "lung_methylation_minimal_v1"
+templates:
+  - id: "lung_methylation_minimal_v1"
+    file: "templates/lung_methylation_minimal_v1.docx"
+    version: "0.1.0"
+    status: "pilot"
+    description: "Minimal M3 pilot template for lung methylation."
+
+mappings:
+  default: "config/mapping.yaml"
+
+rules:
+  panel_rules: "rules/lung_methylation.yaml"
+
+input_contract:
+  required_tables:
+    - "甲基化位点"
+  required_single_fields:
+    - "patient_name"
+    - "sample_id"
+    - "project_name"
+    - "report_date"
+    - "methylation_result"
+  required_columns:
+    甲基化位点:
+      - "基因"
+      - "位点"
+      - "甲基化水平"
+      - "阈值"
+      - "结果"
+
+template_contract:
+  required_variables:
+    - "patient_name"
+    - "sample_id"
+    - "report_date"
+    - "project_name"
+    - "methylation_result"
+  required_lists:
+    - "methylation_sites"
+  required_table_structures:
+    methylation_sites:
+      columns: 5
+      required_headers:
+        - "基因"
+        - "位点"
+        - "甲基化水平"
+        - "阈值"
+        - "结果"
+
+processors: []
+
+golden_cases:
+  - id: "lung_methylation_synthetic_positive"
+    runner: "reportgen.core.golden_case:run_golden_case"
+    command: "reportgen qa run --panel lung_methylation"
+    synthetic: true
+    expected_qa_status: "PASS"

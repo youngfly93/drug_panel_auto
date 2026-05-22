@@ -1,0 +1,229 @@
+schema_version: "1.0"
+panel_id: "crc_358_msi"
+rule_id: "biomarkers"
+version: "0.2.0"
+updated: "2026-05-21"
+status: "active"
+description: "CRC biomarker display rules used by the generator."
+
+biomarkers:
+  tmb:
+    field: "tmb_summary"
+    low_label: "TMB-L"
+    high_label: "TMB-H"
+    reference_threshold: "10 mutations/Mb"
+  msi:
+    field: "msi_summary"
+    allowed_values:
+      - "MSS"
+      - "MSI-L"
+      - "MSI-H"
+      - "未检测"
+  immune_gene_tables:
+    positive_source: "biomarkers.yaml:biomarkers.immune_gene_tables.positive"
+    negative_source: "biomarkers.yaml:biomarkers.immune_gene_tables.negative"
+    hyperprogression_source: "biomarkers.yaml:biomarkers.immune_gene_tables.hyperprogression"
+    positive:
+      genes:
+        - MLH1
+        - MSH2
+        - MSH6
+        - PMS2
+        - POLE
+        - POLD1
+        - CD274
+        - PDCD1LG2
+        - TET1
+        - PMS1
+        - ERCC2
+        - ERCC3
+        - ERCC4
+        - ERCC5
+        - BRCA1
+        - MRE11A
+        - NBN
+        - RAD50
+        - RAD51
+        - RAD51B
+        - RAD51D
+        - RAD52
+        - RAD54L
+        - BRCA2
+        - BRIP1
+        - FANCA
+        - FANCC
+        - PALB2
+        - RAD51C
+        - BLM
+        - ATM
+        - ATR
+        - CHEK1
+        - CHEK2
+        - MDC1
+        - MUTYH
+        - PARP1
+        - RECQL4
+        - ARID1A
+        - ATRX
+        - FANCM
+        - PRKDC
+        - CDK12
+        - MLH3
+        - MSH3
+        - FANCI
+        - ARID1B
+        - ARID2
+        - KRAS
+        - SERPINB3
+        - SERPINB4
+        - PBRM1
+        - TP53
+      rows:
+        - key: MLH1
+          genes: [MLH1]
+          mode: direct
+        - key: MSH2
+          genes: [MSH2]
+          mode: direct
+        - key: MSH6
+          genes: [MSH6]
+          mode: direct
+        - key: PMS2
+          genes: [PMS2]
+          mode: direct
+        - key: POLE
+          genes: [POLE]
+          mode: direct
+        - key: POLD1
+          genes: [POLD1]
+          mode: direct
+        - key: CD274
+          genes: [CD274]
+          mode: direct
+        - key: PDCD1LG2
+          genes: [PDCD1LG2]
+          mode: direct
+        - key: PBRM1
+          genes: [PBRM1]
+          mode: direct
+        - key: KRAS
+          genes: [KRAS]
+          mode: direct
+        - key: KRAS_TP53
+          genes: [TP53, KRAS]
+          mode: co_mutation
+        - key: TET1
+          genes: [TET1]
+          mode: direct
+        - key: SERPINB3
+          genes: [SERPINB3]
+          mode: direct
+        - key: SERPINB4
+          genes: [SERPINB4]
+          mode: direct
+        - key: DDR
+          genes:
+            - ATM
+            - ATR
+            - BRCA1
+            - BRCA2
+            - PALB2
+            - CHEK2
+            - ARID1A
+            - ATRX
+            - CDK12
+            - FANCI
+            - FANCM
+            - MRE11A
+            - NBN
+            - RAD50
+            - RAD51
+          mode: gene_group
+    negative:
+      genes:
+        - PTEN
+        - JAK1
+        - JAK2
+        - B2M
+        - CTNNB1
+        - KEAP1
+        - EGFR
+        - ALK
+        - MET
+        - STK11
+        - IFNGR1
+        - IFNGR2
+      rows:
+        - key: PTEN
+          genes: [PTEN]
+          mode: direct
+        - key: JAK1
+          genes: [JAK1]
+          mode: direct
+        - key: JAK2
+          genes: [JAK2]
+          mode: direct
+        - key: B2M
+          genes: [B2M]
+          mode: direct
+        - key: CTNNB1
+          genes: [CTNNB1]
+          mode: direct
+        - key: EGFR_L858R
+          genes: [EGFR]
+          mode: variant_pattern
+          patterns: [L858R, EX19]
+        - key: ALK
+          genes: [ALK]
+          mode: direct
+        - key: MET
+          genes: [MET]
+          mode: direct
+        - key: STK11
+          genes: [STK11]
+          mode: direct
+        - key: KRAS_STK11
+          genes: [KRAS, STK11]
+          mode: co_mutation
+        - key: KEAP1
+          genes: [KEAP1]
+          mode: direct
+        - key: IFNGR12
+          genes: [IFNGR1, IFNGR2]
+          mode: gene_group
+    hyperprogression:
+      genes:
+        - MDM2
+        - MDM4
+        - DNMT3A
+        - EGFR
+        - CCND1
+        - FGF3
+        - FGF4
+        - FGF19
+      rows:
+        - key: MDM2
+          genes: [MDM2]
+          mode: direct
+        - key: MDM4
+          genes: [MDM4]
+          mode: direct
+        - key: DNMT3A
+          genes: [DNMT3A]
+          mode: direct
+        - key: EGFR_AMP
+          genes: [EGFR]
+          mode: cnv_amp
+          match: "扩增"
+        - key: CCND1
+          genes: [CCND1]
+          mode: direct
+        - key: FGF3
+          genes: [FGF3]
+          mode: direct
+        - key: FGF4
+          genes: [FGF4]
+          mode: direct
+        - key: FGF19
+          genes: [FGF19]
+          mode: direct

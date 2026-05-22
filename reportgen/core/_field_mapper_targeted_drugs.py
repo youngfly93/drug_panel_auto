@@ -123,6 +123,69 @@ class TargetedDrugMixin:
             out[key] = {str(kk): str(vv) for kk, vv in v.items() if vv is not None}
         return out
 
+    def _get_reviewed_variant_overrides(self) -> list[dict[str, Any]]:
+        """Load reviewed per-variant overrides from CRC panel package rules."""
+        project_root = Path(getattr(self.config_loader, "project_root", "."))
+        candidates = [
+            project_root / "panels" / "crc_358_msi" / "rules" / "crc.yaml",
+            Path(self.config_loader.config_dir) / "panels" / "crc_358.yaml",
+        ]
+        cfg = {}
+        for cfg_path in candidates:
+            try:
+                if cfg_path.exists():
+                    cfg = self.config_loader.load_yaml(str(cfg_path))
+                    break
+            except Exception:
+                cfg = {}
+        rows = cfg.get("reviewed_variant_overrides", []) if isinstance(cfg, dict) else []
+        if not isinstance(rows, list):
+            return []
+        return [dict(row) for row in rows if isinstance(row, dict)]
+
+    @staticmethod
+    def _as_text_list(value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, (list, tuple, set)):
+            return [str(item).strip() for item in value if str(item).strip()]
+        text = str(value).strip()
+        return [text] if text else []
+
+    def _lookup_reviewed_variant_override_drugs(
+        self,
+        gene: str,
+        c_point: str,
+        p_point: str,
+    ) -> Optional[tuple[str, str]]:
+        gene_norm = str(gene or "").strip().upper()
+        c_norm = self._norm_text(c_point)
+        p_norm = self._norm_text(p_point)
+        for override in self._get_reviewed_variant_overrides():
+            genes = {
+                item.upper()
+                for item in self._as_text_list(
+                    override.get("gene") or override.get("genes")
+                )
+            }
+            if genes and gene_norm not in genes:
+                continue
+            c_values = set(
+                self._as_text_list(override.get("c_hgvs") or override.get("cHGVS"))
+            )
+            p_values = set(
+                self._as_text_list(override.get("p_hgvs") or override.get("pHGVS"))
+            )
+            if c_values and c_norm not in c_values:
+                continue
+            if p_values and p_norm not in p_values:
+                continue
+            benefit = "\n".join(self._as_text_list(override.get("benefit_drugs")))
+            caution = "\n".join(self._as_text_list(override.get("caution_drugs")))
+            if benefit or caution:
+                return benefit or "--", caution or "--"
+        return None
+
     def _get_targeted_drug_db_filters(self) -> dict[str, Any]:
         cfg = (
             self.config_loader.get_setting(
@@ -234,6 +297,18 @@ class TargetedDrugMixin:
     ) -> tuple[str, str, float]:
         """查询单个变异对应的药物提示（获益/慎重）并返回匹配分数。"""
         gene_norm = str(gene).strip().upper()
+        c_norm = self._norm_text(c_point)
+        p_norm = self._norm_text(p_point)
+
+        reviewed_override = self._lookup_reviewed_variant_override_drugs(
+            gene_norm,
+            c_norm,
+            p_norm,
+        )
+        if reviewed_override:
+            benefit, caution = reviewed_override
+            return benefit, caution, 100.0
+
         overrides = self._get_targeted_drug_overrides()
         if gene_norm in overrides:
             ov = overrides[gene_norm]
@@ -264,8 +339,8 @@ class TargetedDrugMixin:
         best_score = 0.0
         best_benefit = "--"
         best_caution = "--"
-        c_point = self._norm_text(c_point)
-        p_point = self._norm_text(p_point)
+        c_point = c_norm
+        p_point = p_norm
         variant_level = self._norm_text(variant_level)
 
         filters_cfg = self._get_targeted_drug_db_filters()
@@ -479,22 +554,28 @@ class TargetedDrugMixin:
         variations = excel_data.get_table_data("Variations") or []
         report_cancer_type = self._norm_text(report_data.get_field("cancer_type"))
         gene_to_sites: dict[str, list[dict[str, str]]] = {}
+        from reportgen.core.template_bridge_358 import (
+            _get_gene_class,
+            _has_explicit_gene_class_labels,
+        )
+
+        allow_gene_fallback = not _has_explicit_gene_class_labels(variations)
         for r in variations:
             level = self._norm_text(r.get("ExistIn552"))
-            # 兼容数字格式：1=在面板内，需按基因名判断分级
-            if level in ("1", "1.0"):
-                gene_tmp = get_gene_from_row(r)
-                if gene_tmp:
-                    from reportgen.core.template_bridge_358 import _get_gene_class
-                    level = _get_gene_class(gene_tmp, level)
-                else:
-                    continue
-            elif level in ("0", "0.0"):
+            gene_tmp = get_gene_from_row(r)
+            if not gene_tmp:
+                continue
+            level = _get_gene_class(
+                gene_tmp,
+                level,
+                allow_gene_fallback=allow_gene_fallback,
+            )
+            if not level:
                 continue
             # 终版报告：靶向药物提示表仅展示Ⅰ/Ⅱ类
             if level not in {"Ⅰ类", "Ⅱ类"}:
                 continue
-            gene = get_gene_from_row(r)
+            gene = gene_tmp
             c = self._norm_text(r.get("cHGVS"))
             p = self._norm_text(r.get("pHGVS_S") or r.get("pHGVS_A"))
             # 必须是真正的 cHGVS 格式（以 c. 开头），跳过知识库脏数据

@@ -7,8 +7,6 @@ We keep method names as FieldMapper internals for backward compatibility.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 
 from reportgen.models.excel_data import ExcelDataSource

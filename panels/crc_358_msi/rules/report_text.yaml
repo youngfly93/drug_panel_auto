@@ -1,0 +1,39 @@
+schema_version: "1.0"
+panel_id: "crc_358_msi"
+rule_id: "report_text"
+version: "0.2.0"
+updated: "2026-05-21"
+status: "active"
+description: "CRC TMB/MSI report wording rules used by the generator."
+
+texts:
+  tmb_table_immuno_tips:
+    purpose: "TMB row medication tip in biomarker result table."
+    source: "legacy_crc_template_alignment"
+    text: |-
+      多项临床研究表明，TMB-H的肿瘤对免疫检查点抑制剂有更强的免疫应答效果
+      常用免疫抑制剂有：#帕博利珠单抗、#纳武利尤单抗、#纳武利尤单抗+伊匹木单抗、阿替利珠单抗、度伐利尤单抗、特瑞普利单抗、信迪利单抗、卡瑞利珠单抗、#替雷利珠单抗、#恩沃利单抗、#多塔利单抗、#斯鲁利单抗、#普特利单抗、派安普利单抗、赛帕利单抗等
+  tmb_detail_interpretation:
+    purpose: "TMB 3.1 chapter educational paragraph."
+    source: "legacy_crc_template_alignment"
+    text: "肿瘤突变负荷（Tumor Mutation Burden，TMB）即肿瘤基因组去除胚系突变后的体细胞突变数量，一般以非同义突变（导致氨基酸改变的核苷酸变异）总数量或每1Mb（即1百万个碱基对）的突变数量来表示。研究表明，具有较高水平TMB的肿瘤细胞更容易被免疫系统识别，同时在多项临床研究中已证实，TMB水平较高的肿瘤对免疫检查点抑制剂有更强的免疫应答效果[1]。2020年6月，FDA批准帕博利珠单抗用于治疗组织肿瘤突变负荷高且既往治疗后病情进展且无满意替代治疗方案的不可切除或转移性成年和小儿实体瘤患者[2]。"
+  tmb_drug_note:
+    purpose: "TMB 3.1 chapter common immunotherapy drug note."
+    source: "legacy_crc_template_alignment"
+    text: "常用的免疫抑制剂有：帕博利珠单抗、纳武利尤单抗、阿替利珠单抗、度伐利尤单抗、替雷利珠单抗、恩沃利单抗等。"
+  msi_educational_tips:
+    purpose: "MSI row medication tip in biomarker result table."
+    source: "legacy_crc_template_alignment"
+    text: "研究表明，MSI-H的实体瘤通常具有免疫原性和广泛的T细胞浸润性，从而对免疫检查点抑制剂的治疗响应较高"
+  msi_crc_interpretation:
+    purpose: "MSI 3.2 CRC interpretation bullets."
+    source: "legacy_crc_template_alignment"
+    text: |-
+      肿瘤组织为MSS（微卫星稳定）/MSI-L（微卫星低度不稳定）的结直肠癌患者，含5-FU的化疗方案相对敏感，可以正常使用，建议结合临床实际情况选择治疗方案[1]。
+      肿瘤组织为MSI-H（微卫星高度不稳定）的Ⅱ期结直肠癌患者，预后较好，且不能从5-FU辅助化疗获益，不推荐氟尿嘧啶类药物的单药辅助化疗[1-3]。
+      肿瘤组织为MSI-H的转移性结直肠癌患者，可能从PD-1免疫治疗获益[4,5]。
+      肿瘤组织为MSI-H的结直肠癌患者，患有林奇综合征的风险较高，建议做进一步的林奇综合征筛查诊断（NCCN指南建议林奇综合征的基因检测应包括：MMR基因MLH1、MSH2、MSH6、PMS2和EPCAM基因）。
+  patient_letter_project_label:
+    purpose: "Patient letter panel-name wording."
+    source: "legacy_crc_template_alignment"
+    text: "结直肠癌358基因+MSI检测项目"

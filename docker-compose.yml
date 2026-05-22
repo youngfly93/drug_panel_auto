@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   web:
     build:
@@ -10,14 +8,10 @@ services:
     volumes:
       # Persist runtime data
       - ./storage:/app/storage
-      # Mount upstream config/templates/knowledge_bases (live sync)
-      - ../基因组panel自动化系统/config:/upstream/config
-      - ../基因组panel自动化系统/templates:/upstream/templates
-      - ../基因组panel自动化系统/data/knowledge_bases:/upstream/data/knowledge_bases
     environment:
       - RG_WEB_SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - RG_WEB_DEFAULT_ADMIN_USERNAME=${ADMIN_USER:-admin}
       - RG_WEB_DEFAULT_ADMIN_PASSWORD=${ADMIN_PASS:-admin123}
-      - RG_WEB_UPSTREAM_ROOT=/upstream
+      - RG_WEB_UPSTREAM_ROOT=/app
       - RG_WEB_STORAGE_ROOT=/app/storage
     restart: unless-stopped

@@ -37,6 +37,10 @@
           <el-icon><Setting /></el-icon>
           <span>配置管理</span>
         </el-menu-item>
+        <el-menu-item index="/references">
+          <el-icon><Document /></el-icon>
+          <span>基准报告</span>
+        </el-menu-item>
         <el-menu-item index="/tasks">
           <el-icon><List /></el-icon>
           <span>任务队列</span>
@@ -102,16 +106,20 @@ const sidebarWidth = computed(() => {
   return collapsed.value ? '64px' : '220px'
 })
 
-const activeMenu = computed(() => route.path)
+const activeMenu = computed(() => (route.path.startsWith('/tasks/') ? '/tasks' : route.path))
 
 const titleMap: Record<string, string> = {
   '/generate': '生成报告',
   '/patients': '患者信息',
   '/knowledge': '知识库',
   '/config': '配置管理',
+  '/references': '基准报告',
   '/tasks': '任务队列',
 }
-const currentTitle = computed(() => titleMap[route.path] || '')
+const currentTitle = computed(() => {
+  if (route.path.startsWith('/tasks/')) return '任务质控详情'
+  return titleMap[route.path] || ''
+})
 
 function onResize() {
   windowWidth.value = window.innerWidth

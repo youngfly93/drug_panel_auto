@@ -1,9 +1,9 @@
-.PHONY: dev dev-backend dev-frontend build test install clean
+.PHONY: dev dev-backend dev-frontend build test qa-gate preflight release-check install clean
 
 # Install all dependencies
 install:
+	pip install -r requirements.txt
 	cd backend && pip install -e ".[dev]"
-	cd ../基因组panel自动化系统 && pip install -e .
 	cd frontend && npm install
 
 # Development: run backend + frontend in parallel
@@ -29,6 +29,15 @@ build:
 # Run tests
 test:
 	cd backend && pytest tests/ -v
+
+# Run report generation pre-deploy quality gate
+qa-gate:
+	python -m reportgen.cli qa gate
+
+preflight: qa-gate
+
+release-check:
+	scripts/release_check.sh
 
 # Clean generated files
 clean:

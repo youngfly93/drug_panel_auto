@@ -4,13 +4,13 @@ CLI命令行接口
 提供reportgen命令行工具。
 """
 
+import json
 import sys
 from pathlib import Path
 
 import click
 
 from reportgen import __version__
-from reportgen.core.report_generator import ReportGenerator
 from reportgen.utils.logger import get_logger
 
 
@@ -107,9 +107,49 @@ def cli(ctx, config_dir, log_file, verbose):
     default=None,
     help="显式指定项目名称（覆盖 patient_info 全局默认值）",
 )
+@click.option(
+    "--qa-visual-render",
+    type=click.Choice(["none", "first", "all"]),
+    default=None,
+    help="生成后可选执行视觉QA渲染（默认读取 REPORTGEN_QA_VISUAL_RENDER 或 none）",
+)
+@click.option(
+    "--qa-visual-render-required",
+    is_flag=True,
+    default=None,
+    help="视觉QA失败时是否阻断生成QA状态",
+)
+@click.option("--qa-visual-render-dpi", type=int, default=None, help="视觉QA渲染DPI")
+@click.option(
+    "--qa-visual-render-timeout",
+    type=int,
+    default=None,
+    help="视觉QA渲染超时时间（秒）",
+)
+@click.option(
+    "--qa-visual-render-tmp-dir",
+    default=None,
+    type=click.Path(),
+    help="视觉QA渲染临时目录",
+)
 @click.pass_context
-def generate(ctx, excel, template, output, filename, strict, auto_detect,
-             template_contract, project_type, project_name):
+def generate(
+    ctx,
+    excel,
+    template,
+    output,
+    filename,
+    strict,
+    auto_detect,
+    template_contract,
+    project_type,
+    project_name,
+    qa_visual_render,
+    qa_visual_render_required,
+    qa_visual_render_dpi,
+    qa_visual_render_timeout,
+    qa_visual_render_tmp_dir,
+):
     """
     生成单个报告
 
@@ -225,6 +265,8 @@ def generate(ctx, excel, template, output, filename, strict, auto_detect,
         click.echo("")
 
     try:
+        from reportgen.core.report_generator import ReportGenerator
+
         # 初始化生成器
         generator = ReportGenerator(
             config_dir=config_dir,
@@ -264,11 +306,26 @@ def generate(ctx, excel, template, output, filename, strict, auto_detect,
             project_type=detected_project_type,
             project_name=detected_project_name,
             template_contract_mode=contract_mode,
+            qa_visual_render=qa_visual_render,
+            qa_visual_render_required=qa_visual_render_required,
+            qa_visual_render_dpi=qa_visual_render_dpi,
+            qa_visual_render_timeout_seconds=qa_visual_render_timeout,
+            qa_visual_render_tmp_dir=qa_visual_render_tmp_dir,
         )
 
         if result["success"]:
             click.echo("✅ 报告生成成功!")
             click.echo(f"📄 输出文件: {result['output_file']}")
+            if result.get("panel_package_validation"):
+                panel_status = (
+                    result["panel_package_validation"].get("status") or "UNKNOWN"
+                )
+                click.echo(f"🧬 Panel校验: {panel_status}")
+            if result.get("field_provenance_file"):
+                click.echo(f"🧾 字段来源: {result['field_provenance_file']}")
+            if result.get("qa_report_file"):
+                qa_status = result.get("qa_status") or "UNKNOWN"
+                click.echo(f"🧪 QA报告: {result['qa_report_file']} ({qa_status})")
             click.echo(f"⏱️  耗时: {result['duration']:.2f}秒")
 
             # 显示警告
@@ -463,6 +520,474 @@ def batch_validate(
     click.echo(f"  output_root: {run.output_root}")
 
     sys.exit(0 if int(report_obj.get("failures") or 0) == 0 else 1)
+
+
+@cli.group()
+def panel():
+    """Panel package management commands."""
+
+
+@panel.command("validate")
+@click.argument("panel_id", required=False)
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(),
+    help="项目根目录，默认当前目录",
+)
+@click.option(
+    "--panels-dir",
+    default="panels",
+    show_default=True,
+    type=click.Path(),
+    help="Panel Package目录",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+    help="输出格式",
+)
+@click.option(
+    "--fail-on",
+    type=click.Choice(["error", "warn"]),
+    default="error",
+    show_default=True,
+    help="CLI非零退出门槛",
+)
+def panel_validate(panel_id, project_root, panels_dir, output_format, fail_on):
+    """Validate one Panel Package or the whole registry."""
+    from reportgen.panels.validation import (
+        validate_panel_package,
+        validate_panel_registry,
+    )
+
+    if panel_id:
+        report = validate_panel_package(
+            panel_id,
+            project_root=project_root,
+            panels_dir=panels_dir,
+        )
+    else:
+        report = validate_panel_registry(
+            project_root=project_root,
+            panels_dir=panels_dir,
+        )
+
+    payload = report.to_dict()
+    if output_format == "json":
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"Panel validation: {payload['status']}")
+        click.echo(f"  scope: {payload['scope']}")
+        click.echo(f"  panels: {', '.join(payload['panels_checked']) or 'none'}")
+        summary = payload["summary"]
+        click.echo(
+            "  issues: "
+            f"{summary['errors']} errors, {summary['warnings']} warnings"
+        )
+        for issue in payload["issues"]:
+            click.echo(
+                f"  - {issue['level']} {issue['code']}"
+                f" [{issue.get('panel_id') or '-'}]: {issue['message']}"
+            )
+            if issue.get("path"):
+                click.echo(f"    path: {issue['path']}")
+            if issue.get("hint"):
+                click.echo(f"    hint: {issue['hint']}")
+
+    if report.errors or (fail_on == "warn" and report.warnings):
+        sys.exit(1)
+    sys.exit(0)
+
+
+@cli.group()
+def qa():
+    """QA and golden-case regression commands."""
+
+
+@qa.command("run")
+@click.option(
+    "--panel",
+    default="crc_358_msi",
+    show_default=True,
+    help="要运行的 golden case Panel ID",
+)
+@click.option(
+    "--output-root",
+    default=None,
+    type=click.Path(),
+    help="golden case 输出目录（默认写入 tmp/golden_cases/）",
+)
+@click.option(
+    "--template",
+    "template_file",
+    default=None,
+    type=click.Path(exists=True),
+    help="覆盖默认模板路径",
+)
+@click.option(
+    "--template-contract",
+    type=click.Choice(["none", "warn", "fail"]),
+    default="fail",
+    show_default=True,
+    help="模板契约校验模式",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    default="ERROR",
+    show_default=True,
+    help="reportgen内部日志级别",
+)
+@click.option(
+    "--render",
+    type=click.Choice(["none", "first", "all"]),
+    default="none",
+    show_default=True,
+    help="是否把 golden DOCX 渲染为 PNG 页面做视觉验收",
+)
+@click.option("--render-dpi", type=int, default=120, show_default=True, help="渲染DPI")
+@click.option(
+    "--render-timeout",
+    type=int,
+    default=120,
+    show_default=True,
+    help="单个渲染阶段超时时间（秒）",
+)
+@click.option(
+    "--render-required/--render-optional",
+    default=False,
+    show_default=True,
+    help="渲染失败是否使 golden case 失败",
+)
+@click.option(
+    "--render-tmp-dir",
+    default=None,
+    type=click.Path(),
+    help="渲染临时目录；也可使用 REPORTGEN_RENDER_TMPDIR",
+)
+@click.pass_context
+def qa_run(
+    ctx,
+    panel,
+    output_root,
+    template_file,
+    template_contract,
+    log_level,
+    render,
+    render_dpi,
+    render_timeout,
+    render_required,
+    render_tmp_dir,
+):
+    """运行单个 Panel 的端到端 golden case。"""
+    from reportgen.core.golden_case import GoldenCaseOptions, run_golden_case
+
+    if ctx.obj.get("verbose"):
+        log_level = "DEBUG"
+
+    opts = GoldenCaseOptions(
+        panel=panel,
+        config_dir=ctx.obj["config_dir"],
+        template_file=template_file,
+        output_root=output_root,
+        log_level=log_level,
+        template_contract_mode=template_contract,
+        render=render,
+        render_dpi=int(render_dpi),
+        render_timeout_seconds=int(render_timeout),
+        render_required=bool(render_required),
+        render_tmp_dir=render_tmp_dir,
+    )
+
+    click.echo(f"🧪 Running golden case: {panel}")
+    try:
+        result = run_golden_case(opts)
+    except Exception as e:
+        click.echo(f"❌ Golden case failed before assertions: {e}", err=True)
+        sys.exit(1)
+
+    click.echo(f"  output: {result.get('output_file')}")
+    click.echo(f"  qa: {result.get('qa_report_file')} ({result.get('qa_status')})")
+    click.echo(f"  report: {result.get('golden_report_file')}")
+    visual_render = result.get("visual_render") or {}
+    if visual_render.get("requested") != "none":
+        click.echo(
+            "  render: "
+            f"{visual_render.get('status')} "
+            f"({len(visual_render.get('rendered_pages') or [])} page images)"
+        )
+        if visual_render.get("output_dir"):
+            click.echo(f"  render_dir: {visual_render.get('output_dir')}")
+
+    failed = [row for row in result.get("checks", []) if not row.get("passed")]
+    if failed:
+        click.echo("\nFailed checks:", err=True)
+        for row in failed:
+            click.echo(f"  - {row.get('name')}: {row.get('message')}", err=True)
+            actual = row.get("actual")
+            expected = row.get("expected")
+            if expected is not None or actual is not None:
+                click.echo(f"    expected={expected!r} actual={actual!r}", err=True)
+        sys.exit(1)
+
+    click.echo("✅ Golden case passed")
+    sys.exit(0)
+
+
+@qa.command("diff")
+@click.option(
+    "--reference",
+    "reference_docx",
+    required=True,
+    type=click.Path(exists=True),
+    help="基准/正确报告 DOCX",
+)
+@click.option(
+    "--candidate",
+    "candidate_docx",
+    required=True,
+    type=click.Path(exists=True),
+    help="候选/新生成报告 DOCX",
+)
+@click.option(
+    "--output-dir",
+    default=None,
+    type=click.Path(),
+    help="输出 report_diff.json 与 report_diff.md 的目录",
+)
+@click.option(
+    "--reference-qa",
+    default=None,
+    type=click.Path(exists=True),
+    help="基准报告 QA JSON；默认查找同名 .qa.json",
+)
+@click.option(
+    "--candidate-qa",
+    default=None,
+    type=click.Path(exists=True),
+    help="候选报告 QA JSON；默认查找同名 .qa.json",
+)
+@click.option(
+    "--max-samples",
+    default=30,
+    show_default=True,
+    type=int,
+    help="每类差异最多保留的样本数",
+)
+@click.option(
+    "--fail-on",
+    type=click.Choice(["fail", "warn"]),
+    default="fail",
+    show_default=True,
+    help="CLI 非零退出门槛",
+)
+def qa_diff(
+    reference_docx,
+    candidate_docx,
+    output_dir,
+    reference_qa,
+    candidate_qa,
+    max_samples,
+    fail_on,
+):
+    """对比基准报告和候选报告，输出机器可读与人工可读 diff。"""
+    from reportgen.core.report_diff import ReportDiffOptions, compare_reports
+
+    result = compare_reports(
+        ReportDiffOptions(
+            reference_docx=reference_docx,
+            candidate_docx=candidate_docx,
+            output_dir=output_dir,
+            reference_qa=reference_qa,
+            candidate_qa=candidate_qa,
+            max_samples=int(max_samples),
+        )
+    )
+
+    summary = result.get("summary") or {}
+    click.echo(f"🧾 Report diff status: {result.get('status')}")
+    click.echo(
+        "  failures: "
+        f"{summary.get('failures', 0)}, warnings: {summary.get('warnings', 0)}, "
+        f"text_similarity: {summary.get('text_similarity')}"
+    )
+    if result.get("json_file"):
+        click.echo(f"  json: {result.get('json_file')}")
+    if result.get("markdown_file"):
+        click.echo(f"  markdown: {result.get('markdown_file')}")
+    for issue in list(result.get("issues") or [])[: int(max_samples)]:
+        click.echo(
+            f"  - {str(issue.get('level')).upper()} "
+            f"{issue.get('section')}/{issue.get('code')}: {issue.get('message')}"
+        )
+
+    status = result.get("status")
+    if status == "FAIL" or (fail_on == "warn" and status == "WARN"):
+        sys.exit(1)
+    sys.exit(0)
+
+
+@qa.command("gate")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(),
+    help="项目根目录，默认当前目录",
+)
+@click.option(
+    "--output-root",
+    default=None,
+    type=click.Path(),
+    help="门禁产物输出目录（默认写入 tmp/qa_gate/）",
+)
+@click.option(
+    "--panel",
+    "panels",
+    multiple=True,
+    help="要运行的 golden panel，可重复或用逗号分隔；默认运行核心 panel",
+)
+@click.option(
+    "--lint/--skip-lint",
+    "run_lint",
+    default=True,
+    show_default=True,
+    help="是否运行 ruff 检查",
+)
+@click.option(
+    "--pytest/--skip-pytest",
+    "run_pytest",
+    default=True,
+    show_default=True,
+    help="是否运行 pytest 回归",
+)
+@click.option(
+    "--golden/--skip-golden",
+    "run_golden",
+    default=True,
+    show_default=True,
+    help="是否运行 golden case",
+)
+@click.option(
+    "--diff/--skip-diff",
+    "run_diff",
+    default=True,
+    show_default=True,
+    help="是否对重复 golden 结果执行结构 diff",
+)
+@click.option(
+    "--pytest-args",
+    default="backend/tests/test_report_regression.py -q",
+    show_default=True,
+    help="pytest 参数字符串",
+)
+@click.option(
+    "--fail-on",
+    type=click.Choice(["fail", "warn"]),
+    default="warn",
+    show_default=True,
+    help="门禁非零退出门槛",
+)
+@click.option(
+    "--render",
+    type=click.Choice(["none", "first", "all"]),
+    default="none",
+    show_default=True,
+    help="golden case 可选视觉渲染模式",
+)
+@click.option(
+    "--render-required/--render-optional",
+    default=False,
+    show_default=True,
+    help="视觉渲染失败是否阻断门禁",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    default="ERROR",
+    show_default=True,
+    help="reportgen内部日志级别",
+)
+def qa_gate(
+    project_root,
+    output_root,
+    panels,
+    run_lint,
+    run_pytest,
+    run_golden,
+    run_diff,
+    pytest_args,
+    fail_on,
+    render,
+    render_required,
+    log_level,
+):
+    """运行 CI / 部署前质量门禁。"""
+    import shlex
+
+    from reportgen.core.qa_gate import (
+        DEFAULT_GATE_PANELS,
+        QualityGateOptions,
+        run_quality_gate,
+    )
+
+    selected_panels = []
+    for item in panels:
+        selected_panels.extend(
+            part.strip() for part in str(item).split(",") if part.strip()
+        )
+    if not selected_panels:
+        selected_panels = list(DEFAULT_GATE_PANELS)
+
+    click.echo("🧱 Running reportgen QA gate")
+    result = run_quality_gate(
+        QualityGateOptions(
+            project_root=project_root,
+            output_root=output_root,
+            panels=tuple(selected_panels),
+            run_lint=bool(run_lint),
+            run_pytest=bool(run_pytest),
+            run_golden=bool(run_golden),
+            run_diff=bool(run_diff),
+            fail_on_warn=(fail_on == "warn"),
+            pytest_args=tuple(shlex.split(pytest_args)),
+            render=render,
+            render_required=bool(render_required),
+            log_level=log_level,
+        )
+    )
+
+    click.echo(f"  status: {result.get('status')}")
+    click.echo(f"  report: {result.get('report_file')}")
+    click.echo(f"  output_root: {result.get('output_root')}")
+    for step in result.get("steps") or []:
+        icon = {
+            "PASS": "✅",
+            "WARN": "⚠️",
+            "FAIL": "❌",
+            "SKIPPED": "⏭️",
+        }.get(step.get("status"), "•")
+        click.echo(
+            f"  {icon} {step.get('name')}: {step.get('status')} "
+            f"({step.get('duration_seconds')}s)"
+        )
+        if step.get("status") == "FAIL":
+            if step.get("error"):
+                click.echo(f"      error: {step.get('error')}", err=True)
+            for issue in list(step.get("issues") or [])[:5]:
+                click.echo(
+                    f"      issue: {issue.get('code')} {issue.get('message')}",
+                    err=True,
+                )
+            if step.get("log_file"):
+                click.echo(f"      log: {step.get('log_file')}", err=True)
+
+    sys.exit(0 if result.get("status") == "PASS" else 1)
 
 
 @cli.command()

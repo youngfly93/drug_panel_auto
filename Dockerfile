@@ -14,15 +14,21 @@ FROM python:3.11-slim AS production
 
 WORKDIR /app
 
-# Install upstream reportgen
-COPY ../基因组panel自动化系统 /upstream
-RUN pip install --no-cache-dir -e /upstream
+# Install Python dependencies for the self-contained reportgen + web backend.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Install backend
-COPY backend/pyproject.toml backend/
+COPY backend/ backend/
 RUN pip install --no-cache-dir -e backend/
 
-COPY backend/ backend/
+# Copy reportgen package and panel assets from this repository. Keeping these
+# in the image makes deployment independent of any sibling checkout.
+COPY reportgen/ reportgen/
+COPY config/ config/
+COPY templates/ templates/
+COPY data/ data/
+COPY panels/ panels/
 
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist backend/static/
@@ -30,7 +36,7 @@ COPY --from=frontend-build /app/frontend/dist backend/static/
 # Create storage directories
 RUN mkdir -p /app/storage/uploads /app/storage/reports /app/storage/previews /app/storage/db
 
-ENV RG_WEB_UPSTREAM_ROOT=/upstream
+ENV RG_WEB_UPSTREAM_ROOT=/app
 ENV RG_WEB_STORAGE_ROOT=/app/storage
 
 EXPOSE 8000

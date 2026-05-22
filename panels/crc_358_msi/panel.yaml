@@ -1,0 +1,153 @@
+schema_version: "1.0"
+panel_id: "crc_358_msi"
+display_name: "结直肠癌358基因+MSI"
+version: "0.2.0"
+status: "active"
+description: "CRC 358 + MSI panel package for the report production pipeline."
+
+aliases:
+  - "crc_358"
+  - "crc358"
+  - "colorectal_358_msi"
+
+project_detector_rules:
+  keywords:
+    - "358基因"
+    - "结直肠癌358"
+  keyword_groups:
+    - any:
+        - "结直肠癌358"
+        - "358基因"
+        - type: regex
+          pattern: "(^|\\D)358(\\D|$)"
+      weight: 1
+
+enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
+
+default_template: "crc_358_msi_standard_v1"
+templates:
+  - id: "crc_358_msi_standard_v1"
+    file: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
+    version: "1.0.0"
+    status: "active"
+    description: "Current aligned CRC template used by the legacy generator."
+
+mappings:
+  default: "config/mapping.yaml"
+
+rules:
+  panel_rules: "rules/crc.yaml"
+  report_text: "rules/report_text.yaml"
+  biomarkers: "rules/biomarkers.yaml"
+  guideline_tables: "rules/guideline_tables.yaml"
+  drugs: "rules/drugs.yaml"
+  style: "rules/style.yaml"
+  filtering: "config/filtering.yaml"
+  drug_brands: "config/drug_brands.yaml"
+
+input_contract:
+  required_tables:
+    - "Variations"
+  optional_tables:
+    - "TMB"
+    - "Msisensor"
+    - "QC"
+    - "Cnv"
+    - "Fusion"
+    - "HLA"
+    - "CtDrug"
+  required_single_fields:
+    - "patient_name"
+    - "sample_id"
+    - "project_name"
+    - "report_date"
+  required_columns:
+    Variations:
+      - "Gene_Symbol"
+      - "cHGVS"
+      - "ExistInsmall358"
+      - "ExistIn552"
+  biomarkers:
+    tmb_value:
+      required: false
+      source_priority: ["excel", "form", "patient_info"]
+    msi_status:
+      required: true
+      allowed_values: ["MSS", "MSI-L", "MSI-H", "未检测"]
+
+template_contract:
+  required_variables:
+    - "patient_name"
+    - "sample_id"
+    - "report_date"
+    - "total_variants_count"
+    - "drug_related_count"
+    - "tmb_summary"
+    - "msi_summary"
+    - "immuno_tips"
+    - "msi_tips"
+    - "nccn_KRAS_EX2"
+  required_lists:
+    - "targeted_drug_tips"
+    - "variants_2_1"
+    - "chemotherapy"
+  required_table_structures:
+    targeted_drug_tips:
+      columns: 4
+      required_headers:
+        - "基因"
+        - "突变位点"
+        - "潜在获益靶向药物"
+        - "可能耐药"
+    biomarker_results:
+      columns: 3
+      required_headers:
+        - "TMB/MSI"
+        - "用药提示"
+    variant_detail:
+      columns: 9
+      required_headers:
+        - "基因名称"
+        - "转录本号"
+        - "染色体"
+        - "外显子"
+        - "频率"
+        - "潜在获益靶向药物"
+        - "可能耐药"
+    chemotherapy:
+      columns: 3
+      required_headers:
+        - "药物名称"
+        - "相关基因"
+        - "药物适应情况"
+    nccn_results:
+      columns: 3
+      required_headers:
+        - "检测基因"
+        - "检测内容"
+        - "检测结果"
+
+processors:
+  - "empty_table_rows"
+  - "part3_formatted_sections"
+  - "signature_placeholder"
+  - "report_content"
+  - "bullet_lists"
+  - "signature_layout"
+  - "cover_artifacts"
+  - "section_spacing"
+  - "page_layout"
+  - "gene_list_and_qc"
+  - "variant_tables"
+  - "hla_tail"
+  - "blank_page_cleanup"
+  - "toc_refresh"
+  - "final_refresh_cleanup"
+  - "underlines_and_styles"
+
+golden_cases:
+  - id: "crc_358_msi_synthetic_low_tmb_mss"
+    runner: "reportgen.core.golden_case:run_golden_case"
+    command: "reportgen qa run --panel crc_358_msi"
+    synthetic: true
+    expected_qa_status: "PASS"

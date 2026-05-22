@@ -700,6 +700,76 @@ class GeneKnowledgeProvider:
             # 有交集即匹配
             return bool(kb_keywords & variant_keywords)
 
+        def _split_drug_items(drug_text: str) -> list[str]:
+            if not drug_text:
+                return []
+            return [
+                item.strip()
+                for item in re.split(r"[、\n；;]", str(drug_text))
+                if item.strip()
+            ]
+
+        def _filter_drug_name(kb_drug_name: str, variant_drugs: str) -> str:
+            """Keep only KB drug items that are present in the final drug table."""
+            items = _split_drug_items(kb_drug_name)
+            if not items:
+                return kb_drug_name
+            kept = [item for item in items if _drug_matches(item, variant_drugs)]
+            return "、".join(kept) if kept else kb_drug_name
+
+        def _item_keywords(drug_item: str) -> set[str]:
+            keywords = set()
+            for raw in _extract_drug_keywords(drug_item):
+                for piece in re.split(r"[+＋/ ]", raw):
+                    piece = piece.strip().lower()
+                    if len(piece) > 1:
+                        keywords.add(piece)
+            return keywords
+
+        def _filter_analysis_text(
+            text: str,
+            *,
+            kb_drug_name: str,
+            variant_drugs: str,
+        ) -> str:
+            """Drop sentences about KB-only drugs not shown in the final table."""
+            if not text:
+                return ""
+
+            included_items = [
+                item
+                for item in _split_drug_items(kb_drug_name)
+                if _drug_matches(item, variant_drugs)
+            ]
+            excluded_items = [
+                item
+                for item in _split_drug_items(kb_drug_name)
+                if not _drug_matches(item, variant_drugs)
+            ]
+            if not excluded_items:
+                return text
+
+            included_keywords = set()
+            for item in included_items:
+                included_keywords.update(_item_keywords(item))
+            excluded_keywords = set()
+            for item in excluded_items:
+                excluded_keywords.update(_item_keywords(item))
+
+            if not excluded_keywords:
+                return text
+
+            segments = re.split(r"(?<=[。！？!?])", text)
+            kept = []
+            for segment in segments:
+                low = segment.lower()
+                has_excluded = any(k in low for k in excluded_keywords)
+                has_included = any(k in low for k in included_keywords)
+                if has_excluded and not has_included:
+                    continue
+                kept.append(segment)
+            return "".join(kept).strip()
+
         sections = []
         seen_drugs = set()
 
@@ -726,16 +796,27 @@ class GeneKnowledgeProvider:
                             key = f"{gene}:{drug_name}:benefit"
                             if key not in seen_drugs:
                                 seen_drugs.add(key)
+                                filtered_drug_name = _filter_drug_name(
+                                    drug_name, benefit_drugs
+                                )
                                 variant_info = f"{v.get('cHGVS', '')}，{v.get('pHGVS', '')}" if v.get('pHGVS') else v.get('cHGVS', '')
                                 sections.append(
                                     {
                                         "gene": gene,
                                         "variant": variant_info,
-                                        "drug_name": drug_name,
+                                        "drug_name": filtered_drug_name,
                                         "drug_type": "benefit",
                                         "drug_type_cn": "潜在获益药物",
-                                        "relation": drug_info.get("relation", ""),
-                                        "clinical": drug_info.get("clinical", ""),
+                                        "relation": _filter_analysis_text(
+                                            drug_info.get("relation", ""),
+                                            kb_drug_name=drug_name,
+                                            variant_drugs=benefit_drugs,
+                                        ),
+                                        "clinical": _filter_analysis_text(
+                                            drug_info.get("clinical", ""),
+                                            kb_drug_name=drug_name,
+                                            variant_drugs=benefit_drugs,
+                                        ),
                                     }
                                 )
 
@@ -748,16 +829,27 @@ class GeneKnowledgeProvider:
                             key = f"{gene}:{drug_name}:caution"
                             if key not in seen_drugs:
                                 seen_drugs.add(key)
+                                filtered_drug_name = _filter_drug_name(
+                                    drug_name, caution_drugs
+                                )
                                 variant_info = f"{v.get('cHGVS', '')}，{v.get('pHGVS', '')}" if v.get('pHGVS') else v.get('cHGVS', '')
                                 sections.append(
                                     {
                                         "gene": gene,
                                         "variant": variant_info,
-                                        "drug_name": drug_name,
+                                        "drug_name": filtered_drug_name,
                                         "drug_type": "caution",
                                         "drug_type_cn": "慎用药物",
-                                        "relation": drug_info.get("relation", ""),
-                                        "clinical": drug_info.get("clinical", ""),
+                                        "relation": _filter_analysis_text(
+                                            drug_info.get("relation", ""),
+                                            kb_drug_name=drug_name,
+                                            variant_drugs=caution_drugs,
+                                        ),
+                                        "clinical": _filter_analysis_text(
+                                            drug_info.get("clinical", ""),
+                                            kb_drug_name=drug_name,
+                                            variant_drugs=caution_drugs,
+                                        ),
                                     }
                                 )
 

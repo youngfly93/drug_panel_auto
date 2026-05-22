@@ -1,15 +1,62 @@
 """Task queue management endpoints."""
 
 import json
+from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.task import Task
 from app.schemas.common import ApiResponse
+from app.services import reference_report_service as diff_svc
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _qa_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    return Path(output_path).with_suffix(".qa.json")
+
+
+def _stage_results_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    return Path(output_path).with_suffix(".stage_results.json")
+
+
+def _fallback_stage_results_sidecar_path(task_id: str) -> Path:
+    return settings.report_dir / task_id / "generation.stage_results.json"
+
+
+def _load_qa_summary(output_path: Optional[str]) -> tuple[str | None, str | None]:
+    qa_path = _qa_sidecar_path(output_path)
+    if not qa_path or not qa_path.exists():
+        return None, None
+    try:
+        payload = json.loads(qa_path.read_text(encoding="utf-8"))
+    except Exception:
+        return str(qa_path), None
+    return str(qa_path), payload.get("status")
+
+
+def _load_stage_results_summary(
+    output_path: Optional[str],
+    task_id: Optional[str] = None,
+) -> tuple[str | None, str | None]:
+    stage_path = _stage_results_sidecar_path(output_path)
+    if (not stage_path or not stage_path.exists()) and task_id:
+        stage_path = _fallback_stage_results_sidecar_path(task_id)
+    if not stage_path or not stage_path.exists():
+        return None, None
+    try:
+        payload = json.loads(stage_path.read_text(encoding="utf-8"))
+    except Exception:
+        return str(stage_path), None
+    return str(stage_path), payload.get("generation_id")
 
 
 @router.get("", response_model=ApiResponse)
@@ -31,11 +78,25 @@ def list_tasks(
 
     items = []
     for t in tasks:
+        qa_report_file, qa_status = _load_qa_summary(t.output_path)
+        stage_results_file, generation_id = _load_stage_results_summary(
+            t.output_path,
+            task_id=t.id,
+        )
+        diff_summary = diff_svc.report_diff_summary(t.output_path)
         items.append({
             "id": t.id,
             "task_type": t.task_type,
             "status": t.status,
             "project_type": t.project_type,
+            "qa_status": qa_status,
+            "qa_report_file": qa_report_file,
+            "generation_id": generation_id,
+            "stage_results_file": stage_results_file,
+            "diff_status": diff_summary.get("diff_status"),
+            "diff_gate_passed": diff_summary.get("diff_gate_passed"),
+            "diff_reference_id": diff_summary.get("diff_reference_id"),
+            "diff_reference_name": diff_summary.get("diff_reference_name"),
             "total_files": t.total_files,
             "completed_files": t.completed_files,
             "failed_files": t.failed_files,
@@ -71,6 +132,12 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    qa_report_file, qa_status = _load_qa_summary(task.output_path)
+    stage_results_file, generation_id = _load_stage_results_summary(
+        task.output_path,
+        task_id=task.id,
+    )
+    diff_summary = diff_svc.report_diff_summary(task.output_path)
 
     return ApiResponse(data={
         "id": task.id,
@@ -81,6 +148,16 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
         "completed_files": task.completed_files,
         "failed_files": task.failed_files,
         "output_path": task.output_path,
+        "qa_status": qa_status,
+        "qa_report_file": qa_report_file,
+        "generation_id": generation_id,
+        "stage_results_file": stage_results_file,
+        "diff_report_file": diff_summary.get("diff_report_file"),
+        "diff_markdown_file": diff_summary.get("diff_markdown_file"),
+        "diff_status": diff_summary.get("diff_status"),
+        "diff_gate_passed": diff_summary.get("diff_gate_passed"),
+        "diff_reference_id": diff_summary.get("diff_reference_id"),
+        "diff_reference_name": diff_summary.get("diff_reference_name"),
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "started_at": task.started_at.isoformat() if task.started_at else None,
         "completed_at": task.completed_at.isoformat() if task.completed_at else None,

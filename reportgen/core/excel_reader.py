@@ -365,12 +365,14 @@ class ExcelReader:
                     excel_file, "Msisensor", sheet_cache, skip_rows=0, header=0
                 )
                 msi_status = self._get_df_cell_value(msi_df, row=1, col=4)
+                msi_percentage = self._get_df_cell_value(msi_df, row=1, col=3)
+                if msi_percentage is not None:
+                    data_source.single_values["MSI百分比"] = msi_percentage
                 if msi_status is not None:
                     data_source.single_values["MSI状态"] = msi_status
                     self.logger.info("提取MSI状态成功", msi_status=msi_status)
                 else:
                     # 如果第5列没有状态，尝试从百分比判定
-                    msi_percentage = self._get_df_cell_value(msi_df, row=1, col=3)
                     if msi_percentage is not None:
                         try:
                             pct = float(msi_percentage)
@@ -997,19 +999,21 @@ class ExcelReader:
 
         # 移除常见后缀
         filename = filename.replace(".result", "").replace(".final", "")
+        filename = filename.replace(".RESULT", "").replace(".FINAL", "")
 
         # 尝试提取样本编号的几种常见模式
         patterns = [
             r"MLB\d+",  # MLB开头的编号
             r"MLF\d+[A-Z]?",  # MLF开头的编号
             r"MLJY-LZ\d+",  # MLJY-LZ格式
+            r"LZ\d+",  # LZ项目编码；支持文件名中只有 lz000001 的情况
             r"[A-Z]{2,}\d{6,}",  # 通用模式：2+字母+6+数字
         ]
 
         for pattern in patterns:
-            match = re.search(pattern, filename)
+            match = re.search(pattern, filename, flags=re.IGNORECASE)
             if match:
-                sample_id = match.group(0)
+                sample_id = match.group(0).upper()
                 self.logger.debug(
                     "从文件名提取样本编号", filename=filename, sample_id=sample_id
                 )

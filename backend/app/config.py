@@ -92,5 +92,9 @@ class Settings(BaseSettings):
     def signature_dir(self) -> Path:
         return self.storage_root / "signatures"
 
+    @property
+    def reference_report_dir(self) -> Path:
+        return self.storage_root / "reference_reports"
+
 
 settings = Settings()

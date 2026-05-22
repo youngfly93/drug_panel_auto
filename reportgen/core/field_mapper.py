@@ -16,6 +16,11 @@ from reportgen.core._field_mapper_targeted_drugs import TargetedDrugMixin
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.mapping import FieldMapping, TableMapping
 from reportgen.models.report_data import ReportData
+from reportgen.core.validation import (
+    TMB_TABLE_IMMUNO_TIPS,
+    build_msi_fields,
+    build_tmb_fields,
+)
 from reportgen.utils.hgvs_utils import format_variant_site, infer_variant_type_cn
 from reportgen.utils.logger import get_logger
 
@@ -194,11 +199,16 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
             if report_data.get_field("msi") is None:
                 report_data.set_field("msi", msi or "")
 
-            msi_cn = self._build_msi_status_cn(msi) or ""
+            msi_fields = build_msi_fields(msi)
+            msi_cn = msi_fields.get("msi_status_cn") or ""
             cur_msi_cn = (report_data.get_field("msi_status_cn") or "").strip()
-            if (not cur_msi_cn) or (
-                cur_msi_cn == "微卫星稳定型，MSS"
-                and str(msi or "").strip().upper() not in {"", "MSS"}
+            if (
+                (not cur_msi_cn)
+                or cur_msi_cn == "未检测"
+                or (
+                    cur_msi_cn == "微卫星稳定型，MSS"
+                    and str(msi or "").strip().upper() not in {"", "MSS"}
+                )
             ):
                 if msi_cn:
                     report_data.set_field("msi_status_cn", msi_cn)
@@ -208,29 +218,25 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         # Block 3: TMB 参考值/分级计算
         try:
             sample_type = str(report_data.get_field("sample_type") or "组织")
-            threshold = (
-                16 if ("血" in sample_type or "blood" in sample_type.lower()) else 10
-            )
-
-            try:
-                cur_ref = report_data.get_field("tmb_reference")
-                cur_ref_val = float(cur_ref) if cur_ref is not None else None
-            except (ValueError, TypeError):
-                cur_ref_val = None
-            if cur_ref_val is None or (cur_ref_val == 10 and threshold == 16):
-                report_data.set_field("tmb_reference", threshold)
-
             tmb_val = report_data.get_field("tmb_value")
-            if tmb_val is not None:
-                try:
-                    tmb = float(tmb_val)
-                    tmb_status = "H" if tmb >= threshold else "L"
-                    report_data.set_field("tmb_status", tmb_status)
-                    report_data.set_field(
-                        "tmb_level_cn", "高" if tmb_status == "H" else "低"
-                    )
-                except (ValueError, TypeError):
-                    pass
+            if tmb_val is None:
+                for raw_key in ("TMB", "tmb_value", "TMB值", "Tumor Mutation Burden"):
+                    if raw_key in (excel_data.single_values or {}):
+                        tmb_val = excel_data.single_values.get(raw_key)
+                        break
+            normalized_tmb = build_tmb_fields(tmb_val, sample_type=sample_type)
+            for field, value in normalized_tmb.items():
+                # TMB status/summary/reference are derived from the numeric TMB
+                # value. Always recompute them so mapping defaults like "未检测"
+                # cannot survive after a valid TMB was parsed.
+                report_data.set_field(field, value)
+
+            tmb_display = normalized_tmb["tmb_value"]
+            if normalized_tmb["tmb_status"] in {"H", "L"}:
+                unit = str(report_data.get_field("tmb_unit") or "mutations/Mb")
+                tmb_display = f"{normalized_tmb['tmb_value']} {unit}".strip()
+            report_data.set_field("TMB", tmb_display)
+            report_data.set_field("tmb", tmb_display)
         except Exception as e:
             self.logger.warning("TMB参考值/分级计算失败", error=str(e))
 
@@ -255,9 +261,11 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         # Block 6: MSI 摘要
         try:
             msi = report_data.get_field("msi_status")
-            msi_summary = self._build_msi_summary(msi) or ""
-            if (report_data.get_field("msi_summary") or "").strip() == "":
-                report_data.set_field("msi_summary", msi_summary)
+            msi_fields = build_msi_fields(msi)
+            for field, value in msi_fields.items():
+                cur = report_data.get_field(field)
+                if cur is None or str(cur).strip() in {"", "未检测"}:
+                    report_data.set_field(field, value)
         except Exception as e:
             self.logger.warning("MSI摘要生成失败", error=str(e))
 
@@ -291,13 +299,8 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
     def _build_immuno_tips(
         self, msi_status: Optional[str], tmb_status: Optional[str] = None
     ) -> Optional[str]:
-        """生成终版风格的免疫治疗用药提示（固定科普段落，对齐人工终版报告）。"""
-        return (
-            "多项临床研究表明，TMB-H的肿瘤对免疫检查点抑制剂有更强的免疫应答效果\n"
-            "常用免疫抑制剂有：#帕博利珠单抗、#纳武利尤单抗、#纳武利尤单抗+伊匹木单抗、阿替利珠单抗、"
-            "度伐利尤单抗、特瑞普利单抗、信迪利单抗、卡瑞利珠单抗、#替雷利珠单抗、#恩沃利单抗、"
-            "#多塔利单抗、#斯鲁利单抗、#普特利单抗、派安普利单抗、赛帕利单抗等"
-        )
+        """生成终版表格口径的 TMB 免疫治疗科普提示。"""
+        return TMB_TABLE_IMMUNO_TIPS
 
     def _map_single_values(
         self, excel_data: ExcelDataSource, report_data: ReportData
@@ -434,6 +437,8 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                         # CtDrug表兼容：模板历史字段别名（药物适应情况/检测结果/用药提示）
                         if table_name == "chemotherapy":
                             self._apply_ctdrug_template_aliases(mapped_row)
+                        if table_name == "fusion":
+                            self._apply_fusion_template_aliases(mapped_row)
                         # 注入小写别名：模板可能同时引用 Gene1 和 gene1
                         lowercase_aliases = {}
                         for k, v in mapped_row.items():
@@ -875,25 +880,12 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         tmb_val = report_data.get_field("tmb_value")
         if tmb_val is None:
             return None
-        try:
-            tmb = float(tmb_val)
-        except Exception:
-            return str(tmb_val)
-
         sample_type = str(report_data.get_field("sample_type") or "组织")
-        threshold = (
-            16 if ("血" in sample_type or "blood" in sample_type.lower()) else 10
-        )
-        level = "TMB-H" if tmb >= threshold else "TMB-L"
-        direction = "高于" if tmb >= threshold else "低于"
+        summary = build_tmb_fields(tmb_val, sample_type=sample_type)["tmb_summary"]
         unit = str(report_data.get_field("tmb_unit") or "mutations/Mb")
-
-        # 终版常见写法：数值+单位不加空格
-        return (
-            f"{tmb:.1f}{unit}，{level}\n"
-            f"(本次检测结果{direction}参考值\n"
-            f"{threshold} mutations/Mb)"
-        )
+        if unit != "mutations/Mb" and "mutations/Mb" in summary:
+            summary = summary.replace("mutations/Mb", unit, 1)
+        return str(summary)
 
     @staticmethod
     def _build_msi_summary(msi_status: Optional[str]) -> Optional[str]:
@@ -957,30 +949,29 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         report_cancer_type = self._norm_text(report_data.get_field("cancer_type"))
         out: list[dict] = []
         mutated_genes: set[str] = set()
+        from reportgen.core.template_bridge_358 import (
+            CRC_IMPORTANT_GENES,
+            _get_gene_class,
+            _has_explicit_gene_class_labels,
+        )
+
+        allow_gene_fallback = not _has_explicit_gene_class_labels(variations)
 
         for r in variations:
-            level = self._norm_text(r.get("ExistIn552"))
-            # 兼容数字格式：1=在面板内，映射为 Ⅲ类（具体分级由基因名判断）
-            if level in ("1", "1.0"):
-                # 按基因名判断分级（复用 CRC358 enhancer 的逻辑）
-                from reportgen.core.template_bridge_358 import _get_gene_class
-                gene_tmp = self._norm_text(
-                    r.get("Gene_Symbol") or r.get("基因") or r.get("Gene")
-                )
-                level = _get_gene_class(gene_tmp, level) if gene_tmp else "Ⅲ类"
-            elif level in ("0", "0.0"):
-                continue  # 不在面板内
-            if level not in {"Ⅰ类", "Ⅱ类", "Ⅲ类"}:
-                continue
-
             gene = self._norm_text(
                 r.get("Gene_Symbol") or r.get("基因") or r.get("Gene")
             )
             if not gene:
                 continue
+            level = _get_gene_class(
+                gene,
+                r.get("ExistIn552"),
+                allow_gene_fallback=allow_gene_fallback,
+            )
+            if level not in {"Ⅰ类", "Ⅱ类", "Ⅲ类"}:
+                continue
 
             # 终版报告只展示 CRC 重要基因（对齐人工终版 ~27 行）
-            from reportgen.core.template_bridge_358 import CRC_IMPORTANT_GENES
             if gene.upper() not in CRC_IMPORTANT_GENES:
                 continue
 
@@ -1071,6 +1062,27 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         row.setdefault("药物适应情况", tip)
         row.setdefault("检测结果", tip)
         row.setdefault("用药提示", tip)
+
+    def _apply_fusion_template_aliases(self, row: Dict[str, Any]) -> None:
+        """补齐融合表历史模板字段，避免契约校验和渲染出现缺列。
+
+        真实 Fusion sheet 现在常用 `Sv_type`、`FinalFreq` 等规范字段；
+        旧模板里仍有 `row.#Est_Type` / `row.Freq1` 引用。这里只补别名，
+        不改变原始字段。
+        """
+        if "#Est_Type" not in row:
+            row["#Est_Type"] = (
+                self._norm_text(row.get("Est_Type"))
+                or self._norm_text(row.get("Sv_type"))
+                or self._norm_text(row.get("sv_type"))
+            )
+        if "Freq1" not in row:
+            row["Freq1"] = (
+                self._norm_text(row.get("FinalFreq"))
+                or self._norm_text(row.get("Freq1"))
+                or self._norm_text(row.get("freq1"))
+                or self._norm_text(row.get("frequency"))
+            )
 
     def _build_drug_detail_table(
         self, table_name: str, table_mapping: TableMapping, excel_data: ExcelDataSource

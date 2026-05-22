@@ -108,8 +108,30 @@
             >
               下载报告
             </el-button>
+            <el-button
+              v-if="result.task_id"
+              @click="$router.push(`/tasks/${result.task_id}`)"
+            >
+              查看质控详情
+            </el-button>
           </template>
         </el-result>
+        <el-alert
+          v-if="result.qa_status"
+          :title="`QA 状态：${result.qa_status}`"
+          :type="result.qa_status === 'PASS' ? 'success' : result.qa_status === 'FAIL' ? 'error' : 'warning'"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 8px"
+        />
+        <el-alert
+          v-if="result.diff_auto_ran"
+          :title="`自动 Diff：${result.diff_status || '-'}，基准：${result.diff_reference_name || result.diff_reference_id || '-'}`"
+          :type="result.diff_gate_passed === false ? 'error' : result.diff_status === 'WARN' ? 'warning' : 'success'"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 8px"
+        />
         <el-alert
           v-for="(err, i) in result.errors"
           :key="i"

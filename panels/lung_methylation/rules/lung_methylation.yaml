@@ -1,0 +1,17 @@
+schema_version: "1.0"
+panel_id: "lung_methylation"
+rule_id: "lung_methylation"
+version: "0.1.0"
+updated: "2026-05-17"
+status: "pilot"
+notes:
+  - "M3 pilot rules for package wiring only."
+  - "No patient data or production medical interpretation is stored here."
+
+marker_table:
+  required_columns:
+    - "基因"
+    - "位点"
+    - "甲基化水平"
+    - "阈值"
+    - "结果"

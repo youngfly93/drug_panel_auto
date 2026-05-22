@@ -16,6 +16,7 @@ from app.models.task import Task
 from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.services.file_manager import ensure_report_dir
+from app.services import reference_report_service as diff_svc
 from app.services.task_manager import submit_batch_task
 
 router = APIRouter(prefix="/reports", tags=["reports-batch"])
@@ -35,6 +36,26 @@ async def _on_batch_complete(task_id: str, result: dict):
             task.completed_files = report.get("successes", 0)
             task.failed_files = report.get("failures", 0)
             task.output_path = result.get("output_root")
+            warnings = []
+            try:
+                diff_payload = diff_svc.run_batch_reference_diff(
+                    db,
+                    task,
+                    report,
+                    fail_on="fail",
+                    max_samples=50,
+                )
+                summary = diff_payload.get("summary") or {}
+                warnings.append(
+                    "批量Diff: "
+                    f"{diff_payload.get('status')} "
+                    f"命中{summary.get('matched_references', 0)}/"
+                    f"{summary.get('total_reports', 0)}，"
+                    f"阻断{summary.get('blocked', 0)}"
+                )
+            except Exception as exc:
+                warnings.append(f"批量自动基准对比失败: {exc}")
+            task.warnings = json.dumps(warnings, ensure_ascii=False)
         else:
             task.status = "failed"
             task.errors = json.dumps([result.get("error", "Unknown error")], ensure_ascii=False)

@@ -26,8 +26,13 @@ from typing import Any, Callable, Dict, List, Optional
 
 from reportgen.config.loader import ConfigLoader
 from reportgen.core.excel_reader import ExcelReader
+from reportgen.core.pipeline import summarize_stage_results
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.report_generator import ReportGenerator
+from reportgen.core.validation import (
+    format_validation_warning,
+    validate_excel_data_common,
+)
 from reportgen.utils.artifacts import build_meta, write_json
 from reportgen.utils.docx_highlighter import highlight_rendered_docx
 from reportgen.utils.docx_render import render_docx_to_pngs
@@ -133,6 +138,8 @@ class BatchValidateOptions:
     inputs: List[str]
     name_contains: Optional[str] = None
     template: Optional[str] = None
+    project_type: Optional[str] = None
+    project_name: Optional[str] = None
     config_dir: str = "config"
     output_root: Optional[str] = None
     max_files: Optional[int] = None
@@ -148,6 +155,58 @@ class BatchValidateOptions:
     log_level: str = "CRITICAL"
     report_file: Optional[str] = None
     show_paths: bool = False
+
+
+def _project_type_entry(
+    detector: ProjectDetector, project_type: str
+) -> Optional[Dict[str, Any]]:
+    for entry in detector.project_types:
+        if entry.get("id") == project_type:
+            return entry
+    return None
+
+
+def _expected_tables_from_excel(
+    excel_data,
+    *,
+    show_hla_table: bool = False,
+) -> Dict[str, bool]:
+    """Return report tables that should remain visible in generated DOCX."""
+    return {
+        "cnv": bool(excel_data.get_table_data("Cnv")),
+        "fusion": bool(excel_data.get_table_data("Fusion")),
+        # HLA is currently parsed for traceability but hidden from the report by
+        # default because the legacy template places it as a trailing page.
+        "hla": bool(show_hla_table and excel_data.get_table_data("HLA")),
+    }
+
+
+def _patient_snapshot_from_context(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    keys = [
+        "sample_id",
+        "patient_name",
+        "gender",
+        "age",
+        "cancer_type",
+        "sample_type",
+        "report_number",
+        "pathology_id",
+        "hospital",
+        "department",
+        "collection_date",
+        "receive_date",
+        "report_date",
+        "issuer",
+        "reviewer",
+        "signature_image_path",
+        "project_type",
+        "project_name",
+    ]
+    return {
+        key: value
+        for key in keys
+        if (value := ctx.get(key)) not in (None, "", "-", "--")
+    }
 
 
 @dataclass(frozen=True)
@@ -201,6 +260,9 @@ def run_batch_generate_validate(
         config_loader.get_setting("logging.content.sensitive_fields", []) or []
     )
     sensitive_fields.add("sample_id")
+    show_hla_table = bool(
+        config_loader.get_setting("report_content.show_hla_table", False)
+    )
 
     results: List[Dict[str, Any]] = []
     successes = 0
@@ -226,12 +288,28 @@ def run_batch_generate_validate(
 
         try:
             excel_data = excel_reader.read(str(excel_path), include_tables=True)
+            input_validation_warnings = validate_excel_data_common(excel_data)
+            warnings.extend(
+                format_validation_warning(w) for w in input_validation_warnings
+            )
 
             # 始终尝试检测项目类型（用于 enhancer 分派），
             # 仅在未指定模板时才从检测结果中取模板路径
             det = detector.detect(str(excel_path), excel_data=excel_data)
             detected_project_type = det.get("project_type")
             detected_project_name = det.get("project_name") if det.get("detected") else None
+            if opts.project_type:
+                forced = _project_type_entry(detector, opts.project_type)
+                detected_project_type = opts.project_type
+                detected_project_name = opts.project_name or (
+                    forced.get("name") if forced else opts.project_type
+                )
+                if not template_path and forced:
+                    forced_template = forced.get("template")
+                    if forced_template:
+                        template_path = str(
+                            detector._config_loader.resolve_path(str(forced_template))
+                        )
             if not template_path:
                 template_path = det.get("template")
 
@@ -262,6 +340,34 @@ def run_batch_generate_validate(
 
             if gen.get("output_file"):
                 output_docx = str(Path(gen["output_file"]).resolve())
+            ctx = gen.get("context") or {}
+            patient_snapshot = _patient_snapshot_from_context(ctx)
+            post_processors = gen.get("post_processors") or []
+            stage_results = gen.get("stage_results") or []
+            stage_results_file = gen.get("stage_results_file")
+            pipeline_summary = summarize_stage_results(
+                stage_results,
+                stage_results_file=(
+                    public_path(Path(str(stage_results_file)))
+                    if stage_results_file
+                    else None
+                ),
+            )
+            panel_package_validation = gen.get("panel_package_validation")
+            field_provenance = gen.get("field_provenance") or {}
+            field_provenance_file = gen.get("field_provenance_file")
+            if field_provenance_file:
+                artifacts["field_provenance_json"] = public_path(
+                    Path(str(field_provenance_file))
+                )
+            qa_report = gen.get("qa_report") or {}
+            qa_report_file = gen.get("qa_report_file")
+            if qa_report_file:
+                artifacts["qa_report_json"] = public_path(Path(str(qa_report_file)))
+            if stage_results_file:
+                artifacts["stage_results_json"] = public_path(
+                    Path(str(stage_results_file))
+                )
 
             # --- artifacts: context/meta ---
             template_contract = gen.get("template_contract")
@@ -295,6 +401,8 @@ def run_batch_generate_validate(
                             "output_root": str(output_root),
                             "max_files": opts.max_files,
                             "render": opts.render,
+                            "project_type": opts.project_type,
+                            "project_name": opts.project_name,
                             "render_dpi": opts.render_dpi,
                             "highlight": opts.highlight,
                             "highlight_color": opts.highlight_color,
@@ -320,6 +428,15 @@ def run_batch_generate_validate(
             table_presence: Dict[str, bool] = {}
             doc_stats: Dict[str, Any] = {}
             issues: List[str] = []
+            qa_status = qa_report.get("status")
+            if qa_status == "FAIL":
+                issues.append("qa_failed")
+            elif qa_status == "WARN":
+                issues.append("qa_warn")
+            if pipeline_summary.get("status") == "FAIL":
+                issues.append("pipeline_failed")
+            elif pipeline_summary.get("status") == "WARN":
+                issues.append("pipeline_warn")
 
             try:
                 doc = Document(output_docx)
@@ -346,11 +463,9 @@ def run_batch_generate_validate(
                 errors.append(f"docx_open_failed: {e}")
 
             # Expectation checks based on Excel content (only when Excel was parsed).
-            expected = {
-                "cnv": bool(excel_data.get_table_data("Cnv")),
-                "fusion": bool(excel_data.get_table_data("Fusion")),
-                "hla": bool(excel_data.get_table_data("HLA")),
-            }
+            expected = _expected_tables_from_excel(
+                excel_data, show_hla_table=show_hla_table
+            )
             missing_expected = []
             for k, exp in expected.items():
                 if exp and doc_ok and not table_presence.get(k, False):
@@ -437,6 +552,26 @@ def run_batch_generate_validate(
                 "rendered_pages": rendered_pages,
                 "issues": issues,
                 "template_contract": template_contract,
+                "panel_package_validation": panel_package_validation,
+                "input_validation_warnings": input_validation_warnings,
+                "post_processors": post_processors,
+                "pipeline": pipeline_summary,
+                "stage_results": stage_results,
+                "stage_results_file": (
+                    public_path(Path(str(stage_results_file)))
+                    if stage_results_file
+                    else None
+                ),
+                "field_provenance_file": (
+                    public_path(Path(str(field_provenance_file)))
+                    if field_provenance_file
+                    else None
+                ),
+                "field_provenance": field_provenance,
+                "qa_report_file": (
+                    public_path(Path(str(qa_report_file))) if qa_report_file else None
+                ),
+                "qa_report": qa_report,
                 "artifacts": artifacts,
                 "highlight": highlight_info,
             }
@@ -445,6 +580,8 @@ def run_batch_generate_validate(
                 (len(errors) == 0)
                 and doc_ok
                 and (not any(v > 0 for v in placeholder_counts.values()))
+                and (qa_status != "FAIL")
+                and (pipeline_summary.get("status") != "FAIL")
             )
 
         except Exception as e:
@@ -473,6 +610,9 @@ def run_batch_generate_validate(
                     if (opts.show_paths and template_path)
                     else (Path(str(template_path)).name if template_path else None)
                 ),
+                "excel_filename": excel_path.name,
+                "excel_path": str(excel_path.resolve()) if opts.show_paths else excel_path.name,
+                "patient_snapshot": patient_snapshot,
                 "duration_seconds": duration,
                 "errors": errors,
                 "warnings": warnings,
