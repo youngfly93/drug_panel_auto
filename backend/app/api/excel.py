@@ -105,14 +105,10 @@ def list_sheets(
         raise HTTPException(status_code=404, detail="上传记录不存在")
 
     excel_data = _get_excel_data(upload, bridge)
-    tables = excel_data.table_data or {}
     sheets = []
     for name in bridge.get_sheet_names(excel_data):
-        df = tables.get(name)
-        if df is not None and hasattr(df, "shape"):
-            sheets.append(SheetInfo(name=name, rows=df.shape[0], columns=df.shape[1]))
-        else:
-            sheets.append(SheetInfo(name=name, rows=0, columns=0))
+        info = bridge.get_sheet_info(excel_data, name, excel_path=upload.stored_path)
+        sheets.append(SheetInfo(name=name, rows=info["rows"], columns=info["columns"]))
 
     return ApiResponse(data=sheets)
 
@@ -131,7 +127,13 @@ def get_sheet_data(
         raise HTTPException(status_code=404, detail="上传记录不存在")
 
     excel_data = _get_excel_data(upload, bridge)
-    result = bridge.get_table_data(excel_data, sheet_name, page=page, page_size=page_size)
+    result = bridge.get_table_data(
+        excel_data,
+        sheet_name,
+        page=page,
+        page_size=page_size,
+        excel_path=upload.stored_path,
+    )
 
     return ApiResponse(
         data=SheetData(
