@@ -2869,8 +2869,73 @@ def test_template_renderer_can_disable_panel_processors(tmp_path):
     assert renderer.last_processor_report == []
 
 
-def test_bullet_list_processor_is_idempotent(tmp_path):
-    docx_path = tmp_path / "bullet_idempotent.docx"
+def _docx_xml_signature(docx_path: Path) -> dict[str, str]:
+    """Return a deterministic XML signature for idempotency checks."""
+    import re
+    from zipfile import ZipFile
+
+    signature = {}
+    with ZipFile(docx_path, "r") as zf:
+        for name in sorted(zf.namelist()):
+            if name == "docProps/core.xml":
+                continue
+            if not (name.endswith(".xml") or name.endswith(".rels")):
+                continue
+            text = zf.read(name).decode("utf-8", "ignore")
+            text = re.sub(r'\s+w:rsid\w+="[^"]*"', "", text)
+            signature[name] = text
+    return signature
+
+
+def _assert_processors_idempotent(
+    tmp_path: Path,
+    processor_names: list[str],
+    build_docx,
+    *,
+    context: dict | None = None,
+    monkeypatch=None,
+) -> Path:
+    docx_path = tmp_path / f"idempotent_{'_'.join(processor_names)}.docx"
+    build_docx(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    if monkeypatch is not None:
+        monkeypatch.setattr(
+            renderer,
+            "_refresh_fields_with_native_engine",
+            lambda file_path: None,
+        )
+        monkeypatch.setattr(
+            renderer,
+            "_populate_static_toc_page_numbers",
+            lambda file_path: None,
+        )
+
+    renderer._run_post_render_processors(
+        str(docx_path),
+        context or {},
+        str(docx_path),
+        processor_names=processor_names,
+    )
+    assert all(
+        row["status"] in {"OK", "SKIPPED"} for row in renderer.last_processor_report
+    )
+    first_signature = _docx_xml_signature(docx_path)
+
+    renderer._run_post_render_processors(
+        str(docx_path),
+        context or {},
+        str(docx_path),
+        processor_names=processor_names,
+    )
+    assert all(
+        row["status"] in {"OK", "SKIPPED"} for row in renderer.last_processor_report
+    )
+    assert _docx_xml_signature(docx_path) == first_signature
+    return docx_path
+
+
+def _write_empty_numbered_docx(docx_path: Path) -> None:
     doc = Document()
     p = doc.add_paragraph("")
     ppr = p._p.get_or_add_pPr()
@@ -2881,13 +2946,118 @@ def test_bullet_list_processor_is_idempotent(tmp_path):
     ppr.append(num_pr)
     doc.save(docx_path)
 
-    renderer = TemplateRenderer(log_level="ERROR")
-    for _ in range(2):
-        renderer._run_post_render_processors(
-            str(docx_path),
-            {},
-            str(docx_path),
-            processor_names=["bullet_lists"],
+
+def _set_table_widths(table, widths: list[int]) -> None:
+    tbl_pr = table._tbl.tblPr
+    tbl_w = tbl_pr.find(qn("w:tblW"))
+    if tbl_w is None:
+        tbl_w = OxmlElement("w:tblW")
+        tbl_pr.append(tbl_w)
+    tbl_w.set(qn("w:type"), "dxa")
+    tbl_w.set(qn("w:w"), str(sum(widths)))
+
+    grid = table._tbl.tblGrid
+    if grid is None:
+        grid = OxmlElement("w:tblGrid")
+        table._tbl.insert(1, grid)
+    for child in list(grid):
+        grid.remove(child)
+    for width in widths:
+        grid_col = OxmlElement("w:gridCol")
+        grid_col.set(qn("w:w"), str(width))
+        grid.append(grid_col)
+
+    for row in table.rows:
+        for idx, cell in enumerate(row.cells):
+            tc_pr = cell._tc.get_or_add_tcPr()
+            tc_w = tc_pr.find(qn("w:tcW"))
+            if tc_w is None:
+                tc_w = OxmlElement("w:tcW")
+                tc_pr.append(tc_w)
+            tc_w.set(qn("w:type"), "dxa")
+            tc_w.set(qn("w:w"), str(widths[idx]))
+
+
+def _write_overwide_variant_table_docx(docx_path: Path) -> None:
+    doc = Document()
+    table = doc.add_table(rows=3, cols=9)
+    rows = [
+        [
+            "基因名称",
+            "基因突变信息",
+            "基因突变信息",
+            "基因突变信息",
+            "基因突变信息",
+            "基因突变信息",
+            "基因突变信息",
+            "靶向药物信息",
+            "靶向药物信息",
+        ],
+        [
+            "基因名称",
+            "转录本号",
+            "染色体",
+            "外显子",
+            "位点",
+            "突变类型",
+            "频率",
+            "潜在获益靶向药物",
+            "可能耐药或慎重药物",
+        ],
+        [
+            "KRAS",
+            "NM_004985.5",
+            "12",
+            "2",
+            "c.34G>A",
+            "点突变",
+            "46.29",
+            "司美替尼（C）",
+            "西妥昔单抗（A）",
+        ],
+    ]
+    for row, values in zip(table.rows, rows):
+        for idx, value in enumerate(values):
+            row.cells[idx].text = value
+    _set_table_widths(table, [2400] * 9)
+    doc.save(docx_path)
+
+
+def _write_trailing_blank_page_docx(docx_path: Path) -> None:
+    doc = Document()
+    paragraph = doc.add_paragraph("正文结尾")
+    paragraph.add_run().add_break(WD_BREAK.PAGE)
+    doc.add_paragraph("")
+    doc.add_paragraph("")
+    doc.save(docx_path)
+
+
+def _write_toc_update_docx(docx_path: Path) -> None:
+    doc = Document()
+    doc.add_paragraph("目录")
+    doc.add_paragraph("第一部分\t1")
+    doc.add_heading("第一部分", level=1)
+    doc.save(docx_path)
+
+
+def _write_crc_style_docx(docx_path: Path) -> None:
+    doc = Document()
+    doc.add_paragraph("本次共检出体细胞变异：1 个")
+    _add_crc_style_qa_tables(doc)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.underline = True
+    doc.save(docx_path)
+
+
+def test_bullet_list_processor_is_idempotent(tmp_path):
+    docx_path = _assert_processors_idempotent(
+        tmp_path,
+        ["bullet_lists"],
+        _write_empty_numbered_docx,
     )
 
     rendered = Document(docx_path)
@@ -2895,7 +3065,49 @@ def test_bullet_list_processor_is_idempotent(tmp_path):
         paragraph._p.pPr is not None and paragraph._p.pPr.numPr is not None
         for paragraph in rendered.paragraphs
     )
-    assert [row["name"] for row in renderer.last_processor_report] == ["bullet_lists"]
+
+
+def test_variant_tables_processor_is_idempotent(tmp_path):
+    _assert_processors_idempotent(
+        tmp_path,
+        ["variant_tables"],
+        _write_overwide_variant_table_docx,
+    )
+
+
+def test_blank_page_cleanup_processor_is_idempotent(tmp_path):
+    _assert_processors_idempotent(
+        tmp_path,
+        ["blank_page_cleanup"],
+        _write_trailing_blank_page_docx,
+    )
+
+
+def test_toc_refresh_processor_is_idempotent(tmp_path, monkeypatch):
+    _assert_processors_idempotent(
+        tmp_path,
+        ["toc_refresh"],
+        _write_toc_update_docx,
+        monkeypatch=monkeypatch,
+    )
+
+
+def test_final_refresh_cleanup_processor_is_idempotent(tmp_path, monkeypatch):
+    _assert_processors_idempotent(
+        tmp_path,
+        ["final_refresh_cleanup"],
+        _write_trailing_blank_page_docx,
+        monkeypatch=monkeypatch,
+    )
+
+
+def test_underlines_and_styles_processor_is_idempotent(tmp_path):
+    _assert_processors_idempotent(
+        tmp_path,
+        ["underlines_and_styles"],
+        _write_crc_style_docx,
+        context={"panel_style": _crc_panel_style()},
+    )
 
 
 def test_qa_report_records_post_processor_errors(tmp_path):
