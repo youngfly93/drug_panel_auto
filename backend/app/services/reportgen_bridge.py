@@ -157,19 +157,20 @@ class ReportGenBridge:
         table_name: str,
         page: int = 1,
         page_size: int = 50,
+        excel_path: Optional[str] = None,
     ) -> dict[str, Any]:
         """Get table data for a specific sheet with pagination."""
         tables = excel_data.table_data or {}
         if table_name not in tables:
-            return {
-                "columns": [],
-                "rows": [],
-                "total_rows": 0,
-                "page": page,
-                "page_size": page_size,
-            }
+            if not excel_path:
+                return self._empty_table_page(page, page_size)
+            try:
+                df = self.excel_reader.read_sheet(excel_path, table_name)
+            except Exception:
+                return self._empty_table_page(page, page_size)
+        else:
+            df = tables[table_name]
 
-        df = tables[table_name]
         if hasattr(df, "to_dict"):
             # It's a DataFrame
             total = len(df)
@@ -189,20 +190,60 @@ class ReportGenBridge:
             start = (page - 1) * page_size
             end = start + page_size
             rows = df[start:end]
-            columns = list(rows[0].keys()) if rows else []
+            columns = self._columns_from_rows(df)
         else:
-            return {
-                "columns": [],
-                "rows": [],
-                "total_rows": 0,
-                "page": page,
-                "page_size": page_size,
-            }
+            return self._empty_table_page(page, page_size)
 
         return {
             "columns": columns,
             "rows": rows,
             "total_rows": total,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    def get_sheet_info(
+        self,
+        excel_data: ExcelDataSource,
+        sheet_name: str,
+        excel_path: Optional[str] = None,
+    ) -> dict[str, int]:
+        """Return row/column counts for either mapped tables or raw Excel sheets."""
+        tables = excel_data.table_data or {}
+        df = tables.get(sheet_name)
+        if hasattr(df, "shape"):
+            return {"rows": int(df.shape[0]), "columns": int(df.shape[1])}
+        if isinstance(df, list):
+            return {"rows": len(df), "columns": len(self._columns_from_rows(df))}
+        if excel_path:
+            try:
+                raw_df = self.excel_reader.read_sheet(excel_path, sheet_name)
+                return {"rows": int(raw_df.shape[0]), "columns": int(raw_df.shape[1])}
+            except Exception:
+                pass
+        return {"rows": 0, "columns": 0}
+
+    @staticmethod
+    def _columns_from_rows(rows: list[dict[str, Any]]) -> list[str]:
+        """Collect stable columns from a list of row dictionaries."""
+        columns: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            for key in row.keys():
+                key_str = str(key)
+                if key_str not in seen:
+                    seen.add(key_str)
+                    columns.append(key_str)
+        return columns
+
+    @staticmethod
+    def _empty_table_page(page: int, page_size: int) -> dict[str, Any]:
+        return {
+            "columns": [],
+            "rows": [],
+            "total_rows": 0,
             "page": page,
             "page_size": page_size,
         }
