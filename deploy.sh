@@ -15,6 +15,8 @@ RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
 SKIP_PREFLIGHT="${SKIP_PREFLIGHT:-0}"
 PREFLIGHT_OUTPUT_ROOT="${PREFLIGHT_OUTPUT_ROOT:-$APP_DIR/tmp/deploy_qa_gate}"
 PREFLIGHT_ARGS="${PREFLIGHT_ARGS:-}"
+NODE_MIN_MAJOR="${NODE_MIN_MAJOR:-18}"
+NODE_INSTALL_MAJOR="${NODE_INSTALL_MAJOR:-22}"
 
 echo "============================================"
 echo "  基因组Panel自动化报告系统 - 部署开始"
@@ -31,12 +33,12 @@ elif command -v yum &>/dev/null; then
     yum install -y epel-release 2>/dev/null || true
 fi
 
-# Check Node version (need 18+)
+# Check Node version (need 18+ for frontend build)
 NODE_VER=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1)
-if [ -z "$NODE_VER" ] || [ "$NODE_VER" -lt 16 ]; then
-    echo "  Node.js 版本过低或未安装，正在安装 Node 18..."
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - 2>/dev/null || \
-    curl -fsSL https://rpm.nodesource.com/setup_18.x | bash - 2>/dev/null || true
+if [ -z "$NODE_VER" ] || [ "$NODE_VER" -lt "$NODE_MIN_MAJOR" ]; then
+    echo "  Node.js 版本过低或未安装，正在安装 Node ${NODE_INSTALL_MAJOR}..."
+    curl -fsSL "https://deb.nodesource.com/setup_${NODE_INSTALL_MAJOR}.x" | bash - 2>/dev/null || \
+    curl -fsSL "https://rpm.nodesource.com/setup_${NODE_INSTALL_MAJOR}.x" | bash - 2>/dev/null || true
     apt-get install -y nodejs 2>/dev/null || yum install -y nodejs 2>/dev/null || true
 fi
 

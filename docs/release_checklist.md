@@ -54,6 +54,9 @@ RUN_GITHUB_CHECKS=0 make release-check
 - Open a PR from the release branch into `main`.
 - Confirm `Reportgen QA Gate / qa-gate` is green.
 - Confirm the PR is up to date with `main`.
+- Confirm the Actions run has no Node.js runtime deprecation warning. The QA
+  workflow opts JavaScript actions into Node 24 and pins Node 24-compatible
+  major versions.
 - Review generated QA artifacts if the gate fails or warns.
 - Confirm no `.xlsx`, `.docx`, `.pdf`, `storage/`, or patient-level outputs are
   added to Git.
@@ -72,6 +75,11 @@ DEPLOY_BRANCH=main bash deploy.sh
 `deploy.sh` runs the same preflight gate before frontend build and service
 restart. If the gate fails, deployment stops and the existing service is not
 restarted.
+
+The deploy script requires Node.js 18+ for the frontend build. If the server has
+an older Node.js runtime, it installs Node.js 22 by default. Override with
+`NODE_INSTALL_MAJOR=<major>` only when a server image requires a different
+NodeSource channel.
 
 Preflight artifacts are written to:
 
