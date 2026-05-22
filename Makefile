@@ -1,4 +1,4 @@
-.PHONY: dev dev-backend dev-frontend build test qa-gate preflight install clean
+.PHONY: dev dev-backend dev-frontend build test qa-gate preflight release-check install clean
 
 # Install all dependencies
 install:
@@ -35,6 +35,9 @@ qa-gate:
 	python -m reportgen.cli qa gate
 
 preflight: qa-gate
+
+release-check:
+	scripts/release_check.sh
 
 # Clean generated files
 clean:

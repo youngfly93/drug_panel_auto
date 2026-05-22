@@ -28,6 +28,13 @@ DEPLOY_BRANCH=main bash deploy.sh
 Deploy a specific branch. The default is `main`.
 
 ```bash
+DEPLOY_REF=fe265e4 bash deploy.sh
+```
+
+Deploy a specific commit or tag. This is the standard rollback mechanism when a
+known-good commit must be restored.
+
+```bash
 PREFLIGHT_ARGS="--panel crc_358_msi" bash deploy.sh
 ```
 

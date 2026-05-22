@@ -8,6 +8,7 @@ This file provides project memory for Codex when working in this repository.
 - Migration branch plan: `docs/panel_platform_migration_branch_plan.md`
 - Panel package specification: `docs/panel_package_spec.md`
 - M6-M9 refactor implementation PRD: `docs/prd_refactor_implementation_m6_m9.md`
+- Release checklist: `docs/release_checklist.md`
 
 ## Refactor Direction
 
@@ -23,4 +24,3 @@ codex/panel-platform-m6-pipeline
 ```
 
 Every milestone must keep the Web app deployable, keep `ReportGenerator.generate()` externally compatible unless explicitly migrated, and avoid patient-specific hardcoding.
-

@@ -9,6 +9,7 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/reportgen-web}"
 REPO_URL="${REPO_URL:-https://github.com/youngfly93/drug_panel_auto.git}"
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+DEPLOY_REF="${DEPLOY_REF:-}"
 DOMAIN="${DOMAIN:-117.72.75.45}"
 RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
 SKIP_PREFLIGHT="${SKIP_PREFLIGHT:-0}"
@@ -56,7 +57,12 @@ else
     git clone --branch "$DEPLOY_BRANCH" "$REPO_URL" "$APP_DIR"
     cd "$APP_DIR"
 fi
-echo "  Branch: $(git branch --show-current)"
+if [ -n "$DEPLOY_REF" ]; then
+    git fetch --tags origin
+    git checkout "$DEPLOY_REF"
+fi
+CURRENT_BRANCH="$(git branch --show-current || true)"
+echo "  Branch: ${CURRENT_BRANCH:-detached}"
 echo "  Commit: $(git rev-parse --short HEAD)"
 
 # ---- 3. Python 虚拟环境 + 依赖 ----
