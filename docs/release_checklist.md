@@ -49,6 +49,18 @@ Emergency local-only check:
 RUN_GITHUB_CHECKS=0 make release-check
 ```
 
+Run the Web smoke test when the change touches upload, preview, clinical form,
+report generation, download, deployment packaging, or frontend assets:
+
+```bash
+make web-smoke
+```
+
+This uses a synthetic CRC 358 + MSI workbook and verifies upload, project
+detection, sheet preview, schema loading, report generation, QA status, and DOCX
+download. If the frontend is already built, `WEB_SMOKE_BUILD=0 make web-smoke`
+can be used for a faster rerun.
+
 ## 2. Pull Request
 
 - Open a PR from the release branch into `main`.
@@ -117,6 +129,25 @@ Expected:
 - generated DOCX opens;
 - QA report status is `PASS`;
 - repeated golden diff is `PASS`.
+
+If the server has build and test dependencies available, run the same Web smoke
+flow against production:
+
+```bash
+cd /opt/reportgen-web
+WEB_SMOKE_BASE_URL=http://127.0.0.1:8000 \
+WEB_SMOKE_BUILD=0 \
+WEB_SMOKE_ADMIN_USERNAME=<admin_user> \
+WEB_SMOKE_ADMIN_PASSWORD=<admin_password> \
+make web-smoke
+```
+
+Expected:
+
+- synthetic upload is detected as `crc_358_msi`;
+- sheet preview returns non-zero row/column counts;
+- generated report QA status is `PASS`;
+- DOCX download succeeds.
 
 ## 5. Rollback
 

@@ -40,6 +40,7 @@ htmlcov/
 
 # Generated
 backend/static/
+tmp/
 
 # Patient data — NEVER commit real patient files
 # But DO commit templates and knowledge bases needed for deployment

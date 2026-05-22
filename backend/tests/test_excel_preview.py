@@ -1,9 +1,17 @@
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
-import pandas as pd
-from reportgen.models.excel_data import ExcelDataSource
+ROOT = Path(__file__).resolve().parents[2]
+BACKEND = ROOT / "backend"
+for import_path in (str(ROOT), str(BACKEND)):
+    if import_path not in sys.path:
+        sys.path.insert(0, import_path)
 
-from app.services.reportgen_bridge import ReportGenBridge
+import pandas as pd  # noqa: E402
+from reportgen.models.excel_data import ExcelDataSource  # noqa: E402
+
+from app.services.reportgen_bridge import ReportGenBridge  # noqa: E402
 
 
 def _bridge_with_reader(reader=None):

@@ -1,4 +1,4 @@
-.PHONY: dev dev-backend dev-frontend build test qa-gate preflight release-check install clean
+.PHONY: dev dev-backend dev-frontend build test qa-gate web-smoke preflight release-check install clean
 
 # Install all dependencies
 install:
@@ -33,6 +33,9 @@ test:
 # Run report generation pre-deploy quality gate
 qa-gate:
 	python -m reportgen.cli qa gate
+
+web-smoke:
+	bash scripts/web_smoke.sh
 
 preflight: qa-gate
 
