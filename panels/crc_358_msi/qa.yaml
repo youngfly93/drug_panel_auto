@@ -19,7 +19,7 @@ current_output:
     date: fail
 
 legacy_reference:
-  enabled: false
+  enabled: true
   source_dir_name: "crc_358_msi"
   sample_count: 5
   required_features:

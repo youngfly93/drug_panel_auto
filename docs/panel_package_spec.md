@@ -105,11 +105,14 @@ current_output:
 
 Rule severities are `off`, `warn`, or `fail`. A panel that has no historical
 reference set should keep `legacy_reference.enabled: false`; the profile still
-documents the expected QA behavior before the panel is promoted.
+documents the expected QA behavior before the panel is promoted. CRC 301 and
+CRC 358 enable historical reference checks when
+`REPORTGEN_LEGACY_REPORTS_ROOT` or `--legacy-source-root` points at the local
+split reference root.
 
 `current_output` applies the same contract style to the freshly generated golden
 DOCX during `reportgen qa gate`. Its `source` can be `golden_reference` or
-`golden_candidate`.
+`golden_candidate`; CRC 301 and CRC 358 both enable this check in default CI.
 
 ## Validator
 
