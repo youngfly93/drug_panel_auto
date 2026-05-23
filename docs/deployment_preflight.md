@@ -19,6 +19,12 @@ python -m reportgen.cli qa gate --output-root /opt/reportgen-web/tmp/deploy_qa_g
 It validates panel packages, runs lint, runs regression tests, generates
 synthetic golden reports, and compares repeated golden outputs.
 
+The default panel set currently covers:
+
+- `crc_358_msi`
+- `crc_301_msi`
+- `lung_methylation`
+
 ## Useful Environment Variables
 
 ```bash
@@ -38,7 +44,8 @@ known-good commit must be restored.
 PREFLIGHT_ARGS="--panel crc_358_msi" bash deploy.sh
 ```
 
-Pass extra arguments to `reportgen qa gate`.
+Pass extra arguments to `reportgen qa gate`. Use this only for a targeted
+investigation; normal deployments should run the full default panel set.
 
 ```bash
 PREFLIGHT_OUTPUT_ROOT=/tmp/reportgen-deploy-gate bash deploy.sh

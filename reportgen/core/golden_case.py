@@ -25,8 +25,12 @@ from reportgen.utils.docx_render import render_docx_to_pngs
 
 
 SUPPORTED_PANELS = {
+    "crc_301": "crc_301_msi",
+    "crc301": "crc_301_msi",
+    "crc_301_msi": "crc_301_msi",
     "crc_358_msi": "crc_358_msi",
     "crc_358": "crc_358_msi",
+    "crc358": "crc_358_msi",
     "lung_methylation": "lung_methylation",
 }
 
@@ -70,6 +74,31 @@ CRC_358_MSI_EXPECTATIONS: Dict[str, Any] = {
         "drug_related_count_text",
     ],
     "required_text": [
+        "本次共检出体细胞变异：2个",
+        "与靶向药物用药相关的变异有：1个",
+        "6.5mutations/Mb，TMB-L",
+        "微卫星稳定型，MSS",
+        "多项临床研究表明，TMB-H的肿瘤",
+        "研究表明，MSI-H的实体瘤",
+        "ERBB2",
+        "c.1979G>A",
+        "p.G660D",
+    ],
+}
+
+
+CRC_301_MSI_EXPECTATIONS: Dict[str, Any] = {
+    "project_type": "crc_301_msi",
+    "project_name": "结直肠癌301基因+MSI",
+    "expected_context": {
+        "total_variants_count": 2,
+        "drug_related_count": 1,
+        "tmb_status": "L",
+        "msi_status": "MSS",
+    },
+    "required_qa_checks": list(CRC_358_MSI_EXPECTATIONS["required_qa_checks"]),
+    "required_text": [
+        "结直肠癌301基因+MSI",
         "本次共检出体细胞变异：2个",
         "与靶向药物用药相关的变异有：1个",
         "6.5mutations/Mb，TMB-L",
@@ -287,6 +316,13 @@ def run_visual_render(
 
 
 def _golden_case_spec(panel: str) -> Dict[str, Any]:
+    if panel == "crc_301_msi":
+        return {
+            "expectations": CRC_301_MSI_EXPECTATIONS,
+            "builder": build_crc_301_msi_golden_excel,
+            "input_filename": "LZ999301_crc_301_msi_golden.xlsx",
+            "output_filename": "golden_crc_301_msi.docx",
+        }
     if panel == "lung_methylation":
         return {
             "expectations": LUNG_METHYLATION_EXPECTATIONS,
@@ -304,15 +340,40 @@ def _golden_case_spec(panel: str) -> Dict[str, Any]:
 
 def build_crc_358_msi_golden_excel(path: Path | str) -> Path:
     """Create a synthetic CRC 358 + MSI workbook suitable for the golden case."""
+    return _build_crc_msi_golden_excel(
+        path,
+        panel_gene_count=358,
+        sample_id="LZ999001",
+    )
+
+
+def build_crc_301_msi_golden_excel(path: Path | str) -> Path:
+    """Create a synthetic CRC 301 + MSI workbook suitable for the golden case."""
+    return _build_crc_msi_golden_excel(
+        path,
+        panel_gene_count=301,
+        sample_id="LZ999301",
+    )
+
+
+def _build_crc_msi_golden_excel(
+    path: Path | str,
+    *,
+    panel_gene_count: int,
+    sample_id: str,
+) -> Path:
+    """Create a synthetic CRC + MSI workbook for the requested CRC panel size."""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
+    panel_name = f"结直肠癌{panel_gene_count}基因+MSI"
+    panel_flag_column = f"ExistInsmall{panel_gene_count}"
 
     meta = pd.DataFrame(
         [
             {
                 "患者姓名": "黄金测试患者",
-                "样本编号": "LZ999001",
-                "报告编号": "MLJY-LZ999001",
+                "样本编号": sample_id,
+                "报告编号": f"MLJY-{sample_id}",
                 "性别": "男",
                 "年龄": 58,
                 "临床诊断": "结直肠癌",
@@ -320,8 +381,8 @@ def build_crc_358_msi_golden_excel(path: Path | str) -> Path:
                 "样本类型": "组织",
                 "取材手段": "手术",
                 "取材部位": "结肠",
-                "项目名称": "结直肠癌358基因+MSI",
-                "检测项目": "结直肠癌358基因+MSI",
+                "项目名称": panel_name,
+                "检测项目": panel_name,
                 "送检日期": "2026-01-08",
                 "报告日期": "2026-01-15",
                 "检测方法": "NGS高通量测序",
@@ -340,7 +401,7 @@ def build_crc_358_msi_golden_excel(path: Path | str) -> Path:
                 "pHGVS_S": "p.G660D",
                 "Freq(%)": 22.5,
                 "Function": "Missense",
-                "ExistInsmall358": 1,
+                panel_flag_column: 1,
                 "ExistIn552": "Ⅰ类",
                 "CLNSIG": "Pathogenic",
             },
@@ -353,7 +414,7 @@ def build_crc_358_msi_golden_excel(path: Path | str) -> Path:
                 "pHGVS_S": "p.R465H",
                 "Freq(%)": 12.7,
                 "Function": "Missense",
-                "ExistInsmall358": 1,
+                panel_flag_column: 1,
                 "ExistIn552": "Ⅲ类",
                 "CLNSIG": "Uncertain_significance",
             },
