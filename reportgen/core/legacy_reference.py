@@ -192,6 +192,26 @@ def build_legacy_reference_snapshots(
     }
 
 
+def snapshot_docx_report(
+    path: str | Path,
+    *,
+    panel: str,
+    include_source_paths: bool = False,
+    max_text_chars: int = 12000,
+) -> dict[str, Any]:
+    """Build one sanitized DOCX snapshot for QA contract checks."""
+    snapshot = _snapshot_docx(
+        Path(path).expanduser().resolve(),
+        panel=panel,
+        include_source_paths=include_source_paths,
+        max_text_chars=max_text_chars,
+    )
+    if not include_source_paths:
+        snapshot.pop("_source_path", None)
+        snapshot.pop("_source_name", None)
+    return snapshot
+
+
 def _snapshot_docx(
     path: Path,
     *,

@@ -84,11 +84,32 @@ legacy_reference:
     report_id: fail
     sample_id: fail
     date: fail
+
+current_output:
+  enabled: true
+  source: "golden_reference"
+  required_features:
+    total_variants_count: warn
+    drug_related_count: warn
+    msi_status: warn
+  required_sections:
+    variant_summary: warn
+    biomarkers: warn
+    gene_list: warn
+  require_table_shapes: warn
+  privacy_checks:
+    report_id: fail
+    sample_id: fail
+    date: fail
 ```
 
 Rule severities are `off`, `warn`, or `fail`. A panel that has no historical
 reference set should keep `legacy_reference.enabled: false`; the profile still
 documents the expected QA behavior before the panel is promoted.
+
+`current_output` applies the same contract style to the freshly generated golden
+DOCX during `reportgen qa gate`. Its `source` can be `golden_reference` or
+`golden_candidate`.
 
 ## Validator
 

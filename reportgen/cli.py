@@ -952,6 +952,13 @@ def qa_legacy_snapshot(
     help="是否对重复 golden 结果执行结构 diff",
 )
 @click.option(
+    "--current-output/--skip-current-output",
+    "run_current_output",
+    default=True,
+    show_default=True,
+    help="是否按 panel qa.yaml 校验当前生成 DOCX 输出",
+)
+@click.option(
     "--legacy-reference/--skip-legacy-reference",
     "run_legacy_reference",
     default=True,
@@ -1024,6 +1031,7 @@ def qa_gate(
     run_pytest,
     run_golden,
     run_diff,
+    run_current_output,
     run_legacy_reference,
     legacy_source_root,
     legacy_panels,
@@ -1068,6 +1076,7 @@ def qa_gate(
             run_pytest=bool(run_pytest),
             run_golden=bool(run_golden),
             run_diff=bool(run_diff),
+            run_current_output=bool(run_current_output),
             run_legacy_reference=bool(run_legacy_reference),
             fail_on_warn=(fail_on == "warn"),
             pytest_args=tuple(shlex.split(pytest_args)),

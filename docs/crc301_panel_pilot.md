@@ -35,6 +35,8 @@ Filename/body conflicts found: 0.
 - Default `reportgen qa gate` includes `crc_301_msi`.
 - `panels/crc_301_msi/qa.yaml` enables the CRC 301 legacy reference snapshot
   check when a local historical-report root is provided.
+- `panels/crc_301_msi/qa.yaml` also enables current-output contract checks for
+  the generated golden DOCX in default CI.
 
 ## Acceptance Commands
 

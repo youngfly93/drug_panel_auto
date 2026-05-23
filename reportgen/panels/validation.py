@@ -714,6 +714,7 @@ class PanelPackageValidator:
                 path=path,
             )
 
+        self._validate_current_output_profile(package, profile, path, report)
         legacy = profile.get("legacy_reference", {})
         if legacy is None:
             return
@@ -774,6 +775,62 @@ class PanelPackageValidator:
                     path=path,
                 )
 
+    def _validate_current_output_profile(
+        self,
+        package: PanelPackage,
+        profile: Mapping[str, Any],
+        path: Path,
+        report: PanelValidationReport,
+    ) -> None:
+        current = profile.get("current_output", {})
+        if current is None:
+            return
+        if not isinstance(current, Mapping):
+            report.add(
+                "ERROR",
+                "QA_CURRENT_OUTPUT_INVALID",
+                "current_output must be a dict when present",
+                panel_id=package.panel_id,
+                path=path,
+            )
+            return
+        enabled = current.get("enabled", False)
+        if not isinstance(enabled, bool):
+            report.add(
+                "ERROR",
+                "QA_CURRENT_ENABLED_INVALID",
+                "current_output.enabled must be a bool",
+                panel_id=package.panel_id,
+                path=path,
+            )
+        source = current.get("source", "golden_reference")
+        if source not in {"golden_reference", "golden_candidate"}:
+            report.add(
+                "ERROR",
+                "QA_CURRENT_SOURCE_INVALID",
+                "current_output.source must be golden_reference or golden_candidate",
+                panel_id=package.panel_id,
+                path=path,
+            )
+        for key in ("required_features", "required_sections", "privacy_checks"):
+            self._validate_qa_severity_map(
+                current.get(key, {}),
+                key=f"current_output.{key}",
+                package=package,
+                path=path,
+                report=report,
+            )
+        if "require_table_shapes" in current:
+            value = current.get("require_table_shapes")
+            if value not in VALID_QA_SEVERITIES:
+                report.add(
+                    "ERROR",
+                    "QA_CURRENT_SEVERITY_INVALID",
+                    "current_output.require_table_shapes must be off/warn/fail",
+                    panel_id=package.panel_id,
+                    path=path,
+                )
+
     def _validate_qa_severity_map(
         self,
         value: Any,
@@ -783,13 +840,14 @@ class PanelPackageValidator:
         path: Path,
         report: PanelValidationReport,
     ) -> None:
+        label = key if "." in key else f"legacy_reference.{key}"
         if isinstance(value, list):
             for idx, item in enumerate(value):
                 if not isinstance(item, str) or not item.strip():
                     report.add(
                         "ERROR",
                         "QA_LEGACY_RULE_INVALID",
-                        f"legacy_reference.{key}[{idx}] must be a non-empty string",
+                        f"{label}[{idx}] must be a non-empty string",
                         panel_id=package.panel_id,
                         path=path,
                     )
@@ -800,7 +858,7 @@ class PanelPackageValidator:
                     report.add(
                         "ERROR",
                         "QA_LEGACY_RULE_INVALID",
-                        f"legacy_reference.{key} contains an empty rule name",
+                        f"{label} contains an empty rule name",
                         panel_id=package.panel_id,
                         path=path,
                     )
@@ -808,7 +866,7 @@ class PanelPackageValidator:
                     report.add(
                         "ERROR",
                         "QA_LEGACY_SEVERITY_INVALID",
-                        f"legacy_reference.{key}.{name} must be off/warn/fail",
+                        f"{label}.{name} must be off/warn/fail",
                         panel_id=package.panel_id,
                         path=path,
                     )
@@ -816,7 +874,7 @@ class PanelPackageValidator:
         report.add(
             "ERROR",
             "QA_LEGACY_RULES_INVALID",
-            f"legacy_reference.{key} must be a list or dict",
+            f"{label} must be a list or dict",
             panel_id=package.panel_id,
             path=path,
         )

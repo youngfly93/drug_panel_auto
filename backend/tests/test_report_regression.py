@@ -904,6 +904,18 @@ def _write_minimal_panel_package(
             {
                 "schema_version": "1.0",
                 "panel_id": panel_id,
+                "current_output": {
+                    "enabled": False,
+                    "source": "golden_reference",
+                    "required_features": {},
+                    "required_sections": {},
+                    "require_table_shapes": "warn",
+                    "privacy_checks": {
+                        "report_id": "fail",
+                        "sample_id": "fail",
+                        "date": "fail",
+                    },
+                },
                 "legacy_reference": {
                     "enabled": False,
                     "sample_count": 1,
@@ -981,6 +993,7 @@ def test_panel_package_loader_reads_crc358_package():
     assert package.input_contract["required_tables"] == ["Variations"]
     assert "variant_detail" in package.template_contract["required_table_structures"]
     assert package.qa_profile["panel_id"] == "crc_358_msi"
+    assert package.qa_profile["current_output"]["enabled"] is True
     assert package.qa_profile["legacy_reference"]["enabled"] is False
     assert package.golden_cases[0]["id"] == "crc_358_msi_synthetic_low_tmb_mss"
 
@@ -1013,6 +1026,7 @@ def test_panel_package_loader_reads_crc301_package():
         "ExistIn552",
     ]
     assert package.qa_profile["legacy_reference"]["enabled"] is True
+    assert package.qa_profile["current_output"]["required_sections"]["gene_list"] == "warn"
     assert package.qa_profile["legacy_reference"]["required_sections"]["gene_list"] == "warn"
 
 
@@ -1026,6 +1040,7 @@ def test_panel_package_loader_reads_lung_methylation_package():
     assert package.resolve_rule_file("panel_rules").name == "lung_methylation.yaml"
     assert package.input_contract["required_tables"] == ["甲基化位点"]
     assert "methylation_sites" in package.template_contract["required_lists"]
+    assert package.qa_profile["current_output"]["enabled"] is False
     assert package.qa_profile["legacy_reference"]["enabled"] is False
     assert package.golden_cases[0]["id"] == "lung_methylation_synthetic_positive"
 
@@ -1047,6 +1062,7 @@ def test_panel_package_validator_rejects_invalid_qa_profile(tmp_path):
     qa_path = panel_yaml.parent / "qa.yaml"
     payload = yaml.safe_load(qa_path.read_text(encoding="utf-8"))
     payload["legacy_reference"]["privacy_checks"]["sample_id"] = "block"
+    payload["current_output"]["source"] = "uploaded_file"
     qa_path.write_text(
         yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
@@ -1060,6 +1076,7 @@ def test_panel_package_validator_rejects_invalid_qa_profile(tmp_path):
 
     assert report.status == "FAIL"
     assert any(issue.code == "QA_LEGACY_SEVERITY_INVALID" for issue in report.errors)
+    assert any(issue.code == "QA_CURRENT_SOURCE_INVALID" for issue in report.errors)
 
 
 def test_panel_package_validator_rejects_processor_order_and_dependencies(tmp_path):

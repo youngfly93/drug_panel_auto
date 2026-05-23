@@ -1,6 +1,17 @@
 schema_version: "1.0"
 panel_id: "lung_methylation"
 
+current_output:
+  enabled: false
+  source: "golden_reference"
+  required_features: {}
+  required_sections: {}
+  require_table_shapes: warn
+  privacy_checks:
+    report_id: fail
+    sample_id: fail
+    date: fail
+
 legacy_reference:
   enabled: false
   sample_count: 3
