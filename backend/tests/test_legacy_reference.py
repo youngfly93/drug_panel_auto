@@ -96,3 +96,75 @@ def test_legacy_reference_redacts_patient_name_when_filename_has_no_name(tmp_pat
     assert "李四" not in payload
     assert "LZ654321" not in payload
     assert "<PATIENT_NAME>" in payload
+
+
+def test_quality_gate_runs_legacy_reference_when_source_root_exists(tmp_path):
+    from reportgen.core.qa_gate import QualityGateOptions, run_quality_gate
+
+    source_root = tmp_path / "legacy_reports_by_panel"
+    source_dir = source_root / "crc_301_msi"
+    source_dir.mkdir(parents=True)
+    docx_path = source_dir / "crc301_case_001.docx"
+    doc = Document()
+    doc.add_paragraph("结直肠癌301基因+MSI检测报告")
+    doc.add_paragraph("姓名：王五")
+    doc.add_paragraph("本次共检出体细胞变异：3个")
+    doc.add_paragraph("与靶向药物用药相关的变异有：1个")
+    doc.add_paragraph("6.5 mutations/Mb，TMB-L")
+    doc.add_paragraph("该肿瘤样本为微卫星稳定型，MSS")
+    doc.add_paragraph("基因变异检测结果")
+    doc.add_paragraph("TMB/MSI")
+    doc.add_paragraph("基因检测列表")
+    table = doc.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "基因"
+    table.rows[0].cells[1].text = "突变位点"
+    table.rows[1].cells[0].text = "KRAS"
+    table.rows[1].cells[1].text = "c.34G>A"
+    doc.save(docx_path)
+
+    result = run_quality_gate(
+        QualityGateOptions(
+            project_root=str(ROOT),
+            output_root=str(tmp_path / "gate"),
+            run_lint=False,
+            run_pytest=False,
+            run_golden=False,
+            run_legacy_reference=True,
+            legacy_source_root=str(source_root),
+            legacy_panels=("crc_301_msi",),
+            legacy_sample_count=1,
+            legacy_required=True,
+        )
+    )
+
+    legacy_step = next(
+        step for step in result["steps"] if step["name"] == "legacy_reference_crc_301_msi"
+    )
+    assert result["status"] == "PASS"
+    assert legacy_step["status"] == "PASS"
+    assert legacy_step["summary"]["selected_count"] == 1
+    assert Path(legacy_step["manifest_file"]).exists()
+
+
+def test_quality_gate_can_require_legacy_reference_source(tmp_path):
+    from reportgen.core.qa_gate import QualityGateOptions, run_quality_gate
+
+    result = run_quality_gate(
+        QualityGateOptions(
+            project_root=str(ROOT),
+            output_root=str(tmp_path / "gate"),
+            run_lint=False,
+            run_pytest=False,
+            run_golden=False,
+            run_legacy_reference=True,
+            legacy_source_root=str(tmp_path / "missing"),
+            legacy_required=True,
+        )
+    )
+
+    legacy_step = next(
+        step for step in result["steps"] if step["name"] == "legacy_reference"
+    )
+    assert result["status"] == "FAIL"
+    assert legacy_step["status"] == "FAIL"
+    assert legacy_step["issues"][0]["code"] == "LEGACY_REFERENCE_SOURCE_MISSING"
