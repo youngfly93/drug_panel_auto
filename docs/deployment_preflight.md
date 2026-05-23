@@ -63,6 +63,15 @@ fingerprint the configured historical panel samples. The enabled panels, sample
 counts, required sections, and privacy severities come from each panel's
 `qa.yaml`.
 
+For a targeted historical check, use `--legacy-panel`; `--panel` scopes
+golden/current-output checks.
+
+```bash
+REPORTGEN_LEGACY_REPORTS_ROOT=/data/reportgen/legacy_reports_by_panel \
+PREFLIGHT_ARGS="--skip-golden --legacy-panel crc_358_msi --legacy-reference-required" \
+bash deploy.sh
+```
+
 ```bash
 PREFLIGHT_OUTPUT_ROOT=/tmp/reportgen-deploy-gate bash deploy.sh
 ```

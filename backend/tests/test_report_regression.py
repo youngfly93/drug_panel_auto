@@ -994,7 +994,8 @@ def test_panel_package_loader_reads_crc358_package():
     assert "variant_detail" in package.template_contract["required_table_structures"]
     assert package.qa_profile["panel_id"] == "crc_358_msi"
     assert package.qa_profile["current_output"]["enabled"] is True
-    assert package.qa_profile["legacy_reference"]["enabled"] is False
+    assert package.qa_profile["legacy_reference"]["enabled"] is True
+    assert package.qa_profile["legacy_reference"]["source_dir_name"] == "crc_358_msi"
     assert package.golden_cases[0]["id"] == "crc_358_msi_synthetic_low_tmb_mss"
 
 

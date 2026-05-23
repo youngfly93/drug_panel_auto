@@ -51,11 +51,22 @@ python -m reportgen.cli qa legacy-snapshot \
   --sample-count 5
 python -m reportgen.cli qa gate \
   --panel crc_301_msi \
+  --legacy-panel crc_301_msi \
   --legacy-source-root /Volumes/KINGSTON/work/肠癌358基因/legacy_reports_by_panel \
   --legacy-reference-required
 ```
 
 Expected result for each command: `PASS`.
+
+CRC 358 follows the same historical gate pattern:
+
+```bash
+python -m reportgen.cli qa gate \
+  --skip-golden \
+  --legacy-panel crc_358_msi \
+  --legacy-source-root /Volumes/KINGSTON/work/肠癌358基因/legacy_reports_by_panel \
+  --legacy-reference-required
+```
 
 ## Next Work
 
