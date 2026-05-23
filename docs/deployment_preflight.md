@@ -18,9 +18,10 @@ python -m reportgen.cli qa gate --output-root /opt/reportgen-web/tmp/deploy_qa_g
 
 It validates panel packages, runs lint, runs regression tests, generates
 synthetic golden reports, compares repeated golden outputs, and records the
-legacy reference step. The legacy step is skipped when no local historical
-report root is mounted. Panels opt into legacy reference checks through their
-own `panels/<panel_id>/qa.yaml` profile.
+current generated DOCX contract plus the legacy reference step. The legacy step
+is skipped when no local historical report root is mounted. Panels opt into
+current-output and legacy-reference checks through their own
+`panels/<panel_id>/qa.yaml` profile.
 
 The default panel set currently covers:
 

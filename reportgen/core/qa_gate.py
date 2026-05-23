@@ -19,6 +19,7 @@ from reportgen.core.legacy_reference import (
     SAMPLE_ID_RE,
     LegacySnapshotOptions,
     build_legacy_reference_snapshots,
+    snapshot_docx_report,
 )
 from reportgen.core.report_diff import ReportDiffOptions, compare_reports
 from reportgen.panels.loader import PanelPackage, PanelPackageLoader
@@ -51,6 +52,7 @@ class QualityGateOptions:
     run_pytest: bool = True
     run_golden: bool = True
     run_diff: bool = True
+    run_current_output: bool = True
     run_legacy_reference: bool = True
     fail_on_warn: bool = True
     pytest_args: Sequence[str] = DEFAULT_PYTEST_ARGS
@@ -101,15 +103,29 @@ def run_quality_gate(options: Optional[QualityGateOptions] = None) -> dict[str, 
         steps.append(_skipped_step("pytest_regression", "pytest step disabled"))
 
     if opts.run_golden:
+        golden_steps = _run_golden_steps(
+            opts,
+            project_root=project_root,
+            output_root=output_root,
+        )
+        steps.extend(golden_steps)
+    else:
+        golden_steps = []
+        steps.append(_skipped_step("golden_cases", "golden case step disabled"))
+
+    if opts.run_current_output:
         steps.extend(
-            _run_golden_steps(
+            _run_current_output_steps(
                 opts,
                 project_root=project_root,
-                output_root=output_root,
+                output_root=output_root / "current_output",
+                prior_steps=golden_steps,
             )
         )
     else:
-        steps.append(_skipped_step("golden_cases", "golden case step disabled"))
+        steps.append(
+            _skipped_step("current_output", "current output contract step disabled")
+        )
 
     if opts.run_legacy_reference:
         steps.extend(
@@ -139,6 +155,7 @@ def run_quality_gate(options: Optional[QualityGateOptions] = None) -> dict[str, 
             "run_pytest": opts.run_pytest,
             "run_golden": opts.run_golden,
             "run_diff": opts.run_diff,
+            "run_current_output": opts.run_current_output,
             "run_legacy_reference": opts.run_legacy_reference,
             "fail_on_warn": opts.fail_on_warn,
             "pytest_args": list(opts.pytest_args),
@@ -233,6 +250,123 @@ def _run_golden_steps(
     return steps
 
 
+def _run_current_output_steps(
+    opts: QualityGateOptions,
+    *,
+    project_root: Path,
+    output_root: Path,
+    prior_steps: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    profiles = _select_current_output_profiles(opts, project_root=project_root)
+    if not profiles:
+        return [
+            _skipped_step(
+                "current_output",
+                "no current output panels enabled by QA profile",
+            )
+        ]
+
+    golden_outputs = _golden_output_steps_by_panel(prior_steps)
+    steps: list[dict[str, Any]] = []
+    for profile in profiles:
+        panel = str(profile["panel_id"])
+        source_name = str(profile.get("source") or "golden_reference")
+        source_step = golden_outputs.get((panel, source_name))
+        if not source_step:
+            steps.append(
+                _skipped_step(
+                    f"current_output_{panel}",
+                    f"source output not available: {source_name}",
+                    panel=panel,
+                )
+            )
+            continue
+        if source_step.get("status") != "PASS":
+            steps.append(
+                _skipped_step(
+                    f"current_output_{panel}",
+                    f"source output did not pass: {source_step.get('name')}",
+                    panel=panel,
+                )
+            )
+            continue
+        output_file = source_step.get("output_file")
+        if not output_file:
+            steps.append(
+                _skipped_step(
+                    f"current_output_{panel}",
+                    f"source output file missing: {source_step.get('name')}",
+                    panel=panel,
+                )
+            )
+            continue
+        steps.append(
+            _run_single_current_output_contract(
+                panel,
+                output_file=Path(str(output_file)),
+                output_root=output_root / panel,
+                profile=profile,
+                source_step=str(source_step.get("name") or ""),
+                fail_on_warn=opts.fail_on_warn,
+            )
+        )
+    return steps
+
+
+def _golden_output_steps_by_panel(
+    steps: Sequence[dict[str, Any]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    outputs: dict[tuple[str, str], dict[str, Any]] = {}
+    for step in steps:
+        panel = str(step.get("panel") or "")
+        name = str(step.get("name") or "")
+        if not panel:
+            continue
+        if name == f"golden_{panel}_reference":
+            outputs[(panel, "golden_reference")] = step
+        elif name == f"golden_{panel}_candidate":
+            outputs[(panel, "golden_candidate")] = step
+    return outputs
+
+
+def _run_single_current_output_contract(
+    panel: str,
+    *,
+    output_file: Path,
+    output_root: Path,
+    profile: dict[str, Any],
+    source_step: str,
+    fail_on_warn: bool,
+) -> dict[str, Any]:
+    started = time.perf_counter()
+    try:
+        output_root.mkdir(parents=True, exist_ok=True)
+        snapshot = snapshot_docx_report(output_file, panel=panel)
+        snapshot_file = output_root / "current_output_snapshot.json"
+        write_json(snapshot_file, snapshot)
+        issues = _audit_report_snapshot(snapshot, profile=profile)
+        issues.extend(_audit_snapshot_file_privacy(snapshot_file, profile=profile))
+        status = _status_from_issues(issues, fail_on_warn=fail_on_warn)
+        return {
+            "name": f"current_output_{panel}",
+            "status": status,
+            "duration_seconds": round(time.perf_counter() - started, 3),
+            "panel": panel,
+            "source_step": source_step,
+            "output_file": str(output_file),
+            "snapshot_file": str(snapshot_file),
+            "summary": {
+                "features": snapshot.get("features") or {},
+                "section_presence": snapshot.get("section_presence") or {},
+                "table_count": snapshot.get("table_count"),
+            },
+            "qa_profile_file": profile.get("qa_profile_file"),
+            "issues": issues,
+        }
+    except Exception as exc:
+        return _exception_step(f"current_output_{panel}", started, exc, panel=panel)
+
+
 def _run_legacy_reference_steps(
     opts: QualityGateOptions,
     *,
@@ -317,10 +451,44 @@ def _select_legacy_reference_profiles(
     return selected
 
 
+def _select_current_output_profiles(
+    opts: QualityGateOptions,
+    *,
+    project_root: Path,
+) -> list[dict[str, Any]]:
+    profiles = {
+        profile["panel_id"]: profile
+        for profile in _load_current_output_profiles(project_root)
+    }
+    requested = [
+        str(panel).strip()
+        for panel in opts.panels
+        if str(panel).strip()
+    ]
+    if not requested:
+        return [
+            profile
+            for profile in profiles.values()
+            if bool(profile.get("enabled"))
+        ]
+    return [
+        profiles[panel]
+        for panel in requested
+        if panel in profiles and bool(profiles[panel].get("enabled"))
+    ]
+
+
 def _load_legacy_reference_profiles(project_root: Path) -> list[dict[str, Any]]:
     profiles: list[dict[str, Any]] = []
     for package in PanelPackageLoader(project_root=project_root).load_all():
         profiles.append(_legacy_reference_profile_from_package(package))
+    return profiles
+
+
+def _load_current_output_profiles(project_root: Path) -> list[dict[str, Any]]:
+    profiles: list[dict[str, Any]] = []
+    for package in PanelPackageLoader(project_root=project_root).load_all():
+        profiles.append(_current_output_profile_from_package(package))
     return profiles
 
 
@@ -333,6 +501,22 @@ def _legacy_reference_profile_from_package(package: PanelPackage) -> dict[str, A
         "enabled": bool(raw.get("enabled", False)),
         "source_dir_name": str(raw.get("source_dir_name") or package.panel_id),
         "sample_count": int(raw.get("sample_count") or 5),
+        "required_features": _severity_map(raw.get("required_features") or {}),
+        "required_sections": _severity_map(raw.get("required_sections") or {}),
+        "require_table_shapes": _severity(raw.get("require_table_shapes"), default="warn"),
+        "privacy_checks": _severity_map(raw.get("privacy_checks") or {}),
+        "qa_profile_file": str(package.resolve_qa_profile_file()),
+    }
+
+
+def _current_output_profile_from_package(package: PanelPackage) -> dict[str, Any]:
+    raw = package.qa_profile.get("current_output") or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    return {
+        "panel_id": package.panel_id,
+        "enabled": bool(raw.get("enabled", False)),
+        "source": str(raw.get("source") or "golden_reference"),
         "required_features": _severity_map(raw.get("required_features") or {}),
         "required_sections": _severity_map(raw.get("required_sections") or {}),
         "require_table_shapes": _severity(raw.get("require_table_shapes"), default="warn"),
@@ -536,9 +720,22 @@ def _audit_legacy_reference_sample(
     *,
     profile: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    return _audit_report_snapshot(sample, profile=profile)
+
+
+def _audit_report_snapshot(
+    snapshot: dict[str, Any],
+    *,
+    profile: dict[str, Any],
+) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
-    reference_id = sample.get("reference_id") or "<unknown>"
-    features = sample.get("features") or {}
+    reference_id = (
+        snapshot.get("reference_id")
+        or snapshot.get("source_label")
+        or snapshot.get("detected_panel")
+        or "<unknown>"
+    )
+    features = snapshot.get("features") or {}
     required_features = profile.get("required_features") or {}
     for field, severity in required_features.items():
         if features.get(field) is None:
@@ -558,7 +755,7 @@ def _audit_legacy_reference_sample(
         issues.append(table_shape_issue)
 
     required_sections = profile.get("required_sections") or {}
-    sections = sample.get("section_presence") or {}
+    sections = snapshot.get("section_presence") or {}
     for section, severity in required_sections.items():
         if not sections.get(section):
             issue = _legacy_issue_from_severity(
@@ -576,34 +773,44 @@ def _audit_legacy_reference_privacy(
     output_root: Path,
     profile: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    privacy_checks = profile.get("privacy_checks") or {}
     issues: list[dict[str, Any]] = []
     samples_dir = output_root / "samples"
     for sample_file in sorted(samples_dir.glob("*.json")):
         if sample_file.name.startswith("._"):
             continue
-        text = sample_file.read_text(encoding="utf-8")
-        report_id_issue = _legacy_issue_from_severity(
-            privacy_checks.get("report_id"),
-            "LEGACY_REPORT_ID_LEAK",
-            f"report id leaked in {sample_file.name}",
-        )
-        if REPORT_ID_RE.search(text) and report_id_issue:
-            issues.append(report_id_issue)
-        sample_id_issue = _legacy_issue_from_severity(
-            privacy_checks.get("sample_id"),
-            "LEGACY_SAMPLE_ID_LEAK",
-            f"sample id leaked in {sample_file.name}",
-        )
-        if SAMPLE_ID_RE.search(text) and sample_id_issue:
-            issues.append(sample_id_issue)
-        date_issue = _legacy_issue_from_severity(
-            privacy_checks.get("date"),
-            "LEGACY_DATE_LEAK",
-            f"date-like value leaked in {sample_file.name}",
-        )
-        if DATE_RE.search(text) and date_issue:
-            issues.append(date_issue)
+        issues.extend(_audit_snapshot_file_privacy(sample_file, profile=profile))
+    return issues
+
+
+def _audit_snapshot_file_privacy(
+    snapshot_file: Path,
+    *,
+    profile: dict[str, Any],
+) -> list[dict[str, Any]]:
+    privacy_checks = profile.get("privacy_checks") or {}
+    issues: list[dict[str, Any]] = []
+    text = snapshot_file.read_text(encoding="utf-8")
+    report_id_issue = _legacy_issue_from_severity(
+        privacy_checks.get("report_id"),
+        "LEGACY_REPORT_ID_LEAK",
+        f"report id leaked in {snapshot_file.name}",
+    )
+    if REPORT_ID_RE.search(text) and report_id_issue:
+        issues.append(report_id_issue)
+    sample_id_issue = _legacy_issue_from_severity(
+        privacy_checks.get("sample_id"),
+        "LEGACY_SAMPLE_ID_LEAK",
+        f"sample id leaked in {snapshot_file.name}",
+    )
+    if SAMPLE_ID_RE.search(text) and sample_id_issue:
+        issues.append(sample_id_issue)
+    date_issue = _legacy_issue_from_severity(
+        privacy_checks.get("date"),
+        "LEGACY_DATE_LEAK",
+        f"date-like value leaked in {snapshot_file.name}",
+    )
+    if DATE_RE.search(text) and date_issue:
+        issues.append(date_issue)
     return issues
 
 
@@ -781,13 +988,15 @@ def _overall_status(steps: Sequence[dict[str, Any]]) -> str:
     return "PASS"
 
 
-def _skipped_step(name: str, message: str) -> dict[str, Any]:
-    return {
+def _skipped_step(name: str, message: str, **extra: Any) -> dict[str, Any]:
+    row = {
         "name": name,
         "status": "SKIPPED",
         "duration_seconds": 0.0,
         "message": message,
     }
+    row.update(extra)
+    return row
 
 
 def _exception_step(
