@@ -16,7 +16,7 @@ from reportgen.panels.validation import validate_panel_registry
 from reportgen.utils.artifacts import write_json
 
 
-DEFAULT_GATE_PANELS = ("crc_358_msi", "lung_methylation")
+DEFAULT_GATE_PANELS = ("crc_358_msi", "crc_301_msi", "lung_methylation")
 DEFAULT_PYTEST_ARGS = ("backend/tests/test_report_regression.py", "-q")
 DEFAULT_RUFF_PATHS = (
     "reportgen/cli.py",

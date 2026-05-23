@@ -37,6 +37,7 @@ from reportgen.core.golden_case import (
     GoldenCaseOptions,
     LUNG_METHYLATION_EXPECTATIONS,
     assert_golden_case_output,
+    build_crc_301_msi_golden_excel,
     build_crc_358_msi_golden_excel,
     build_lung_methylation_golden_excel,
     run_golden_case,
@@ -3426,26 +3427,9 @@ def test_crc358_golden_excel_fixture_is_synthetic_and_parseable(tmp_path):
 
 
 def test_crc301_panel_package_basic_generation_passes(tmp_path):
-    from openpyxl import load_workbook
-
-    xlsx_path = build_crc_358_msi_golden_excel(
+    xlsx_path = build_crc_301_msi_golden_excel(
         tmp_path / "LZ999301_crc_301_msi_basic.xlsx"
     )
-    workbook = load_workbook(xlsx_path)
-
-    meta = workbook["Meta"]
-    meta_headers = {str(cell.value): idx for idx, cell in enumerate(meta[1], start=1)}
-    for field in ("项目名称", "检测项目"):
-        meta.cell(row=2, column=meta_headers[field]).value = "结直肠癌301基因+MSI"
-
-    variations = workbook["Variations"]
-    var_headers = {
-        str(cell.value): idx for idx, cell in enumerate(variations[1], start=1)
-    }
-    variations.cell(row=1, column=var_headers["ExistInsmall358"]).value = (
-        "ExistInsmall301"
-    )
-    workbook.save(xlsx_path)
 
     result = ReportGenerator(
         config_dir=str(ROOT / "config"),
@@ -3513,6 +3497,24 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     ]
     assert "MSI-H的实体瘤通常具有免疫原性" in result["context"]["msi_tips"]
     assert result["template_contract"]["declared_contract"]["ok"] is True
+
+
+def test_crc301_golden_case_passes(tmp_path):
+    result = run_golden_case(
+        GoldenCaseOptions(
+            panel="crc_301_msi",
+            config_dir=str(ROOT / "config"),
+            output_root=str(tmp_path / "golden"),
+            template_contract_mode="fail",
+        )
+    )
+
+    assert result["ok"], result.get("errors")
+    assert result["qa_status"] == "PASS"
+    assert result["panel"] == "crc_301_msi"
+    assert Path(result["input_excel"]).name == "LZ999301_crc_301_msi_golden.xlsx"
+    assert Path(result["output_file"]).name == "golden_crc_301_msi.docx"
+    assert not [row for row in result["checks"] if not row["passed"]]
 
 
 def test_lung_methylation_golden_excel_fixture_is_parseable(tmp_path):
