@@ -64,3 +64,35 @@ def test_legacy_reference_snapshot_redacts_patient_identifiers(tmp_path):
     assert "<SAMPLE_ID>" in payload
     assert "<REPORT_ID>" in payload
     assert "<DATE>" in payload
+
+
+def test_legacy_reference_redacts_patient_name_when_filename_has_no_name(tmp_path):
+    source_dir = tmp_path / "legacy"
+    source_dir.mkdir()
+    docx_path = source_dir / "crc301_case_001.docx"
+    doc = Document()
+    doc.add_paragraph("结直肠癌301基因+MSI检测报告")
+    doc.add_paragraph("尊敬的 李四 女士")
+    table = doc.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "姓名"
+    table.rows[0].cells[1].text = "李四"
+    table.rows[1].cells[0].text = "样本编号"
+    table.rows[1].cells[1].text = "LZ654321"
+    doc.add_paragraph("本次共检出体细胞变异：1个")
+    doc.add_paragraph("与靶向药物用药相关的变异有：0个")
+    doc.save(docx_path)
+
+    result = build_legacy_reference_snapshots(
+        LegacySnapshotOptions(
+            panel="crc_301_msi",
+            source_dir=str(source_dir),
+            output_dir=str(tmp_path / "snapshots"),
+            sample_count=1,
+        )
+    )
+
+    sample_path = Path(result["output_dir"]) / "samples" / "crc_301_msi_legacy_ref_001.json"
+    payload = sample_path.read_text(encoding="utf-8")
+    assert "李四" not in payload
+    assert "LZ654321" not in payload
+    assert "<PATIENT_NAME>" in payload

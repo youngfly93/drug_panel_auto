@@ -42,6 +42,33 @@ MSI_RESULT_RE = re.compile(
     r")"
 )
 GENE_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}\b")
+PATIENT_NAME_FIELD_RE = re.compile(
+    r"(?:患者姓名|受检者姓名|姓名|委托人)\s*[:：]?\s*([\u4e00-\u9fff·]{2,8})"
+)
+PATIENT_NAME_SALUTATION_RE = re.compile(
+    r"尊敬的\s*([\u4e00-\u9fff·]{2,8})\s*(?:先生|女士|患者|家属)"
+)
+PATIENT_NAME_PREFIX_RE = re.compile(
+    r"^([\u4e00-\u9fff·]{2,8})(?=[\-_—\s]|直肠癌|结肠癌|乙状结肠癌|肿瘤|癌)"
+)
+PATIENT_NAME_EXCLUDES = {
+    "姓名",
+    "患者",
+    "报告",
+    "检测",
+    "样本",
+    "组织",
+    "肿瘤",
+    "结直肠癌",
+    "直肠癌",
+    "结肠癌",
+    "乙状结肠癌",
+    "脉络医学",
+    "医学",
+    "先生",
+    "女士",
+    "未知",
+}
 
 
 KEY_SECTIONS = {
@@ -173,7 +200,6 @@ def _snapshot_docx(
     max_text_chars: int,
 ) -> dict[str, Any]:
     source_name = path.name
-    patient_name = _patient_name_from_filename(source_name)
     try:
         doc = Document(str(path))
     except Exception as exc:
@@ -188,7 +214,8 @@ def _snapshot_docx(
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     tables = [_table_snapshot(table) for table in doc.tables]
     text = "\n".join(paragraphs + [table["text"] for table in tables])
-    sanitized_text = _sanitize_text(text, patient_name=patient_name)
+    patient_names = _patient_names_from_document(source_name, text=text, tables=tables)
+    sanitized_text = _sanitize_text(text, patient_names=patient_names)
     detected_panel = _detect_panel(text) or panel
     features = _extract_features(sanitized_text, tables=tables)
     return {
@@ -210,7 +237,7 @@ def _snapshot_docx(
                 "index": idx,
                 "rows": table["rows"],
                 "columns": table["columns"],
-                "header": _sanitize_table_row(table["header"], patient_name=patient_name),
+                "header": _sanitize_table_row(table["header"], patient_names=patient_names),
             }
             for idx, table in enumerate(tables)
         ],
@@ -224,6 +251,7 @@ def _table_snapshot(table: Any) -> dict[str, Any]:
         "rows": len(rows),
         "columns": max((len(row) for row in rows), default=0),
         "header": rows[0] if rows else [],
+        "_raw_rows": rows,
         "text": "\n".join("\t".join(row) for row in rows),
     }
 
@@ -347,17 +375,62 @@ def _first_int(pattern: re.Pattern[str], text: str) -> Optional[int]:
 
 def _patient_name_from_filename(filename: str) -> Optional[str]:
     stem = Path(filename).stem
-    if "-" not in stem:
+    match = PATIENT_NAME_PREFIX_RE.search(stem)
+    if not match:
         return None
-    value = stem.split("-", 1)[0].strip()
-    if not value or value.startswith("tempe"):
-        return None
-    return value
+    value = match.group(1).strip()
+    return value if _is_patient_name_candidate(value) else None
 
 
-def _sanitize_text(text: str, *, patient_name: Optional[str]) -> str:
+def _patient_names_from_document(
+    filename: str,
+    *,
+    text: str,
+    tables: Iterable[Mapping[str, Any]],
+) -> list[str]:
+    candidates: list[str] = []
+    filename_name = _patient_name_from_filename(filename)
+    if filename_name:
+        candidates.append(filename_name)
+    candidates.extend(PATIENT_NAME_FIELD_RE.findall(text))
+    candidates.extend(PATIENT_NAME_SALUTATION_RE.findall(text))
+    for table in tables:
+        for row in table.get("_raw_rows") or []:
+            cells = [str(cell or "").strip() for cell in row]
+            for idx, cell in enumerate(cells):
+                if cell in {"姓名", "患者姓名", "受检者姓名", "委托人"} and idx + 1 < len(cells):
+                    candidates.append(cells[idx + 1])
+                candidates.extend(PATIENT_NAME_FIELD_RE.findall(cell))
+    return _unique_patient_names(candidates)
+
+
+def _unique_patient_names(values: Iterable[str]) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = str(value or "").strip()
+        if not _is_patient_name_candidate(cleaned) or cleaned in seen:
+            continue
+        names.append(cleaned)
+        seen.add(cleaned)
+    return sorted(names, key=len, reverse=True)
+
+
+def _is_patient_name_candidate(value: str) -> bool:
+    if not re.fullmatch(r"[\u4e00-\u9fff·]{2,8}", value):
+        return False
+    if value in PATIENT_NAME_EXCLUDES:
+        return False
+    return not any(token in value for token in PATIENT_NAME_EXCLUDES)
+
+
+def _sanitize_text(
+    text: str,
+    *,
+    patient_names: Iterable[str] | None = None,
+) -> str:
     sanitized = str(text or "")
-    if patient_name:
+    for patient_name in patient_names or []:
         sanitized = sanitized.replace(patient_name, "<PATIENT_NAME>")
     sanitized = REPORT_ID_RE.sub("<REPORT_ID>", sanitized)
     sanitized = SAMPLE_ID_RE.sub("<SAMPLE_ID>", sanitized)
@@ -365,8 +438,15 @@ def _sanitize_text(text: str, *, patient_name: Optional[str]) -> str:
     return sanitized
 
 
-def _sanitize_table_row(row: Iterable[Any], *, patient_name: Optional[str]) -> list[str]:
-    return [_sanitize_text(str(cell or ""), patient_name=patient_name) for cell in row]
+def _sanitize_table_row(
+    row: Iterable[Any],
+    *,
+    patient_names: Iterable[str] | None,
+) -> list[str]:
+    return [
+        _sanitize_text(str(cell or ""), patient_names=patient_names)
+        for cell in row
+    ]
 
 
 def _source_ref(row: Mapping[str, Any], *, include_paths: bool) -> str:
