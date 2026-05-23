@@ -33,6 +33,8 @@ Filename/body conflicts found: 0.
   mutating the CRC 358 fixture.
 - `reportgen qa run --panel crc_301_msi` is supported.
 - Default `reportgen qa gate` includes `crc_301_msi`.
+- `reportgen qa gate` can run the CRC 301 legacy reference snapshot check when
+  a local historical-report root is provided.
 
 ## Acceptance Commands
 
@@ -45,6 +47,10 @@ python -m reportgen.cli qa legacy-snapshot \
   --source-dir /Volumes/KINGSTON/work/肠癌358基因/legacy_reports_by_panel/crc_301_msi \
   --output-dir tmp/crc301_reference_snapshots \
   --sample-count 5
+python -m reportgen.cli qa gate \
+  --panel crc_301_msi \
+  --legacy-source-root /Volumes/KINGSTON/work/肠癌358基因/legacy_reports_by_panel \
+  --legacy-reference-required
 ```
 
 Expected result for each command: `PASS`.
@@ -56,7 +62,8 @@ Expected result for each command: `PASS`.
 - Current local snapshot run over the CRC 301 legacy folder found 92 DOCX files,
   79 readable DOCX files, 13 historical DOCX read errors, and 5 representative
   sanitized reference snapshots.
-- Compare newly generated CRC 301 reports against those references with the
-  existing diff gate.
+- Use the legacy reference gate during local release checks so field extraction,
+  section presence, table-shape fingerprints, and privacy redaction are checked
+  against historical CRC 301 reports.
 - Decide whether CRC 301 needs separate template assets or can keep sharing the
   current CRC template.

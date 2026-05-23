@@ -952,6 +952,39 @@ def qa_legacy_snapshot(
     help="是否对重复 golden 结果执行结构 diff",
 )
 @click.option(
+    "--legacy-reference/--skip-legacy-reference",
+    "run_legacy_reference",
+    default=True,
+    show_default=True,
+    help="是否运行历史报告脱敏 reference snapshot 门禁",
+)
+@click.option(
+    "--legacy-source-root",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="历史报告按 panel 拆分后的根目录；也可用 REPORTGEN_LEGACY_REPORTS_ROOT",
+)
+@click.option(
+    "--legacy-panel",
+    "legacy_panels",
+    multiple=True,
+    help="要运行历史 reference 的 panel，可重复或用逗号分隔；默认 crc_301_msi",
+)
+@click.option(
+    "--legacy-sample-count",
+    default=5,
+    show_default=True,
+    type=int,
+    help="每个 panel 抽取的历史 reference 样本数",
+)
+@click.option(
+    "--legacy-reference-required/--legacy-reference-optional",
+    "legacy_required",
+    default=False,
+    show_default=True,
+    help="历史报告目录缺失时是否阻断门禁",
+)
+@click.option(
     "--pytest-args",
     default="backend/tests/test_report_regression.py -q",
     show_default=True,
@@ -992,6 +1025,11 @@ def qa_gate(
     run_pytest,
     run_golden,
     run_diff,
+    run_legacy_reference,
+    legacy_source_root,
+    legacy_panels,
+    legacy_sample_count,
+    legacy_required,
     pytest_args,
     fail_on,
     render,
@@ -1003,6 +1041,7 @@ def qa_gate(
 
     from reportgen.core.qa_gate import (
         DEFAULT_GATE_PANELS,
+        DEFAULT_LEGACY_REFERENCE_PANELS,
         QualityGateOptions,
         run_quality_gate,
     )
@@ -1015,6 +1054,14 @@ def qa_gate(
     if not selected_panels:
         selected_panels = list(DEFAULT_GATE_PANELS)
 
+    selected_legacy_panels = []
+    for item in legacy_panels:
+        selected_legacy_panels.extend(
+            part.strip() for part in str(item).split(",") if part.strip()
+        )
+    if not selected_legacy_panels:
+        selected_legacy_panels = list(DEFAULT_LEGACY_REFERENCE_PANELS)
+
     click.echo("🧱 Running reportgen QA gate")
     result = run_quality_gate(
         QualityGateOptions(
@@ -1025,11 +1072,16 @@ def qa_gate(
             run_pytest=bool(run_pytest),
             run_golden=bool(run_golden),
             run_diff=bool(run_diff),
+            run_legacy_reference=bool(run_legacy_reference),
             fail_on_warn=(fail_on == "warn"),
             pytest_args=tuple(shlex.split(pytest_args)),
             render=render,
             render_required=bool(render_required),
             log_level=log_level,
+            legacy_source_root=legacy_source_root,
+            legacy_panels=tuple(selected_legacy_panels),
+            legacy_sample_count=int(legacy_sample_count),
+            legacy_required=bool(legacy_required),
         )
     )
 
