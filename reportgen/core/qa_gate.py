@@ -21,12 +21,12 @@ from reportgen.core.legacy_reference import (
     build_legacy_reference_snapshots,
 )
 from reportgen.core.report_diff import ReportDiffOptions, compare_reports
+from reportgen.panels.loader import PanelPackage, PanelPackageLoader
 from reportgen.panels.validation import validate_panel_registry
 from reportgen.utils.artifacts import write_json
 
 
 DEFAULT_GATE_PANELS = ("crc_358_msi", "crc_301_msi", "lung_methylation")
-DEFAULT_LEGACY_REFERENCE_PANELS = ("crc_301_msi",)
 LEGACY_REFERENCE_ROOT_ENV = "REPORTGEN_LEGACY_REPORTS_ROOT"
 DEFAULT_PYTEST_ARGS = ("backend/tests/test_report_regression.py", "-q")
 DEFAULT_RUFF_PATHS = (
@@ -35,6 +35,7 @@ DEFAULT_RUFF_PATHS = (
     "reportgen/core/golden_case.py",
     "reportgen/core/legacy_reference.py",
     "reportgen/core/report_diff.py",
+    "reportgen/panels/loader.py",
     "reportgen/panels/validation.py",
 )
 
@@ -59,8 +60,8 @@ class QualityGateOptions:
     log_level: str = "ERROR"
     max_samples: int = 30
     legacy_source_root: Optional[str] = None
-    legacy_panels: Sequence[str] = DEFAULT_LEGACY_REFERENCE_PANELS
-    legacy_sample_count: int = 5
+    legacy_panels: Sequence[str] = ()
+    legacy_sample_count: Optional[int] = None
     legacy_required: bool = False
 
 
@@ -238,9 +239,14 @@ def _run_legacy_reference_steps(
     project_root: Path,
     output_root: Path,
 ) -> list[dict[str, Any]]:
-    panels = [str(panel).strip() for panel in opts.legacy_panels if str(panel).strip()]
-    if not panels:
-        return [_skipped_step("legacy_reference", "no legacy reference panels selected")]
+    profiles = _select_legacy_reference_profiles(opts, project_root=project_root)
+    if not profiles:
+        return [
+            _skipped_step(
+                "legacy_reference",
+                "no legacy reference panels enabled by QA profile",
+            )
+        ]
 
     source_root = _resolve_legacy_source_root(opts, project_root=project_root)
     if not source_root.exists():
@@ -254,8 +260,9 @@ def _run_legacy_reference_steps(
         ]
 
     steps: list[dict[str, Any]] = []
-    for panel in panels:
-        source_dir = source_root / panel
+    for profile in profiles:
+        panel = str(profile["panel_id"])
+        source_dir = source_root / str(profile["source_dir_name"])
         if not source_dir.exists():
             steps.append(
                 _legacy_reference_unavailable_step(
@@ -272,11 +279,102 @@ def _run_legacy_reference_steps(
                 panel,
                 source_dir=source_dir,
                 output_root=output_root / panel,
-                sample_count=opts.legacy_sample_count,
+                sample_count=int(opts.legacy_sample_count or profile["sample_count"]),
+                profile=profile,
                 fail_on_warn=opts.fail_on_warn,
             )
         )
     return steps
+
+
+def _select_legacy_reference_profiles(
+    opts: QualityGateOptions,
+    *,
+    project_root: Path,
+) -> list[dict[str, Any]]:
+    profiles = {
+        profile["panel_id"]: profile
+        for profile in _load_legacy_reference_profiles(project_root)
+    }
+    requested = [
+        str(panel).strip()
+        for panel in opts.legacy_panels
+        if str(panel).strip()
+    ]
+    if not requested:
+        return [
+            profile
+            for profile in profiles.values()
+            if bool(profile.get("enabled"))
+        ]
+
+    selected: list[dict[str, Any]] = []
+    for panel in requested:
+        profile = profiles.get(panel)
+        if profile is None:
+            profile = _default_legacy_reference_profile(panel)
+        selected.append(profile)
+    return selected
+
+
+def _load_legacy_reference_profiles(project_root: Path) -> list[dict[str, Any]]:
+    profiles: list[dict[str, Any]] = []
+    for package in PanelPackageLoader(project_root=project_root).load_all():
+        profiles.append(_legacy_reference_profile_from_package(package))
+    return profiles
+
+
+def _legacy_reference_profile_from_package(package: PanelPackage) -> dict[str, Any]:
+    raw = package.qa_profile.get("legacy_reference") or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    return {
+        "panel_id": package.panel_id,
+        "enabled": bool(raw.get("enabled", False)),
+        "source_dir_name": str(raw.get("source_dir_name") or package.panel_id),
+        "sample_count": int(raw.get("sample_count") or 5),
+        "required_features": _severity_map(raw.get("required_features") or {}),
+        "required_sections": _severity_map(raw.get("required_sections") or {}),
+        "require_table_shapes": _severity(raw.get("require_table_shapes"), default="warn"),
+        "privacy_checks": _severity_map(raw.get("privacy_checks") or {}),
+        "qa_profile_file": str(package.resolve_qa_profile_file()),
+    }
+
+
+def _default_legacy_reference_profile(panel: str) -> dict[str, Any]:
+    return {
+        "panel_id": panel,
+        "enabled": True,
+        "source_dir_name": panel,
+        "sample_count": 5,
+        "required_features": {},
+        "required_sections": {},
+        "require_table_shapes": "warn",
+        "privacy_checks": {
+            "source_dir": "fail",
+            "report_id": "fail",
+            "sample_id": "fail",
+            "date": "fail",
+        },
+        "qa_profile_file": "",
+    }
+
+
+def _severity_map(value: Any) -> dict[str, str]:
+    if isinstance(value, list):
+        return {str(item): "warn" for item in value if str(item).strip()}
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): _severity(severity)
+        for key, severity in value.items()
+        if str(key).strip()
+    }
+
+
+def _severity(value: Any, *, default: str = "warn") -> str:
+    normalized = str(value or default).strip().lower()
+    return normalized if normalized in {"off", "warn", "fail"} else default
 
 
 def _resolve_legacy_source_root(
@@ -326,6 +424,7 @@ def _run_single_legacy_reference(
     source_dir: Path,
     output_root: Path,
     sample_count: int,
+    profile: dict[str, Any],
     fail_on_warn: bool,
 ) -> dict[str, Any]:
     started = time.perf_counter()
@@ -341,6 +440,7 @@ def _run_single_legacy_reference(
         issues = _audit_legacy_reference_output(
             output_root=output_root,
             expected_sample_count=int(sample_count),
+            profile=profile,
         )
         status = _status_from_issues(issues, fail_on_warn=fail_on_warn)
         return {
@@ -358,6 +458,7 @@ def _run_single_legacy_reference(
                 "read_error_count": result.get("read_error_count"),
                 "selected_count": result.get("selected_count"),
             },
+            "qa_profile_file": profile.get("qa_profile_file"),
             "issues": issues,
         }
     except Exception as exc:
@@ -368,6 +469,7 @@ def _audit_legacy_reference_output(
     *,
     output_root: Path,
     expected_sample_count: int,
+    profile: dict[str, Any],
 ) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     manifest_path = output_root / "manifest.json"
@@ -381,14 +483,14 @@ def _audit_legacy_reference_output(
         ]
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("source_dir") != "<redacted>":
-        issues.append(
-            _legacy_issue(
-                "error",
-                "LEGACY_SOURCE_NOT_REDACTED",
-                "legacy manifest must not persist source_dir by default",
-            )
-        )
+    privacy_checks = profile.get("privacy_checks") or {}
+    source_dir_issue = _legacy_issue_from_severity(
+        privacy_checks.get("source_dir"),
+        "LEGACY_SOURCE_NOT_REDACTED",
+        "legacy manifest must not persist source_dir by default",
+    )
+    if manifest.get("source_dir") != "<redacted>" and source_dir_issue:
+        issues.append(source_dir_issue)
 
     source_count = int(manifest.get("source_docx_count") or 0)
     readable_count = int(manifest.get("readable_docx_count") or 0)
@@ -424,82 +526,104 @@ def _audit_legacy_reference_output(
 
     selected_samples = manifest.get("selected_samples") or []
     for sample in selected_samples:
-        issues.extend(_audit_legacy_reference_sample(sample))
-    issues.extend(_audit_legacy_reference_privacy(output_root=output_root))
+        issues.extend(_audit_legacy_reference_sample(sample, profile=profile))
+    issues.extend(_audit_legacy_reference_privacy(output_root=output_root, profile=profile))
     return issues
 
 
-def _audit_legacy_reference_sample(sample: dict[str, Any]) -> list[dict[str, Any]]:
+def _audit_legacy_reference_sample(
+    sample: dict[str, Any],
+    *,
+    profile: dict[str, Any],
+) -> list[dict[str, Any]]:
     issues: list[dict[str, Any]] = []
     reference_id = sample.get("reference_id") or "<unknown>"
     features = sample.get("features") or {}
-    for field in ("total_variants_count", "drug_related_count", "msi_status"):
+    required_features = profile.get("required_features") or {}
+    for field, severity in required_features.items():
         if features.get(field) is None:
-            issues.append(
-                _legacy_issue(
-                    "warning",
-                    "LEGACY_FEATURE_MISSING",
-                    f"{reference_id} missing extracted feature: {field}",
-                )
+            issue = _legacy_issue_from_severity(
+                severity,
+                "LEGACY_FEATURE_MISSING",
+                f"{reference_id} missing extracted feature: {field}",
             )
-    if not features.get("table_shape_counts"):
-        issues.append(
-            _legacy_issue(
-                "warning",
-                "LEGACY_TABLE_SHAPES_MISSING",
-                f"{reference_id} has no table shape fingerprint",
-            )
-        )
+            if issue:
+                issues.append(issue)
+    table_shape_issue = _legacy_issue_from_severity(
+        profile.get("require_table_shapes"),
+        "LEGACY_TABLE_SHAPES_MISSING",
+        f"{reference_id} has no table shape fingerprint",
+    )
+    if not features.get("table_shape_counts") and table_shape_issue:
+        issues.append(table_shape_issue)
 
+    required_sections = profile.get("required_sections") or {}
     sections = sample.get("section_presence") or {}
-    for section in ("variant_summary", "biomarkers", "gene_list"):
+    for section, severity in required_sections.items():
         if not sections.get(section):
-            issues.append(
-                _legacy_issue(
-                    "warning",
-                    "LEGACY_SECTION_MISSING",
-                    f"{reference_id} missing expected section: {section}",
-                )
+            issue = _legacy_issue_from_severity(
+                severity,
+                "LEGACY_SECTION_MISSING",
+                f"{reference_id} missing expected section: {section}",
             )
+            if issue:
+                issues.append(issue)
     return issues
 
 
-def _audit_legacy_reference_privacy(*, output_root: Path) -> list[dict[str, Any]]:
+def _audit_legacy_reference_privacy(
+    *,
+    output_root: Path,
+    profile: dict[str, Any],
+) -> list[dict[str, Any]]:
+    privacy_checks = profile.get("privacy_checks") or {}
     issues: list[dict[str, Any]] = []
     samples_dir = output_root / "samples"
     for sample_file in sorted(samples_dir.glob("*.json")):
         if sample_file.name.startswith("._"):
             continue
         text = sample_file.read_text(encoding="utf-8")
-        if REPORT_ID_RE.search(text):
-            issues.append(
-                _legacy_issue(
-                    "error",
-                    "LEGACY_REPORT_ID_LEAK",
-                    f"report id leaked in {sample_file.name}",
-                )
-            )
-        if SAMPLE_ID_RE.search(text):
-            issues.append(
-                _legacy_issue(
-                    "error",
-                    "LEGACY_SAMPLE_ID_LEAK",
-                    f"sample id leaked in {sample_file.name}",
-                )
-            )
-        if DATE_RE.search(text):
-            issues.append(
-                _legacy_issue(
-                    "error",
-                    "LEGACY_DATE_LEAK",
-                    f"date-like value leaked in {sample_file.name}",
-                )
-            )
+        report_id_issue = _legacy_issue_from_severity(
+            privacy_checks.get("report_id"),
+            "LEGACY_REPORT_ID_LEAK",
+            f"report id leaked in {sample_file.name}",
+        )
+        if REPORT_ID_RE.search(text) and report_id_issue:
+            issues.append(report_id_issue)
+        sample_id_issue = _legacy_issue_from_severity(
+            privacy_checks.get("sample_id"),
+            "LEGACY_SAMPLE_ID_LEAK",
+            f"sample id leaked in {sample_file.name}",
+        )
+        if SAMPLE_ID_RE.search(text) and sample_id_issue:
+            issues.append(sample_id_issue)
+        date_issue = _legacy_issue_from_severity(
+            privacy_checks.get("date"),
+            "LEGACY_DATE_LEAK",
+            f"date-like value leaked in {sample_file.name}",
+        )
+        if DATE_RE.search(text) and date_issue:
+            issues.append(date_issue)
     return issues
 
 
 def _legacy_issue(level: str, code: str, message: str) -> dict[str, str]:
     return {"level": level, "code": code, "message": message}
+
+
+def _legacy_issue_from_severity(
+    severity: Any,
+    code: str,
+    message: str,
+) -> Optional[dict[str, str]]:
+    normalized = _severity(severity, default="off")
+    if normalized == "off":
+        return None
+    return _legacy_issue(
+        "error" if normalized == "fail" else "warning",
+        code,
+        message,
+    )
 
 
 def _status_from_issues(issues: Sequence[dict[str, Any]], *, fail_on_warn: bool) -> str:

@@ -53,4 +53,5 @@ python -m reportgen.cli qa gate
 The gate runs panel validation, lint, regression tests, synthetic golden cases,
 repeated-generation DOCX diffs, and an optional legacy reference snapshot step.
 The legacy step is skipped unless a historical-report root is available through
-`--legacy-source-root` or `REPORTGEN_LEGACY_REPORTS_ROOT`.
+`--legacy-source-root` or `REPORTGEN_LEGACY_REPORTS_ROOT`; panel-specific legacy
+rules are read from `panels/<panel_id>/qa.yaml`.

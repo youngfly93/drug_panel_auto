@@ -968,14 +968,13 @@ def qa_legacy_snapshot(
     "--legacy-panel",
     "legacy_panels",
     multiple=True,
-    help="要运行历史 reference 的 panel，可重复或用逗号分隔；默认 crc_301_msi",
+    help="要运行历史 reference 的 panel，可重复或用逗号分隔；默认读取 panel qa.yaml 中启用项",
 )
 @click.option(
     "--legacy-sample-count",
-    default=5,
-    show_default=True,
+    default=None,
     type=int,
-    help="每个 panel 抽取的历史 reference 样本数",
+    help="覆盖 qa.yaml 中每个 panel 抽取的历史 reference 样本数",
 )
 @click.option(
     "--legacy-reference-required/--legacy-reference-optional",
@@ -1041,7 +1040,6 @@ def qa_gate(
 
     from reportgen.core.qa_gate import (
         DEFAULT_GATE_PANELS,
-        DEFAULT_LEGACY_REFERENCE_PANELS,
         QualityGateOptions,
         run_quality_gate,
     )
@@ -1059,8 +1057,6 @@ def qa_gate(
         selected_legacy_panels.extend(
             part.strip() for part in str(item).split(",") if part.strip()
         )
-    if not selected_legacy_panels:
-        selected_legacy_panels = list(DEFAULT_LEGACY_REFERENCE_PANELS)
 
     click.echo("🧱 Running reportgen QA gate")
     result = run_quality_gate(
@@ -1080,7 +1076,9 @@ def qa_gate(
             log_level=log_level,
             legacy_source_root=legacy_source_root,
             legacy_panels=tuple(selected_legacy_panels),
-            legacy_sample_count=int(legacy_sample_count),
+            legacy_sample_count=(
+                int(legacy_sample_count) if legacy_sample_count is not None else None
+            ),
             legacy_required=bool(legacy_required),
         )
     )

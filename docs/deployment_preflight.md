@@ -19,7 +19,8 @@ python -m reportgen.cli qa gate --output-root /opt/reportgen-web/tmp/deploy_qa_g
 It validates panel packages, runs lint, runs regression tests, generates
 synthetic golden reports, compares repeated golden outputs, and records the
 legacy reference step. The legacy step is skipped when no local historical
-report root is mounted.
+report root is mounted. Panels opt into legacy reference checks through their
+own `panels/<panel_id>/qa.yaml` profile.
 
 The default panel set currently covers:
 
@@ -57,7 +58,9 @@ bash deploy.sh
 
 Run deployment preflight with mounted historical reports. This blocks deployment
 when the legacy reference snapshot check cannot read, sanitize, or structurally
-fingerprint the configured historical panel samples.
+fingerprint the configured historical panel samples. The enabled panels, sample
+counts, required sections, and privacy severities come from each panel's
+`qa.yaml`.
 
 ```bash
 PREFLIGHT_OUTPUT_ROOT=/tmp/reportgen-deploy-gate bash deploy.sh

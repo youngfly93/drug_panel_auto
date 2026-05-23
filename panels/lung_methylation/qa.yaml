@@ -1,0 +1,14 @@
+schema_version: "1.0"
+panel_id: "lung_methylation"
+
+legacy_reference:
+  enabled: false
+  sample_count: 3
+  required_features: {}
+  required_sections: {}
+  require_table_shapes: warn
+  privacy_checks:
+    source_dir: fail
+    report_id: fail
+    sample_id: fail
+    date: fail

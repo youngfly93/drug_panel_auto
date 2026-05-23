@@ -16,6 +16,7 @@ from typing import Any, Iterable, Mapping, Sequence, Union
 import yaml
 
 from reportgen.panels.loader import (
+    QA_PROFILE_FILENAME,
     PanelPackage,
     PanelPackageLoader,
     validate_panel_package_config,
@@ -26,6 +27,7 @@ from reportgen.rules.loader import load_rule_package
 PANEL_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 VALID_PACKAGE_STATUSES = {"draft", "pilot", "active", "deprecated"}
 VALID_TEMPLATE_STATUSES = {"draft", "pilot", "active", "deprecated"}
+VALID_QA_SEVERITIES = {"off", "warn", "fail"}
 YAML_SUFFIXES = {".yaml", ".yml"}
 DOCX_SUFFIXES = {".docx"}
 
@@ -329,6 +331,7 @@ class PanelPackageValidator:
         self._validate_enhancer(package, report)
         self._validate_processors(package, report)
         self._validate_contracts(package, raw, report)
+        self._validate_qa_profile(package, report)
         self._validate_golden_cases(package, raw, report)
 
     def _validate_templates(
@@ -667,6 +670,156 @@ class PanelPackageValidator:
                     panel_id=package.panel_id,
                     path=package.root_dir / "panel.yaml",
                 )
+
+    def _validate_qa_profile(
+        self,
+        package: PanelPackage,
+        report: PanelValidationReport,
+    ) -> None:
+        path = package.resolve_qa_profile_file()
+        if not path.exists():
+            report.add(
+                "ERROR",
+                "QA_PROFILE_REQUIRED",
+                f"Panel package must declare {QA_PROFILE_FILENAME}",
+                panel_id=package.panel_id,
+                path=path,
+            )
+            return
+
+        profile = package.qa_profile
+        if not isinstance(profile, Mapping):
+            report.add(
+                "ERROR",
+                "QA_PROFILE_INVALID",
+                f"{QA_PROFILE_FILENAME} must be a dict",
+                panel_id=package.panel_id,
+                path=path,
+            )
+            return
+        if str(profile.get("schema_version") or "") != "1.0":
+            report.add(
+                "ERROR",
+                "QA_PROFILE_SCHEMA_VERSION",
+                "qa.yaml schema_version must be '1.0'",
+                panel_id=package.panel_id,
+                path=path,
+            )
+        if str(profile.get("panel_id") or "") != package.panel_id:
+            report.add(
+                "ERROR",
+                "QA_PROFILE_PANEL_MISMATCH",
+                "qa.yaml panel_id must match panel.yaml panel_id",
+                panel_id=package.panel_id,
+                path=path,
+            )
+
+        legacy = profile.get("legacy_reference", {})
+        if legacy is None:
+            return
+        if not isinstance(legacy, Mapping):
+            report.add(
+                "ERROR",
+                "QA_LEGACY_REFERENCE_INVALID",
+                "legacy_reference must be a dict when present",
+                panel_id=package.panel_id,
+                path=path,
+            )
+            return
+
+        enabled = legacy.get("enabled", False)
+        if not isinstance(enabled, bool):
+            report.add(
+                "ERROR",
+                "QA_LEGACY_ENABLED_INVALID",
+                "legacy_reference.enabled must be a bool",
+                panel_id=package.panel_id,
+                path=path,
+            )
+        sample_count = legacy.get("sample_count", 5)
+        if not isinstance(sample_count, int) or sample_count <= 0:
+            report.add(
+                "ERROR",
+                "QA_LEGACY_SAMPLE_COUNT_INVALID",
+                "legacy_reference.sample_count must be a positive integer",
+                panel_id=package.panel_id,
+                path=path,
+            )
+        source_dir_name = legacy.get("source_dir_name", package.panel_id)
+        if not isinstance(source_dir_name, str) or not source_dir_name.strip():
+            report.add(
+                "ERROR",
+                "QA_LEGACY_SOURCE_DIR_INVALID",
+                "legacy_reference.source_dir_name must be a non-empty string",
+                panel_id=package.panel_id,
+                path=path,
+            )
+
+        for key in ("required_features", "required_sections", "privacy_checks"):
+            self._validate_qa_severity_map(
+                legacy.get(key, {}),
+                key=key,
+                package=package,
+                path=path,
+                report=report,
+            )
+        if "require_table_shapes" in legacy:
+            value = legacy.get("require_table_shapes")
+            if value not in VALID_QA_SEVERITIES:
+                report.add(
+                    "ERROR",
+                    "QA_LEGACY_SEVERITY_INVALID",
+                    "legacy_reference.require_table_shapes must be off/warn/fail",
+                    panel_id=package.panel_id,
+                    path=path,
+                )
+
+    def _validate_qa_severity_map(
+        self,
+        value: Any,
+        *,
+        key: str,
+        package: PanelPackage,
+        path: Path,
+        report: PanelValidationReport,
+    ) -> None:
+        if isinstance(value, list):
+            for idx, item in enumerate(value):
+                if not isinstance(item, str) or not item.strip():
+                    report.add(
+                        "ERROR",
+                        "QA_LEGACY_RULE_INVALID",
+                        f"legacy_reference.{key}[{idx}] must be a non-empty string",
+                        panel_id=package.panel_id,
+                        path=path,
+                    )
+            return
+        if isinstance(value, Mapping):
+            for name, severity in value.items():
+                if not isinstance(name, str) or not name.strip():
+                    report.add(
+                        "ERROR",
+                        "QA_LEGACY_RULE_INVALID",
+                        f"legacy_reference.{key} contains an empty rule name",
+                        panel_id=package.panel_id,
+                        path=path,
+                    )
+                if severity not in VALID_QA_SEVERITIES:
+                    report.add(
+                        "ERROR",
+                        "QA_LEGACY_SEVERITY_INVALID",
+                        f"legacy_reference.{key}.{name} must be off/warn/fail",
+                        panel_id=package.panel_id,
+                        path=path,
+                    )
+            return
+        report.add(
+            "ERROR",
+            "QA_LEGACY_RULES_INVALID",
+            f"legacy_reference.{key} must be a list or dict",
+            panel_id=package.panel_id,
+            path=path,
+        )
 
     def _validate_registry_aliases(
         self, packages: Sequence[PanelPackage], report: PanelValidationReport
