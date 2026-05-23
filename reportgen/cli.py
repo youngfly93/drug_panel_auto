@@ -832,6 +832,77 @@ def qa_diff(
     sys.exit(0)
 
 
+@qa.command("legacy-snapshot")
+@click.option(
+    "--panel",
+    required=True,
+    help="历史报告所属 Panel ID，例如 crc_301_msi",
+)
+@click.option(
+    "--source-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="按 panel 拆分后的历史 DOCX 目录",
+)
+@click.option(
+    "--output-dir",
+    required=True,
+    type=click.Path(),
+    help="脱敏 reference snapshot 输出目录",
+)
+@click.option(
+    "--sample-count",
+    default=5,
+    show_default=True,
+    type=int,
+    help="选择的代表样本数量",
+)
+@click.option(
+    "--max-text-chars",
+    default=12000,
+    show_default=True,
+    type=int,
+    help="每份脱敏文本摘录最多保留字符数",
+)
+@click.option(
+    "--include-source-paths",
+    is_flag=True,
+    default=False,
+    help="调试用：在快照中保留原始路径/文件名。默认关闭，避免患者信息进入产物。",
+)
+def qa_legacy_snapshot(
+    panel,
+    source_dir,
+    output_dir,
+    sample_count,
+    max_text_chars,
+    include_source_paths,
+):
+    """从历史 DOCX 报告构建脱敏 reference snapshots。"""
+    from reportgen.core.legacy_reference import (
+        LegacySnapshotOptions,
+        build_legacy_reference_snapshots,
+    )
+
+    result = build_legacy_reference_snapshots(
+        LegacySnapshotOptions(
+            panel=panel,
+            source_dir=source_dir,
+            output_dir=output_dir,
+            sample_count=int(sample_count),
+            include_source_paths=bool(include_source_paths),
+            max_text_chars=int(max_text_chars),
+        )
+    )
+    click.echo(f"🧾 Legacy snapshots: {result.get('status')}")
+    click.echo(f"  source_docx_count: {result.get('source_docx_count')}")
+    click.echo(f"  readable_docx_count: {result.get('readable_docx_count')}")
+    click.echo(f"  read_error_count: {result.get('read_error_count')}")
+    click.echo(f"  selected_count: {result.get('selected_count')}")
+    click.echo(f"  manifest: {result.get('manifest_file')}")
+    click.echo(f"  markdown: {result.get('markdown_file')}")
+
+
 @qa.command("gate")
 @click.option(
     "--project-root",

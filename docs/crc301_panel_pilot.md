@@ -40,14 +40,22 @@ Filename/body conflicts found: 0.
 python -m reportgen.cli panel validate crc_301_msi --project-root .
 python -m reportgen.cli qa run --panel crc_301_msi
 python -m reportgen.cli qa gate --panel crc_301_msi
+python -m reportgen.cli qa legacy-snapshot \
+  --panel crc_301_msi \
+  --source-dir /Volumes/KINGSTON/work/肠癌358基因/legacy_reports_by_panel/crc_301_msi \
+  --output-dir tmp/crc301_reference_snapshots \
+  --sample-count 5
 ```
 
 Expected result for each command: `PASS`.
 
 ## Next Work
 
-- Select 3 to 5 representative historical CRC 301 reports as reference cases.
-- Build a sanitized text/QA snapshot set for those references.
+- Review the generated `tmp/crc301_reference_snapshots/manifest.json` and
+  `samples/*.json` files before using them as local reference material.
+- Current local snapshot run over the CRC 301 legacy folder found 92 DOCX files,
+  79 readable DOCX files, 13 historical DOCX read errors, and 5 representative
+  sanitized reference snapshots.
 - Compare newly generated CRC 301 reports against those references with the
   existing diff gate.
 - Decide whether CRC 301 needs separate template assets or can keep sharing the

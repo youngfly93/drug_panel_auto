@@ -22,6 +22,7 @@ DEFAULT_RUFF_PATHS = (
     "reportgen/cli.py",
     "reportgen/core/qa_gate.py",
     "reportgen/core/golden_case.py",
+    "reportgen/core/legacy_reference.py",
     "reportgen/core/report_diff.py",
     "reportgen/panels/validation.py",
 )
