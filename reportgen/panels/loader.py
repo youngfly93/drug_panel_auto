@@ -16,6 +16,7 @@ import yaml
 
 
 PANEL_SCHEMA_VERSION = "1.0"
+QA_PROFILE_FILENAME = "qa.yaml"
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class PanelPackage:
     project_detector_rules: Dict[str, Any] = field(default_factory=dict)
     input_contract: Dict[str, Any] = field(default_factory=dict)
     template_contract: Dict[str, Any] = field(default_factory=dict)
+    qa_profile: Dict[str, Any] = field(default_factory=dict)
     golden_cases: tuple[Dict[str, Any], ...] = ()
     raw: Dict[str, Any] = field(default_factory=dict)
 
@@ -85,6 +87,10 @@ class PanelPackage:
                 f"Panel {self.panel_id!r} has no mapping {mapping_name!r}"
             ) from exc
         return self._resolve_path(mapping_path)
+
+    def resolve_qa_profile_file(self) -> Path:
+        """Resolve this package's QA profile path."""
+        return self.root_dir / QA_PROFILE_FILENAME
 
     def _resolve_path(self, value: str) -> Path:
         path = Path(str(value)).expanduser()
@@ -153,6 +159,7 @@ class PanelPackageLoader:
             for item in raw.get("golden_cases", [])
             if isinstance(item, Mapping)
         )
+        qa_profile = _load_qa_profile(path.parent)
 
         return PanelPackage(
             panel_id=str(raw["panel_id"]),
@@ -169,6 +176,7 @@ class PanelPackageLoader:
             project_detector_rules=dict(raw.get("project_detector_rules") or {}),
             input_contract=dict(raw.get("input_contract") or {}),
             template_contract=dict(raw.get("template_contract") or {}),
+            qa_profile=qa_profile,
             golden_cases=golden_cases,
             raw=dict(raw),
         )
@@ -193,6 +201,17 @@ def load_panel_package(
     return PanelPackageLoader(project_root=project_root, panels_dir=panels_dir).load(
         panel_id
     )
+
+
+def _load_qa_profile(panel_dir: Path) -> Dict[str, Any]:
+    path = panel_dir / QA_PROFILE_FILENAME
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"{QA_PROFILE_FILENAME} must be a dict at top level")
+    return dict(raw)
 
 
 def validate_panel_package_config(cfg: Any) -> tuple[bool, List[str]]:

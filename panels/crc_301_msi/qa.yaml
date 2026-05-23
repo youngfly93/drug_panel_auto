@@ -1,0 +1,21 @@
+schema_version: "1.0"
+panel_id: "crc_301_msi"
+
+legacy_reference:
+  enabled: true
+  source_dir_name: "crc_301_msi"
+  sample_count: 5
+  required_features:
+    total_variants_count: warn
+    drug_related_count: warn
+    msi_status: warn
+  required_sections:
+    variant_summary: warn
+    biomarkers: warn
+    gene_list: warn
+  require_table_shapes: warn
+  privacy_checks:
+    source_dir: fail
+    report_id: fail
+    sample_id: fail
+    date: fail

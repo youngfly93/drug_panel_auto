@@ -33,8 +33,8 @@ Filename/body conflicts found: 0.
   mutating the CRC 358 fixture.
 - `reportgen qa run --panel crc_301_msi` is supported.
 - Default `reportgen qa gate` includes `crc_301_msi`.
-- `reportgen qa gate` can run the CRC 301 legacy reference snapshot check when
-  a local historical-report root is provided.
+- `panels/crc_301_msi/qa.yaml` enables the CRC 301 legacy reference snapshot
+  check when a local historical-report root is provided.
 
 ## Acceptance Commands
 
@@ -64,6 +64,7 @@ Expected result for each command: `PASS`.
   sanitized reference snapshots.
 - Use the legacy reference gate during local release checks so field extraction,
   section presence, table-shape fingerprints, and privacy redaction are checked
-  against historical CRC 301 reports.
+  against historical CRC 301 reports. Required fields and severities are owned
+  by `panels/crc_301_msi/qa.yaml`.
 - Decide whether CRC 301 needs separate template assets or can keep sharing the
   current CRC template.

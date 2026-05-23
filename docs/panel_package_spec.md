@@ -10,6 +10,7 @@ pipeline can reject incomplete packages before customer reports are generated.
 panels/
   <panel_id>/
     panel.yaml
+    qa.yaml
     rules/
       *.yaml
     templates/
@@ -57,6 +58,38 @@ Supported package and template statuses:
 Every active or pilot panel must declare at least one synthetic golden case.
 Production customer files must not be placed under `golden_cases/`.
 
+## `qa.yaml` Minimum Fields
+
+Every panel package must include a QA profile:
+
+```yaml
+schema_version: "1.0"
+panel_id: "crc_301_msi"
+
+legacy_reference:
+  enabled: true
+  source_dir_name: "crc_301_msi"
+  sample_count: 5
+  required_features:
+    total_variants_count: warn
+    drug_related_count: warn
+    msi_status: warn
+  required_sections:
+    variant_summary: warn
+    biomarkers: warn
+    gene_list: warn
+  require_table_shapes: warn
+  privacy_checks:
+    source_dir: fail
+    report_id: fail
+    sample_id: fail
+    date: fail
+```
+
+Rule severities are `off`, `warn`, or `fail`. A panel that has no historical
+reference set should keep `legacy_reference.enabled: false`; the profile still
+documents the expected QA behavior before the panel is promoted.
+
 ## Validator
 
 Run the full registry validator:
@@ -88,6 +121,8 @@ The validator checks:
 - enhancer imports are resolvable when declared.
 - processor names exist in the DOCX processor registry and are not duplicated.
 - input/template contracts are non-empty.
+- `qa.yaml` exists, matches `panel_id`, and uses valid legacy reference rule
+  severities.
 - golden case ids are unique and runnable.
 - registry aliases do not collide across packages.
 
