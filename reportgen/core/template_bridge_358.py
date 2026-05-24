@@ -600,6 +600,8 @@ def _normalize_immune_rows(tables: Dict[str, Any], category: str) -> List[Dict[s
             "genes": genes,
             "mode": str(row.get("mode") or "direct").strip() or "direct",
         }
+        if row.get("display") is not None:
+            item["display"] = str(row.get("display") or "").strip()
         if row.get("match") is not None:
             item["match"] = str(row.get("match") or "").strip()
         patterns = row.get("patterns")
@@ -659,7 +661,10 @@ def _normalize_nccn_result_rows(raw: Any) -> List[Dict[str, Any]]:
         clean_genes = [str(g).strip().upper() for g in genes if str(g).strip()]
         if not clean_genes:
             continue
-        normalized.append({"key": key, "genes": clean_genes, "match": match})
+        item = {"key": key, "genes": clean_genes, "match": match}
+        if row.get("display") is not None:
+            item["display"] = str(row.get("display") or "").strip()
+        normalized.append(item)
     return normalized
 
 
@@ -1697,6 +1702,45 @@ def _build_nccn_and_immune_fields(
     def _genes_from_row(row: Dict[str, Any]) -> List[str]:
         return _as_upper_gene_list(row.get("genes"))
 
+    def _display_label(row: Dict[str, Any]) -> str:
+        explicit = (
+            row.get("display")
+            or row.get("display_gene")
+            or row.get("display_genes")
+            or row.get("label")
+        )
+        if explicit:
+            return _norm_text(explicit)
+        return "/".join(_genes_from_row(row))
+
+    def _table_row(
+        *,
+        key: str,
+        gene: str,
+        result: str,
+        content: str = "",
+        interpretation: str = "",
+    ) -> Dict[str, str]:
+        row = {
+            "key": key,
+            "gene": gene,
+            "genes": gene,
+            "content": content,
+            "match": content,
+            "result": result,
+            "interpretation": interpretation,
+        }
+        row.update(
+            {
+                "检测基因": gene,
+                "检测内容": content,
+                "检测结果": result,
+                "基因": gene,
+                "临床解读": interpretation,
+            }
+        )
+        return row
+
     def _format_gene_prefixed_variants(
         variants: List[Dict[str, str]],
     ) -> str:
@@ -1766,6 +1810,7 @@ def _build_nccn_and_immune_fields(
         return default
 
     # ===== T[5] NCCN 检测基因表 =====
+    nccn_table_rows: List[Dict[str, str]] = []
     for row in nccn_rows:
         key = str(row.get("key") or "").strip()
         genes = row.get("genes") or []
@@ -1777,30 +1822,69 @@ def _build_nccn_and_immune_fields(
         results = [_format_result(str(g), match) for g in genes if str(g).strip()]
         val = _first_detected(results, "未检出")
         report_data.set_field(f"nccn_{key}", val)
+        nccn_table_rows.append(
+            _table_row(
+                key=key,
+                gene=_display_label(row),
+                content=match,
+                result=val,
+            )
+        )
+    report_data.set_table("nccn_results", nccn_table_rows)
 
     # ===== T[6] 免疫正相关基因 =====
+    immune_positive_table_rows: List[Dict[str, str]] = []
     for row in imm_pos_rows:
         key = str(row.get("key") or "").strip()
         if not key:
             continue
         val = _immune_row_result(row)
         report_data.set_field(f"imm_pos_{key}", val)
+        immune_positive_table_rows.append(
+            _table_row(
+                key=key,
+                gene=_display_label(row),
+                result=val,
+                interpretation="检出有害变异时可能疗效较好",
+            )
+        )
+    report_data.set_table("immune_positive_results", immune_positive_table_rows)
 
     # ===== T[7] 免疫负相关基因 =====
+    immune_negative_table_rows: List[Dict[str, str]] = []
     for row in imm_neg_rows:
         key = str(row.get("key") or "").strip()
         if not key:
             continue
         val = _immune_row_result(row)
         report_data.set_field(f"imm_neg_{key}", val)
+        immune_negative_table_rows.append(
+            _table_row(
+                key=key,
+                gene=_display_label(row),
+                result=val,
+                interpretation="检出有害变异时可能耐药/疗效不佳",
+            )
+        )
+    report_data.set_table("immune_negative_results", immune_negative_table_rows)
 
     # ===== T[8] 免疫超进展基因 =====
+    immune_hyper_table_rows: List[Dict[str, str]] = []
     for row in imm_hyper_rows:
         key = str(row.get("key") or "").strip()
         if not key:
             continue
         val = _immune_row_result(row)
         report_data.set_field(f"imm_hyper_{key}", val)
+        immune_hyper_table_rows.append(
+            _table_row(
+                key=key,
+                gene=_display_label(row),
+                result=val,
+                interpretation="检出有害变异时可能与超进展相关",
+            )
+        )
+    report_data.set_table("immune_hyperprogression_results", immune_hyper_table_rows)
 
 
 def _resolve_crc_filter_column(excel_data: ExcelDataSource) -> Optional[str]:

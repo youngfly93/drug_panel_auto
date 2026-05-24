@@ -22,6 +22,10 @@ if str(_upstream) not in sys.path:
 
 from reportgen.core.excel_reader import ExcelReader  # noqa: E402
 from reportgen.core.field_mapper import FieldMapper  # noqa: E402
+from reportgen.core.enhancer_registry import (  # noqa: E402
+    get_panel_registry,
+    normalize_project_type,
+)
 from reportgen.core.project_detector import ProjectDetector  # noqa: E402
 from reportgen.core.report_generator import ReportGenerator  # noqa: E402
 from reportgen.core.validation import validate_excel_data_common  # noqa: E402
@@ -303,13 +307,7 @@ class ReportGenBridge:
 
         Returns dict with: success, output_file, duration, errors, warnings
         """
-        # Resolve template
-        if template_name:
-            template_path = str(Path(self.template_dir) / template_name)
-        else:
-            template_path = str(
-                Path(self.template_dir) / "aligned_template_with_cnv_fusion_hla_FIXED.docx"
-            )
+        template_path = self._resolve_template_path(template_name, project_type)
 
         # Read Excel first
         excel_data = self.read_excel(excel_path)
@@ -411,6 +409,37 @@ class ReportGenBridge:
                     result["warnings"].append(f"签名图片插入失败: {e}")
 
         return result
+
+    def _resolve_template_path(
+        self,
+        template_name: Optional[str],
+        project_type: Optional[str],
+    ) -> str:
+        """Resolve a template filename or panel template id to a DOCX path."""
+        panel_package = None
+        if project_type:
+            try:
+                canonical = normalize_project_type(project_type)
+                registration = get_panel_registry().get(canonical)
+                panel_package = registration.package if registration else None
+            except Exception:
+                panel_package = None
+
+        if panel_package is not None:
+            if template_name and template_name in panel_package.templates:
+                return str(panel_package.resolve_template_file(template_name))
+            if not template_name:
+                try:
+                    return str(panel_package.resolve_template_file())
+                except Exception:
+                    pass
+
+        if template_name:
+            return str(Path(self.template_dir) / template_name)
+
+        return str(
+            Path(self.template_dir) / "aligned_template_with_cnv_fusion_hla_FIXED.docx"
+        )
 
     def _insert_signature_image(self, docx_path: str, signature_path: str) -> None:
         """Replace __SIG_IMG__ marker in the generated docx with an inline image."""

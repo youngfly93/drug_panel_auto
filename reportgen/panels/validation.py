@@ -328,6 +328,13 @@ class PanelPackageValidator:
             section="mappings",
             allowed_suffixes=YAML_SUFFIXES,
         )
+        self._validate_declared_file_map(
+            package,
+            package.context_contracts,
+            report,
+            section="context_contracts",
+            allowed_suffixes=YAML_SUFFIXES,
+        )
         self._validate_enhancer(package, report)
         self._validate_processors(package, report)
         self._validate_contracts(package, raw, report)
@@ -484,6 +491,7 @@ class PanelPackageValidator:
         if project_relative.exists():
             return project_relative
         if raw_path.parts and raw_path.parts[0] in {
+            "context_contracts",
             "golden_cases",
             "rules",
             "templates",
@@ -536,35 +544,62 @@ class PanelPackageValidator:
     def _validate_processors(
         self, package: PanelPackage, report: PanelValidationReport
     ) -> None:
+        self._validate_processor_list(
+            package,
+            report,
+            names=package.processors,
+            path=package.root_dir / "panel.yaml",
+            scope="panel processors",
+        )
+        for template_id, template in package.templates.items():
+            if template.processors is None:
+                continue
+            self._validate_processor_list(
+                package,
+                report,
+                names=template.processors,
+                path=package.root_dir / "panel.yaml",
+                scope=f"templates.{template_id}.processors",
+            )
+
+    def _validate_processor_list(
+        self,
+        package: PanelPackage,
+        report: PanelValidationReport,
+        *,
+        names: Iterable[str],
+        path: Union[str, Path],
+        scope: str,
+    ) -> None:
         seen: set[str] = set()
         known = _known_processor_names()
-        for name in package.processors:
+        for name in names:
             if name in seen:
                 report.add(
                     "ERROR",
                     "PROCESSOR_DUPLICATED",
-                    f"Processor {name!r} is declared more than once",
+                    f"Processor {name!r} is declared more than once in {scope}",
                     panel_id=package.panel_id,
-                    path=package.root_dir / "panel.yaml",
+                    path=path,
                 )
             seen.add(name)
             if known and name not in known:
                 report.add(
                     "ERROR",
                     "PROCESSOR_UNKNOWN",
-                    f"Unknown DOCX processor: {name!r}",
+                    f"Unknown DOCX processor in {scope}: {name!r}",
                     panel_id=package.panel_id,
-                    path=package.root_dir / "panel.yaml",
+                    path=path,
                 )
-        for issue in _validate_processor_sequence(package.processors):
+        for issue in _validate_processor_sequence(names):
             if issue.get("code") in {"PROCESSOR_UNKNOWN", "PROCESSOR_DUPLICATED"}:
                 continue
             report.add(
                 "ERROR",
                 str(issue.get("code") or "PROCESSOR_INVALID"),
-                str(issue.get("message") or "Invalid DOCX processor sequence."),
+                f"{scope}: {issue.get('message') or 'Invalid DOCX processor sequence.'}",
                 panel_id=package.panel_id,
-                path=package.root_dir / "panel.yaml",
+                path=path,
             )
 
     def _validate_panel_rules(

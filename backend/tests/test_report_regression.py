@@ -271,6 +271,22 @@ def test_nccn_result_rows_are_driven_by_guideline_rules(tmp_path):
 
     assert report_data.get_field("nccn_CUSTOM_EGFR_EX21") == "c.2573T>G，p.L858R"
     assert report_data.get_field("nccn_EGFR_EX21") is None
+    assert report_data.get_table("nccn_results") == [
+        {
+            "key": "CUSTOM_EGFR_EX21",
+            "gene": "EGFR",
+            "genes": "EGFR",
+            "content": "外显子21",
+            "match": "外显子21",
+            "result": "c.2573T>G，p.L858R",
+            "interpretation": "",
+            "检测基因": "EGFR",
+            "检测内容": "外显子21",
+            "检测结果": "c.2573T>G，p.L858R",
+            "基因": "EGFR",
+            "临床解读": "",
+        }
+    ]
 
 
 def test_crc_guideline_rule_contains_active_nccn_rows():
@@ -380,6 +396,22 @@ def test_immune_table_rows_are_driven_by_biomarker_rules(tmp_path):
     )
 
     assert report_data.get_field("imm_pos_CUSTOM_ATM") == "c.6874C>T，p.Q2292*"
+    assert report_data.get_table("immune_positive_results") == [
+        {
+            "key": "CUSTOM_ATM",
+            "gene": "ATM",
+            "genes": "ATM",
+            "content": "",
+            "match": "",
+            "result": "c.6874C>T，p.Q2292*",
+            "interpretation": "检出有害变异时可能疗效较好",
+            "检测基因": "ATM",
+            "检测内容": "",
+            "检测结果": "c.6874C>T，p.Q2292*",
+            "基因": "ATM",
+            "临床解读": "检出有害变异时可能疗效较好",
+        }
+    ]
 
 
 def test_field_mapper_adds_legacy_fusion_aliases(tmp_path):
@@ -1455,6 +1487,31 @@ def test_template_contract_fails_when_declared_table_shape_changes(tmp_path):
     assert report["ok"] is False
     errors = report["declared_contract"]["table_errors"]["variant_detail"]
     assert any("expected 9 columns" in error for error in errors)
+
+
+def test_template_contract_extracts_docxtpl_table_row_loops(tmp_path):
+    template_path = tmp_path / "loop_template.docx"
+    doc = Document()
+    table = doc.add_table(rows=3, cols=2)
+    table.rows[0].cells[0].text = "基因"
+    table.rows[0].cells[1].text = "检测结果"
+    table.rows[1].cells[0].text = "{%tr for row in immune_positive_results %}"
+    table.rows[2].cells[0].text = "{{ row.gene }}"
+    table.rows[2].cells[1].text = "{{ row.result }}"
+    doc.save(template_path)
+
+    report = TemplateRenderer(log_level="ERROR").validate_template_contract(
+        str(template_path),
+        {"immune_positive_results": [{"gene": "KRAS", "result": "检出"}]},
+        contract_spec={
+            "required_lists": ["immune_positive_results"],
+        },
+    )
+
+    assert report["ok"] is True
+    assert report["required_lists"] == ["immune_positive_results"]
+    assert report["loop_row_fields"]["immune_positive_results"] == ["gene", "result"]
+    assert "row.gene" not in report["required_paths"]
 
 
 def test_report_generator_fails_bad_panel_template_before_rendering(tmp_path):
@@ -3721,6 +3778,7 @@ def test_docx_render_uses_configured_tmp_dir_and_timeout(tmp_path, monkeypatch):
 
     monkeypatch.setattr(docx_render, "_run_checked", fake_run)
     monkeypatch.setenv("REPORTGEN_RENDER_TMPDIR", str(render_tmp))
+    monkeypatch.setenv("REPORTGEN_LIBREOFFICE_PROFILE_MODE", "isolated")
 
     pngs = docx_render.render_docx_to_pngs(
         docx_path,
@@ -3730,6 +3788,86 @@ def test_docx_render_uses_configured_tmp_dir_and_timeout(tmp_path, monkeypatch):
 
     assert [call[0] for call in calls] == ["docx_to_pdf", "pdf_to_png"]
     assert {call[2] for call in calls} == {37}
+    assert pngs == [output_dir / "source-1.png"]
+
+
+def test_docx_render_falls_back_to_system_profile(tmp_path, monkeypatch):
+    docx_path = tmp_path / "source.docx"
+    Document().save(docx_path)
+    output_dir = tmp_path / "pages"
+    calls = []
+
+    monkeypatch.setattr(
+        docx_render,
+        "_which_or_raise",
+        lambda name, *, hint: f"/bin/{name}",
+    )
+
+    def fake_run(cmd, *, timeout_seconds, stage):
+        calls.append((stage, list(cmd)))
+        if stage == "docx_to_pdf":
+            raise docx_render.DocxRenderError(
+                "isolated profile failed",
+                stage=stage,
+                command=cmd,
+                stderr="profile crash",
+            )
+        if stage == "docx_to_pdf_fallback":
+            assert not any("UserInstallation" in part for part in cmd)
+            outdir = Path(cmd[cmd.index("--outdir") + 1])
+            (outdir / "input.pdf").write_bytes(b"%PDF-1.4\n")
+        elif stage == "pdf_to_png":
+            prefix = Path(cmd[-1])
+            prefix.parent.mkdir(parents=True, exist_ok=True)
+            Path(f"{prefix}-1.png").write_bytes(b"png")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(docx_render, "_run_checked", fake_run)
+    monkeypatch.setenv("REPORTGEN_LIBREOFFICE_PROFILE_MODE", "isolated")
+
+    with pytest.warns(RuntimeWarning, match="system profile"):
+        pngs = docx_render.render_docx_to_pngs(docx_path, output_dir=output_dir)
+
+    assert [call[0] for call in calls] == [
+        "docx_to_pdf",
+        "docx_to_pdf_fallback",
+        "pdf_to_png",
+    ]
+    assert pngs == [output_dir / "source-1.png"]
+
+
+def test_docx_render_uses_system_profile_by_default_on_macos(tmp_path, monkeypatch):
+    docx_path = tmp_path / "source.docx"
+    Document().save(docx_path)
+    output_dir = tmp_path / "pages"
+    calls = []
+
+    monkeypatch.delenv("REPORTGEN_LIBREOFFICE_PROFILE_MODE", raising=False)
+    monkeypatch.delenv("REPORTGEN_RENDER_PROFILE_MODE", raising=False)
+    monkeypatch.setattr(docx_render.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(
+        docx_render,
+        "_which_or_raise",
+        lambda name, *, hint: f"/bin/{name}",
+    )
+
+    def fake_run(cmd, *, timeout_seconds, stage):
+        calls.append((stage, list(cmd)))
+        if stage == "docx_to_pdf_system":
+            assert not any("UserInstallation" in part for part in cmd)
+            outdir = Path(cmd[cmd.index("--outdir") + 1])
+            (outdir / "input.pdf").write_bytes(b"%PDF-1.4\n")
+        elif stage == "pdf_to_png":
+            prefix = Path(cmd[-1])
+            prefix.parent.mkdir(parents=True, exist_ok=True)
+            Path(f"{prefix}-1.png").write_bytes(b"png")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(docx_render, "_run_checked", fake_run)
+
+    pngs = docx_render.render_docx_to_pngs(docx_path, output_dir=output_dir)
+
+    assert [call[0] for call in calls] == ["docx_to_pdf_system", "pdf_to_png"]
     assert pngs == [output_dir / "source-1.png"]
 
 

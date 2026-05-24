@@ -28,7 +28,7 @@ from docx import Document
 
 _JINJA_VAR_RE = re.compile(r"\{\{\s*(?P<expr>.*?)\s*\}\}")
 _JINJA_FOR_RE = re.compile(
-    r"\{%\s*for\s+(?P<var>[a-zA-Z_][a-zA-Z0-9_]*)\s+in\s+"
+    r"\{%\s*(?:tr|tc|p|r)?\s*for\s+(?P<var>[a-zA-Z_][a-zA-Z0-9_]*)\s+in\s+"
     r"(?P<list>[a-zA-Z_][a-zA-Z0-9_]*)\s*%}"
 )
 

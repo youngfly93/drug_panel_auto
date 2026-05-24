@@ -69,6 +69,20 @@ single_values:
     required: false
     default_value: "组织"
     description: "样本类型：组织/血液/胸腹水等"
+
+  sampling_method:
+    synonyms: ["取材手段", "取样方式", "采样方式", "Sampling Method"]
+    type: string
+    required: false
+    default_value: "-"
+    description: "样本取材方式，如手术、穿刺等"
+
+  sample_site:
+    synonyms: ["取材部位", "取样部位", "采样部位", "Sample Site"]
+    type: string
+    required: false
+    default_value: "-"
+    description: "样本取材部位"
   
   collection_date:
     synonyms: ["采样日期", "采集日期", "Collection Date"]

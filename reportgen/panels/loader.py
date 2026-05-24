@@ -28,6 +28,7 @@ class PanelTemplate:
     version: str = ""
     status: str = "active"
     description: str = ""
+    processors: Optional[tuple[str, ...]] = None
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class PanelPackage:
     project_detector_rules: Dict[str, Any] = field(default_factory=dict)
     input_contract: Dict[str, Any] = field(default_factory=dict)
     template_contract: Dict[str, Any] = field(default_factory=dict)
+    context_contracts: Dict[str, str] = field(default_factory=dict)
     qa_profile: Dict[str, Any] = field(default_factory=dict)
     golden_cases: tuple[Dict[str, Any], ...] = ()
     raw: Dict[str, Any] = field(default_factory=dict)
@@ -91,6 +93,16 @@ class PanelPackage:
     def resolve_qa_profile_file(self) -> Path:
         """Resolve this package's QA profile path."""
         return self.root_dir / QA_PROFILE_FILENAME
+
+    def resolve_context_contract_file(self, contract_id: str) -> Path:
+        """Resolve a declared pre-render context contract file."""
+        try:
+            contract_path = self.context_contracts[contract_id]
+        except KeyError as exc:
+            raise KeyError(
+                f"Panel {self.panel_id!r} has no context contract {contract_id!r}"
+            ) from exc
+        return self._resolve_path(contract_path)
 
     def _resolve_path(self, value: str) -> Path:
         path = Path(str(value)).expanduser()
@@ -145,6 +157,7 @@ class PanelPackageLoader:
                 version=str(item.get("version") or ""),
                 status=str(item.get("status") or "active"),
                 description=str(item.get("description") or ""),
+                processors=_parse_optional_processors(item.get("processors")),
             )
             for item in raw.get("templates", [])
         }
@@ -176,6 +189,9 @@ class PanelPackageLoader:
             project_detector_rules=dict(raw.get("project_detector_rules") or {}),
             input_contract=dict(raw.get("input_contract") or {}),
             template_contract=dict(raw.get("template_contract") or {}),
+            context_contracts={
+                str(k): str(v) for k, v in (raw.get("context_contracts") or {}).items()
+            },
             qa_profile=qa_profile,
             golden_cases=golden_cases,
             raw=dict(raw),
@@ -212,6 +228,25 @@ def _load_qa_profile(panel_dir: Path) -> Dict[str, Any]:
     if not isinstance(raw, Mapping):
         raise ValueError(f"{QA_PROFILE_FILENAME} must be a dict at top level")
     return dict(raw)
+
+
+def _parse_optional_processors(value: Any) -> Optional[tuple[str, ...]]:
+    """Parse an optional template-level processor list.
+
+    ``None`` means inherit panel-level processors. An empty list is intentional
+    and disables all post-render processors for that template.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        return None
+    result: list[str] = []
+    for item in value:
+        name = item.get("name") if isinstance(item, Mapping) else item
+        text = str(name or "").strip()
+        if text:
+            result.append(text)
+    return tuple(result)
 
 
 def validate_panel_package_config(cfg: Any) -> tuple[bool, List[str]]:
@@ -252,6 +287,10 @@ def validate_panel_package_config(cfg: Any) -> tuple[bool, List[str]]:
         else:
             template_ids.add(tid)
         _require_str(item, "file", errors, prefix=f"templates[{idx}]")
+        if "processors" in item and not _valid_processors(item.get("processors")):
+            errors.append(
+                f"templates[{idx}].processors must be a list[str|{{name: str}}]"
+            )
 
     default_template = cfg.get("default_template")
     if (
@@ -269,6 +308,7 @@ def validate_panel_package_config(cfg: Any) -> tuple[bool, List[str]]:
         "project_detector_rules",
         "input_contract",
         "template_contract",
+        "context_contracts",
     ):
         value = cfg.get(section, {})
         if value is not None and not isinstance(value, Mapping):

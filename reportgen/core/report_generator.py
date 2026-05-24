@@ -75,6 +75,7 @@ class _GenerationState:
     generation_id: Optional[str] = None
     template_context: Optional[dict[str, Any]] = None
     template_contract_report: Optional[dict[str, Any]] = None
+    template_processor_names: Optional[tuple[str, ...]] = None
     processor_report: list[Any] = dc_field(default_factory=list)
     field_provenance: Optional[dict[str, Any]] = None
     field_provenance_file: Optional[str] = None
@@ -826,7 +827,10 @@ class ReportGenerator:
             state.template_file,
             state.report_data,
             state.output_path,
-            post_processor_names=self._get_panel_processor_names(state.panel_package),
+            post_processor_names=self._get_template_processor_names(
+                state.panel_package,
+                state.template_file,
+            ),
         )
         state.processor_report = list(
             getattr(self.template_renderer, "last_processor_report", []) or []
@@ -834,8 +838,12 @@ class ReportGenerator:
         self.logger.log_event("template_rendering_completed", output=state.final_output)
         stage.artifacts["output_file"] = state.final_output
         stage.metrics["post_processors"] = len(state.processor_report)
+        state.template_processor_names = self._get_template_processor_names(
+            state.panel_package,
+            state.template_file,
+        )
         stage.metrics["declared_processors"] = list(
-            self._get_panel_processor_names(state.panel_package) or []
+            state.template_processor_names or []
         )
 
     def _stage_field_provenance(
@@ -990,6 +998,38 @@ class ReportGenerator:
         if processors is None:
             return None
         return tuple(str(name) for name in processors)
+
+    @classmethod
+    def _get_template_processor_names(
+        cls,
+        panel_package,
+        template_file: Optional[str],
+    ) -> Optional[tuple[str, ...]]:
+        """Return template-level processors, falling back to panel processors.
+
+        Template-level processors let a golden-template pilot use a much smaller
+        DOCX surgery chain while the legacy template keeps the full chain.
+        """
+        panel_processors = cls._get_panel_processor_names(panel_package)
+        if panel_package is None or not template_file:
+            return panel_processors
+
+        try:
+            selected = Path(template_file).resolve()
+        except Exception:
+            return panel_processors
+
+        templates = getattr(panel_package, "templates", {}) or {}
+        for template in templates.values():
+            try:
+                candidate = panel_package.resolve_template_file(
+                    template.template_id
+                ).resolve()
+            except Exception:
+                continue
+            if candidate == selected and template.processors is not None:
+                return tuple(str(name) for name in template.processors)
+        return panel_processors
 
     @staticmethod
     def _resolve_visual_qa_options(state: _GenerationState) -> dict[str, Any]:

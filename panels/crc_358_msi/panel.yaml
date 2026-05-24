@@ -31,6 +31,15 @@ templates:
     version: "1.0.0"
     status: "active"
     description: "Current aligned CRC template used by the legacy generator."
+  - id: "crc_358_msi_golden_template_v0"
+    file: "templates/crc_358_msi_golden_template_v0.docx"
+    version: "0.4.4"
+    status: "pilot"
+    description: "Scrubbed golden-template pilot generated from the reviewed CRC358+MSI report. Not approved for default customer delivery until the PRD acceptance gates pass."
+    processors:
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
 
 mappings:
   default: "config/mapping.yaml"
@@ -86,7 +95,6 @@ template_contract:
     - "msi_summary"
     - "immuno_tips"
     - "msi_tips"
-    - "nccn_KRAS_EX2"
   required_lists:
     - "targeted_drug_tips"
     - "variants_2_1"
@@ -126,6 +134,9 @@ template_contract:
         - "检测基因"
         - "检测内容"
         - "检测结果"
+
+context_contracts:
+  reviewed_low_tmb_mss: "context_contracts/reviewed_low_tmb_mss.yaml"
 
 processors:
   - "empty_table_rows"

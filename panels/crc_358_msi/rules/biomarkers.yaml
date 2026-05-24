@@ -99,9 +99,11 @@ biomarkers:
           mode: direct
         - key: CD274
           genes: [CD274]
+          display: "CD274（PD-L1）"
           mode: direct
         - key: PDCD1LG2
           genes: [PDCD1LG2]
+          display: "PDCD1LG2（PD-L2）"
           mode: direct
         - key: PBRM1
           genes: [PBRM1]
@@ -111,6 +113,7 @@ biomarkers:
           mode: direct
         - key: KRAS_TP53
           genes: [TP53, KRAS]
+          display: "KRAS/TP53"
           mode: co_mutation
         - key: TET1
           genes: [TET1]
@@ -122,6 +125,7 @@ biomarkers:
           genes: [SERPINB4]
           mode: direct
         - key: DDR
+          display: "DDR相关基因"
           genes:
             - ATM
             - ATR
@@ -171,6 +175,7 @@ biomarkers:
           mode: direct
         - key: EGFR_L858R
           genes: [EGFR]
+          display: "EGFR（L858R/EX19del）"
           mode: variant_pattern
           patterns: [L858R, EX19]
         - key: ALK
@@ -184,12 +189,14 @@ biomarkers:
           mode: direct
         - key: KRAS_STK11
           genes: [KRAS, STK11]
+          display: "KRAS/STK11"
           mode: co_mutation
         - key: KEAP1
           genes: [KEAP1]
           mode: direct
         - key: IFNGR12
           genes: [IFNGR1, IFNGR2]
+          display: "IFNGR1/IFNGR2"
           mode: gene_group
     hyperprogression:
       genes:
@@ -213,6 +220,7 @@ biomarkers:
           mode: direct
         - key: EGFR_AMP
           genes: [EGFR]
+          display: "EGFR扩增"
           mode: cnv_amp
           match: "扩增"
         - key: CCND1

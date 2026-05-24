@@ -1,0 +1,151 @@
+schema_version: "1.0"
+contract_id: "reviewed_low_tmb_mss"
+panel_id: "crc_358_msi"
+description: >
+  Pre-render context gate for a reviewed CRC358+MSI low-TMB/MSS profile.
+  The checks encode report-level business expectations without patient names,
+  sample IDs, or dates.
+severity_default: "fail"
+
+fields:
+  total_variants_count:
+    equals: 8
+  drug_related_count:
+    equals: 4
+  tmb_value:
+    equals: "6.5"
+  tmb_status:
+    equals: "L"
+  tmb_summary:
+    contains:
+      - "6.5"
+      - "TMB-L"
+      - "10 mutations/Mb"
+    not_contains:
+      - "13.5"
+      - "TMB水平较高"
+  tmb_detail_sentence:
+    contains:
+      - "6.5"
+      - "TMB水平较低"
+    not_contains:
+      - "13.5"
+      - "TMB水平较高"
+  tmb_detail_interpretation:
+    contains:
+      - "肿瘤突变负荷"
+      - "2020年6月"
+      - "FDA批准帕博利珠单抗"
+  tmb_drug_note:
+    contains:
+      - "常用的免疫抑制剂有"
+      - "帕博利珠单抗"
+  msi_status:
+    equals: "MSS"
+  msi_summary:
+    contains:
+      - "MSS"
+  immuno_tips:
+    contains:
+      - "TMB-H的肿瘤"
+      - "常用免疫抑制剂有"
+  msi_tips:
+    contains:
+      - "MSI-H的实体瘤"
+      - "T细胞浸润性"
+  nccn_KRAS_EX2:
+    contains:
+      - "c.34G>A"
+      - "p.G12S"
+  nccn_FGFR123_MUT:
+    equals: "未检出"
+  imm_pos_KRAS:
+    contains:
+      - "c.34G>A"
+      - "p.G12S"
+  imm_pos_POLE:
+    equals: "未检出有害变异"
+  imm_neg_ALK:
+    equals: "未检出有害变异"
+  imm_pos_DDR:
+    contains:
+      - "ATM"
+      - "c.6874C>T"
+    not_contains:
+      - "FANCI"
+      - "RAD50"
+
+tables:
+  chemotherapy:
+    row_count: 7
+  targeted_drug_tips:
+    min_row_count: 4
+    forbid_rows:
+      - id: "fbxw7_class_iii_must_not_trigger_drug"
+        match:
+          gene:
+            equals: "FBXW7"
+  variants_2_1:
+    min_row_count: 8
+    rows:
+      - id: "kras_g12s"
+        match:
+          gene:
+            equals: "KRAS"
+        contains:
+          locus:
+            - "c.34G>A"
+            - "p.G12S"
+  nccn_results:
+    row_count: 32
+    rows:
+      - id: "kras_ex2"
+        match:
+          key:
+            equals: "KRAS_EX2"
+        contains:
+          result:
+            - "c.34G>A"
+            - "p.G12S"
+      - id: "fgfr123_mut_negative"
+        match:
+          key:
+            equals: "FGFR123_MUT"
+        expect:
+          result:
+            equals: "未检出"
+  immune_positive_results:
+    row_count: 15
+    rows:
+      - id: "kras_positive"
+        match:
+          key:
+            equals: "KRAS"
+        contains:
+          result:
+            - "c.34G>A"
+            - "p.G12S"
+      - id: "ddr_atm_positive"
+        match:
+          key:
+            equals: "DDR"
+        contains:
+          result:
+            - "ATM"
+            - "c.6874C>T"
+        not_contains:
+          result:
+            - "FANCI"
+            - "RAD50"
+  immune_negative_results:
+    row_count: 12
+    rows:
+      - id: "alk_negative"
+        match:
+          key:
+            equals: "ALK"
+        expect:
+          result:
+            equals: "未检出有害变异"
+  immune_hyperprogression_results:
+    row_count: 8
