@@ -154,7 +154,7 @@ def build_tmb_fields(
     direction = "高于" if tmb_status == "H" else "低于"
     unit = "mutations/Mb"
     detail_sentence = (
-        f"在本次检测范围内，该样本肿瘤突变负荷为{tmb:.1f}{unit}，"
+        f"在本次检测范围内，该样本肿瘤突变负荷为{tmb:.1f} {unit}，"
         f"TMB水平较{tmb_level_cn}。"
     )
     detail_interpretation = _text_rule(
@@ -170,7 +170,7 @@ def build_tmb_fields(
         "tmb_level_cn": tmb_level_cn,
         "tmb_reference": threshold,
         "tmb_summary": (
-            f"{tmb:.1f} {unit}，{level}\n"
+            f"{tmb:.1f}{unit}，{level}\n"
             f"(本次检测结果{direction}参考值\n{threshold} mutations/Mb)"
         ),
         "tmb_detail_sentence": detail_sentence,

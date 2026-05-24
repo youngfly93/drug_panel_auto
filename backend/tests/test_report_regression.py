@@ -26,6 +26,7 @@ from reportgen.core.batch_runner import (
     BatchValidateOptions,
     _expected_tables_from_excel,
 )
+from reportgen.core.data_cleaner import DataCleaner
 from reportgen.core.excel_reader import ExcelReader
 from reportgen.core.field_provenance import (
     build_field_provenance_report,
@@ -51,6 +52,7 @@ from reportgen.core.report_diff import ReportDiffOptions, compare_reports
 from reportgen.core.template_bridge_358 import (
     PanelConfig,
     _build_nccn_and_immune_fields,
+    _patch_reviewed_variant_override_rows,
     build_targeted_drug_brand_summary,
     build_tmb_summary,
     build_variants_for_template,
@@ -97,6 +99,21 @@ def _excel(
         sheet_names=list(table_data),
         metadata={},
     )
+
+
+def test_data_cleaner_exposes_date_display_aliases():
+    report_data = ReportData()
+    report_data.set_field("receive_date", "2025.11.21")
+    report_data.set_field("report_date", "2025-12-04")
+
+    DataCleaner(log_level="ERROR").validate_and_clean(report_data)
+
+    assert report_data.get_field("receive_date") == "2025-11-21"
+    assert report_data.get_field("receive_date_compact") == "20251121"
+    assert report_data.get_field("receive_date_dot") == "2025.11.21"
+    assert report_data.get_field("report_date") == "2025-12-04"
+    assert report_data.get_field("report_date_compact") == "20251204"
+    assert report_data.get_field("report_date_dot") == "2025.12.04"
 
 
 class _FakeDrugLookup:
@@ -404,12 +421,12 @@ def test_immune_table_rows_are_driven_by_biomarker_rules(tmp_path):
             "content": "",
             "match": "",
             "result": "c.6874C>T，p.Q2292*",
-            "interpretation": "检出有害变异时可能疗效较好",
+            "interpretation": "检出有害变异时可能疗效较好。",
             "检测基因": "ATM",
             "检测内容": "",
             "检测结果": "c.6874C>T，p.Q2292*",
             "基因": "ATM",
-            "临床解读": "检出有害变异时可能疗效较好",
+            "临床解读": "检出有害变异时可能疗效较好。",
         }
     ]
 
@@ -521,7 +538,7 @@ def test_field_mapper_dynamic_tmb_msi_narratives_match_mss_low_tmb(tmp_path):
 
     assert report_data.get_field("tmb_value") == "7.7"
     assert report_data.get_field("tmb_status") == "L"
-    assert "7.7mutations/Mb" in report_data.get_field("tmb_detail_sentence")
+    assert "7.7 mutations/Mb" in report_data.get_field("tmb_detail_sentence")
     assert "TMB水平较低" in report_data.get_field("tmb_detail_sentence")
     assert "2020年6月，FDA批准帕博利珠单抗" in report_data.get_field(
         "tmb_detail_interpretation"
@@ -687,6 +704,124 @@ def test_mixed_reviewed_class_labels_control_counts_and_drug_rows(tmp_path):
         "targeted_drug_brand_summary"
     )
     assert "FBXW7" not in report_data.get_field("targeted_drug_brand_summary")
+
+
+def test_variants_2_1_keeps_all_detected_panel_variants(tmp_path):
+    variations = [
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "APC",
+            "Transcript": "NM_000038.6",
+            "Chr": "chr5",
+            "ExIn_ID": "EX16E",
+            "cHGVS": "c.2387_2388del",
+            "pHGVS_S": "p.Y796Wfs*2",
+            "Function": "Frameshift",
+            "Freq(%)": 37.52,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "EPHA2",
+            "Transcript": "NM_004431.5",
+            "Chr": "chr1",
+            "ExIn_ID": "EX2",
+            "cHGVS": "c.153+2T>C",
+            "pHGVS_S": "*",
+            "Function": "Splice-5",
+            "Freq(%)": 3.33,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "FANCI",
+            "Transcript": "NM_001113378.2",
+            "Chr": "chr15",
+            "ExIn_ID": "EX26",
+            "cHGVS": "c.2879G>A",
+            "pHGVS_S": "p.R960Q",
+            "Function": "Missense",
+            "Freq(%)": 2.18,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 0,
+            "Gene_Symbol": "NOTPANEL",
+            "Transcript": "NM_TEST",
+            "Chr": "chr1",
+            "ExIn_ID": "EX1",
+            "cHGVS": "c.1A>T",
+            "pHGVS_S": "p.K1M",
+            "Function": "Missense",
+            "Freq(%)": 1.0,
+        },
+    ]
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+
+    rows = mapper._build_variants_2_1(
+        _excel(tmp_path, variations=variations),
+        ReportData(),
+    )
+
+    genes = [row["gene"] for row in rows]
+    assert "EPHA2" in genes
+    assert "FANCI" in genes
+    assert "NOTPANEL" not in genes
+    apc = next(row for row in rows if row["gene"] == "APC")
+    assert apc["var_type_cn"] == "缺失突变"
+    epha2 = next(row for row in rows if row["gene"] == "EPHA2")
+    assert epha2["locus"] == "c.153+2T>C"
+    assert epha2["exon"] == "内含子2"
+    assert epha2["benefit_drugs"] == "--"
+    fanci = next(row for row in rows if row["gene"] == "FANCI")
+    assert fanci["var_type_cn"] == "点突变"
+
+
+def test_reviewed_variant_override_replaces_existing_targeted_tip():
+    report_data = ReportData()
+    report_data.set_table(
+        "variants_2_1",
+        [
+            {
+                "gene": "KRAS",
+                "locus": "c.34G>A,\np.G12S",
+                "benefit_drugs": "old",
+                "caution_drugs": "old",
+            }
+        ],
+    )
+    report_data.set_table(
+        "targeted_drug_tips",
+        [
+            {
+                "gene": "KRAS",
+                "variant_site": "c.34G>A,\np.G12S",
+                "benefit_drugs": "Avutometinib+Defactinib（C）",
+                "caution_drugs": "西妥昔单抗（A）",
+            }
+        ],
+    )
+    panel_config = PanelConfig(
+        reviewed_variant_overrides=[
+            {
+                "gene": "KRAS",
+                "c_hgvs": "c.34G>A",
+                "p_hgvs": "p.G12S",
+                "benefit_drugs": ["司美替尼（C）", "Defactinib+Avutometinib（C）"],
+                "caution_drugs": ["西妥昔单抗（A）", "帕尼单抗（A）"],
+            }
+        ]
+    )
+
+    _patch_reviewed_variant_override_rows(report_data, panel_config)
+
+    variant_row = report_data.get_table("variants_2_1")[0]
+    tip_row = report_data.get_table("targeted_drug_tips")[0]
+    assert "司美替尼（C）" in variant_row["benefit_drugs"]
+    assert "Avutometinib+Defactinib" not in tip_row["benefit_drugs"]
+    assert "Defactinib+Avutometinib（C）" in tip_row["benefit_drugs"]
+    assert "帕尼单抗（A）" in tip_row["caution_drugs"]
 
 
 def test_part3_variant_scope_can_follow_summary_variants(tmp_path):

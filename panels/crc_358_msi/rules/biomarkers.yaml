@@ -113,7 +113,7 @@ biomarkers:
           mode: direct
         - key: KRAS_TP53
           genes: [TP53, KRAS]
-          display: "KRAS/TP53"
+          display: "KRAS/TP53共突变"
           mode: co_mutation
         - key: TET1
           genes: [TET1]
@@ -125,7 +125,7 @@ biomarkers:
           genes: [SERPINB4]
           mode: direct
         - key: DDR
-          display: "DDR相关基因"
+          display: "DDR基因\n（DNA损伤修复相关基因）"
           genes:
             - ATM
             - ATR
@@ -160,43 +160,55 @@ biomarkers:
       rows:
         - key: PTEN
           genes: [PTEN]
+          interpretation: "检出有害变异时可能耐药。"
           mode: direct
         - key: JAK1
           genes: [JAK1]
+          interpretation: "检出有害变异时可能耐药。"
           mode: direct
         - key: JAK2
           genes: [JAK2]
+          interpretation: "检出有害变异时可能耐药。"
           mode: direct
         - key: B2M
           genes: [B2M]
+          interpretation: "检出有害变异时可能耐药。"
           mode: direct
         - key: CTNNB1
           genes: [CTNNB1]
+          interpretation: "检出有害变异时可能耐药。"
           mode: direct
         - key: EGFR_L858R
           genes: [EGFR]
           display: "EGFR（L858R/EX19del）"
+          interpretation: "检出有害变异时可能疗效不佳。"
           mode: variant_pattern
           patterns: [L858R, EX19]
         - key: ALK
           genes: [ALK]
+          interpretation: "检出有害变异时可能疗效不佳。"
           mode: direct
         - key: MET
           genes: [MET]
+          interpretation: "检出有害变异时可能疗效不佳。"
           mode: direct
         - key: STK11
           genes: [STK11]
+          interpretation: "检出有害变异时可能疗效不佳。"
           mode: direct
         - key: KRAS_STK11
           genes: [KRAS, STK11]
-          display: "KRAS/STK11"
+          display: "KRAS/STK11共突变"
+          interpretation: "检出有害变异时可能疗效不佳。"
           mode: co_mutation
         - key: KEAP1
           genes: [KEAP1]
+          interpretation: "检出有害变异时可能疗效不佳。"
           mode: direct
         - key: IFNGR12
           genes: [IFNGR1, IFNGR2]
-          display: "IFNGR1/IFNGR2"
+          display: "IFNGR1/2"
+          interpretation: "检出有害变异时可能疗效不佳。"
           mode: gene_group
     hyperprogression:
       genes:
@@ -220,7 +232,7 @@ biomarkers:
           mode: direct
         - key: EGFR_AMP
           genes: [EGFR]
-          display: "EGFR扩增"
+          display: "EGFR（扩增）"
           mode: cnv_amp
           match: "扩增"
         - key: CCND1

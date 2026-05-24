@@ -51,9 +51,11 @@ def test_crc358_golden_template_declares_template_level_processors():
 
     assert template.status == "pilot"
     assert template.processors == (
+        "bullet_lists",
         "blank_page_cleanup",
         "toc_refresh",
         "final_refresh_cleanup",
+        "underlines_and_styles",
     )
     assert package.resolve_template_file(template.template_id).exists()
 
@@ -89,9 +91,11 @@ def test_report_generator_uses_template_level_processors():
     )
 
     assert processors == (
+        "bullet_lists",
         "blank_page_cleanup",
         "toc_refresh",
         "final_refresh_cleanup",
+        "underlines_and_styles",
     )
 
 

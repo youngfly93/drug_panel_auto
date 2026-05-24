@@ -47,9 +47,11 @@ guideline_tables:
         match: "融合"
       - key: "ERBB2_MUT"
         genes: ["ERBB2"]
+        display: "ERBB2\n（HER2）"
         match: "突变"
       - key: "ERBB2_AMP"
         genes: ["ERBB2"]
+        display: "ERBB2\n（HER2）"
         match: "扩增"
       - key: "PIK3CA_EX10"
         genes: ["PIK3CA"]
@@ -77,15 +79,15 @@ guideline_tables:
         match: "密码子600"
       - key: "FGFR123_MUT"
         genes: ["FGFR1", "FGFR2", "FGFR3"]
-        display: "FGFR1/FGFR2/FGFR3"
+        display: "FGFR1/2/3"
         match: "突变"
       - key: "FGFR123_FUSION"
         genes: ["FGFR1", "FGFR2", "FGFR3"]
-        display: "FGFR1/FGFR2/FGFR3"
+        display: "FGFR1/2/3"
         match: "融合"
       - key: "NTRK123_FUSION"
         genes: ["NTRK1", "NTRK2", "NTRK3"]
-        display: "NTRK1/NTRK2/NTRK3"
+        display: "NTRK1/2/3"
         match: "融合"
       - key: "KIT_EX9"
         genes: ["KIT"]
@@ -110,11 +112,11 @@ guideline_tables:
         match: "外显子18"
       - key: "BRCA12_MUT"
         genes: ["BRCA1", "BRCA2"]
-        display: "BRCA1/BRCA2"
+        display: "BRCA1/2"
         match: "突变"
       - key: "IDH12_MUT"
         genes: ["IDH1", "IDH2"]
-        display: "IDH1/IDH2"
+        display: "IDH1/2"
         match: "突变"
   chemotherapy:
     output_table: "chemotherapy"

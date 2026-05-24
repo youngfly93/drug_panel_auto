@@ -271,6 +271,17 @@ class DataCleaner:
                 self.logger.debug(
                     "日期格式标准化", field=field_name, original=value, normalized=normalized
                 )
+        self._set_date_display_aliases(report_data)
+
+    def _set_date_display_aliases(self, report_data: ReportData) -> None:
+        """Expose common date display variants without changing canonical fields."""
+        for field_name in self._KNOWN_DATE_FIELDS:
+            value = report_data.get_field(field_name)
+            normalized = self.normalize_date(value) if value else None
+            if not normalized:
+                continue
+            report_data.set_field(f"{field_name}_compact", normalized.replace("-", ""))
+            report_data.set_field(f"{field_name}_dot", normalized.replace("-", "."))
 
     def validate_and_clean(self, report_data: ReportData) -> ReportData:
         """

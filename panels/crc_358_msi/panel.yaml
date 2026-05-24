@@ -37,9 +37,11 @@ templates:
     status: "pilot"
     description: "Scrubbed golden-template pilot generated from the reviewed CRC358+MSI report. Not approved for default customer delivery until the PRD acceptance gates pass."
     processors:
+      - "bullet_lists"
       - "blank_page_cleanup"
       - "toc_refresh"
       - "final_refresh_cleanup"
+      - "underlines_and_styles"
 
 mappings:
   default: "config/mapping.yaml"
@@ -88,7 +90,9 @@ template_contract:
   required_variables:
     - "patient_name"
     - "sample_id"
-    - "report_date"
+    - "receive_date_compact"
+    - "report_date_compact"
+    - "report_date_dot"
     - "total_variants_count"
     - "drug_related_count"
     - "tmb_summary"

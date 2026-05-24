@@ -924,7 +924,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
             benefit_drugs, caution_drugs
         规则：
         - 取 Variations 的核心字段。
-        - 仅展示分级为 Ⅰ/Ⅱ/Ⅲ 类的变异（ExistIn552），对齐终版报告"只展示Ⅰ/Ⅱ/Ⅲ类"。
+        - 仅展示当前 panel 中分级为 Ⅰ/Ⅱ/Ⅲ 类的检出变异（ExistInsmall358 + ExistIn552）。
         - exon 从 ExIn_ID 中提取数字（EX7/Exon7/EX16E -> 7/16）。
         - locus = cHGVS + ',\\n' + pHGVS_S（若p为*则仅cHGVS）。
         - var_type_cn 将 Function 翻译为中文标签。
@@ -932,12 +932,24 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         - 末尾补齐"未见突变"基线行（config/variant_table_baseline.yaml），用于对齐终版报告展示。
         """
 
-        def exon_num(exid: Any) -> str:
+        def exon_num(exid: Any, c_hgvs: Any = "") -> str:
             s = self._norm_text(exid)
             if not s:
                 return ""
             m = re.search(r"(?i)(?:EX|EXON)(\d+)", s)
-            return m.group(1) if m else s
+            value = m.group(1) if m else s
+            if re.search(r"c\.\d+[+-]\d+", self._norm_text(c_hgvs)):
+                return f"内含子{value}"
+            return value
+
+        def variant_type_cn(c_hgvs: Any) -> str:
+            value = infer_variant_type_cn(c_hgvs) or "点突变"
+            return {
+                "缺失": "缺失突变",
+                "插入": "插入突变",
+                "重复": "重复突变",
+                "缺失插入": "缺失插入突变",
+            }.get(value, value)
 
         def chr_num(v: Any) -> str:
             s = self._norm_text(v)
@@ -950,7 +962,6 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         out: list[dict] = []
         mutated_genes: set[str] = set()
         from reportgen.core.template_bridge_358 import (
-            CRC_IMPORTANT_GENES,
             _get_gene_class,
             _has_explicit_gene_class_labels,
         )
@@ -963,16 +974,18 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
             )
             if not gene:
                 continue
+            if "ExistInsmall358" in r and r.get("ExistInsmall358") not in (
+                1,
+                "1",
+                True,
+            ):
+                continue
             level = _get_gene_class(
                 gene,
                 r.get("ExistIn552"),
                 allow_gene_fallback=allow_gene_fallback,
             )
             if level not in {"Ⅰ类", "Ⅱ类", "Ⅲ类"}:
-                continue
-
-            # 终版报告只展示 CRC 重要基因（对齐人工终版 ~27 行）
-            if gene.upper() not in CRC_IMPORTANT_GENES:
                 continue
 
             c = self._norm_text(r.get("cHGVS"))
@@ -998,10 +1011,10 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                 "gene": gene,
                 "transcript": self._norm_text(r.get("Transcript")),
                 "chr": chr_num(r.get("Chr")),
-                "exon": exon_num(r.get("ExIn_ID")),
+                "exon": exon_num(r.get("ExIn_ID"), c),
                 "locus": locus or "",
                 # 批注：变异类型依据 c.HGVS 关键字 del/dup/ins/delins
-                "var_type_cn": infer_variant_type_cn(c) or "点突变",
+                "var_type_cn": variant_type_cn(c),
                 "af_pct": self._norm_text(r.get("Freq(%)") or r.get("AF")),
                 "benefit_drugs": benefit or "--",
                 "caution_drugs": caution or "--",

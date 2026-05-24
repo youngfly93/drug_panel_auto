@@ -602,6 +602,8 @@ def _normalize_immune_rows(tables: Dict[str, Any], category: str) -> List[Dict[s
         }
         if row.get("display") is not None:
             item["display"] = str(row.get("display") or "").strip()
+        if row.get("interpretation") is not None:
+            item["interpretation"] = str(row.get("interpretation") or "").strip()
         if row.get("match") is not None:
             item["match"] = str(row.get("match") or "").strip()
         patterns = row.get("patterns")
@@ -1845,7 +1847,7 @@ def _build_nccn_and_immune_fields(
                 key=key,
                 gene=_display_label(row),
                 result=val,
-                interpretation="检出有害变异时可能疗效较好",
+                interpretation=str(row.get("interpretation") or "检出有害变异时可能疗效较好。"),
             )
         )
     report_data.set_table("immune_positive_results", immune_positive_table_rows)
@@ -1863,7 +1865,7 @@ def _build_nccn_and_immune_fields(
                 key=key,
                 gene=_display_label(row),
                 result=val,
-                interpretation="检出有害变异时可能耐药/疗效不佳",
+                interpretation=str(row.get("interpretation") or "检出有害变异时可能耐药/疗效不佳。"),
             )
         )
     report_data.set_table("immune_negative_results", immune_negative_table_rows)
@@ -1881,7 +1883,7 @@ def _build_nccn_and_immune_fields(
                 key=key,
                 gene=_display_label(row),
                 result=val,
-                interpretation="检出有害变异时可能与超进展相关",
+                interpretation=str(row.get("interpretation") or "检出有害变异时可能与超进展相关。"),
             )
         )
     report_data.set_table("immune_hyperprogression_results", immune_hyper_table_rows)
@@ -2061,14 +2063,20 @@ def _patch_reviewed_variant_override_rows(
             variant_site = ",\n".join(site_parts)
         if not variant_site:
             continue
-        has_tip = any(
-            _variant_override_matches(
+        has_tip = False
+        for row in tips:
+            if not _variant_override_matches(
                 override,
                 _norm_text(row.get("gene")),
                 locus=_norm_text(row.get("variant_site")),
-            )
-            for row in tips
-        )
+            ):
+                continue
+            row["variant_site"] = variant_site
+            row["benefit_drugs"] = benefit or "--"
+            row["caution_drugs"] = caution or "--"
+            has_tip = True
+            changed = True
+            break
         if has_tip:
             continue
         tips.append(

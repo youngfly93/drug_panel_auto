@@ -24,8 +24,8 @@ def _reviewed_low_tmb_context():
         "drug_related_count": 4,
         "tmb_value": "6.5",
         "tmb_status": "L",
-        "tmb_summary": "6.5 mutations/Mb，TMB-L\n(本次检测结果低于参考值\n10 mutations/Mb)",
-        "tmb_detail_sentence": "在本次检测范围内，该样本肿瘤突变负荷为6.5mutations/Mb，TMB水平较低。",
+        "tmb_summary": "6.5mutations/Mb，TMB-L\n(本次检测结果低于参考值\n10 mutations/Mb)",
+        "tmb_detail_sentence": "在本次检测范围内，该样本肿瘤突变负荷为6.5 mutations/Mb，TMB水平较低。",
         "tmb_detail_interpretation": (
             "肿瘤突变负荷（Tumor Mutation Burden，TMB）即肿瘤基因组去除胚系突变后的"
             "体细胞突变数量。2020年6月，FDA批准帕博利珠单抗用于治疗组织肿瘤突变"

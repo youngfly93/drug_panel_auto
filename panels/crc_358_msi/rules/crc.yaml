@@ -138,6 +138,27 @@ panel_display_genes:
 # Reviewed variant-level overrides.
 # Use this only for lab-reviewed rules that should override the public/internal KB.
 reviewed_variant_overrides:
+  - gene: KRAS
+    c_hgvs: "c.34G>A"
+    p_hgvs: "p.G12S"
+    variant_site: "c.34G>A,\np.G12S"
+    benefit_drugs:
+      - "司美替尼（C）"
+      - "曲美替尼+Navitoclax（C）"
+      - "帕尼单抗+曲美替尼（C）"
+      - "贝美替尼+哌柏西利（C）"
+      - "BI 1701963（C）"
+      - "BI 1701963+曲美替尼（C）"
+      - "PD0325901+哌柏西利（C）"
+      - "奈拉替尼+曲美替尼（C）"
+      - "福巴替尼+贝美替尼（C） Defactinib+Avutometinib（C）"
+      - "依维莫司+Avutometinib（C）"
+      - "RMC-6236（C）"
+      - "PD0325901（D）"
+    caution_drugs:
+      - "西妥昔单抗（A）"
+      - "帕尼单抗（A）"
+      - "依维莫司（C）"
   - gene: ERBB2
     c_hgvs: "c.1979G>A"
     p_hgvs:
