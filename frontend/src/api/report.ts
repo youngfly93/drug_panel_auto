@@ -1,9 +1,10 @@
 import client from './client'
 
 export interface GenerateRequest {
-  upload_id: string
+  upload_id?: string
   clinical_info: Record<string, any>
   project_type?: string | null
+  project_name?: string | null
   template_name?: string | null
   strict_mode?: boolean
   template_contract_mode?: string
@@ -17,6 +18,8 @@ export interface GenerateResult {
   task_id: string
   success: boolean
   output_file: string | null
+  output_filename?: string | null
+  output_file_base64?: string | null
   field_provenance_file?: string | null
   qa_report_file?: string | null
   qa_status?: string | null
@@ -133,6 +136,37 @@ export const reportApi = {
     return data.data
   },
 
+  async generateFromFile(file: File, req: Omit<GenerateRequest, 'upload_id'>): Promise<GenerateResult> {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('clinical_info', JSON.stringify(req.clinical_info || {}))
+    if (req.project_type) form.append('project_type', req.project_type)
+    if (req.project_name) form.append('project_name', req.project_name)
+    if (req.template_name) form.append('template_name', req.template_name)
+    if (req.strict_mode !== undefined) form.append('strict_mode', String(req.strict_mode))
+    if (req.template_contract_mode) {
+      form.append('template_contract_mode', req.template_contract_mode)
+    }
+    if (req.qa_visual_render) form.append('qa_visual_render', req.qa_visual_render)
+    if (req.qa_visual_render_required !== undefined && req.qa_visual_render_required !== null) {
+      form.append('qa_visual_render_required', String(req.qa_visual_render_required))
+    }
+    if (req.qa_visual_render_dpi !== undefined && req.qa_visual_render_dpi !== null) {
+      form.append('qa_visual_render_dpi', String(req.qa_visual_render_dpi))
+    }
+    if (
+      req.qa_visual_render_timeout_seconds !== undefined
+      && req.qa_visual_render_timeout_seconds !== null
+    ) {
+      form.append(
+        'qa_visual_render_timeout_seconds',
+        String(req.qa_visual_render_timeout_seconds),
+      )
+    }
+    const { data } = await client.post('/reports/generate-file', form)
+    return data.data
+  },
+
   async getTaskStatus(taskId: string): Promise<TaskStatus> {
     const { data } = await client.get(`/reports/${taskId}`)
     return data.data
@@ -214,5 +248,44 @@ export const reportApi = {
 
   getDownloadUrl(taskId: string): string {
     return `/api/v1/reports/${taskId}/download`
+  },
+
+  async download(taskId: string): Promise<void> {
+    const response = await client.get(`/reports/${taskId}/download`, {
+      responseType: 'blob',
+    })
+    const disposition = String(response.headers['content-disposition'] || '')
+    const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/)
+    const filename = decodeURIComponent(match?.[1] || match?.[2] || `${taskId}.docx`)
+    const url = window.URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  },
+
+  downloadInline(result: GenerateResult): void {
+    if (!result.output_file_base64) {
+      throw new Error('报告内容不存在')
+    }
+    const binary = window.atob(result.output_file_base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    const blob = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = result.output_filename || `${result.task_id}.docx`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
   },
 }

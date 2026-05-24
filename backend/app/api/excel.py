@@ -12,6 +12,7 @@ from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.schemas.excel import (
     DetectResult,
+    InspectResponse,
     SheetData,
     SheetInfo,
     SingleValuesResponse,
@@ -94,6 +95,53 @@ def upload_excel(
     )
 
 
+@router.post("/inspect", response_model=ApiResponse[InspectResponse])
+def inspect_excel(
+    file: UploadFile,
+    bridge: ReportGenBridge = Depends(get_bridge),
+):
+    """Inspect Excel content in one request for stateless preview deployments."""
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="仅支持 .xlsx 格式文件")
+
+    upload_id, stored_path, file_size = save_upload(file)
+    try:
+        excel_data = bridge.read_excel(str(stored_path))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Excel解析失败: {e}") from e
+
+    sheet_names = bridge.get_sheet_names(excel_data)
+    sheets = [
+        SheetInfo(
+            name=name,
+            **bridge.get_sheet_info(excel_data, name, excel_path=str(stored_path)),
+        )
+        for name in sheet_names
+    ]
+    detect = bridge.detect_project_type(
+        str(Path(stored_path).parent / (file.filename or "upload.xlsx")),
+        excel_data=excel_data,
+    )
+    upload = UploadResponse(
+        upload_id=upload_id,
+        original_filename=file.filename,
+        file_size_bytes=file_size,
+        sheet_names=sheet_names,
+        detected_project_type=detect.get("project_type"),
+        detected_project_name=detect.get("project_name"),
+        detection_confidence=detect.get("confidence"),
+        validation_warnings=bridge.validate_excel_data(excel_data),
+    )
+
+    return ApiResponse(
+        data=InspectResponse(
+            upload=upload,
+            sheets=sheets,
+            single_values=bridge.get_mapped_clinical_fields(excel_data),
+        )
+    )
+
+
 @router.get("/{upload_id}/sheets", response_model=ApiResponse[list[SheetInfo]])
 def list_sheets(
     upload_id: str,
@@ -147,7 +195,9 @@ def get_sheet_data(
     )
 
 
-@router.get("/{upload_id}/single-values", response_model=ApiResponse[SingleValuesResponse])
+@router.get(
+    "/{upload_id}/single-values", response_model=ApiResponse[SingleValuesResponse]
+)
 def get_single_values(
     upload_id: str,
     db: Session = Depends(get_db),

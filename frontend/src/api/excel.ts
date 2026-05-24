@@ -32,7 +32,20 @@ export interface SheetData {
   page_size: number
 }
 
+export interface InspectResult {
+  upload: UploadResult
+  sheets: SheetInfo[]
+  single_values: Record<string, any>
+}
+
 export const excelApi = {
+  async inspect(file: File): Promise<InspectResult> {
+    const form = new FormData()
+    form.append('file', file)
+    const { data } = await client.post('/excel/inspect', form)
+    return data.data
+  },
+
   async upload(file: File): Promise<UploadResult> {
     const form = new FormData()
     form.append('file', file)

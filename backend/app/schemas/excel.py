@@ -42,6 +42,12 @@ class SingleValuesResponse(BaseModel):
     fields: dict[str, Any]
 
 
+class InspectResponse(BaseModel):
+    upload: UploadResponse
+    sheets: list[SheetInfo]
+    single_values: dict[str, Any]
+
+
 class DetectResult(BaseModel):
     project_type: Optional[str] = None
     project_name: Optional[str] = None

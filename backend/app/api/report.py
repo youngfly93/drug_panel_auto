@@ -1,5 +1,6 @@
 """Report generation and download endpoints."""
 
+import base64
 import json
 import shutil
 import uuid
@@ -7,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from reportgen.utils.docx_render import render_docx_to_pngs
 from sqlalchemy.orm import Session
@@ -20,7 +21,7 @@ from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.schemas.report import GenerateRequest, GenerateResponse, TaskStatus
 from app.services import reference_report_service as diff_svc
-from app.services.file_manager import ensure_report_dir
+from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.reportgen_bridge import ReportGenBridge
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -88,7 +89,9 @@ def _visual_render_dir(output_path: Optional[str]) -> Optional[Path]:
     return path.parent / "rendered_pages" / path.stem
 
 
-def _visual_render_page_path(output_path: Optional[str], filename: str) -> Optional[Path]:
+def _visual_render_page_path(
+    output_path: Optional[str], filename: str
+) -> Optional[Path]:
     render_dir = _visual_render_dir(output_path)
     if not render_dir:
         return None
@@ -104,7 +107,9 @@ def _report_diff_dir(output_path: Optional[str]) -> Optional[Path]:
     return diff_svc.report_diff_dir(output_path)
 
 
-def _report_diff_artifact_path(output_path: Optional[str], filename: str) -> Optional[Path]:
+def _report_diff_artifact_path(
+    output_path: Optional[str], filename: str
+) -> Optional[Path]:
     return diff_svc.report_diff_artifact_path(output_path, filename)
 
 
@@ -149,6 +154,61 @@ def _get_report_task_with_output(task_id: str, db: Session) -> Task:
     if not output_path.exists():
         raise HTTPException(status_code=404, detail="报告文件已被删除")
     return task
+
+
+def _inline_docx_payload(
+    output_file: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    if not output_file:
+        return None, None
+    path = Path(output_file)
+    if not path.exists():
+        return path.name, None
+    return path.name, base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def _generate_response_from_result(
+    *,
+    task_id: str,
+    result: dict,
+    warnings: list[str],
+    diff_summary: dict,
+    auto_diff_ran: bool,
+    include_inline_file: bool = False,
+) -> GenerateResponse:
+    output_filename = None
+    output_file_base64 = None
+    if include_inline_file and result.get("success", False):
+        output_filename, output_file_base64 = _inline_docx_payload(
+            result.get("output_file")
+        )
+
+    return GenerateResponse(
+        task_id=task_id,
+        success=result.get("success", False),
+        output_file=result.get("output_file"),
+        output_filename=output_filename,
+        output_file_base64=output_file_base64,
+        field_provenance_file=result.get("field_provenance_file"),
+        qa_report_file=result.get("qa_report_file"),
+        qa_status=result.get("qa_status"),
+        qa_issues=(result.get("qa_report") or {}).get("issues") or [],
+        visual_render=((result.get("qa_report") or {}).get("checks") or {}).get(
+            "visual_render"
+        ),
+        panel_package_validation=result.get("panel_package_validation"),
+        generation_id=result.get("generation_id"),
+        stage_results=result.get("stage_results") or [],
+        stage_results_file=result.get("stage_results_file"),
+        diff_status=diff_summary.get("diff_status"),
+        diff_gate_passed=diff_summary.get("diff_gate_passed"),
+        diff_reference_id=diff_summary.get("diff_reference_id"),
+        diff_reference_name=diff_summary.get("diff_reference_name"),
+        diff_auto_ran=auto_diff_ran,
+        duration_seconds=result.get("duration"),
+        errors=result.get("errors", []),
+        warnings=warnings,
+    )
 
 
 @router.post("/generate", response_model=ApiResponse[GenerateResponse])
@@ -221,29 +281,137 @@ def generate_report(
         diff_summary = diff_svc.report_diff_summary(task.output_path)
 
         return ApiResponse(
+            data=_generate_response_from_result(
+                task_id=task_id,
+                result=result,
+                warnings=warnings,
+                diff_summary=diff_summary,
+                auto_diff_ran=auto_diff_result is not None,
+            )
+        )
+    except Exception as e:
+        task.status = "failed"
+        task.errors = json.dumps([str(e)], ensure_ascii=False)
+        task.completed_at = datetime.utcnow()
+        db.commit()
+        return ApiResponse(
+            success=False,
             data=GenerateResponse(
                 task_id=task_id,
-                success=success,
-                output_file=result.get("output_file"),
-                field_provenance_file=result.get("field_provenance_file"),
-                qa_report_file=result.get("qa_report_file"),
-                qa_status=result.get("qa_status"),
-                qa_issues=(result.get("qa_report") or {}).get("issues") or [],
-                visual_render=((result.get("qa_report") or {}).get("checks") or {}).get(
-                    "visual_render"
-                ),
-                panel_package_validation=result.get("panel_package_validation"),
-                generation_id=result.get("generation_id"),
-                stage_results=result.get("stage_results") or [],
-                stage_results_file=result.get("stage_results_file"),
-                diff_status=diff_summary.get("diff_status"),
-                diff_gate_passed=diff_summary.get("diff_gate_passed"),
-                diff_reference_id=diff_summary.get("diff_reference_id"),
-                diff_reference_name=diff_summary.get("diff_reference_name"),
-                diff_auto_ran=auto_diff_result is not None,
-                duration_seconds=result.get("duration"),
-                errors=result.get("errors", []),
+                success=False,
+                errors=[str(e)],
+            ),
+            error=str(e),
+        )
+
+
+@router.post("/generate-file", response_model=ApiResponse[GenerateResponse])
+def generate_report_from_file(
+    file: UploadFile = File(...),
+    clinical_info: str = Form("{}"),
+    project_type: Optional[str] = Form(None),
+    project_name: Optional[str] = Form(None),
+    template_name: Optional[str] = Form(None),
+    strict_mode: bool = Form(False),
+    template_contract_mode: str = Form("warn"),
+    qa_visual_render: Optional[str] = Form(None),
+    qa_visual_render_required: Optional[bool] = Form(None),
+    qa_visual_render_dpi: Optional[int] = Form(None),
+    qa_visual_render_timeout_seconds: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    bridge: ReportGenBridge = Depends(get_bridge),
+):
+    """Generate a report from Excel in one request for stateless previews."""
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="仅支持 .xlsx 格式文件")
+
+    try:
+        clinical_payload = json.loads(clinical_info or "{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"临床信息不是合法 JSON: {exc}"
+        ) from exc
+    if not isinstance(clinical_payload, dict):
+        raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
+
+    _, stored_path, _file_size = save_upload(file)
+    detected_project_type = project_type
+    detected_project_name = project_name
+    if not detected_project_type:
+        try:
+            excel_data = bridge.read_excel(str(stored_path))
+            detect = bridge.detect_project_type(
+                str(Path(stored_path).parent / (file.filename or "upload.xlsx")),
+                excel_data=excel_data,
+            )
+            detected_project_type = detect.get("project_type")
+            detected_project_name = detected_project_name or detect.get("project_name")
+        except Exception:
+            detected_project_type = project_type
+
+    task_id = str(uuid.uuid4())
+    output_dir = ensure_report_dir(task_id)
+    task = Task(
+        id=task_id,
+        task_type="single",
+        status="running",
+        project_type=detected_project_type,
+        clinical_info_snapshot=(
+            json.dumps(clinical_payload, ensure_ascii=False)
+            if clinical_payload
+            else None
+        ),
+        started_at=datetime.utcnow(),
+    )
+    db.add(task)
+    db.commit()
+
+    try:
+        result = bridge.generate_report(
+            excel_path=str(stored_path),
+            output_dir=str(output_dir),
+            template_name=template_name,
+            clinical_info=clinical_payload,
+            project_type=detected_project_type,
+            project_name=detected_project_name,
+            strict_mode=strict_mode,
+            template_contract_mode=template_contract_mode,
+            qa_visual_render=qa_visual_render,
+            qa_visual_render_required=qa_visual_render_required,
+            qa_visual_render_dpi=qa_visual_render_dpi,
+            qa_visual_render_timeout_seconds=qa_visual_render_timeout_seconds,
+        )
+
+        success = result.get("success", False)
+        task.status = "completed" if success else "failed"
+        task.output_path = result.get("output_file")
+        task.duration_seconds = result.get("duration")
+        warnings = list(result.get("warnings", []) or [])
+        auto_diff_result = None
+        if success and task.output_path:
+            try:
+                auto_diff_result = diff_svc.run_auto_reference_diff(
+                    db,
+                    task,
+                    fail_on="fail",
+                    max_samples=50,
+                )
+            except Exception as exc:
+                warnings.append(f"自动基准对比失败: {exc}")
+        task.errors = json.dumps(result.get("errors", []), ensure_ascii=False)
+        task.warnings = json.dumps(warnings, ensure_ascii=False)
+        task.completed_at = datetime.utcnow()
+        db.commit()
+        diff_summary = diff_svc.report_diff_summary(task.output_path)
+
+        return ApiResponse(
+            data=_generate_response_from_result(
+                task_id=task_id,
+                result=result,
                 warnings=warnings,
+                diff_summary=diff_summary,
+                auto_diff_ran=auto_diff_result is not None,
+                include_inline_file=True,
             )
         )
     except Exception as e:
@@ -285,9 +453,11 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             completed_files=task.completed_files,
             failed_files=task.failed_files,
             output_path=task.output_path,
-            field_provenance_file=str(field_provenance_path)
-            if field_provenance_path and field_provenance_path.exists()
-            else None,
+            field_provenance_file=(
+                str(field_provenance_path)
+                if field_provenance_path and field_provenance_path.exists()
+                else None
+            ),
             qa_report_file=qa_report_file,
             qa_status=qa_status,
             generation_id=generation_id,
@@ -335,7 +505,9 @@ def get_field_provenance(task_id: str, db: Session = Depends(get_db)):
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"字段来源报告读取失败: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"字段来源报告读取失败: {exc}"
+        ) from exc
     return ApiResponse(data=payload)
 
 
@@ -516,7 +688,9 @@ def diff_batch_report_against_registered_references(
     try:
         batch_report = json.loads(report_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"批量验证报告读取失败: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"批量验证报告读取失败: {exc}"
+        ) from exc
     result = diff_svc.run_batch_reference_diff(
         db,
         task,
@@ -554,7 +728,9 @@ def download_batch_report_diff_artifact(
     if not artifact_path or not artifact_path.exists():
         raise HTTPException(status_code=404, detail="批量报告对比产物不存在")
     media_type = "application/json" if filename.endswith(".json") else "text/markdown"
-    return FileResponse(path=str(artifact_path), filename=filename, media_type=media_type)
+    return FileResponse(
+        path=str(artifact_path), filename=filename, media_type=media_type
+    )
 
 
 @router.get("/{task_id}/diff/batch/items/{item_key}/download/{filename}")
@@ -582,7 +758,9 @@ def download_batch_report_diff_item_artifact(
     if not artifact_path.exists():
         raise HTTPException(status_code=404, detail="报告对比产物不存在")
     media_type = "application/json" if filename.endswith(".json") else "text/markdown"
-    return FileResponse(path=str(artifact_path), filename=filename, media_type=media_type)
+    return FileResponse(
+        path=str(artifact_path), filename=filename, media_type=media_type
+    )
 
 
 @router.get("/{task_id}/diff/download/{filename}")

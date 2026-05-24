@@ -6,19 +6,19 @@ export const useExcelStore = defineStore('excel', () => {
   const upload = ref<UploadResult | null>(null)
   const sheets = ref<SheetInfo[]>([])
   const singleValues = ref<Record<string, any>>({})
+  const sourceFile = ref<File | null>(null)
+  const isPersistentUpload = ref(false)
   const loading = ref(false)
 
   async function uploadFile(file: File) {
     loading.value = true
     try {
-      upload.value = await excelApi.upload(file)
-      // Load sheets and single values in parallel
-      const [s, v] = await Promise.all([
-        excelApi.getSheets(upload.value.upload_id),
-        excelApi.getSingleValues(upload.value.upload_id),
-      ])
-      sheets.value = s
-      singleValues.value = v
+      sourceFile.value = file
+      const inspected = await excelApi.inspect(file)
+      upload.value = inspected.upload
+      sheets.value = inspected.sheets
+      singleValues.value = inspected.single_values
+      isPersistentUpload.value = false
     } finally {
       loading.value = false
     }
@@ -28,7 +28,18 @@ export const useExcelStore = defineStore('excel', () => {
     upload.value = null
     sheets.value = []
     singleValues.value = {}
+    sourceFile.value = null
+    isPersistentUpload.value = false
   }
 
-  return { upload, sheets, singleValues, loading, uploadFile, reset }
+  return {
+    upload,
+    sheets,
+    singleValues,
+    sourceFile,
+    isPersistentUpload,
+    loading,
+    uploadFile,
+    reset,
+  }
 })

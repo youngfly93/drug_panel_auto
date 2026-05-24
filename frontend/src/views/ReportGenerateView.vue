@@ -46,7 +46,10 @@
         </div>
 
         <!-- Sheet tabs preview -->
-        <el-tabs v-if="excelStore.sheets.length > 0" style="margin-top: 12px">
+        <el-tabs
+          v-if="excelStore.sheets.length > 0 && excelStore.isPersistentUpload"
+          style="margin-top: 12px"
+        >
           <el-tab-pane
             v-for="sheet in excelStore.sheets"
             :key="sheet.name"
@@ -57,6 +60,14 @@
             <SheetPreview :upload-id="excelStore.upload!.upload_id" :sheet-name="sheet.name" />
           </el-tab-pane>
         </el-tabs>
+        <el-alert
+          v-else-if="excelStore.sheets.length > 0"
+          type="info"
+          show-icon
+          :closable="false"
+          style="margin-top: 12px"
+          :title="`已识别 ${excelStore.sheets.length} 个 Sheet。当前使用无状态生成模式。`"
+        />
       </div>
     </el-card>
 
@@ -104,7 +115,7 @@
             <el-button
               v-if="result.success && result.task_id"
               type="primary"
-              @click="downloadReport(result.task_id)"
+              @click="downloadGenerated(result)"
             >
               下载报告
             </el-button>
@@ -214,11 +225,17 @@ async function handleGenerate() {
   generating.value = true
   result.value = null
   try {
-    result.value = await reportApi.generate({
-      upload_id: excelStore.upload.upload_id,
+    const payload = {
       clinical_info: form.getCleanValues(),
       project_type: projectType.value,
-    })
+      project_name: excelStore.upload.detected_project_name,
+    }
+    result.value = excelStore.sourceFile
+      ? await reportApi.generateFromFile(excelStore.sourceFile, payload)
+      : await reportApi.generate({
+          upload_id: excelStore.upload.upload_id,
+          ...payload,
+        })
     if (result.value.success) {
       ElMessage.success('报告生成成功')
     } else {
@@ -231,8 +248,23 @@ async function handleGenerate() {
   }
 }
 
-function downloadReport(taskId: string) {
-  const url = reportApi.getDownloadUrl(taskId)
-  window.open(url, '_blank')
+async function downloadReport(taskId: string) {
+  try {
+    await reportApi.download(taskId)
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '下载失败，请重新登录后再试')
+  }
+}
+
+async function downloadGenerated(generated: GenerateResult) {
+  try {
+    if (generated.output_file_base64) {
+      reportApi.downloadInline(generated)
+      return
+    }
+    await downloadReport(generated.task_id)
+  } catch (err: any) {
+    ElMessage.error(err.message || '下载失败')
+  }
 }
 </script>

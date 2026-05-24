@@ -24,6 +24,8 @@ class GenerateResponse(BaseModel):
     task_id: str
     success: bool
     output_file: Optional[str] = None
+    output_filename: Optional[str] = None
+    output_file_base64: Optional[str] = None
     field_provenance_file: Optional[str] = None
     qa_report_file: Optional[str] = None
     qa_status: Optional[str] = None
