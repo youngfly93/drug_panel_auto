@@ -79,6 +79,22 @@
    时仍需失败后 fallback 到系统 profile，并发出 warning。
 5. 使用入包模板和 reviewed Excel 重新生成报告时，context contract 和视觉基础检查均通过。
 
+## M4.5 Reference Diff Gate 验收
+
+1. `scripts/diff_golden_report.py` 必须能用 reviewed Excel、正确报告和入包
+   golden template 生成一份候选报告。
+2. reviewed case 的患者/日期等表单字段必须通过 `--override KEY=VALUE`
+   注入，不能写死在模板、规则或脚本源码中。
+3. 脚本必须输出：
+   - `diff.json`：机器可读差异。
+   - `diff.md`：人工审阅清单。
+   - `context.json`：本次渲染上下文。
+   - reference/candidate 的 PDF 和 PNG 页图。
+4. 以下差异必须被明确标出：页数、近空白页、关键标题页码、关键表格形状、
+   关键文案片段、QA 状态。
+5. 切换默认 golden template 前，`diff.json` 的最终状态必须达到 `PASS`；
+   迁移过程中允许 `WARN`，但每条 warning 都必须有后续处理结论。
+
 ## 回归命令
 
 ```bash
@@ -91,6 +107,13 @@ python scripts/build_golden_template_seed.py /path/to/正确报告.docx \
   --replace "原报告日期={{ report_date }}"
 python scripts/variableize_golden_template.py tmp/golden_template_seed/crc_358_msi_golden_seed.docx --map panels/crc_358_msi/templates/golden_template_v0_variables.yaml --output tmp/golden_template_m4/crc_358_msi_golden_template_m4_3.docx
 python scripts/check_report_context.py tmp/m4_3_context_probe/context.json panels/crc_358_msi/context_contracts/reviewed_low_tmb_mss.yaml --output tmp/m4_3_context_probe/context_contract_report.json
+python scripts/diff_golden_report.py \
+  --excel /path/to/reviewed.xlsx \
+  --reference-docx /path/to/reference.docx \
+  --override patient_name=... \
+  --override sample_id=... \
+  --override report_date=... \
+  --allow-warn
 python -m reportgen.cli validate --template panels/crc_358_msi/templates/crc_358_msi_golden_template_v0.docx --show-vars
 cd backend && pytest tests/ -v
 ```

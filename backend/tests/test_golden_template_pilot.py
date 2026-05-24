@@ -35,6 +35,16 @@ def _load_variableizer():
     return module
 
 
+def _load_golden_diff():
+    path = ROOT / "scripts" / "diff_golden_report.py"
+    spec = importlib.util.spec_from_file_location("diff_golden_report", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_crc358_golden_template_declares_template_level_processors():
     package = load_panel_package("crc_358_msi", project_root=ROOT)
     template = package.templates["crc_358_msi_golden_template_v0"]
@@ -258,3 +268,48 @@ def test_golden_template_variableizer_applies_structural_map(tmp_path):
         "c.844C>T",
         "B",
     ]
+
+
+def test_golden_diff_helpers_find_headings_and_tables(tmp_path):
+    diff = _load_golden_diff()
+    assert diff.find_heading_pages(
+        ["封面", "报告导读\n检测结果", "3.1 肿瘤突变负荷（TMB）水平提示"],
+        ["报告导读", "3.1 肿瘤突变负荷"],
+    ) == {
+        "报告导读": 2,
+        "3.1 肿瘤突变负荷": 3,
+    }
+
+    docx_path = tmp_path / "tables.docx"
+    doc = Document()
+    table = doc.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "基因"
+    table.rows[0].cells[1].text = "位点"
+    table.rows[1].cells[0].text = "KRAS"
+    table.rows[1].cells[1].text = "c.34G>A"
+    doc.save(docx_path)
+
+    summaries = diff.table_summaries(docx_path)
+    assert summaries[0]["row_count"] == 2
+    assert summaries[0]["col_count"] == 2
+    assert summaries[0]["header"] == ["基因", "位点"]
+
+
+def test_golden_diff_visual_metrics_detect_blank_page(tmp_path):
+    from PIL import Image, ImageDraw
+
+    diff = _load_golden_diff()
+    blank = tmp_path / "report-1.png"
+    content = tmp_path / "report-2.png"
+    Image.new("RGB", (200, 300), "white").save(blank)
+    img = Image.new("RGB", (200, 300), "white")
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((20, 20, 180, 80), fill="black")
+    img.save(content)
+
+    blank_metrics = diff.image_visual_metrics(blank, blank_threshold=0.003)
+    content_metrics = diff.image_visual_metrics(content, blank_threshold=0.003)
+
+    assert blank_metrics["near_blank"] is True
+    assert content_metrics["near_blank"] is False
+    assert content_metrics["top_half_nonwhite_ratio"] > 0
