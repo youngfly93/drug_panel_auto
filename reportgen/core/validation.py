@@ -204,7 +204,7 @@ def build_msi_fields(
         msi_status = "MSS"
         msi_status_cn = "微卫星稳定型，MSS"
         msi_summary = "微卫星稳定型，MSS"
-        detail_sentence = "依据本次检测结果，该肿瘤样本为微卫星稳定（MSS）型。"
+        detail_sentence = "依据本次检测结果，该肿瘤样本为 微卫星稳定（MSS）型。"
         detail_interpretation = crc_interpretation
         msi_tips = educational_tips
     elif up == "MSI-H":

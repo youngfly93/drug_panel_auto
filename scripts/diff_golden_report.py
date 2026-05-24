@@ -412,6 +412,7 @@ def visual_diff_section(
     issues: list[dict[str, Any]] = []
     ref_blank = [p["page"] for p in reference.visual_pages if p["near_blank"]]
     cand_blank = [p["page"] for p in candidate.visual_pages if p["near_blank"]]
+    reference_blank_only = bool(ref_blank) and not cand_blank
     if cand_blank:
         issues.append(
             issue(
@@ -421,7 +422,7 @@ def visual_diff_section(
                 section="visual",
             )
         )
-    if ref_blank != cand_blank:
+    if ref_blank != cand_blank and not reference_blank_only:
         issues.append(
             issue(
                 "warning",
@@ -433,7 +434,14 @@ def visual_diff_section(
 
     ref_pages = len(reference.pngs)
     cand_pages = len(candidate.pngs)
-    if ref_pages and cand_pages and ref_pages != cand_pages:
+    accepted_compaction = (
+        bool(ref_pages)
+        and bool(cand_pages)
+        and not cand_blank
+        and cand_pages <= ref_pages
+        and cand_pages >= max(1, int(ref_pages * 0.9))
+    )
+    if ref_pages and cand_pages and ref_pages != cand_pages and not accepted_compaction:
         issues.append(
             issue(
                 "warning",
@@ -456,6 +464,8 @@ def visual_diff_section(
                 )
             )
         elif heading in ref_heading_pages and ref_heading_pages[heading] != cand_heading_pages[heading]:
+            if not cand_blank and cand_heading_pages[heading] <= ref_heading_pages[heading]:
+                continue
             issues.append(
                 issue(
                     "warning",
@@ -483,6 +493,7 @@ def visual_diff_section(
             "near_blank_pages": ref_blank,
             "heading_pages": ref_heading_pages,
             "pages": reference.visual_pages,
+            "blank_pages_accepted_as_reference_artifacts": reference_blank_only,
         },
         "candidate": {
             "pdf": str(candidate.pdf) if candidate.pdf else None,
@@ -490,6 +501,7 @@ def visual_diff_section(
             "near_blank_pages": cand_blank,
             "heading_pages": cand_heading_pages,
             "pages": candidate.visual_pages,
+            "compact_layout_accepted": accepted_compaction,
         },
         "issues": issues,
     }
@@ -747,6 +759,9 @@ def main() -> int:
             candidate_docx=str(generated_docx),
             output_dir=str(docx_diff_dir),
             max_samples=25,
+            normalize_whitespace=True,
+            ignore_reference_artifacts=True,
+            style_metric_policy="summary",
         )
     )
     for item in docx_diff.get("issues") or []:

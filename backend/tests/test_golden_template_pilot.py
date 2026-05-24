@@ -317,3 +317,48 @@ def test_golden_diff_visual_metrics_detect_blank_page(tmp_path):
     assert blank_metrics["near_blank"] is True
     assert content_metrics["near_blank"] is False
     assert content_metrics["top_half_nonwhite_ratio"] > 0
+
+
+def test_golden_diff_accepts_reference_blank_page_compaction(tmp_path):
+    diff = _load_golden_diff()
+
+    reference = diff.RenderedDocument(
+        docx=tmp_path / "reference.docx",
+        pdf=None,
+        pngs=[tmp_path / f"ref-{i}.png" for i in range(1, 11)],
+        page_texts=[""] * 4 + ["4. 基因检测列表"] + [""] * 5,
+        visual_pages=[
+            {
+                "page": i,
+                "near_blank": i == 2,
+                "top_half_nonwhite_ratio": 0.01,
+                "bottom_half_nonwhite_ratio": 0.01,
+            }
+            for i in range(1, 11)
+        ],
+    )
+    candidate = diff.RenderedDocument(
+        docx=tmp_path / "candidate.docx",
+        pdf=None,
+        pngs=[tmp_path / f"cand-{i}.png" for i in range(1, 10)],
+        page_texts=[""] * 3 + ["4. 基因检测列表"] + [""] * 5,
+        visual_pages=[
+            {
+                "page": i,
+                "near_blank": False,
+                "top_half_nonwhite_ratio": 0.01,
+                "bottom_half_nonwhite_ratio": 0.01,
+            }
+            for i in range(1, 10)
+        ],
+    )
+
+    section = diff.visual_diff_section(
+        reference,
+        candidate,
+        headings=["4. 基因检测列表"],
+    )
+
+    assert section["status"] == "PASS"
+    assert section["reference"]["blank_pages_accepted_as_reference_artifacts"] is True
+    assert section["candidate"]["compact_layout_accepted"] is True

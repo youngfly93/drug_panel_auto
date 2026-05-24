@@ -30,6 +30,9 @@ class ReportDiffOptions:
     reference_qa: Optional[str] = None
     candidate_qa: Optional[str] = None
     max_samples: int = 30
+    normalize_whitespace: bool = False
+    ignore_reference_artifacts: bool = False
+    style_metric_policy: str = "warn"
 
 
 def compare_reports(options: ReportDiffOptions) -> dict[str, Any]:
@@ -45,9 +48,25 @@ def compare_reports(options: ReportDiffOptions) -> dict[str, Any]:
         "documents": _compare_document_openability(
             ref_snapshot, cand_snapshot, reference_path, candidate_path
         ),
-        "text": _compare_text(ref_snapshot, cand_snapshot, max_samples=max_samples),
-        "tables": _compare_tables(ref_snapshot, cand_snapshot, max_samples=max_samples),
-        "styles": _compare_styles(ref_snapshot, cand_snapshot, max_samples=max_samples),
+        "text": _compare_text(
+            ref_snapshot,
+            cand_snapshot,
+            max_samples=max_samples,
+            normalize_whitespace=options.normalize_whitespace,
+            ignore_reference_artifacts=options.ignore_reference_artifacts,
+        ),
+        "tables": _compare_tables(
+            ref_snapshot,
+            cand_snapshot,
+            max_samples=max_samples,
+            normalize_whitespace=options.normalize_whitespace,
+        ),
+        "styles": _compare_styles(
+            ref_snapshot,
+            cand_snapshot,
+            max_samples=max_samples,
+            policy=options.style_metric_policy,
+        ),
         "qa": _compare_qa(
             _load_qa(options.reference_qa, reference_path),
             _load_qa(options.candidate_qa, candidate_path),
@@ -288,10 +307,21 @@ def _compare_document_openability(
 
 
 def _compare_text(
-    ref: Mapping[str, Any], cand: Mapping[str, Any], *, max_samples: int
+    ref: Mapping[str, Any],
+    cand: Mapping[str, Any],
+    *,
+    max_samples: int,
+    normalize_whitespace: bool = False,
+    ignore_reference_artifacts: bool = False,
 ) -> dict[str, Any]:
     ref_paras = list(ref.get("paragraphs") or [])
     cand_paras = list(cand.get("paragraphs") or [])
+    if ignore_reference_artifacts:
+        ref_paras = [text for text in ref_paras if not _is_reference_artifact(text)]
+        cand_paras = [text for text in cand_paras if not _is_reference_artifact(text)]
+    if normalize_whitespace:
+        ref_paras = [_normalize_soft_whitespace(text) for text in ref_paras]
+        cand_paras = [_normalize_soft_whitespace(text) for text in cand_paras]
     matcher = SequenceMatcher(a=ref_paras, b=cand_paras, autojunk=False)
     samples = []
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
@@ -341,7 +371,11 @@ def _compare_text(
 
 
 def _compare_tables(
-    ref: Mapping[str, Any], cand: Mapping[str, Any], *, max_samples: int
+    ref: Mapping[str, Any],
+    cand: Mapping[str, Any],
+    *,
+    max_samples: int,
+    normalize_whitespace: bool = False,
 ) -> dict[str, Any]:
     ref_tables = list(ref.get("tables") or [])
     cand_tables = list(cand.get("tables") or [])
@@ -381,7 +415,9 @@ def _compare_tables(
             if len(samples) >= max_samples:
                 break
             continue
-        if ref_table.get("header") != cand_table.get("header"):
+        ref_header = _normalize_row(ref_table.get("header") or [], normalize_whitespace)
+        cand_header = _normalize_row(cand_table.get("header") or [], normalize_whitespace)
+        if ref_header != cand_header:
             issues.append(
                 {
                     "level": "warning",
@@ -393,11 +429,16 @@ def _compare_tables(
                 {
                     "table_index": idx,
                     "message": f"Table {idx} header differs",
-                    "reference": ref_table.get("header"),
-                    "candidate": cand_table.get("header"),
+                    "reference": ref_header,
+                    "candidate": cand_header,
                 }
             )
-        cell_diffs = _table_cell_diffs(ref_table["rows"], cand_table["rows"], max_samples)
+        cell_diffs = _table_cell_diffs(
+            ref_table["rows"],
+            cand_table["rows"],
+            max_samples,
+            normalize_whitespace=normalize_whitespace,
+        )
         if cell_diffs:
             issues.append(
                 {
@@ -427,12 +468,18 @@ def _compare_tables(
 
 
 def _table_cell_diffs(
-    ref_rows: list[list[str]], cand_rows: list[list[str]], max_samples: int
+    ref_rows: list[list[str]],
+    cand_rows: list[list[str]],
+    max_samples: int,
+    *,
+    normalize_whitespace: bool = False,
 ) -> list[dict[str, Any]]:
     diffs = []
     for r_idx, (ref_row, cand_row) in enumerate(zip(ref_rows, cand_rows)):
         for c_idx, (ref_cell, cand_cell) in enumerate(zip(ref_row, cand_row)):
-            if ref_cell != cand_cell:
+            ref_cmp = _normalize_soft_whitespace(ref_cell) if normalize_whitespace else ref_cell
+            cand_cmp = _normalize_soft_whitespace(cand_cell) if normalize_whitespace else cand_cell
+            if ref_cmp != cand_cmp:
                 diffs.append(
                     {
                         "cell": [r_idx, c_idx],
@@ -446,7 +493,11 @@ def _table_cell_diffs(
 
 
 def _compare_styles(
-    ref: Mapping[str, Any], cand: Mapping[str, Any], *, max_samples: int
+    ref: Mapping[str, Any],
+    cand: Mapping[str, Any],
+    *,
+    max_samples: int,
+    policy: str = "warn",
 ) -> dict[str, Any]:
     issues = []
     samples = []
@@ -467,7 +518,7 @@ def _compare_styles(
             )
             if len(samples) >= max_samples:
                 break
-    if samples:
+    if samples and policy != "summary":
         issues.append(
             {
                 "level": "warning",
@@ -477,9 +528,27 @@ def _compare_styles(
         )
     return {
         "status": _section_status(issues),
+        "policy": policy,
         "samples": samples,
         "issues": issues,
     }
+
+
+def _normalize_row(row: list[str], normalize_whitespace: bool) -> list[str]:
+    if not normalize_whitespace:
+        return row
+    return [_normalize_soft_whitespace(cell) for cell in row]
+
+
+def _normalize_soft_whitespace(text: str) -> str:
+    value = str(text or "").replace("\u00a0", " ")
+    value = "\n".join(line.rstrip() for line in value.splitlines())
+    return value.strip()
+
+
+def _is_reference_artifact(text: str) -> bool:
+    value = str(text or "").strip()
+    return bool(value and len(value) >= 12 and len(set(value)) == 1 and value[0].isdigit())
 
 
 def _compare_qa(

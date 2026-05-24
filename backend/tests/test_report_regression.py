@@ -4185,6 +4185,41 @@ def test_report_diff_warns_on_style_and_qa_changes(tmp_path):
     assert result["sections"]["qa"]["candidate_status"] == "WARN"
 
 
+def test_report_diff_can_suppress_golden_template_noise(tmp_path):
+    reference = tmp_path / "reference.docx"
+    candidate = tmp_path / "candidate.docx"
+    ref_doc = Document()
+    ref_doc.add_paragraph("33333333333333333333333333")
+    ref_doc.add_paragraph("报告摘要 ")
+    ref_table = ref_doc.add_table(rows=1, cols=1)
+    ref_table.rows[0].cells[0].text = "司美替尼（C） \n曲美替尼（C） "
+    ref_doc.save(reference)
+
+    cand_doc = Document()
+    para = cand_doc.add_paragraph()
+    run = para.add_run("报告摘要")
+    run.font.underline = True
+    cand_table = cand_doc.add_table(rows=1, cols=1)
+    cand_table.rows[0].cells[0].text = "司美替尼（C）\n曲美替尼（C）"
+    cand_doc.save(candidate)
+
+    result = compare_reports(
+        ReportDiffOptions(
+            reference_docx=str(reference),
+            candidate_docx=str(candidate),
+            normalize_whitespace=True,
+            ignore_reference_artifacts=True,
+            style_metric_policy="summary",
+        )
+    )
+
+    assert result["status"] == "PASS"
+    assert result["sections"]["text"]["similarity"] == 1.0
+    assert result["sections"]["tables"]["status"] == "PASS"
+    assert result["sections"]["styles"]["policy"] == "summary"
+    assert result["sections"]["styles"]["samples"]
+
+
 def test_quality_gate_can_run_panel_validation_only(tmp_path):
     from reportgen.core.qa_gate import QualityGateOptions, run_quality_gate
 
