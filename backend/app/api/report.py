@@ -3,18 +3,27 @@
 import base64
 import json
 import shutil
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from reportgen.utils.docx_render import render_docx_to_pngs
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.dependencies import get_bridge
 from app.models.task import Task
 from app.models.upload import Upload
@@ -25,6 +34,77 @@ from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.reportgen_bridge import ReportGenBridge
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _complete_file_generation_task(
+    *,
+    task_id: str,
+    stored_path: str,
+    output_dir: str,
+    clinical_payload: dict,
+    project_type: Optional[str],
+    project_name: Optional[str],
+    template_name: Optional[str],
+    strict_mode: bool,
+    template_contract_mode: str,
+    qa_visual_render: Optional[str],
+    qa_visual_render_required: Optional[bool],
+    qa_visual_render_dpi: Optional[int],
+    qa_visual_render_timeout_seconds: Optional[int],
+    bridge: ReportGenBridge,
+) -> None:
+    """Complete a file-based report task after the request has returned."""
+    db = SessionLocal()
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        db.close()
+        return
+
+    try:
+        result = bridge.generate_report(
+            excel_path=stored_path,
+            output_dir=output_dir,
+            template_name=template_name,
+            clinical_info=clinical_payload,
+            project_type=project_type,
+            project_name=project_name,
+            strict_mode=strict_mode,
+            template_contract_mode=template_contract_mode,
+            qa_visual_render=qa_visual_render,
+            qa_visual_render_required=qa_visual_render_required,
+            qa_visual_render_dpi=qa_visual_render_dpi,
+            qa_visual_render_timeout_seconds=qa_visual_render_timeout_seconds,
+        )
+
+        success = result.get("success", False)
+        task.status = "completed" if success else "failed"
+        task.completed_files = 1 if success else 0
+        task.failed_files = 0 if success else 1
+        task.output_path = result.get("output_file")
+        task.duration_seconds = result.get("duration")
+        warnings = list(result.get("warnings", []) or [])
+        if success and task.output_path:
+            try:
+                diff_svc.run_auto_reference_diff(
+                    db,
+                    task,
+                    fail_on="fail",
+                    max_samples=50,
+                )
+            except Exception as exc:
+                warnings.append(f"自动基准对比失败: {exc}")
+        task.errors = json.dumps(result.get("errors", []), ensure_ascii=False)
+        task.warnings = json.dumps(warnings, ensure_ascii=False)
+        task.completed_at = datetime.utcnow()
+        db.commit()
+    except Exception as exc:
+        task.status = "failed"
+        task.failed_files = 1
+        task.errors = json.dumps([str(exc)], ensure_ascii=False)
+        task.completed_at = datetime.utcnow()
+        db.commit()
+    finally:
+        db.close()
 
 
 def _qa_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
@@ -428,6 +508,100 @@ def generate_report_from_file(
             ),
             error=str(e),
         )
+
+
+@router.post("/generate-file-async", response_model=ApiResponse[GenerateResponse])
+def generate_report_from_file_async(
+    file: UploadFile = File(...),
+    clinical_info: str = Form("{}"),
+    project_type: Optional[str] = Form(None),
+    project_name: Optional[str] = Form(None),
+    template_name: Optional[str] = Form(None),
+    strict_mode: bool = Form(False),
+    template_contract_mode: str = Form("warn"),
+    qa_visual_render: Optional[str] = Form(None),
+    qa_visual_render_required: Optional[bool] = Form(None),
+    qa_visual_render_dpi: Optional[int] = Form(None),
+    qa_visual_render_timeout_seconds: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    bridge: ReportGenBridge = Depends(get_bridge),
+):
+    """Start file-based report generation and return immediately."""
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="仅支持 .xlsx 格式文件")
+
+    try:
+        clinical_payload = json.loads(clinical_info or "{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"临床信息不是合法 JSON: {exc}"
+        ) from exc
+    if not isinstance(clinical_payload, dict):
+        raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
+
+    _, stored_path, _file_size = save_upload(file)
+    detected_project_type = project_type
+    detected_project_name = project_name
+    if not detected_project_type:
+        try:
+            excel_data = bridge.read_excel(str(stored_path))
+            detect = bridge.detect_project_type(
+                str(Path(stored_path).parent / (file.filename or "upload.xlsx")),
+                excel_data=excel_data,
+            )
+            detected_project_type = detect.get("project_type")
+            detected_project_name = detected_project_name or detect.get("project_name")
+        except Exception:
+            detected_project_type = project_type
+
+    task_id = str(uuid.uuid4())
+    output_dir = ensure_report_dir(task_id)
+    task = Task(
+        id=task_id,
+        task_type="single",
+        status="running",
+        project_type=detected_project_type,
+        clinical_info_snapshot=(
+            json.dumps(clinical_payload, ensure_ascii=False)
+            if clinical_payload
+            else None
+        ),
+        started_at=datetime.utcnow(),
+    )
+    db.add(task)
+    db.commit()
+
+    worker = threading.Thread(
+        target=_complete_file_generation_task,
+        kwargs={
+            "task_id": task_id,
+            "stored_path": str(stored_path),
+            "output_dir": str(output_dir),
+            "clinical_payload": clinical_payload,
+            "project_type": detected_project_type,
+            "project_name": detected_project_name,
+            "template_name": template_name,
+            "strict_mode": strict_mode,
+            "template_contract_mode": template_contract_mode,
+            "qa_visual_render": qa_visual_render,
+            "qa_visual_render_required": qa_visual_render_required,
+            "qa_visual_render_dpi": qa_visual_render_dpi,
+            "qa_visual_render_timeout_seconds": qa_visual_render_timeout_seconds,
+            "bridge": bridge,
+        },
+        daemon=True,
+    )
+    worker.start()
+
+    return ApiResponse(
+        data=GenerateResponse(
+            task_id=task_id,
+            success=True,
+            output_file=None,
+            duration_seconds=None,
+            warnings=["报告生成已进入后台任务，请稍后刷新任务状态。"],
+        )
+    )
 
 
 @router.get("/{task_id}", response_model=ApiResponse[TaskStatus])

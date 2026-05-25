@@ -1,4 +1,5 @@
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -80,6 +81,7 @@ def _client(tmp_path, monkeypatch):
     )
     Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
+    monkeypatch.setattr(report_api, "SessionLocal", SessionLocal)
 
     def override_db():
         db = SessionLocal()
@@ -128,3 +130,33 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert data["output_filename"] == "fake_report.docx"
     assert data["output_file_base64"].startswith("UEsD")
     assert data["qa_status"] == "PASS"
+
+
+def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file-async",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": '{"patient_name":"测试患者","sample_id":"CASE001"}',
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["success"] is True
+        assert data["output_file"] is None
+
+        status_response = None
+        for _ in range(20):
+            status_response = client.get(f"/api/v1/reports/{data['task_id']}")
+            if status_response.json()["data"]["status"] != "running":
+                break
+            time.sleep(0.05)
+
+    assert status_response.status_code == 200
+    status = status_response.json()["data"]
+    assert status["status"] == "completed"
+    assert status["output_path"].endswith("fake_report.docx")

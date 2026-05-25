@@ -198,6 +198,7 @@ const projectType = ref<string | null>(null)
 const templateName = ref<string | null>(null)
 const generating = ref(false)
 const result = ref<GenerateResult | null>(null)
+const generationMode = import.meta.env.VITE_REPORT_GENERATION_MODE || 'stateless'
 
 const templateOptions = computed(() => {
   if (projectType.value === 'crc_358_msi') {
@@ -279,12 +280,18 @@ async function handleGenerate() {
       project_name: excelStore.upload.detected_project_name,
       template_name: templateName.value,
     }
-    result.value = excelStore.sourceFile
-      ? await reportApi.generateFromFile(excelStore.sourceFile, payload)
-      : await reportApi.generate({
-          upload_id: excelStore.upload.upload_id,
-          ...payload,
-        })
+    if (excelStore.sourceFile && generationMode === 'async') {
+      const accepted = await reportApi.generateFromFileAsync(excelStore.sourceFile, payload)
+      ElMessage.info('报告已进入后台生成，请稍候')
+      result.value = await waitForReportTask(accepted.task_id)
+    } else {
+      result.value = excelStore.sourceFile
+        ? await reportApi.generateFromFile(excelStore.sourceFile, payload)
+        : await reportApi.generate({
+            upload_id: excelStore.upload.upload_id,
+            ...payload,
+          })
+    }
     if (result.value.success) {
       ElMessage.success('报告生成成功')
     } else {
@@ -295,6 +302,43 @@ async function handleGenerate() {
   } finally {
     generating.value = false
   }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function taskStatusToResult(task: Awaited<ReturnType<typeof reportApi.getTaskStatus>>): GenerateResult {
+  return {
+    task_id: task.id,
+    success: task.status === 'completed',
+    output_file: task.output_path,
+    field_provenance_file: task.field_provenance_file,
+    qa_report_file: task.qa_report_file,
+    qa_status: task.qa_status,
+    generation_id: task.generation_id,
+    stage_results: task.stage_results,
+    stage_results_file: task.stage_results_file,
+    diff_status: task.diff_status,
+    diff_gate_passed: task.diff_gate_passed,
+    diff_reference_id: task.diff_reference_id,
+    diff_reference_name: task.diff_reference_name,
+    diff_auto_ran: Boolean(task.diff_status),
+    duration_seconds: task.duration_seconds,
+    errors: task.errors,
+    warnings: task.warnings,
+  }
+}
+
+async function waitForReportTask(taskId: string): Promise<GenerateResult> {
+  for (let i = 0; i < 180; i += 1) {
+    const task = await reportApi.getTaskStatus(taskId)
+    if (task.status === 'completed' || task.status === 'failed') {
+      return taskStatusToResult(task)
+    }
+    await sleep(2000)
+  }
+  throw new Error('报告生成超时，请稍后到任务详情页查看')
 }
 
 async function downloadReport(taskId: string) {

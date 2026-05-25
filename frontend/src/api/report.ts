@@ -130,40 +130,55 @@ export interface ReportDiffResult {
   }
 }
 
+function buildReportFileForm(file: File, req: Omit<GenerateRequest, 'upload_id'>): FormData {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('clinical_info', JSON.stringify(req.clinical_info || {}))
+  if (req.project_type) form.append('project_type', req.project_type)
+  if (req.project_name) form.append('project_name', req.project_name)
+  if (req.template_name) form.append('template_name', req.template_name)
+  if (req.strict_mode !== undefined) form.append('strict_mode', String(req.strict_mode))
+  if (req.template_contract_mode) {
+    form.append('template_contract_mode', req.template_contract_mode)
+  }
+  if (req.qa_visual_render) form.append('qa_visual_render', req.qa_visual_render)
+  if (req.qa_visual_render_required !== undefined && req.qa_visual_render_required !== null) {
+    form.append('qa_visual_render_required', String(req.qa_visual_render_required))
+  }
+  if (req.qa_visual_render_dpi !== undefined && req.qa_visual_render_dpi !== null) {
+    form.append('qa_visual_render_dpi', String(req.qa_visual_render_dpi))
+  }
+  if (
+    req.qa_visual_render_timeout_seconds !== undefined
+    && req.qa_visual_render_timeout_seconds !== null
+  ) {
+    form.append(
+      'qa_visual_render_timeout_seconds',
+      String(req.qa_visual_render_timeout_seconds),
+    )
+  }
+  return form
+}
+
 export const reportApi = {
   async generate(req: GenerateRequest): Promise<GenerateResult> {
     const { data } = await client.post('/reports/generate', req)
     return data.data
   },
 
+  buildFileForm(file: File, req: Omit<GenerateRequest, 'upload_id'>): FormData {
+    return buildReportFileForm(file, req)
+  },
+
   async generateFromFile(file: File, req: Omit<GenerateRequest, 'upload_id'>): Promise<GenerateResult> {
-    const form = new FormData()
-    form.append('file', file)
-    form.append('clinical_info', JSON.stringify(req.clinical_info || {}))
-    if (req.project_type) form.append('project_type', req.project_type)
-    if (req.project_name) form.append('project_name', req.project_name)
-    if (req.template_name) form.append('template_name', req.template_name)
-    if (req.strict_mode !== undefined) form.append('strict_mode', String(req.strict_mode))
-    if (req.template_contract_mode) {
-      form.append('template_contract_mode', req.template_contract_mode)
-    }
-    if (req.qa_visual_render) form.append('qa_visual_render', req.qa_visual_render)
-    if (req.qa_visual_render_required !== undefined && req.qa_visual_render_required !== null) {
-      form.append('qa_visual_render_required', String(req.qa_visual_render_required))
-    }
-    if (req.qa_visual_render_dpi !== undefined && req.qa_visual_render_dpi !== null) {
-      form.append('qa_visual_render_dpi', String(req.qa_visual_render_dpi))
-    }
-    if (
-      req.qa_visual_render_timeout_seconds !== undefined
-      && req.qa_visual_render_timeout_seconds !== null
-    ) {
-      form.append(
-        'qa_visual_render_timeout_seconds',
-        String(req.qa_visual_render_timeout_seconds),
-      )
-    }
+    const form = buildReportFileForm(file, req)
     const { data } = await client.post('/reports/generate-file', form)
+    return data.data
+  },
+
+  async generateFromFileAsync(file: File, req: Omit<GenerateRequest, 'upload_id'>): Promise<GenerateResult> {
+    const form = buildReportFileForm(file, req)
+    const { data } = await client.post('/reports/generate-file-async', form)
     return data.data
   },
 
