@@ -8,8 +8,8 @@
   ],
   "functions": {
     "api/index.py": {
-      "runtime": "@vercel/python@4",
-      "maxDuration": 60
+      "maxDuration": 60,
+      "excludeFiles": "{backend/tests/**,tests/**,tmp/**,storage/**,frontend/**,.git/**,**/__pycache__/**,**/*.pyc}"
     }
   }
 }
