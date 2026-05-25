@@ -1,8 +1,11 @@
 import importlib.util
 import sys
 from pathlib import Path
+from zipfile import ZipFile
+import xml.etree.ElementTree as ET
 
 from docx import Document
+from docx.shared import RGBColor
 from docxtpl import DocxTemplate
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,7 +54,10 @@ def test_crc358_golden_template_declares_template_level_processors():
 
     assert template.status == "pilot"
     assert template.processors == (
+        "part3_formatted_sections",
+        "signature_placeholder",
         "bullet_lists",
+        "front_matter_spacing",
         "blank_page_cleanup",
         "toc_refresh",
         "final_refresh_cleanup",
@@ -61,6 +67,23 @@ def test_crc358_golden_template_declares_template_level_processors():
 
     report = validate_panel_package("crc_358_msi", project_root=ROOT)
     assert report.ok, report.to_dict()
+
+
+def test_crc358_golden_template_part3_uses_dynamic_marker():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    template_path = package.resolve_template_file("crc_358_msi_golden_template_v0")
+    doc = Document(template_path)
+    paragraphs = [p.text.strip() for p in doc.paragraphs]
+    text = "\n".join(paragraphs)
+
+    assert "__PART3_MARKER__" in text
+    marker_idx = paragraphs.index("__PART3_MARKER__")
+    reading_idx = paragraphs.index("3. 阅读说明")
+    assert marker_idx < reading_idx
+    dynamic_stub = "\n".join(paragraphs[marker_idx:reading_idx])
+    assert "p.G12S" not in dynamic_stub
+    assert "c.34G>A" not in dynamic_stub
+    assert "46.29" not in dynamic_stub
 
 
 def test_web_bridge_resolves_panel_template_id():
@@ -91,12 +114,52 @@ def test_report_generator_uses_template_level_processors():
     )
 
     assert processors == (
+        "part3_formatted_sections",
+        "signature_placeholder",
         "bullet_lists",
+        "front_matter_spacing",
         "blank_page_cleanup",
         "toc_refresh",
         "final_refresh_cleanup",
         "underlines_and_styles",
     )
+
+
+def test_crc358_golden_template_has_no_report_guide_spacer_cluster():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    template_path = package.resolve_template_file("crc_358_msi_golden_template_v0")
+    ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    w_p = f"{{{ns_w}}}p"
+    w_t = f"{{{ns_w}}}t"
+    w_br = f"{{{ns_w}}}br"
+    w_type = f"{{{ns_w}}}type"
+    w_drawing = f"{{{ns_w}}}drawing"
+
+    with ZipFile(template_path) as zin:
+        root = ET.fromstring(zin.read("word/document.xml"))
+    body_items = list(root.iter())
+    paragraphs = [elem for elem in body_items if elem.tag == w_p]
+
+    def text(elem):
+        return "".join((node.text or "") for node in elem.iter(w_t)).strip()
+
+    def is_blank(elem):
+        return elem.tag == w_p and not text(elem) and not any(elem.iter(w_drawing))
+
+    def has_page_break(elem):
+        return any(node.attrib.get(w_type) == "page" for node in elem.iter(w_br))
+
+    guide_idx = next(
+        idx for idx, paragraph in enumerate(paragraphs) if text(paragraph) == "报告导读"
+    )
+    cluster = []
+    idx = guide_idx - 1
+    while idx >= 0 and is_blank(paragraphs[idx]):
+        cluster.append(paragraphs[idx])
+        idx -= 1
+
+    assert len(cluster) == 1
+    assert has_page_break(cluster[0])
 
 
 def test_golden_seed_builder_scrubs_patient_tokens(tmp_path):
@@ -161,7 +224,11 @@ def test_golden_template_variableizer_applies_structural_map(tmp_path):
     doc = Document()
     table = doc.add_table(rows=3, cols=2)
     table.rows[0].cells[0].text = "姓名："
-    table.rows[0].cells[1].text = "黄金测试患者"
+    patient_cell = table.rows[0].cells[1]
+    patient_cell.text = ""
+    patient_run = patient_cell.paragraphs[0].add_run("黄金测试患者")
+    patient_run.bold = True
+    patient_run.font.color.rgb = RGBColor(0x12, 0x34, 0x56)
     table.rows[1].cells[0].text = "性别："
     table.rows[1].cells[1].text = "男"
     table.rows[2].cells[0].text = "静态行"
@@ -227,6 +294,13 @@ def test_golden_template_variableizer_applies_structural_map(tmp_path):
     assert manifest["success"] is True
     assert manifest["operation_count"] == 5
     assert out_doc.tables[0].rows[0].cells[1].text == "{{ patient_name }}"
+    out_run = next(
+        run
+        for run in out_doc.tables[0].rows[0].cells[1].paragraphs[0].runs
+        if run.text
+    )
+    assert out_run.bold is True
+    assert out_run.font.color.rgb == RGBColor(0x12, 0x34, 0x56)
     assert out_doc.tables[0].rows[1].cells[1].text == "{{ gender }}"
     assert "total_variants_count" in "\n".join(p.text for p in out_doc.paragraphs)
     loop_rows = out_doc.tables[1].rows

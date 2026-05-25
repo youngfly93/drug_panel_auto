@@ -59,11 +59,15 @@ def loop_field_expression(alias: str, field: str) -> str:
 
 
 def replace_paragraph_text(paragraph, text: str) -> None:
-    """Replace paragraph text while preserving the first run's formatting."""
-    if paragraph.runs:
-        paragraph.runs[0].text = text
-        for run in paragraph.runs[1:]:
-            run.text = ""
+    """Replace paragraph text while preserving the source text run formatting."""
+    runs = list(paragraph.runs)
+    if runs:
+        target_index = next((idx for idx, run in enumerate(runs) if run.text), 0)
+        target = runs[target_index]
+        target.text = text
+        for idx, run in enumerate(runs):
+            if idx != target_index:
+                run.text = ""
     else:
         paragraph.add_run(text)
 

@@ -350,18 +350,18 @@ single_values:
   
   # 签发信息
   issuer:
-    synonyms: ["签发人", "报告人", "Issuer"]
+    synonyms: ["检测者", "签发人", "报告人", "Issuer"]
     type: string
     required: false
     default_value: ""
-    description: "报告签发人"
+    description: "报告检测者/签发人；若签名库存在同名人员，将自动匹配检测者签名图"
   
   reviewer:
-    synonyms: ["审核人", "Reviewer"]
+    synonyms: ["审核者", "审核人", "Reviewer"]
     type: string
     required: false
     default_value: ""
-    description: "报告审核人"
+    description: "报告审核者；若签名库存在同名人员，将自动匹配审核者签名图"
   
   signature_image_path:
     synonyms: ["签名图片路径", "Signature Path"]
@@ -369,6 +369,20 @@ single_values:
     required: false
     default_value: null
     description: "签名图片文件路径（用于嵌入到报告）"
+
+  detector_signature_image_path:
+    synonyms: ["检测者签名图片路径", "Detector Signature Path"]
+    type: string
+    required: false
+    default_value: null
+    description: "检测者签名图片文件路径（用于替换报告签名区左侧手写签名）"
+
+  reviewer_signature_image_path:
+    synonyms: ["审核者签名图片路径", "Reviewer Signature Path"]
+    type: string
+    required: false
+    default_value: null
+    description: "审核者签名图片文件路径（用于替换报告签名区右侧手写签名）"
 
 # ============================================================================
 # 表格数据映射

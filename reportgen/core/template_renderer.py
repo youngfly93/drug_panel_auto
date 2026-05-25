@@ -372,12 +372,23 @@ class TemplateRenderer:
             ppr = paragraph._p.pPr
             return ppr is not None and ppr.numPr is not None
 
+        def has_embedded_object(paragraph) -> bool:
+            xml = paragraph._p.xml
+            return "<w:drawing" in xml or "<w:pict" in xml
+
         def non_empty_lines(paragraph) -> list[str]:
             return [
                 line.strip()
                 for line in (paragraph.text or "").splitlines()
                 if line.strip()
             ]
+
+        def is_empty_numbered_placeholder(paragraph) -> bool:
+            return (
+                has_numbering(paragraph)
+                and not (paragraph.text or "").strip()
+                and not has_embedded_object(paragraph)
+            )
 
         def set_text(paragraph, text: str) -> None:
             if paragraph.runs:
@@ -419,8 +430,7 @@ class TemplateRenderer:
             for line in lines[1:]:
                 if (
                     next_idx < len(paragraphs)
-                    and has_numbering(paragraphs[next_idx])
-                    and not (paragraphs[next_idx].text or "").strip()
+                    and is_empty_numbered_placeholder(paragraphs[next_idx])
                 ):
                     cursor = paragraphs[next_idx]
                     set_text(cursor, line)
@@ -430,8 +440,7 @@ class TemplateRenderer:
 
             while (
                 next_idx < len(paragraphs)
-                and has_numbering(paragraphs[next_idx])
-                and not (paragraphs[next_idx].text or "").strip()
+                and is_empty_numbered_placeholder(paragraphs[next_idx])
             ):
                 remove_paragraph(paragraphs[next_idx])
                 next_idx += 1
@@ -452,6 +461,10 @@ class TemplateRenderer:
             ppr = paragraph._p.pPr
             return bool(ppr is not None and ppr.numPr is not None)
 
+        def has_embedded_object(paragraph) -> bool:
+            xml = paragraph._p.xml
+            return "<w:drawing" in xml or "<w:pict" in xml
+
         def clear_numbering(paragraph) -> bool:
             ppr = paragraph._p.pPr
             if ppr is None or ppr.numPr is None:
@@ -463,6 +476,8 @@ class TemplateRenderer:
             if not has_numbering(paragraph):
                 continue
             if (paragraph.text or "").strip():
+                continue
+            if has_embedded_object(paragraph):
                 continue
             parent = paragraph._element.getparent()
             if parent is None:
@@ -514,6 +529,97 @@ class TemplateRenderer:
                 elif run.font.underline is not None:
                     run.font.underline = None
                     changed = True
+
+        if changed:
+            doc.save(file_path)
+
+    def _restore_patient_letter_fill_underlines(self, file_path: str) -> None:
+        """Restore reviewed fill-in underlines in the patient letter.
+
+        The global template-underline cleanup removes placeholder underlines
+        from tables as intended, but the reviewed front letter intentionally
+        underlines the patient-name and project-name fill-in spans. Restore
+        only those sentence-bounded spans so table/body cleanup stays intact.
+        """
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        doc = Document(file_path)
+        changed = False
+
+        def run_text(run) -> str:
+            return "".join(node.text or "" for node in run.xpath(".//w:t"))
+
+        def set_underline(run, enabled: bool) -> None:
+            nonlocal changed
+            r_pr = run.find(qn("w:rPr"))
+            if r_pr is None:
+                if not enabled:
+                    return
+                r_pr = OxmlElement("w:rPr")
+                run.insert(0, r_pr)
+            underlines = list(r_pr.findall(qn("w:u")))
+            if enabled:
+                if underlines:
+                    return
+                underline = OxmlElement("w:u")
+                underline.set(qn("w:val"), "single")
+                r_pr.append(underline)
+                changed = True
+                return
+            for underline in underlines:
+                r_pr.remove(underline)
+                changed = True
+
+        for paragraph in doc.element.xpath(".//w:p"):
+            paragraph_text = "".join(node.text or "" for node in paragraph.xpath(".//w:t"))
+            if not (
+                ("尊敬的" in paragraph_text and "先生" in paragraph_text)
+                or ("感谢您选择本机构" in paragraph_text and "检测项目" in paragraph_text)
+            ):
+                continue
+
+            in_name_fill = False
+            project_fill_armed = False
+            in_project_fill = False
+
+            for run in paragraph.xpath(".//w:r"):
+                text = run_text(run)
+                if not text:
+                    continue
+
+                # Some Word text boxes contain a non-visible fallback run with
+                # the whole paragraph duplicated. Do not style that aggregate.
+                if len(text) > 120:
+                    continue
+
+                if "尊敬的" in text:
+                    in_name_fill = True
+                    set_underline(run, False)
+                    continue
+                if "先生" in text and in_name_fill:
+                    in_name_fill = False
+                    set_underline(run, False)
+                    continue
+                if in_name_fill:
+                    set_underline(run, True)
+                    continue
+
+                if "感谢您选择本机构" in text and "精心定" in text:
+                    project_fill_armed = True
+                    set_underline(run, False)
+                    continue
+                if project_fill_armed and text.strip() == "的":
+                    project_fill_armed = False
+                    in_project_fill = True
+                    set_underline(run, False)
+                    continue
+                if "检测项目" in text and in_project_fill:
+                    in_project_fill = False
+                    set_underline(run, False)
+                    continue
+                if in_project_fill:
+                    set_underline(run, True)
 
         if changed:
             doc.save(file_path)
@@ -1171,6 +1277,17 @@ class TemplateRenderer:
         def dotted_date(text: str) -> str:
             return re.sub(r"\b(\d{4})-(\d{2})-(\d{2})\b", r"\1.\2.\3", text)
 
+        def normalized_project_code(value: str) -> str:
+            text = str(value or "").strip().upper()
+            if not text:
+                return ""
+            match = re.search(
+                r"\b(?:MLJY[-_ ]?)?([A-Z]{1,5}\d{5,}[A-Z]?)\b",
+                text,
+                flags=re.IGNORECASE,
+            )
+            return match.group(1).upper() if match else text
+
         # Cover dates use compact yyyymmdd; signature/report footer uses yyyy.mm.dd.
         for paragraph in doc.paragraphs:
             text = paragraph.text or ""
@@ -1192,12 +1309,11 @@ class TemplateRenderer:
                 break
 
         # The first information table displays project code, not the source MLS file id.
-        report_number = str(context.get("report_number") or "").strip()
-        project_code = ""
-        match = re.search(r"(LZ\d+)", report_number, flags=re.IGNORECASE)
-        if match:
-            project_code = match.group(1).upper()
         sample_id = str(context.get("sample_id") or "").strip()
+        report_number = str(context.get("report_number") or "").strip()
+        project_code = normalized_project_code(sample_id) or normalized_project_code(
+            report_number
+        )
         if project_code:
             for table in doc.tables:
                 for row in table.rows:
@@ -1869,6 +1985,113 @@ class TemplateRenderer:
             doc.save(file_path)
             self.logger.debug("已移除标题前空白分页段落", removed=removed)
 
+    def _normalize_front_matter_spacing(self, file_path: str) -> None:
+        """Keep the report guide on its own page without template spacer blanks.
+
+        The reviewed CRC golden source contains a manual page break followed by
+        many empty paragraphs before ``报告导读``. Variableizing that source keeps
+        those empty paragraphs, so Word renders the guide in the lower half of
+        the page. This processor preserves the intended page separation while
+        collapsing the spacer cluster to a single page-break paragraph.
+        """
+        import os
+        import shutil
+        import tempfile
+        import xml.etree.ElementTree as ET
+        from zipfile import ZIP_DEFLATED, ZipFile
+
+        ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        w_p = f"{{{ns_w}}}p"
+        w_r = f"{{{ns_w}}}r"
+        w_t = f"{{{ns_w}}}t"
+        w_br = f"{{{ns_w}}}br"
+        w_drawing = f"{{{ns_w}}}drawing"
+        w_type = f"{{{ns_w}}}type"
+
+        def para_text(elem) -> str:
+            return "".join((node.text or "") for node in elem.iter(w_t)).strip()
+
+        def has_drawing(elem) -> bool:
+            return any(True for _ in elem.iter(w_drawing))
+
+        def has_page_break(elem) -> bool:
+            return any(node.attrib.get(w_type) == "page" for node in elem.iter(w_br))
+
+        def is_blank_paragraph(elem) -> bool:
+            return elem.tag == w_p and not para_text(elem) and not has_drawing(elem)
+
+        def make_page_break_paragraph() -> ET.Element:
+            paragraph = ET.Element(w_p)
+            run = ET.SubElement(paragraph, w_r)
+            br = ET.SubElement(run, w_br)
+            br.set(w_type, "page")
+            return paragraph
+
+        with ZipFile(file_path, "r") as zin:
+            document_xml = zin.read("word/document.xml")
+            other_entries = [
+                (info, zin.read(info.filename))
+                for info in zin.infolist()
+                if info.filename != "word/document.xml"
+            ]
+            document_info = zin.getinfo("word/document.xml")
+
+        root = ET.fromstring(document_xml)
+        changed = False
+        removed = 0
+
+        for parent in root.iter():
+            children = list(parent)
+            if not children:
+                continue
+
+            for idx, child in enumerate(children):
+                if child.tag != w_p or para_text(child) != "报告导读":
+                    continue
+
+                prev_idx = idx - 1
+                blank_cluster: list[ET.Element] = []
+                saw_page_break = False
+                while prev_idx >= 0 and is_blank_paragraph(children[prev_idx]):
+                    prev = children[prev_idx]
+                    saw_page_break = saw_page_break or has_page_break(prev)
+                    blank_cluster.append(prev)
+                    prev_idx -= 1
+
+                if not blank_cluster:
+                    continue
+
+                for blank in blank_cluster:
+                    parent.remove(blank)
+                    removed += 1
+
+                insert_at = list(parent).index(child)
+                parent.insert(insert_at, make_page_break_paragraph())
+                changed = True
+                if not saw_page_break:
+                    self.logger.debug("报告导读前缺少分页符，已补齐")
+                break
+
+        if not changed:
+            return
+
+        fd, tmp_name = tempfile.mkstemp(suffix=".docx")
+        os.close(fd)
+        try:
+            with ZipFile(tmp_name, "w", compression=ZIP_DEFLATED) as zout:
+                zout.writestr(
+                    document_info,
+                    ET.tostring(root, encoding="utf-8", xml_declaration=True),
+                )
+                for info, data in other_entries:
+                    zout.writestr(info, data)
+            shutil.move(tmp_name, file_path)
+        finally:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+
+        self.logger.debug("已清理报告导读前空白段落", removed=removed)
+
     def _cleanup_section_spacing(self, file_path: str) -> None:
         """删除章节标题前的空白段落。
 
@@ -1996,7 +2219,7 @@ class TemplateRenderer:
         self.logger.debug("清理章节前空白段落", removed=removed)
 
     def _render_part3_formatted(self, file_path: str, context: dict) -> None:
-        """将 {{PART3_PLACEHOLDER}} 替换为格式化的 Part 3 段落。
+        """Replace ``__PART3_MARKER__`` with data-driven Part 3 sections.
 
         对齐参考终版格式：
         - 变异标题：bold=True, size=12pt, color=FF0000(有药物)/0000FF(无药物), 前缀"u "
@@ -2023,6 +2246,17 @@ class TemplateRenderer:
         def element_text(element) -> str:
             return "".join(node.text or "" for node in element.iter(qn("w:t")))
 
+        def has_following_paragraph(prefix: str) -> bool:
+            current = placeholder_para._element.getnext()
+            while current is not None:
+                if (
+                    current.tag == qn("w:p")
+                    and element_text(current).strip().startswith(prefix)
+                ):
+                    return True
+                current = current.getnext()
+            return False
+
         amino_table_element = None
         previous = placeholder_para._element.getprevious()
         if previous is not None and previous.tag == qn("w:tbl") and "氨基酸缩写" in element_text(previous):
@@ -2036,10 +2270,22 @@ class TemplateRenderer:
         references = context.get("gene_references", [])
         total_count = context.get("total_variants_count", 0)
         drug_count = context.get("drug_related_count", 0)
+        has_static_reading_section = has_following_paragraph("3. 阅读说明")
+        has_static_reference_section = has_following_paragraph("5. 参考文献")
 
         # 辅助函数：在指定元素后插入新段落
-        def add_para_after(prev_element, text, bold=False, size=10.5,
-                          color=None, prefix="", page_break_before=False):
+        def add_para_after(
+            prev_element,
+            text,
+            bold=False,
+            size=10.5,
+            color=None,
+            prefix="",
+            page_break_before=False,
+            underline=False,
+            font_name="微软雅黑",
+            prefix_font_name=None,
+        ):
             new_p = OxmlElement("w:p")
             if page_break_before:
                 ppr = OxmlElement("w:pPr")
@@ -2049,6 +2295,23 @@ class TemplateRenderer:
             if prefix:
                 # 前缀 run
                 pr = OxmlElement("w:r")
+                prPr = OxmlElement("w:rPr")
+                if prefix_font_name:
+                    r_fonts = OxmlElement("w:rFonts")
+                    r_fonts.set(qn("w:ascii"), prefix_font_name)
+                    r_fonts.set(qn("w:hAnsi"), prefix_font_name)
+                    r_fonts.set(qn("w:eastAsia"), prefix_font_name)
+                    r_fonts.set(qn("w:cs"), prefix_font_name)
+                    prPr.append(r_fonts)
+                if size:
+                    psz = OxmlElement("w:sz")
+                    psz.set(qn("w:val"), str(int(size * 2)))
+                    prPr.append(psz)
+                    pszCs = OxmlElement("w:szCs")
+                    pszCs.set(qn("w:val"), str(int(size * 2)))
+                    prPr.append(pszCs)
+                if len(prPr):
+                    pr.append(prPr)
                 pt_elem = OxmlElement("w:t")
                 pt_elem.text = prefix
                 pt_elem.set(qn("xml:space"), "preserve")
@@ -2058,9 +2321,20 @@ class TemplateRenderer:
             new_r = OxmlElement("w:r")
             # 格式
             rPr = OxmlElement("w:rPr")
+            if font_name:
+                r_fonts = OxmlElement("w:rFonts")
+                r_fonts.set(qn("w:ascii"), font_name)
+                r_fonts.set(qn("w:hAnsi"), font_name)
+                r_fonts.set(qn("w:eastAsia"), font_name)
+                r_fonts.set(qn("w:cs"), font_name)
+                rPr.append(r_fonts)
             if bold:
                 b_elem = OxmlElement("w:b")
                 rPr.append(b_elem)
+            if underline:
+                u_elem = OxmlElement("w:u")
+                u_elem.set(qn("w:val"), "single")
+                rPr.append(u_elem)
             if size:
                 sz = OxmlElement("w:sz")
                 sz.set(qn("w:val"), str(int(size * 2)))  # half-points
@@ -2084,15 +2358,23 @@ class TemplateRenderer:
             prev_element.addnext(new_p)
             return new_p
 
+        def add_text_block(prev_element, text, **options):
+            current_element = prev_element
+            lines = [line.strip() for line in str(text or "").splitlines()]
+            lines = [line for line in lines if line]
+            for line in lines:
+                current_element = add_para_after(current_element, line, **options)
+            return current_element
+
         # 从占位标记位置开始，链式插入
         current = placeholder_para._element
 
         # 总述
         current = add_para_after(
             current,
-            f"在本次检测范围内，检出体细胞变异{total_count}个，"
-            f"其中与靶向/免疫药物相关的变异{drug_count}个。"
-            "对第二部分中的基因变异和靶向/免疫药物提示进行详细解析。",
+            f"在本次检测范围内，检出体细胞变异：{total_count}个，"
+            f"其中与靶向/免疫药物相关的变异：{drug_count}个。"
+            "（下面红色标注的为有对应靶向/免疫药物的基因变异。）",
             size=10.5,
         )
 
@@ -2108,7 +2390,12 @@ class TemplateRenderer:
             # 变异标题：bold, 12pt, red/blue, 前缀圆点 "● "
             current = add_para_after(
                 current, header,
-                bold=True, size=12, color=header_color, prefix="\u25cf ",
+                bold=True,
+                size=12,
+                color=header_color,
+                prefix="u ",
+                prefix_font_name="Wingdings",
+                underline=True,
             )
 
             # 基因简介（紧跟标题，无多余空行）
@@ -2117,7 +2404,7 @@ class TemplateRenderer:
                 current = add_para_after(
                     current, "基因简介：", bold=True, size=10.5
                 )
-                current = add_para_after(current, intro, size=10.5)
+                current = add_text_block(current, intro, size=10.5)
 
             # 基因变异说明
             desc = section.get("mutation_desc", "")
@@ -2125,7 +2412,7 @@ class TemplateRenderer:
                 current = add_para_after(
                     current, "基因变异说明：", bold=True, size=10.5
                 )
-                current = add_para_after(current, desc, size=10.5)
+                current = add_text_block(current, desc, size=10.5)
 
             # 基因变异解析
             analysis = section.get("mutation_analysis", "")
@@ -2133,7 +2420,7 @@ class TemplateRenderer:
                 current = add_para_after(
                     current, "基因变异解析：", bold=True, size=10.5
                 )
-                current = add_para_after(current, analysis, size=10.5)
+                current = add_text_block(current, analysis, size=10.5)
 
             # 变异之间留一个空行分隔
             current = add_para_after(current, "")
@@ -2166,9 +2453,21 @@ class TemplateRenderer:
                     bold=True, size=12, color="FF0000",
                 )
                 if drug_name:
-                    current = add_para_after(current, drug_name, size=10.5)
+                    current = add_text_block(current, drug_name, size=10.5)
+                relation = ds.get("relation", "")
+                if relation:
+                    current = add_para_after(
+                        current,
+                        "基因变异与药物关联分析：",
+                        bold=True,
+                        size=10.5,
+                    )
+                    current = add_text_block(current, relation, size=10.5)
                 if clinical:
-                    current = add_para_after(current, clinical, size=10.5)
+                    current = add_para_after(
+                        current, "药物疗效临床解析：", bold=True, size=10.5
+                    )
+                    current = add_text_block(current, clinical, size=10.5)
                 current = add_para_after(current, "")
 
         # 负相关药物
@@ -2191,13 +2490,28 @@ class TemplateRenderer:
                     bold=True, size=12, color="FF0000",
                 )
                 if drug_name:
-                    current = add_para_after(current, drug_name, size=10.5)
+                    current = add_text_block(current, drug_name, size=10.5)
+                relation = ds.get("relation", "")
+                if relation:
+                    current = add_para_after(
+                        current,
+                        "基因变异与药物关联分析：",
+                        bold=True,
+                        size=10.5,
+                    )
+                    current = add_text_block(current, relation, size=10.5)
                 if clinical:
-                    current = add_para_after(current, clinical, size=10.5)
+                    current = add_para_after(
+                        current, "药物疗效临床解析：", bold=True, size=10.5
+                    )
+                    current = add_text_block(current, clinical, size=10.5)
                 current = add_para_after(current, "")
 
         # === 参考文献 ===
-        if references:
+        # The CRC golden template keeps the reviewed appendix-level reference
+        # section. Only inline references when a marker-only template has no
+        # static final reference section after Part 3.
+        if references and not has_static_reference_section:
             current = add_para_after(
                 current, "参考文献",
                 bold=True, size=12,
@@ -2206,11 +2520,14 @@ class TemplateRenderer:
             for ref in references:
                 current = add_para_after(current, ref, size=9)
 
-        reading_blocks = self._paragraph_specs(content_cfg.get("part3_reading_blocks"))
-        for text, options in reading_blocks:
-            para_options = {"size": 10.5}
-            para_options.update(options)
-            current = add_para_after(current, text, **para_options)
+        if not has_static_reading_section:
+            reading_blocks = self._paragraph_specs(
+                content_cfg.get("part3_reading_blocks")
+            )
+            for text, options in reading_blocks:
+                para_options = {"size": 10.5}
+                para_options.update(options)
+                current = add_para_after(current, text, **para_options)
 
         if amino_table_element is not None:
             current.addnext(amino_table_element)
@@ -2276,6 +2593,230 @@ class TemplateRenderer:
                 "签名占位处理完成",
                 image_inserted=signature_exists,
             )
+
+    def _replace_signature_anchor_images(self, file_path: str, context: dict) -> None:
+        """Replace detector/reviewer signature images from context paths.
+
+        Reviewed templates keep the handwritten signatures as positioned
+        drawings before the "检测者/审核者/报告日期" line. Keep those anchors and
+        dimensions, but redirect their image relationship to per-report uploads
+        when supplied by the operator.
+        """
+        import os
+        import shutil
+        import tempfile
+        from io import BytesIO
+        from zipfile import ZIP_DEFLATED, ZipFile
+
+        try:
+            from lxml import etree
+        except Exception as exc:
+            self.logger.debug("缺少 lxml，跳过签名图片替换", error=str(exc))
+            return
+
+        ns = {
+            "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            "rel": "http://schemas.openxmlformats.org/package/2006/relationships",
+            "ct": "http://schemas.openxmlformats.org/package/2006/content-types",
+        }
+
+        role_paths = {
+            "detector": str(
+                context.get("detector_signature_image_path")
+                or context.get("issuer_signature_image_path")
+                or ""
+            ).strip(),
+            "reviewer": str(context.get("reviewer_signature_image_path") or "").strip(),
+        }
+        role_paths = {
+            role: path for role, path in role_paths.items() if path and Path(path).exists()
+        }
+        if not role_paths:
+            return
+
+        def paragraph_text(paragraph) -> str:
+            return "".join(paragraph.xpath(".//w:t/text()", namespaces=ns))
+
+        def drawing_offset(drawing, fallback: int) -> tuple[int, int]:
+            offsets = drawing.xpath(".//wp:positionH/wp:posOffset/text()", namespaces=ns)
+            try:
+                return int(offsets[0]), fallback
+            except Exception:
+                return fallback, fallback
+
+        def prepare_image(path: str) -> tuple[bytes, str, str]:
+            src = Path(path)
+            suffix = src.suffix.lower()
+            if suffix == ".png":
+                return src.read_bytes(), "png", "image/png"
+            if suffix in {".jpg", ".jpeg"}:
+                return src.read_bytes(), "jpg", "image/jpeg"
+            try:
+                from PIL import Image
+
+                with Image.open(src) as image:
+                    output = BytesIO()
+                    image.convert("RGBA").save(output, format="PNG")
+                return output.getvalue(), "png", "image/png"
+            except Exception as exc:
+                raise ValueError(f"签名图片格式不支持或无法转换: {src}") from exc
+
+        def next_relationship_id(root) -> str:
+            used = {
+                rel.get("Id", "")
+                for rel in root.xpath("./rel:Relationship", namespaces=ns)
+            }
+            max_num = 0
+            for rid in used:
+                if rid.startswith("rId") and rid[3:].isdigit():
+                    max_num = max(max_num, int(rid[3:]))
+            candidate = max_num + 1
+            while f"rId{candidate}" in used:
+                candidate += 1
+            return f"rId{candidate}"
+
+        def ensure_content_type(root, extension: str, content_type: str) -> None:
+            existing = {
+                elem.get("Extension")
+                for elem in root.xpath("./ct:Default", namespaces=ns)
+            }
+            if extension in existing:
+                return
+            elem = etree.SubElement(
+                root, f"{{{ns['ct']}}}Default", Extension=extension, ContentType=content_type
+            )
+            root.append(elem)
+
+        with ZipFile(file_path, "r") as zin:
+            document_xml = zin.read("word/document.xml")
+            rels_xml = zin.read("word/_rels/document.xml.rels")
+            content_types_xml = zin.read("[Content_Types].xml")
+            document_info = zin.getinfo("word/document.xml")
+            rels_info = zin.getinfo("word/_rels/document.xml.rels")
+            content_types_info = zin.getinfo("[Content_Types].xml")
+            entries = [(info, zin.read(info.filename)) for info in zin.infolist()]
+
+        document_root = etree.fromstring(document_xml)
+        rels_root = etree.fromstring(rels_xml)
+        content_types_root = etree.fromstring(content_types_xml)
+
+        paragraphs = document_root.xpath(".//w:body/w:p", namespaces=ns)
+        label_index = next(
+            (
+                idx
+                for idx, paragraph in enumerate(paragraphs)
+                if "检测者" in paragraph_text(paragraph)
+                and "审核者" in paragraph_text(paragraph)
+            ),
+            None,
+        )
+        if label_index is None:
+            return
+
+        candidates = paragraphs[max(0, label_index - 2) : label_index + 1]
+        drawings: list[Any] = []
+        for paragraph in candidates:
+            drawings.extend(
+                paragraph.xpath(".//wp:anchor | .//wp:inline", namespaces=ns)
+            )
+        drawing_blips = []
+        for order, drawing in enumerate(drawings):
+            blip = drawing.xpath(".//a:blip[@r:embed]", namespaces=ns)
+            if blip:
+                drawing_blips.append((drawing_offset(drawing, order), blip[0]))
+        drawing_blips.sort(key=lambda item: item[0])
+        if len(drawing_blips) < 2:
+            return
+
+        rels_by_target = {
+            rel.get("Target"): rel
+            for rel in rels_root.xpath("./rel:Relationship", namespaces=ns)
+        }
+        replacements: dict[str, bytes] = {}
+        changed = False
+
+        for role, (_, blip) in zip(("detector", "reviewer"), drawing_blips[:2]):
+            image_path = role_paths.get(role)
+            if not image_path:
+                continue
+            image_bytes, extension, content_type = prepare_image(image_path)
+            target = f"media/reportgen_signature_{role}.{extension}"
+            rel = rels_by_target.get(target)
+            if rel is None:
+                rid = next_relationship_id(rels_root)
+                rel = etree.SubElement(
+                    rels_root,
+                    f"{{{ns['rel']}}}Relationship",
+                    Id=rid,
+                    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+                    Target=target,
+                )
+                rels_by_target[target] = rel
+            else:
+                rid = rel.get("Id")
+            blip.set(f"{{{ns['r']}}}embed", rid)
+            replacements[f"word/{target}"] = image_bytes
+            ensure_content_type(content_types_root, extension, content_type)
+            changed = True
+
+        if not changed:
+            return
+
+        patched = {
+            "word/document.xml": etree.tostring(
+                document_root,
+                xml_declaration=True,
+                encoding="UTF-8",
+                standalone="yes",
+            ),
+            "word/_rels/document.xml.rels": etree.tostring(
+                rels_root,
+                xml_declaration=True,
+                encoding="UTF-8",
+                standalone="yes",
+            ),
+            "[Content_Types].xml": etree.tostring(
+                content_types_root,
+                xml_declaration=True,
+                encoding="UTF-8",
+                standalone="yes",
+            ),
+        }
+        patched.update(replacements)
+
+        fd, tmp_name = tempfile.mkstemp(suffix=".docx")
+        os.close(fd)
+        written = set()
+        try:
+            with ZipFile(tmp_name, "w", compression=ZIP_DEFLATED) as zout:
+                for info, data in entries:
+                    if info.filename == "word/document.xml":
+                        zout.writestr(document_info, patched[info.filename])
+                    elif info.filename == "word/_rels/document.xml.rels":
+                        zout.writestr(rels_info, patched[info.filename])
+                    elif info.filename == "[Content_Types].xml":
+                        zout.writestr(content_types_info, patched[info.filename])
+                    elif info.filename in patched:
+                        zout.writestr(info, patched[info.filename])
+                    else:
+                        zout.writestr(info, data)
+                    written.add(info.filename)
+                for name, data in patched.items():
+                    if name not in written:
+                        zout.writestr(name, data)
+            shutil.move(tmp_name, file_path)
+        finally:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+
+        self.logger.debug(
+            "已替换动态签名图片",
+            detector=bool(role_paths.get("detector")),
+            reviewer=bool(role_paths.get("reviewer")),
+        )
 
     def _normalize_signature_layout(self, file_path: str, context: dict) -> None:
         """Stabilize the detector/reviewer signature block.
@@ -3043,7 +3584,9 @@ class TemplateRenderer:
 
         self.logger.debug("已调整目录装饰线位置", changed=changed)
 
-    def _populate_static_toc_page_numbers(self, file_path: str) -> None:
+    def _populate_static_toc_page_numbers(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
         """Write visible TOC page numbers from the final rendered PDF layout.
 
         LibreOffice can refresh the PAGEREF fields but may leave the tab run
@@ -3074,7 +3617,7 @@ class TemplateRenderer:
         if not page_numbers:
             return
 
-        if not self._write_static_toc_page_numbers(file_path, page_numbers):
+        if not self._write_static_toc_page_numbers(file_path, page_numbers, context):
             return
 
         # Re-render after removing TOC fields and updateFields. Static TOC
@@ -3087,12 +3630,17 @@ class TemplateRenderer:
             pdfinfo=pdfinfo,
         )
         if final_numbers and final_numbers != page_numbers:
-            self._write_static_toc_page_numbers(file_path, final_numbers)
+            self._write_static_toc_page_numbers(file_path, final_numbers, context)
             page_numbers = final_numbers
 
         self.logger.info("已按最终 PDF 版式写回目录页码", output=file_path, page_numbers=page_numbers)
 
-    def _write_static_toc_page_numbers(self, file_path: str, page_numbers: dict[str, int]) -> bool:
+    def _write_static_toc_page_numbers(
+        self,
+        file_path: str,
+        page_numbers: dict[str, int],
+        context: dict | None = None,
+    ) -> bool:
         """Replace TOC field results with plain visible labels and page numbers."""
         import os
         import re
@@ -3116,6 +3664,21 @@ class TemplateRenderer:
             text = re.sub(r"\s+", "", text or "")
             text = re.sub(r"\d+$", "", text)
             return text
+
+        style_cfg = self._panel_style_config(context, "toc")
+        font_name = str(style_cfg.get("font_name") or "微软雅黑").strip()
+        section_color = self._hex_color_config(
+            style_cfg.get("section_font_color"), "00C4D8"
+        )
+        item_color = self._hex_color_config(style_cfg.get("item_font_color"), "000000")
+        section_size = str(
+            int(round(self._float_config(style_cfg.get("section_font_size"), 16.0) * 2))
+        )
+        item_size = str(
+            int(round(self._float_config(style_cfg.get("item_font_size"), 11.0) * 2))
+        )
+        section_bold = self._bool_config(style_cfg.get("section_bold"), True)
+        item_bold = self._bool_config(style_cfg.get("item_bold"), False)
 
         src = Path(file_path)
         with ZipFile(src, "r") as zin:
@@ -3150,20 +3713,28 @@ class TemplateRenderer:
             }
             changed = False
 
-            def make_run(text: str | None = None, *, tab: bool = False) -> Any:
+            def make_run(
+                text: str | None = None,
+                *,
+                tab: bool = False,
+                section: bool = False,
+            ) -> Any:
                 run = etree.Element(qn("r"))
                 r_pr = etree.SubElement(run, qn("rPr"))
                 fonts = etree.SubElement(r_pr, qn("rFonts"))
-                fonts.set(qn("ascii"), "微软雅黑")
-                fonts.set(qn("hAnsi"), "微软雅黑")
-                fonts.set(qn("eastAsia"), "微软雅黑")
+                fonts.set(qn("ascii"), font_name)
+                fonts.set(qn("hAnsi"), font_name)
+                fonts.set(qn("eastAsia"), font_name)
                 fonts.set(qn("cs"), "Times New Roman")
+                if section and section_bold or (not section and item_bold):
+                    etree.SubElement(r_pr, qn("b"))
+                    etree.SubElement(r_pr, qn("bCs"))
+                color = etree.SubElement(r_pr, qn("color"))
+                color.set(qn("val"), section_color if section else item_color)
                 size = etree.SubElement(r_pr, qn("sz"))
-                size.set(qn("val"), "22")
+                size.set(qn("val"), section_size if section else item_size)
                 size_cs = etree.SubElement(r_pr, qn("szCs"))
-                size_cs.set(qn("val"), "22")
-                underline = etree.SubElement(r_pr, qn("u"))
-                underline.set(qn("val"), "none")
+                size_cs.set(qn("val"), section_size if section else item_size)
                 if tab:
                     etree.SubElement(run, qn("tab"))
                 else:
@@ -3185,7 +3756,10 @@ class TemplateRenderer:
                 for child in list(para):
                     if child.tag != qn("pPr"):
                         para.remove(child)
-                para.append(make_run(display_label))
+                is_section = normalize_label(display_label) in {
+                    normalize_label(item) for item in section_labels
+                }
+                para.append(make_run(display_label, section=is_section))
                 if label in normalized_numbers:
                     para.append(make_run(tab=True))
                     para.append(make_run(normalized_numbers[label]))
@@ -3357,6 +3931,12 @@ class TemplateRenderer:
                 page_texts[page] = text
                 normalized_pages[page] = normalize(text)
 
+        report_page_numbers = {
+            page: number
+            for page, text in page_texts.items()
+            if (number := self._extract_pdf_footer_page_number(text)) is not None
+        }
+
         toc_page = next(
             (
                 page for page, text in normalized_pages.items()
@@ -3387,9 +3967,28 @@ class TemplateRenderer:
                     found_page = page
                     break
             if found_page is not None:
-                page_numbers[label] = found_page - content_start + 1
+                page_numbers[label] = report_page_numbers.get(
+                    found_page, found_page - content_start + 1
+                )
 
         return page_numbers
+
+    @staticmethod
+    def _extract_pdf_footer_page_number(page_text: str) -> int | None:
+        """Return the visible report-page footer number from one PDF text page."""
+        import re
+
+        for line in reversed((page_text or "").splitlines()):
+            text = line.strip()
+            if not text:
+                continue
+            if re.fullmatch(r"\d{1,3}", text):
+                return int(text)
+            # Footer page numbers are the last visible token; once a non-empty
+            # non-number line is encountered near the bottom, stop scanning to
+            # avoid matching numbered evidence or section text higher up.
+            return None
+        return None
 
     def _compact_gene_list_tables(self, file_path: str, context: dict | None = None) -> None:
         """Align static gene-list tables with the reviewed report layout."""

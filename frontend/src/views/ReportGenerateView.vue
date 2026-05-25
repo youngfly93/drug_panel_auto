@@ -76,17 +76,33 @@
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <strong>2. 临床信息</strong>
-          <el-select
-            v-model="projectType"
-            placeholder="项目类型"
-            style="width: 250px"
-            clearable
-          >
-            <el-option label="结直肠癌301基因+MSI" value="crc_301_msi" />
-            <el-option label="结直肠癌358基因+MSI" value="crc_358_msi" />
-            <el-option label="MLF基因检测" value="mlf_result" />
-            <el-option label="肺癌甲基化" value="lung_methylation" />
-          </el-select>
+          <div style="display: flex; gap: 12px; align-items: center">
+            <el-select
+              v-model="projectType"
+              placeholder="项目类型"
+              style="width: 250px"
+              clearable
+            >
+              <el-option label="结直肠癌301基因+MSI" value="crc_301_msi" />
+              <el-option label="结直肠癌358基因+MSI" value="crc_358_msi" />
+              <el-option label="MLF基因检测" value="mlf_result" />
+              <el-option label="肺癌甲基化" value="lung_methylation" />
+            </el-select>
+            <el-select
+              v-if="templateOptions.length"
+              v-model="templateName"
+              placeholder="报告模板"
+              style="width: 270px"
+              clearable
+            >
+              <el-option
+                v-for="option in templateOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </div>
         </div>
       </template>
       <DynamicClinicalForm
@@ -179,8 +195,25 @@ import SheetPreview from '@/components/excel/SheetPreview.vue'
 const excelStore = useExcelStore()
 
 const projectType = ref<string | null>(null)
+const templateName = ref<string | null>(null)
 const generating = ref(false)
 const result = ref<GenerateResult | null>(null)
+
+const templateOptions = computed(() => {
+  if (projectType.value === 'crc_358_msi') {
+    return [
+      {
+        label: '结直肠癌358+MSI Golden 模板（内测）',
+        value: 'crc_358_msi_golden_template_v0',
+      },
+      {
+        label: '结直肠癌358+MSI Legacy 模板',
+        value: 'crc_358_msi_standard_v1',
+      },
+    ]
+  }
+  return []
+})
 
 // Initialize projectType from detection
 watch(
@@ -188,6 +221,21 @@ watch(
   (type) => {
     if (type) projectType.value = type
   },
+)
+
+watch(
+  templateOptions,
+  (options) => {
+    if (!options.length) {
+      templateName.value = null
+      return
+    }
+    const current = templateName.value
+    if (!current || !options.some((option) => option.value === current)) {
+      templateName.value = options[0].value
+    }
+  },
+  { immediate: true },
 )
 
 // Dynamic form driven by project type
@@ -229,6 +277,7 @@ async function handleGenerate() {
       clinical_info: form.getCleanValues(),
       project_type: projectType.value,
       project_name: excelStore.upload.detected_project_name,
+      template_name: templateName.value,
     }
     result.value = excelStore.sourceFile
       ? await reportApi.generateFromFile(excelStore.sourceFile, payload)

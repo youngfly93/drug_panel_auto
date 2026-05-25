@@ -199,6 +199,8 @@ def _patient_snapshot_from_context(ctx: Dict[str, Any]) -> Dict[str, Any]:
         "issuer",
         "reviewer",
         "signature_image_path",
+        "detector_signature_image_path",
+        "reviewer_signature_image_path",
         "project_type",
         "project_name",
     ]

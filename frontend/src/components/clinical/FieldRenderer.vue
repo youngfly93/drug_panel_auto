@@ -51,6 +51,10 @@
       v-model="model"
       :placeholder="field.ui.placeholder || '请选择'"
       :disabled="field.computed"
+      :allow-create="field.ui.allow_create"
+      :default-first-option="field.ui.allow_create"
+      filterable
+      clearable
       style="width: 100%"
     >
       <el-option

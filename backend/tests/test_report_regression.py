@@ -3,9 +3,11 @@
 import sys
 import subprocess
 import json
+import shutil
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from zipfile import ZipFile
 
 import pytest
 import yaml
@@ -15,6 +17,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm
+from docx.shared import Inches
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -48,6 +51,7 @@ from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.processors import ProcessorContext, run_processors
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.report_generator import ReportGenerator
+from reportgen.core.signature_library import resolve_signature_path, signature_options
 from reportgen.core.report_diff import ReportDiffOptions, compare_reports
 from reportgen.core.template_bridge_358 import (
     PanelConfig,
@@ -75,9 +79,15 @@ from reportgen.panels.validation import (
     validate_panel_registry,
 )
 from reportgen.rules import PanelRuleEngine, load_rule_package
+from app.services import clinical_info_service
 from reportgen.rules.evaluators import apply_report_text_rules, collect_report_texts
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
 from reportgen.utils import docx_render
+
+
+def _read_docx_part(docx_path: Path, part_name: str) -> str:
+    with ZipFile(docx_path) as zf:
+        return zf.read(part_name).decode("utf-8")
 
 
 def _excel(
@@ -879,6 +889,56 @@ def test_part3_variant_scope_can_follow_summary_variants(tmp_path):
     ]
 
 
+def test_part3_marker_renders_from_context_without_case_stub(tmp_path):
+    docx_path = tmp_path / "part3_marker.docx"
+    doc = Document()
+    doc.add_paragraph("第三部分：基因变异及相应靶向/免疫药物解析")
+    doc.add_paragraph("基因变异解析")
+    doc.add_paragraph("__PART3_MARKER__")
+    doc.add_paragraph("3. 阅读说明")
+    doc.add_paragraph("5. 参考文献")
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._render_part3_formatted(
+        str(docx_path),
+        {
+            "total_variants_count": 2,
+            "drug_related_count": 1,
+            "gene_knowledge_sections": [
+                {
+                    "gene": "BRAF",
+                    "header": "BRAF：c.1799T>A，p.V600E；12.30%",
+                    "has_drug": True,
+                    "intro": "BRAF intro",
+                    "mutation_desc": "BRAF desc",
+                    "mutation_analysis": "BRAF analysis",
+                }
+            ],
+            "drug_benefit_sections": [
+                {
+                    "gene": "BRAF",
+                    "variant": "c.1799T>A，p.V600E",
+                    "drug_name": "维莫非尼",
+                    "clinical": "BRAF clinical",
+                }
+            ],
+            "drug_caution_sections": [],
+            "gene_references": ["BRAF reference"],
+        },
+    )
+
+    paragraphs = [p.text for p in Document(docx_path).paragraphs]
+    text = "\n".join(paragraphs)
+    assert "__PART3_MARKER__" not in text
+    assert "BRAF：c.1799T>A，p.V600E；12.30%" in text
+    assert "维莫非尼" in text
+    assert "BRAF reference" not in text
+    assert paragraphs.count("3. 阅读说明") == 1
+    assert "p.G12S" not in text
+    assert "c.34G>A" not in text
+    assert "46.29" not in text
+
+
 def test_targeted_drug_brand_summary_uses_final_drug_columns_only():
     summary = build_targeted_drug_brand_summary(
         [
@@ -1357,8 +1417,9 @@ def test_crc_style_rule_contains_active_table_tokens():
 
     assert rule["version"] == "0.2.0"
     assert rule["status"] == "active"
-    assert style["variant_summary_table"]["link_underline"] is False
-    assert style["variant_detail_table"]["link_color"] == "000000"
+    assert style["variant_summary_table"]["link_underline"] is True
+    assert style["variant_detail_table"]["link_color"] == "0000FF"
+    assert style["toc"]["section_font_color"] == "00C4D8"
     assert style["biomarker_table"]["header_fill"] == "00B7C7"
     assert "style" not in engine.get("panel_rules")
 
@@ -1367,8 +1428,9 @@ def test_report_generator_loads_panel_style_from_style_rule():
     package = load_panel_package("crc_358_msi", project_root=ROOT)
     style = ReportGenerator._load_panel_style_config(package)
 
-    assert style["variant_summary_table"]["link_underline"] is False
-    assert style["variant_detail_table"]["link_color"] == "000000"
+    assert style["variant_summary_table"]["link_underline"] is True
+    assert style["variant_detail_table"]["link_color"] == "0000FF"
+    assert style["toc"]["section_font_size"] == 16
     assert style["biomarker_table"]["header_fill"] == "00B7C7"
 
 
@@ -1810,6 +1872,26 @@ def test_configured_letter_content_is_inserted_inside_table_cells(tmp_path):
     assert "固定补充段二" in text
 
 
+def test_report_content_fixes_project_code_is_not_lz_specific(tmp_path):
+    docx_path = tmp_path / "project_code.docx"
+    doc = Document()
+    table = doc.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text = "项目编码"
+    table.rows[0].cells[1].text = "MLJY-MLB2509307001"
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._apply_report_content_fixes(
+        str(docx_path),
+        {
+            "sample_id": "MLJY-MLB2509307001",
+            "report_number": "MLJY-MLB2509307001",
+        },
+    )
+
+    rendered = Document(docx_path)
+    assert rendered.tables[0].rows[0].cells[1].text == "MLB2509307001"
+
+
 def test_configured_tail_contact_block_uses_template_qr(tmp_path):
     from zipfile import ZipFile
 
@@ -1952,6 +2034,118 @@ def test_drug_analysis_is_limited_to_final_displayed_drugs():
     assert "Peposertib" not in section["clinical"]
 
 
+def test_drug_analysis_respects_variant_specific_p_point():
+    provider = GeneKnowledgeProvider({"enabled": False})
+    provider._loaded = True
+    provider._drug_full_cache = {
+        "TP53": [
+            {
+                "type": "benefit",
+                "drug": "Eprenetapopt",
+                "p_point": "",
+                "relation": "general TP53 relation",
+                "clinical": "general TP53 clinical",
+            },
+            {
+                "type": "benefit",
+                "drug": "Eprenetapopt、PC14586",
+                "p_point": "p.Y220C",
+                "relation": "p.Y220C specific relation",
+                "clinical": "p.Y220C specific clinical",
+            },
+        ]
+    }
+
+    sections = provider.build_drug_analysis_sections(
+        [
+            {
+                "gene": "TP53",
+                "cHGVS": "c.844C>T",
+                "pHGVS": "p.R282W",
+                "benefit_drugs": "Eprenetapopt（C）",
+                "caution_drugs": "--",
+            }
+        ]
+    )
+
+    assert len(sections) == 1
+    assert sections[0]["relation"] == "general TP53 relation"
+    assert "Y220C" not in sections[0]["clinical"]
+
+
+def test_drug_analysis_matches_kras_wildcard_p_point():
+    provider = GeneKnowledgeProvider({"enabled": False})
+    provider._loaded = True
+    provider._drug_full_cache = {
+        "KRAS": [
+            {
+                "type": "benefit",
+                "drug": "索托拉西布",
+                "p_point": "p.G12C",
+                "relation": "G12C only",
+                "clinical": "G12C clinical",
+            },
+            {
+                "type": "benefit",
+                "drug": "司美替尼",
+                "p_point": "p.G12X(X为除C、D外的任何氨基酸)",
+                "relation": "G12X wildcard",
+                "clinical": "G12X clinical",
+            },
+        ]
+    }
+
+    sections = provider.build_drug_analysis_sections(
+        [
+            {
+                "gene": "KRAS",
+                "cHGVS": "c.34G>A",
+                "pHGVS": "p.G12S",
+                "benefit_drugs": "索托拉西布（C）\n司美替尼（C）",
+                "caution_drugs": "--",
+            }
+        ]
+    )
+
+    assert len(sections) == 1
+    assert sections[0]["drug_name"] == "司美替尼"
+    assert sections[0]["relation"] == "G12X wildcard"
+
+
+def test_gene_knowledge_uses_reviewed_columns_without_intro_domain_tail():
+    provider = GeneKnowledgeProvider({"enabled": False})
+    provider._loaded = True
+    provider._gene_intro_cache = {
+        "KRAS": provider._strip_intro_domain_tail(
+            "KRAS",
+            "KRAS基因简介。\nKRAS基因编码的蛋白全长为189个氨基酸，主要包含Hypervariable region（166-185位氨基酸）。",
+        )
+    }
+    provider._gene_analysis_cache = {"KRAS": "generic KRAS analysis"}
+    provider._reviewed_gene_analysis_cache = {
+        "KRAS": {
+            "domain_text": "KRAS基因编码的蛋白全长为189个氨基酸，主要包含RAS结构域（1-166位氨基酸）。",
+            "expert_text": "据OncoKB/JAXCKB数据库记载，该为已知激活突变，对蛋白功能有重要影响。",
+            "cancer_text": "KRAS突变会激活下游信号通路，且已被证实是anti-EGFR抗体药物耐药的标志。",
+        }
+    }
+
+    section = provider.build_gene_knowledge_section(
+        gene="KRAS",
+        c_hgvs="c.34G>A",
+        p_hgvs="p.G12S",
+        frequency=46.29,
+        mutation_type="Missense",
+        has_drug=True,
+    )
+
+    assert section["intro"] == "KRAS基因简介。"
+    assert "Hypervariable region" not in section["intro"]
+    assert "RAS结构域" in section["mutation_analysis"]
+    assert "已知激活突变" in section["mutation_analysis"]
+    assert "疾病的发生发展及用药相关" in section["mutation_analysis"]
+
+
 def test_signature_placeholder_is_removed_without_image(tmp_path):
     docx_path = tmp_path / "signature.docx"
     doc = Document()
@@ -1980,6 +2174,162 @@ def test_signature_layout_moves_report_date_to_separate_line(tmp_path):
     assert signature_lines
     assert all("报告日期" not in p for p in signature_lines)
     assert "报告日期：2026.04.26" in paragraphs
+
+
+def test_detector_and_reviewer_signature_images_are_context_driven(tmp_path):
+    from PIL import Image
+
+    def write_png(path: Path, color: tuple[int, int, int]) -> None:
+        Image.new("RGB", (12, 6), color).save(path)
+
+    old_detector = tmp_path / "old_detector.png"
+    old_reviewer = tmp_path / "old_reviewer.png"
+    new_detector = tmp_path / "new_detector.png"
+    new_reviewer = tmp_path / "new_reviewer.png"
+    write_png(old_detector, (255, 0, 0))
+    write_png(old_reviewer, (0, 255, 0))
+    write_png(new_detector, (0, 0, 255))
+    write_png(new_reviewer, (255, 255, 0))
+
+    docx_path = tmp_path / "signature_dynamic.docx"
+    doc = Document()
+    paragraph = doc.add_paragraph()
+    paragraph.add_run().add_picture(str(old_detector), width=Cm(2))
+    paragraph.add_run(" ")
+    paragraph.add_run().add_picture(str(old_reviewer), width=Cm(2))
+    doc.add_paragraph("检测者：                    审核者：                    报告日期：2026.05.24")
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._replace_signature_anchor_images(
+        str(docx_path),
+        {
+            "detector_signature_image_path": str(new_detector),
+            "reviewer_signature_image_path": str(new_reviewer),
+        },
+    )
+
+    with ZipFile(docx_path) as zf:
+        assert (
+            zf.read("word/media/reportgen_signature_detector.png")
+            == new_detector.read_bytes()
+        )
+        assert (
+            zf.read("word/media/reportgen_signature_reviewer.png")
+            == new_reviewer.read_bytes()
+        )
+        document_xml = zf.read("word/document.xml").decode("utf-8")
+        rels_xml = zf.read("word/_rels/document.xml.rels").decode("utf-8")
+    assert "reportgen_signature_detector.png" in rels_xml
+    assert "reportgen_signature_reviewer.png" in rels_xml
+    assert "reportgen_signature_detector" not in document_xml
+
+
+def test_signature_library_resolves_names_to_paths(tmp_path):
+    detector_png = tmp_path / "detector.png"
+    reviewer_png = tmp_path / "reviewer.png"
+    detector_png.write_bytes(b"detector")
+    reviewer_png.write_bytes(b"reviewer")
+    (tmp_path / "signatures.yaml").write_text(
+        f"""
+detector:
+  张三: {detector_png.name}
+reviewer:
+  - name: 李四
+    path: {reviewer_png}
+""",
+        encoding="utf-8",
+    )
+
+    assert signature_options(tmp_path, "detector") == ["张三"]
+    assert resolve_signature_path(tmp_path, "detector", " 张三 ") == str(
+        detector_png.resolve()
+    )
+    assert resolve_signature_path(tmp_path, "reviewer", "李四") == str(reviewer_png)
+    assert resolve_signature_path(tmp_path, "reviewer", "王五") == ""
+
+
+def test_report_generator_fills_signature_paths_from_library(tmp_path):
+    detector_png = tmp_path / "detector.png"
+    reviewer_png = tmp_path / "reviewer.png"
+    detector_png.write_bytes(b"detector")
+    reviewer_png.write_bytes(b"reviewer")
+    (tmp_path / "signatures.yaml").write_text(
+        f"""
+detector:
+  张三: {detector_png}
+reviewer:
+  李四: {reviewer_png}
+""",
+        encoding="utf-8",
+    )
+    report_data = ReportData(
+        context={
+            "issuer": "张三",
+            "reviewer": "李四",
+            "reviewer_signature_image_path": "/explicit/reviewer.png",
+        }
+    )
+    generator = object.__new__(ReportGenerator)
+    generator.config_dir = str(tmp_path)
+
+    generator._resolve_signature_image_fields(report_data)
+
+    assert report_data.get_field("detector_signature_image_path") == str(detector_png)
+    assert report_data.get_field("reviewer_signature_image_path") == "/explicit/reviewer.png"
+
+
+def test_clinical_schema_exposes_signature_people_as_editable_selects(monkeypatch):
+    monkeypatch.setattr(
+        clinical_info_service,
+        "_load_mapping_yaml",
+        lambda: {
+            "single_values": {
+                "issuer": {
+                    "synonyms": ["检测者"],
+                    "type": "string",
+                    "default_value": "",
+                    "description": "检测者",
+                },
+                "reviewer": {
+                    "synonyms": ["审核者"],
+                    "type": "string",
+                    "default_value": "",
+                    "description": "审核者",
+                },
+                "detector_signature_image_path": {
+                    "synonyms": ["检测者签名图片路径"],
+                    "type": "string",
+                    "default_value": None,
+                    "description": "检测者签名图片",
+                },
+                "reviewer_signature_image_path": {
+                    "synonyms": ["审核者签名图片路径"],
+                    "type": "string",
+                    "default_value": None,
+                    "description": "审核者签名图片",
+                },
+            }
+        },
+    )
+    monkeypatch.setattr(
+        clinical_info_service,
+        "signature_options",
+        lambda _config_dir, role: ["张三"] if role == "detector" else ["李四"],
+    )
+
+    schema = clinical_info_service.get_clinical_form_schema("crc_358_msi")
+    fields = {
+        field.key: field
+        for group in schema.groups
+        for field in group.fields
+    }
+
+    assert fields["issuer"].ui.component == "select"
+    assert fields["issuer"].ui.options == ["张三"]
+    assert fields["issuer"].ui.allow_create is True
+    assert fields["reviewer"].ui.options == ["李四"]
+    assert fields["detector_signature_image_path"].ui.component == "file-upload"
+    assert fields["reviewer_signature_image_path"].ui.component == "file-upload"
 
 
 def test_template_renderer_removes_explicit_underlines(tmp_path):
@@ -2018,6 +2368,55 @@ def test_detection_content_fill_underline_is_restored(tmp_path):
     assert runs[0].font.underline is None
     assert runs[1].font.underline is True
     assert runs[2].font.underline is None
+
+
+def test_patient_letter_fill_underlines_are_restored(tmp_path):
+    docx_path = tmp_path / "patient_letter.docx"
+    doc = Document()
+    paragraph = doc.add_paragraph()
+    paragraph.add_run("尊敬的").font.underline = True
+    paragraph.add_run("     ").font.underline = True
+    paragraph.add_run("苏雨起").font.underline = True
+    paragraph.add_run("     ").font.underline = True
+    paragraph.add_run("先生：").font.underline = True
+    paragraph.add_run("感谢您选择本机构为您精心定").font.underline = True
+    paragraph.add_run("的").font.underline = True
+    paragraph.add_run("      ").font.underline = True
+    paragraph.add_run("结直肠癌358基因+MSI      ").font.underline = True
+    paragraph.add_run("检测项目。").font.underline = True
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._remove_template_underlines(str(docx_path))
+    renderer._restore_patient_letter_fill_underlines(str(docx_path))
+
+    runs = Document(docx_path).paragraphs[0].runs
+    assert runs[0].font.underline is None
+    assert runs[1].font.underline is True
+    assert runs[2].font.underline is True
+    assert runs[3].font.underline is True
+    assert runs[4].font.underline is None
+    assert runs[5].font.underline is None
+    assert runs[6].font.underline is None
+    assert runs[7].font.underline is True
+    assert runs[8].font.underline is True
+    assert runs[9].font.underline is None
+
+
+def test_pdf_footer_page_number_is_used_for_static_toc_detection():
+    page_text = """
+姓名：苏雨起                 科技服务人类健康
+
+3. 免疫治疗疗效评估
+3.1 肿瘤突变负荷（TMB）水平提示
+
+
+
+                                    12
+"""
+
+    assert TemplateRenderer._extract_pdf_footer_page_number(page_text) == 12
+    assert TemplateRenderer._extract_pdf_footer_page_number("正文\\n没有页脚") is None
 
 
 def test_report_generator_normalizes_duplicate_project_name_suffix():
@@ -2228,6 +2627,52 @@ def test_variant_detail_table_can_disable_link_underlines_from_panel_style(tmp_p
     assert str(drug_run.font.color.rgb) == "000000"
 
 
+def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    template_path = package.resolve_template_file("crc_358_msi_golden_template_v0")
+    docx_path = tmp_path / "toc_style.docx"
+    shutil.copy2(template_path, docx_path)
+
+    context = {
+        "panel_style": {
+            "toc": {
+                "font_name": "微软雅黑",
+                "section_font_color": "00C4D8",
+                "section_font_size": 16,
+                "section_bold": True,
+                "item_font_color": "000000",
+                "item_font_size": 11,
+                "item_bold": False,
+            }
+        }
+    }
+    ok = TemplateRenderer(log_level="ERROR")._write_static_toc_page_numbers(
+        str(docx_path),
+        {
+            "患者及样本信息": 1,
+            "检测内容": 1,
+            "检测结果小结": 2,
+            "靶向药物相关检测结果": 4,
+            "参考文献": 71,
+        },
+        context,
+    )
+
+    assert ok is True
+    xml = _read_docx_part(docx_path, "word/document.xml")
+    section_idx = xml.index("第一部分：基本信息")
+    item_idx = xml.index("患者及样本信息", section_idx)
+    section_xml = xml[section_idx - 800 : section_idx + 200]
+    item_xml = xml[item_idx - 800 : item_idx + 300]
+    assert 'w:val="00C4D8"' in section_xml
+    assert 'w:val="32"' in section_xml
+    assert "<w:b" in section_xml
+    assert 'w:val="000000"' in item_xml
+    assert 'w:val="22"' in item_xml
+    assert "<w:u" not in section_xml
+    assert "<w:u" not in item_xml
+
+
 def test_biomarker_table_restores_template_typography(tmp_path):
     docx_path = tmp_path / "biomarker.docx"
     doc = Document()
@@ -2428,6 +2873,62 @@ def test_empty_numbered_paragraphs_are_removed(tmp_path):
     ]
     assert bullets == ["保留", "也保留"]
     assert any(not p.text for p in rendered.paragraphs)
+
+
+def test_empty_numbered_paragraph_with_image_is_preserved(tmp_path):
+    from PIL import Image
+
+    docx_path = tmp_path / "numbered_image.docx"
+    image_path = tmp_path / "figure.png"
+    Image.new("RGB", (320, 120), "white").save(image_path)
+    doc = Document()
+    paragraph = doc.add_paragraph("")
+    ppr = paragraph._p.get_or_add_pPr()
+    num_pr = OxmlElement("w:numPr")
+    num_id = OxmlElement("w:numId")
+    num_id.set(qn("w:val"), "1")
+    num_pr.append(num_id)
+    ppr.append(num_pr)
+    paragraph.add_run().add_picture(str(image_path), width=Inches(2.0))
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._remove_empty_numbered_paragraphs(str(docx_path))
+
+    rendered = Document(docx_path)
+    assert len(rendered.inline_shapes) == 1
+    assert any("<w:drawing" in paragraph._p.xml for paragraph in rendered.paragraphs)
+
+
+def test_multiline_bullet_cleanup_preserves_numbered_image_paragraph(tmp_path):
+    from PIL import Image
+
+    docx_path = tmp_path / "numbered_image_after_multiline.docx"
+    image_path = tmp_path / "figure.png"
+    Image.new("RGB", (320, 120), "white").save(image_path)
+    doc = Document()
+
+    def add_bullet(text: str = ""):
+        paragraph = doc.add_paragraph(text)
+        ppr = paragraph._p.get_or_add_pPr()
+        num_pr = OxmlElement("w:numPr")
+        num_id = OxmlElement("w:numId")
+        num_id.set(qn("w:val"), "1")
+        num_pr.append(num_id)
+        ppr.append(num_pr)
+        return paragraph
+
+    add_bullet("第一条\n第二条")
+    image_paragraph = add_bullet("")
+    image_paragraph.add_run().add_picture(str(image_path), width=Inches(2.0))
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._normalize_multiline_bullet_paragraphs(
+        str(docx_path)
+    )
+
+    rendered = Document(docx_path)
+    assert len(rendered.inline_shapes) == 1
+    assert any("<w:drawing" in paragraph._p.xml for paragraph in rendered.paragraphs)
 
 
 def test_blank_page_break_before_references_heading_is_removed(tmp_path):
@@ -3093,8 +3594,50 @@ def test_template_renderer_default_processors_include_key_m1_processors():
     assert "bullet_lists" in names
     assert "variant_tables" in names
     assert "toc_refresh" in names
+    assert "front_matter_spacing" in names
     assert "blank_page_cleanup" in names
     assert "underlines_and_styles" in names
+
+
+def test_front_matter_spacing_keeps_report_guide_page_top(tmp_path):
+    docx_path = tmp_path / "front_matter.docx"
+    doc = Document()
+    doc.add_paragraph("检测报告")
+    page_break = doc.add_paragraph("")
+    page_break.add_run().add_break(WD_BREAK.PAGE)
+    for _ in range(6):
+        doc.add_paragraph("")
+    doc.add_paragraph("报告导读")
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._normalize_front_matter_spacing(
+        str(docx_path)
+    )
+
+    import xml.etree.ElementTree as ET
+    from zipfile import ZipFile
+
+    ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    w_p = f"{{{ns_w}}}p"
+    w_t = f"{{{ns_w}}}t"
+    w_br = f"{{{ns_w}}}br"
+    w_type = f"{{{ns_w}}}type"
+
+    with ZipFile(docx_path) as zin:
+        root = ET.fromstring(zin.read("word/document.xml"))
+
+    paragraphs = [elem for elem in root.iter(w_p)]
+
+    def text(elem):
+        return "".join((node.text or "") for node in elem.iter(w_t)).strip()
+
+    def has_page_break(elem):
+        return any(node.attrib.get(w_type) == "page" for node in elem.iter(w_br))
+
+    guide_idx = next(idx for idx, elem in enumerate(paragraphs) if text(elem) == "报告导读")
+
+    assert has_page_break(paragraphs[guide_idx - 1])
+    assert text(paragraphs[guide_idx - 2]) == "检测报告"
 
 
 def test_template_renderer_can_build_panel_declared_processors_only():
@@ -3168,7 +3711,7 @@ def _assert_processors_idempotent(
         monkeypatch.setattr(
             renderer,
             "_populate_static_toc_page_numbers",
-            lambda file_path: None,
+            lambda file_path, context=None: None,
         )
 
     renderer._run_post_render_processors(
@@ -3421,6 +3964,31 @@ def test_qa_report_detects_empty_numbered_paragraph(tmp_path):
     assert qa["status"] == "FAIL"
     assert qa["checks"]["empty_numbered_paragraphs"]["count"] == 1
     assert any(i["code"] == "EMPTY_NUMBERED_PARAGRAPH" for i in qa["issues"])
+
+
+def test_qa_report_ignores_numbered_image_paragraph(tmp_path):
+    from PIL import Image
+
+    docx_path = tmp_path / "numbered_image.docx"
+    image_path = tmp_path / "figure.png"
+    Image.new("RGB", (80, 40), color=(0, 180, 180)).save(image_path)
+
+    doc = Document()
+    p = doc.add_paragraph("")
+    ppr = p._p.get_or_add_pPr()
+    num_pr = OxmlElement("w:numPr")
+    num_id = OxmlElement("w:numId")
+    num_id.set(qn("w:val"), "1")
+    num_pr.append(num_id)
+    ppr.append(num_pr)
+    p.add_run().add_picture(str(image_path), width=Inches(2.0))
+    doc.save(docx_path)
+
+    qa = build_docx_qa_report(output_file=str(docx_path))
+
+    assert qa["checks"]["empty_numbered_paragraphs"]["status"] == "PASS"
+    assert qa["checks"]["empty_numbered_paragraphs"]["count"] == 0
+    assert not any(i["code"] == "EMPTY_NUMBERED_PARAGRAPH" for i in qa["issues"])
 
 
 def test_renderer_clears_empty_numbered_paragraphs_inside_tables(tmp_path):

@@ -6,6 +6,7 @@ export interface FieldUiHints {
   span: number
   options: string[] | null
   accept: string | null
+  allow_create: boolean
 }
 
 export interface FieldSchema {

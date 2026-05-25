@@ -9,6 +9,7 @@
 Python 3.9 compatible.
 """
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -43,6 +44,7 @@ class GeneKnowledgeProvider:
         # 索引缓存（基因名 -> 数据行）
         self._gene_intro_cache: Dict[str, str] = {}
         self._gene_analysis_cache: Dict[str, str] = {}
+        self._reviewed_gene_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._drug_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._drug_full_cache: Dict[str, List[Dict[str, str]]] = {}  # 完整药物信息
         self._gene_transcript_cache: Dict[str, Dict[str, str]] = {}
@@ -171,15 +173,191 @@ class GeneKnowledgeProvider:
 
             gene_upper = gene.upper()
 
-            # 缓存基因简介
+            # 缓存基因简介。部分处理后的知识库会把“蛋白结构域”自动摘要
+            # 拼到简介末尾；终版报告把这类内容放在“基因变异解析”段。
             intro = self._norm_text(row.get(intro_col))
             if intro and gene_upper not in self._gene_intro_cache:
-                self._gene_intro_cache[gene_upper] = intro
+                self._gene_intro_cache[gene_upper] = self._strip_intro_domain_tail(
+                    gene_upper, intro
+                )
 
             # 缓存基因变异解析
             analysis = self._norm_text(row.get(analysis_col))
             if analysis and gene_upper not in self._gene_analysis_cache:
                 self._gene_analysis_cache[gene_upper] = analysis
+
+            reviewed = self._extract_reviewed_analysis_fields(row, df.columns)
+            if reviewed and gene_upper not in self._reviewed_gene_analysis_cache:
+                self._reviewed_gene_analysis_cache[gene_upper] = reviewed
+
+    def _extract_reviewed_analysis_fields(self, row, columns) -> Dict[str, str]:
+        """Extract reviewed report-generation columns from the gene KB.
+
+        The public workbook keeps both generic analysis columns and report-review
+        columns. The latter are not named semantically after export (often
+        ``Unnamed: 4`` ...), but the first row documents their purpose:
+        protein/domain text, expert consequence text, cancer-specific evidence,
+        and conclusion/fallback wording.
+        """
+
+        def by_name(name: str) -> str:
+            return self._norm_text(row.get(name)) if name in columns else ""
+
+        # Prefer explicit names if a future curated workbook adds them; fall
+        # back to the current exported column positions.
+        fields = {
+            "domain_text": by_name("泛癌") or by_name("Unnamed: 4"),
+            "expert_text": by_name("需自动化识别(Ⅱ类出具，Ⅲ类 本列不出具)") or by_name("Unnamed: 5"),
+            "cancer_text": by_name("肠癌{运营系统调取}") or by_name("Unnamed: 6"),
+            "conclusion_text": by_name("需自动化识别") or by_name("Unnamed: 7"),
+        }
+        return {k: v for k, v in fields.items() if v and v.lower() != "nan"}
+
+    def _strip_intro_domain_tail(self, gene: str, intro: str) -> str:
+        lines = [line.strip() for line in str(intro).splitlines() if line.strip()]
+        if len(lines) <= 1:
+            return intro
+        kept = []
+        for line in lines:
+            if (
+                line.upper().startswith(f"{gene}基因".upper())
+                and "编码的蛋白全长" in line
+            ):
+                continue
+            kept.append(line)
+        return "\n".join(kept) if kept else intro
+
+    def _protein_position(self, p_hgvs: str) -> Optional[int]:
+        match = re.search(r"p\.[A-Za-z*]{1,3}(\d+)", str(p_hgvs or ""))
+        if not match:
+            return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
+
+    def _domain_for_position(self, domain_text: str, position: Optional[int]) -> str:
+        if not position:
+            return ""
+        pattern = re.compile(
+            r"([\u4e00-\u9fffA-Za-z0-9/（）()_\-\s]+?结构域)"
+            r"[（(](?:第)?(\d+)[\-－~～](\d+)位氨基酸[)）]"
+        )
+        for name, start, end in pattern.findall(str(domain_text or "")):
+            try:
+                if int(start) <= position <= int(end):
+                    return name.strip(" ，、。；：")
+            except ValueError:
+                continue
+        return ""
+
+    def _is_splice_variant(self, c_hgvs: str, p_hgvs: str, mutation_type: Optional[str]) -> bool:
+        mt = str(mutation_type or "")
+        if "Splice" in mt or "剪接" in mt:
+            return True
+        return bool(re.search(r"c\.\d+[+-]\d+", str(c_hgvs or ""))) and str(p_hgvs or "") in {"", "--", "*"}
+
+    def _is_truncating_variant(self, p_hgvs: str, mutation_type: Optional[str]) -> bool:
+        mt = str(mutation_type or "")
+        if any(key in mt for key in ("Nonsense", "Frameshift", "Stop_gain", "Stop-loss", "无义", "移码")):
+            return True
+        p = str(p_hgvs or "")
+        return "*" in p or "fs" in p
+
+    def _reviewed_variant_consequence(
+        self,
+        *,
+        c_hgvs: str,
+        p_hgvs: str,
+        mutation_type: Optional[str],
+        domain_text: str,
+        expert_text: str,
+    ) -> str:
+        if self._is_splice_variant(c_hgvs, p_hgvs, mutation_type):
+            return (
+                f"该样本检出的{c_hgvs}突变位于内含子与外显子交界处，"
+                "可能导致mRNA剪接异常，进而导致蛋白功能缺失。"
+            )
+
+        if p_hgvs and p_hgvs not in {"--", "*"}:
+            if self._is_truncating_variant(p_hgvs, mutation_type):
+                return (
+                    f"该样本检出的{p_hgvs}突变导致蛋白翻译提前终止，"
+                    "产生截短的蛋白，可能导致蛋白功能缺失。"
+                )
+
+            position = self._protein_position(p_hgvs)
+            domain = self._domain_for_position(domain_text, position)
+            if "已知激活突变" in expert_text:
+                location = "位于上述结构域之内" if domain else ""
+                return f"该样本检出的{p_hgvs}突变{location}，为已知激活突变，对蛋白功能有重要影响。"
+            if "蛋白功能缺失" in expert_text:
+                if domain:
+                    return f"该样本检出的{p_hgvs}突变位于{domain}，可能导致蛋白功能缺失。"
+                return f"该样本检出的{p_hgvs}突变可能导致蛋白功能缺失。"
+            if domain:
+                return f"该样本检出的{p_hgvs}突变位于{domain}，可能会对蛋白功能产生影响。"
+            return f"该样本检出的{p_hgvs}突变对蛋白功能的影响有待结合数据库和文献进一步评估。"
+
+        return ""
+
+    def _clean_reviewed_conclusion(self, text: str) -> str:
+        text = self._norm_text(text)
+        if not text:
+            return ""
+        # Current workbook stores several alternative fallback endings in one
+        # cell. Keep the reviewed leading conclusion when present.
+        match = re.search(r"(因此，该样本检出的突变[^。]*。)", text)
+        return match.group(1) if match else ""
+
+    def _build_reviewed_mutation_analysis(
+        self,
+        *,
+        gene: str,
+        c_hgvs: str,
+        p_hgvs: str,
+        mutation_type: Optional[str],
+        has_drug: bool,
+    ) -> str:
+        reviewed = self._reviewed_gene_analysis_cache.get(gene.upper(), {})
+        if not reviewed:
+            return self.get_gene_analysis(gene)
+
+        domain_text = reviewed.get("domain_text", "")
+        expert_text = reviewed.get("expert_text", "")
+        cancer_text = reviewed.get("cancer_text", "")
+
+        paragraphs: List[str] = []
+        if domain_text:
+            consequence = self._reviewed_variant_consequence(
+                c_hgvs=c_hgvs,
+                p_hgvs=p_hgvs,
+                mutation_type=mutation_type,
+                domain_text=domain_text,
+                expert_text=expert_text,
+            )
+            first = domain_text.rstrip("。")
+            if consequence:
+                first = f"{first}。{consequence}"
+            else:
+                first = f"{first}。"
+            paragraphs.append(first)
+
+        if cancer_text:
+            conclusion = self._clean_reviewed_conclusion(
+                reviewed.get("conclusion_text", "")
+            )
+            if not conclusion:
+                mentions_drug = bool(
+                    re.search(r"用药|药物|耐药|获益|抑制剂", cancer_text)
+                )
+                suffix = "及用药" if has_drug and mentions_drug else ""
+                conclusion = f"因此，该样本检出的突变可能与疾病的发生发展{suffix}相关。"
+            paragraphs.append(f"{cancer_text.rstrip('。')}。{conclusion}")
+
+        if paragraphs:
+            return "\n".join(paragraphs)
+        return self.get_gene_analysis(gene)
 
     def _build_drug_analysis_cache(self, columns: Dict) -> None:
         """构建药物分析缓存"""
@@ -201,10 +379,10 @@ class GeneKnowledgeProvider:
         c_point_col = None
         p_point_col = None
         benefit_drug_col = None
-        benefit_relation_col = None
+        benefit_relation_cols = []
         benefit_clinical_col = None
         negative_drug_col = None
-        negative_relation_col = None
+        negative_relation_cols = []
         negative_clinical_col = None
 
         # 解析列位置
@@ -221,15 +399,20 @@ class GeneKnowledgeProvider:
                 p_point_col = col
             elif "潜在获益靶向/免疫药物解析" in col_str:
                 benefit_drug_col = col
-                # 后续列
+                # 后续列：当前工作簿里“基因变异与药物关联分析”可能拆成
+                # 变异特异说明 + 药物机制说明两列，临床解析在第三列之后。
                 if i + 1 < len(cols):
-                    benefit_relation_col = cols[i + 1]
+                    benefit_relation_cols.append(cols[i + 1])
+                if i + 2 < len(cols):
+                    benefit_relation_cols.append(cols[i + 2])
                 if i + 3 < len(cols):
                     benefit_clinical_col = cols[i + 3]
             elif "潜在负相关靶向/免疫药物解析" in col_str:
                 negative_drug_col = col
                 if i + 1 < len(cols):
-                    negative_relation_col = cols[i + 1]
+                    negative_relation_cols.append(cols[i + 1])
+                if i + 2 < len(cols):
+                    negative_relation_cols.append(cols[i + 2])
                 if i + 3 < len(cols):
                     negative_clinical_col = cols[i + 3]
 
@@ -275,10 +458,12 @@ class GeneKnowledgeProvider:
             benefit_drug = (
                 self._norm_text(row.get(benefit_drug_col)) if benefit_drug_col else ""
             )
-            benefit_relation = (
-                self._norm_text(row.get(benefit_relation_col))
-                if benefit_relation_col
-                else ""
+            benefit_relation = "\n".join(
+                text
+                for text in (
+                    self._norm_text(row.get(col)) for col in benefit_relation_cols
+                )
+                if text
             )
             benefit_clinical = (
                 self._norm_text(row.get(benefit_clinical_col))
@@ -290,10 +475,12 @@ class GeneKnowledgeProvider:
             negative_drug = (
                 self._norm_text(row.get(negative_drug_col)) if negative_drug_col else ""
             )
-            negative_relation = (
-                self._norm_text(row.get(negative_relation_col))
-                if negative_relation_col
-                else ""
+            negative_relation = "\n".join(
+                text
+                for text in (
+                    self._norm_text(row.get(col)) for col in negative_relation_cols
+                )
+                if text
             )
             negative_clinical = (
                 self._norm_text(row.get(negative_clinical_col))
@@ -582,8 +769,15 @@ class GeneKnowledgeProvider:
             gene, c_hgvs, p_hgvs, frequency, mutation_type
         )
 
-        # 获取变异解析
-        mutation_analysis = self.get_gene_analysis(gene)
+        # 获取变异解析。优先使用终版报告口径的 reviewed 列组合；
+        # 没有 reviewed 数据时回退到通用分析列。
+        mutation_analysis = self._build_reviewed_mutation_analysis(
+            gene=gene,
+            c_hgvs=c_hgvs,
+            p_hgvs=p_hgvs,
+            mutation_type=mutation_type,
+            has_drug=has_drug,
+        )
 
         return {
             "gene": gene,
@@ -770,6 +964,57 @@ class GeneKnowledgeProvider:
                 kept.append(segment)
             return "".join(kept).strip()
 
+        def _aa_change(p_hgvs: str) -> tuple[str, Optional[int], str]:
+            match = re.search(r"p\.([A-Za-z*]{1,3})(\d+)([A-Za-z*]{1,3})", str(p_hgvs or ""))
+            if not match:
+                return "", None, ""
+            return match.group(1).upper(), int(match.group(2)), match.group(3).upper()
+
+        def _p_point_matches(pattern: str, observed: str) -> bool:
+            pattern = str(pattern or "").strip()
+            observed = str(observed or "").strip()
+            if not pattern:
+                return True
+            if observed and observed in pattern:
+                return True
+
+            from_aa, pos, to_aa = _aa_change(observed)
+            if not pos:
+                return False
+
+            for item in re.split(r"[、,，]", pattern):
+                item = item.strip()
+                if not item:
+                    continue
+                wildcard = re.search(r"p\.([A-Za-z*]{1,3})(\d+)X", item)
+                if not wildcard:
+                    continue
+                item_from = wildcard.group(1).upper()
+                item_pos = int(wildcard.group(2))
+                if item_from != from_aa or item_pos != pos:
+                    continue
+                excluded = set()
+                excluded_match = re.search(r"除([^外]+)外", item)
+                if excluded_match:
+                    excluded = {
+                        token.strip().upper()
+                        for token in re.split(r"[、,，/]", excluded_match.group(1))
+                        if token.strip()
+                    }
+                return to_aa not in excluded
+            return False
+
+        def _drug_info_matches_variant(drug_info: Dict[str, str], variant: Dict[str, Any]) -> bool:
+            c_point = str(drug_info.get("c_point") or "").strip()
+            p_point = str(drug_info.get("p_point") or "").strip()
+            c_hgvs = str(variant.get("cHGVS") or "").strip()
+            p_hgvs = str(variant.get("pHGVS") or "").strip()
+            if c_point and c_hgvs and c_point != c_hgvs:
+                return False
+            if p_point and not _p_point_matches(p_point, p_hgvs):
+                return False
+            return True
+
         sections = []
         seen_drugs = set()
 
@@ -791,14 +1036,16 @@ class GeneKnowledgeProvider:
             if benefit_drugs and benefit_drugs != "--":
                 for drug_info in drug_infos:
                     if drug_info["type"] == "benefit":
+                        if not _drug_info_matches_variant(drug_info, v):
+                            continue
                         drug_name = drug_info["drug"]
                         if _drug_matches(drug_name, benefit_drugs):
-                            key = f"{gene}:{drug_name}:benefit"
+                            filtered_drug_name = _filter_drug_name(
+                                drug_name, benefit_drugs
+                            )
+                            key = f"{gene}:{filtered_drug_name}:benefit"
                             if key not in seen_drugs:
                                 seen_drugs.add(key)
-                                filtered_drug_name = _filter_drug_name(
-                                    drug_name, benefit_drugs
-                                )
                                 variant_info = f"{v.get('cHGVS', '')}，{v.get('pHGVS', '')}" if v.get('pHGVS') else v.get('cHGVS', '')
                                 sections.append(
                                     {
@@ -824,14 +1071,16 @@ class GeneKnowledgeProvider:
             if caution_drugs and caution_drugs != "--":
                 for drug_info in drug_infos:
                     if drug_info["type"] == "caution":
+                        if not _drug_info_matches_variant(drug_info, v):
+                            continue
                         drug_name = drug_info["drug"]
                         if _drug_matches(drug_name, caution_drugs):
-                            key = f"{gene}:{drug_name}:caution"
+                            filtered_drug_name = _filter_drug_name(
+                                drug_name, caution_drugs
+                            )
+                            key = f"{gene}:{filtered_drug_name}:caution"
                             if key not in seen_drugs:
                                 seen_drugs.add(key)
-                                filtered_drug_name = _filter_drug_name(
-                                    drug_name, caution_drugs
-                                )
                                 variant_info = f"{v.get('cHGVS', '')}，{v.get('pHGVS', '')}" if v.get('pHGVS') else v.get('cHGVS', '')
                                 sections.append(
                                     {

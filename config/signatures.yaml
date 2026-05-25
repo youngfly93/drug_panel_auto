@@ -1,0 +1,14 @@
+# Signature image registry.
+#
+# Keep real signature images outside git, for example under:
+#   storage/signatures/<date>/<uuid>.png
+#
+# Supported forms:
+# detector:
+#   张三: /absolute/path/to/zhangsan.png
+# reviewer:
+#   - name: 李四
+#     path: storage/signatures/reviewer_lisi.png
+
+detector: {}
+reviewer: {}

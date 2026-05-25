@@ -37,7 +37,10 @@ templates:
     status: "pilot"
     description: "Scrubbed golden-template pilot generated from the reviewed CRC358+MSI report. Not approved for default customer delivery until the PRD acceptance gates pass."
     processors:
+      - "part3_formatted_sections"
+      - "signature_placeholder"
       - "bullet_lists"
+      - "front_matter_spacing"
       - "blank_page_cleanup"
       - "toc_refresh"
       - "final_refresh_cleanup"

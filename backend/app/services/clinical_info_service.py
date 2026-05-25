@@ -21,6 +21,7 @@ from app.schemas.clinical_info import (
     PatientInfo,
     ProjectInfo,
 )
+from reportgen.core.signature_library import signature_options
 
 # File lock for concurrent YAML writes
 _yaml_lock = threading.Lock()
@@ -49,7 +50,13 @@ FIELD_GROUPS = {
     },
     "approval": {
         "label": "签发信息",
-        "fields": ["issuer", "reviewer", "signature_image_path"],
+        "fields": [
+            "issuer",
+            "reviewer",
+            "signature_image_path",
+            "detector_signature_image_path",
+            "reviewer_signature_image_path",
+        ],
     },
     "biomarkers": {
         "label": "检测指标",
@@ -97,12 +104,25 @@ def _is_computed_field(field_def: dict) -> bool:
 
 def _build_ui_hints(key: str, field_def: dict) -> FieldUiHints:
     """Build UI hints for a field."""
-    if key == "signature_image_path":
+    if key == "signature_image_path" or key.endswith("_signature_image_path"):
+        placeholder = "请选择或上传签名图片"
+        if key in {"detector_signature_image_path", "reviewer_signature_image_path"}:
+            placeholder = "可选：上传临时签名图片，优先级高于签名库"
         return FieldUiHints(
             component="file-upload",
-            placeholder="请选择或上传签名图片",
+            placeholder=placeholder,
             span=24,
             accept=".png,.jpg,.jpeg,.webp",
+        )
+    if key in {"issuer", "reviewer"}:
+        role = "detector" if key == "issuer" else "reviewer"
+        options = signature_options(settings.upstream_config_dir, role)
+        return FieldUiHints(
+            component="select" if options else "input",
+            placeholder="请选择或输入人员姓名",
+            span=12,
+            options=options,
+            allow_create=True,
         )
 
     ftype = field_def.get("type", "string")

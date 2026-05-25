@@ -11,6 +11,7 @@ class FieldUiHints(BaseModel):
     span: int = 12  # grid span (out of 24)
     options: Optional[list[str]] = None  # for select component
     accept: Optional[str] = None  # for file-upload component
+    allow_create: bool = False  # for editable select components
 
 
 class FieldSchema(BaseModel):

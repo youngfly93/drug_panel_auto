@@ -36,6 +36,7 @@ from reportgen.core.qa_report import (
     build_docx_qa_report,
     write_docx_qa_report,
 )
+from reportgen.core.signature_library import resolve_signature_path
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
@@ -549,6 +550,7 @@ class ReportGenerator:
         panel_style = self._load_panel_style_config(state.panel_package)
         if panel_style:
             state.report_data.set_field("panel_style", panel_style)
+        self._resolve_signature_image_fields(state.report_data)
         state.report_text_rules = self._load_report_text_rules(state.panel_package)
         applied_text_rules = apply_report_text_rules(
             state.report_data,
@@ -558,6 +560,21 @@ class ReportGenerator:
             state.report_data.set_field("report_text_rule_keys", applied_text_rules)
             stage.metrics["report_text_rule_count"] = len(applied_text_rules)
         stage.metrics["validation_errors"] = len(state.report_data.validation_errors)
+
+    def _resolve_signature_image_fields(self, report_data: ReportData) -> None:
+        """Fill signature image paths from configured signer names when needed."""
+        bindings = (
+            ("detector", "issuer", "detector_signature_image_path"),
+            ("reviewer", "reviewer", "reviewer_signature_image_path"),
+        )
+        for role, name_field, path_field in bindings:
+            current_path = str(report_data.get_field(path_field) or "").strip()
+            if current_path:
+                continue
+            signer_name = str(report_data.get_field(name_field) or "").strip()
+            resolved = resolve_signature_path(self.config_dir, role, signer_name)
+            if resolved:
+                report_data.set_field(path_field, resolved)
 
     def _stage_panel_rule_execution(
         self,

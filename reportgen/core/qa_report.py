@@ -768,8 +768,15 @@ def _paragraph_location(paragraph: Any) -> str:
 def _is_empty_numbered_paragraph(paragraph: Any) -> bool:
     if (paragraph.text or "").strip():
         return False
+    if _paragraph_has_embedded_object(paragraph):
+        return False
     ppr = paragraph._p.pPr
     return bool(ppr is not None and ppr.numPr is not None)
+
+
+def _paragraph_has_embedded_object(paragraph: Any) -> bool:
+    xml = paragraph._p.xml
+    return "<w:drawing" in xml or "<w:pict" in xml
 
 
 def _inspect_toc(paragraphs: List[Any]) -> Dict[str, Any]:

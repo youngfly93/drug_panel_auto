@@ -45,9 +45,7 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
         FunctionProcessor(
             "signature_placeholder",
             "签名占位处理失败",
-            lambda c: c.renderer._render_signature_placeholder(
-                c.output_path, c.template_context
-            ),
+            _run_signature_placeholders,
         ),
         FunctionProcessor(
             "report_content",
@@ -77,6 +75,11 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
             "section_spacing",
             "章节间距清理失败",
             lambda c: c.renderer._cleanup_section_spacing(c.output_path),
+        ),
+        FunctionProcessor(
+            "front_matter_spacing",
+            "首页导读页空白清理失败",
+            lambda c: c.renderer._normalize_front_matter_spacing(c.output_path),
         ),
         FunctionProcessor(
             "page_layout",
@@ -168,7 +171,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         ctx.logger.warning("最终目录页码刷新失败", error=str(refresh_err))
     ctx.renderer._normalize_toc_decoration_layout(ctx.output_path)
     ctx.renderer._restore_reviewed_body_headers(ctx.output_path)
-    ctx.renderer._populate_static_toc_page_numbers(ctx.output_path)
+    ctx.renderer._populate_static_toc_page_numbers(ctx.output_path, ctx.template_context)
 
 
 def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
@@ -181,3 +184,9 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     )
     ctx.renderer._restore_biomarker_table_style(ctx.output_path, ctx.template_context)
     ctx.renderer._restore_detection_content_underlines(ctx.output_path)
+    ctx.renderer._restore_patient_letter_fill_underlines(ctx.output_path)
+
+
+def _run_signature_placeholders(ctx: ProcessorContext) -> None:
+    ctx.renderer._render_signature_placeholder(ctx.output_path, ctx.template_context)
+    ctx.renderer._replace_signature_anchor_images(ctx.output_path, ctx.template_context)
