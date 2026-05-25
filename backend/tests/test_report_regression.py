@@ -4788,6 +4788,144 @@ def test_report_diff_can_suppress_golden_template_noise(tmp_path):
     assert result["sections"]["styles"]["samples"]
 
 
+def test_gene_knowledge_provider_applies_reviewed_part3_yaml_overlay(tmp_path):
+    overlay = tmp_path / "reviewed_part3.yaml"
+    overlay.write_text(
+        yaml.safe_dump(
+            {
+                "gene_sections": [
+                    {
+                        "gene": "SETD2",
+                        "c_hgvs": "c.4930G>T",
+                        "p_hgvs": "p.G1644*",
+                        "intro": "SETD2 reviewed intro",
+                        "mutation_analysis": "SETD2 reviewed analysis",
+                    }
+                ],
+                "drug_sections": [
+                    {
+                        "gene": "SETD2",
+                        "c_hgvs": "c.4930G>T",
+                        "p_hgvs": "p.G1644*",
+                        "type": "benefit",
+                        "header": "SETD2：c.4930G>T，p.G1644*突变相应靶向药物",
+                        "drug_name": "AZD1775",
+                        "relation": "reviewed relation",
+                        "clinical": "reviewed clinical",
+                    }
+                ],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    provider = GeneKnowledgeProvider(
+        {
+            "enabled": True,
+            "gene_knowledge_db": {
+                "enabled": True,
+                "path": "missing.xlsx",
+                "reviewed_part3_overlay_path": str(overlay),
+            },
+        }
+    )
+    assert provider.load(base_path=str(tmp_path))
+
+    section = provider.build_gene_knowledge_section(
+        gene="SETD2",
+        c_hgvs="c.4930G>T",
+        p_hgvs="p.G1644*",
+        frequency=22.15,
+        mutation_type="Nonsense",
+        has_drug=True,
+    )
+    assert section["intro"] == "SETD2 reviewed intro"
+    assert "22.15%" in section["mutation_desc"]
+    assert section["mutation_analysis"] == "SETD2 reviewed analysis"
+
+    drug_sections = provider.build_drug_analysis_sections(
+        [
+            {
+                "gene": "SETD2",
+                "cHGVS": "c.4930G>T",
+                "pHGVS": "p.G1644*",
+                "benefit_drugs": "AZD1775（C）",
+                "caution_drugs": "--",
+            }
+        ]
+    )
+    assert len(drug_sections) == 1
+    assert drug_sections[0]["drug_name"] == "AZD1775"
+    assert drug_sections[0]["relation"] == "reviewed relation"
+    assert drug_sections[0]["clinical"] == "reviewed clinical"
+
+
+def test_report_diff_fails_on_part3_gene_and_drug_text_mismatch(tmp_path):
+    reference = tmp_path / "reference.docx"
+    candidate = tmp_path / "candidate.docx"
+
+    ref_doc = Document()
+    for text in [
+        "第三部分：基因变异及相应靶向/免疫药物解析",
+        "基因变异解析",
+        "u SETD2：c.4930G>T，p.G1644*；22.15%",
+        "基因简介：",
+        "SETD2 reviewed intro",
+        "基因变异说明：",
+        "SETD2 reviewed desc",
+        "基因变异解析：",
+        "SETD2 reviewed analysis",
+        "靶向药物/免疫用药提示解析",
+        "潜在获益靶向/免疫药物解析",
+        "SETD2：c.4930G>T，p.G1644*突变相应靶向药物",
+        "AZD1775",
+        "基因变异与药物关联分析：",
+        "reviewed relation",
+        "药物疗效临床解析：",
+        "reviewed clinical",
+        "3. 阅读说明",
+    ]:
+        ref_doc.add_paragraph(text)
+    ref_doc.save(reference)
+
+    cand_doc = Document()
+    for text in [
+        "第三部分：基因变异及相应靶向/免疫药物解析",
+        "基因变异解析",
+        "u SETD2：c.4930G>T，p.G1644*；22.15%",
+        "基因简介：",
+        "SETD2 generic intro",
+        "基因变异说明：",
+        "SETD2 reviewed desc",
+        "基因变异解析：",
+        "SETD2 reviewed analysis",
+        "靶向药物/免疫用药提示解析",
+        "潜在获益靶向/免疫药物解析",
+        "SETD2：c.4930G>T，p.G1644*突变相应靶向药物",
+        "AZD1775",
+        "基因变异与药物关联分析：",
+        "generic relation",
+        "药物疗效临床解析：",
+        "reviewed clinical",
+        "3. 阅读说明",
+    ]:
+        cand_doc.add_paragraph(text)
+    cand_doc.save(candidate)
+
+    result = compare_reports(
+        ReportDiffOptions(
+            reference_docx=str(reference),
+            candidate_docx=str(candidate),
+        )
+    )
+
+    assert result["status"] == "FAIL"
+    codes = {issue["code"] for issue in result["issues"]}
+    assert "PART3_GENE_SECTION_DIFF" in codes
+    assert "PART3_DRUG_SECTION_DIFF" in codes
+
+
 def test_quality_gate_can_run_panel_validation_only(tmp_path):
     from reportgen.core.qa_gate import QualityGateOptions, run_quality_gate
 

@@ -9,6 +9,7 @@ rendering is unavailable.
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
@@ -54,6 +55,11 @@ def compare_reports(options: ReportDiffOptions) -> dict[str, Any]:
             max_samples=max_samples,
             normalize_whitespace=options.normalize_whitespace,
             ignore_reference_artifacts=options.ignore_reference_artifacts,
+        ),
+        "part3": _compare_part3_sections(
+            ref_snapshot,
+            cand_snapshot,
+            max_samples=max_samples,
         ),
         "tables": _compare_tables(
             ref_snapshot,
@@ -156,6 +162,19 @@ def render_report_diff_markdown(result: Mapping[str, Any]) -> str:
         f"{table_section.get('candidate_count')}"
     )
     for sample in table_section.get("samples") or []:
+        lines.append(f"- {sample.get('message')}")
+
+    part3_section = sections.get("part3") or {}
+    lines.extend(["", "## Part 3", ""])
+    lines.append(
+        f"- Gene sections: {part3_section.get('reference_gene_count')} -> "
+        f"{part3_section.get('candidate_gene_count')}"
+    )
+    lines.append(
+        f"- Drug sections: {part3_section.get('reference_drug_count')} -> "
+        f"{part3_section.get('candidate_drug_count')}"
+    )
+    for sample in part3_section.get("samples") or []:
         lines.append(f"- {sample.get('message')}")
 
     style_section = sections.get("styles") or {}
@@ -465,6 +484,268 @@ def _compare_tables(
         "samples": samples[:max_samples],
         "issues": issues,
     }
+
+
+def _compare_part3_sections(
+    ref: Mapping[str, Any],
+    cand: Mapping[str, Any],
+    *,
+    max_samples: int,
+) -> dict[str, Any]:
+    ref_part3 = _extract_part3_sections(list(ref.get("paragraphs") or []))
+    cand_part3 = _extract_part3_sections(list(cand.get("paragraphs") or []))
+    issues: list[dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
+
+    if not ref_part3["present"] and not cand_part3["present"]:
+        return {
+            "status": "PASS",
+            "present": False,
+            "reference_gene_count": 0,
+            "candidate_gene_count": 0,
+            "reference_drug_count": 0,
+            "candidate_drug_count": 0,
+            "samples": [],
+            "issues": [],
+        }
+
+    if ref_part3["present"] != cand_part3["present"]:
+        issues.append(
+            {
+                "level": "error",
+                "code": "PART3_PRESENCE_DIFF",
+                "message": "Part 3 presence differs between reference and candidate.",
+            }
+        )
+
+    for section_name, code in (
+        ("gene_sections", "PART3_GENE_SECTION_DIFF"),
+        ("drug_sections", "PART3_DRUG_SECTION_DIFF"),
+    ):
+        ref_sections = ref_part3.get(section_name) or {}
+        cand_sections = cand_part3.get(section_name) or {}
+        ref_keys = set(ref_sections)
+        cand_keys = set(cand_sections)
+        missing = sorted(ref_keys - cand_keys)
+        extra = sorted(cand_keys - ref_keys)
+        if missing or extra:
+            issues.append(
+                {
+                    "level": "error",
+                    "code": "PART3_SECTION_KEY_DIFF",
+                    "message": (
+                        f"{section_name} keys differ: missing={missing[:5]}, "
+                        f"extra={extra[:5]}."
+                    ),
+                }
+            )
+            samples.append(
+                {
+                    "message": f"{section_name} keys differ",
+                    "missing": missing[:max_samples],
+                    "extra": extra[:max_samples],
+                }
+            )
+        for key in sorted(ref_keys & cand_keys):
+            ref_text = _normalize_part3_text(ref_sections[key]["text"])
+            cand_text = _normalize_part3_text(cand_sections[key]["text"])
+            if ref_text == cand_text:
+                continue
+            issues.append(
+                {
+                    "level": "error",
+                    "code": code,
+                    "message": f"{section_name} text differs for {key}.",
+                }
+            )
+            if len(samples) < max_samples:
+                samples.append(
+                    {
+                        "message": f"{section_name} text differs for {key}",
+                        "key": key,
+                        "reference_sample": ref_sections[key]["text"][:300],
+                        "candidate_sample": cand_sections[key]["text"][:300],
+                    }
+                )
+
+    return {
+        "status": _section_status(issues),
+        "present": bool(ref_part3["present"] or cand_part3["present"]),
+        "reference_gene_count": len(ref_part3.get("gene_sections") or {}),
+        "candidate_gene_count": len(cand_part3.get("gene_sections") or {}),
+        "reference_drug_count": len(ref_part3.get("drug_sections") or {}),
+        "candidate_drug_count": len(cand_part3.get("drug_sections") or {}),
+        "samples": samples[:max_samples],
+        "issues": issues,
+    }
+
+
+def _extract_part3_sections(paragraphs: list[str]) -> dict[str, Any]:
+    start = _find_paragraph_index(
+        paragraphs, "第三部分：基因变异及相应靶向/免疫药物解析"
+    )
+    if start is None:
+        return {"present": False, "gene_sections": {}, "drug_sections": {}}
+    end = len(paragraphs)
+    for idx in range(start + 1, len(paragraphs)):
+        text = str(paragraphs[idx]).strip()
+        if text.startswith("3. 阅读说明") or text.startswith("第四部分：附录"):
+            end = idx
+            break
+
+    part3 = [str(text).strip() for text in paragraphs[start:end] if str(text).strip()]
+    drug_start = _find_paragraph_index(part3, "靶向药物/免疫用药提示解析")
+    gene_lines = part3 if drug_start is None else part3[:drug_start]
+    drug_lines = [] if drug_start is None else part3[drug_start:]
+    return {
+        "present": True,
+        "gene_sections": _extract_part3_gene_sections(gene_lines),
+        "drug_sections": _extract_part3_drug_sections(drug_lines),
+    }
+
+
+def _extract_part3_gene_sections(lines: list[str]) -> dict[str, dict[str, str]]:
+    sections: dict[str, dict[str, str]] = {}
+    current_key: Optional[str] = None
+    current_lines: list[str] = []
+    for line in lines:
+        if _is_part3_gene_header(line):
+            if current_key and current_lines:
+                sections[current_key] = {"text": "\n".join(current_lines)}
+            current_key = _part3_variant_key_from_header(line)
+            current_lines = [line]
+            continue
+        if current_key:
+            current_lines.append(line)
+    if current_key and current_lines:
+        sections[current_key] = {"text": "\n".join(current_lines)}
+    return sections
+
+
+def _extract_part3_drug_sections(lines: list[str]) -> dict[str, dict[str, str]]:
+    sections: dict[str, dict[str, str]] = {}
+    current_variant: Optional[dict[str, str]] = None
+    current_type = "benefit"
+    pending_header = ""
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx]
+        if line == "潜在获益靶向/免疫药物解析":
+            current_type = "benefit"
+            current_variant = None
+            pending_header = ""
+            idx += 1
+            continue
+        if line == "潜在负相关靶向/免疫药物解析":
+            current_type = "caution"
+            current_variant = None
+            pending_header = ""
+            idx += 1
+            continue
+        if _is_part3_drug_header(line):
+            current_variant = _drug_variant_from_header(line)
+            current_type = current_variant.get("type") or current_type
+            pending_header = line
+            idx += 1
+            continue
+        if (
+            current_variant is None
+            or line in {"靶向药物/免疫用药提示解析", "基因变异与药物关联分析：", "药物疗效临床解析："}
+            or line.startswith("潜在")
+        ):
+            idx += 1
+            continue
+
+        drug_name = line
+        block = [pending_header] if pending_header else []
+        block.append(drug_name)
+        pending_header = ""
+        idx += 1
+        if idx < len(lines) and lines[idx] == "基因变异与药物关联分析：":
+            block.append(lines[idx])
+            idx += 1
+            while idx < len(lines) and lines[idx] != "药物疗效临床解析：":
+                if _is_part3_drug_header(lines[idx]) or lines[idx].startswith("潜在"):
+                    break
+                block.append(lines[idx])
+                idx += 1
+        if idx < len(lines) and lines[idx] == "药物疗效临床解析：":
+            block.append(lines[idx])
+            idx += 1
+            while idx < len(lines):
+                if (
+                    _is_part3_drug_header(lines[idx])
+                    or lines[idx].startswith("潜在")
+                    or _is_next_drug_name(lines, idx)
+                ):
+                    break
+                block.append(lines[idx])
+                idx += 1
+        key = (
+            f"{current_type}:"
+            f"{current_variant.get('gene')}|{current_variant.get('c_hgvs')}|"
+            f"{current_variant.get('p_hgvs')}|{_normalize_part3_text(drug_name)}"
+        )
+        sections[key] = {"text": "\n".join(item for item in block if item)}
+    return sections
+
+
+def _find_paragraph_index(lines: list[str], needle: str) -> Optional[int]:
+    for idx, line in enumerate(lines):
+        if str(line).strip() == needle:
+            return idx
+    return None
+
+
+def _is_part3_gene_header(text: str) -> bool:
+    value = str(text or "").strip()
+    if value.startswith("u "):
+        value = value[2:].strip()
+    if "突变相应" in value:
+        return False
+    return bool(re.match(r"^[A-Z0-9]+：.+；\d+(?:\.\d+)?%$", value))
+
+
+def _part3_variant_key_from_header(text: str) -> str:
+    value = str(text or "").strip()
+    if value.startswith("u "):
+        value = value[2:].strip()
+    gene, rest = value.split("：", 1)
+    variant, _freq = rest.rsplit("；", 1)
+    parts = [part.strip() for part in variant.split("，") if part.strip()]
+    c_hgvs = parts[0] if parts else ""
+    p_hgvs = parts[1] if len(parts) > 1 else ""
+    return f"{gene.upper()}|{_part3_hgvs_key(c_hgvs)}|{_part3_hgvs_key(p_hgvs)}"
+
+
+def _is_part3_drug_header(text: str) -> bool:
+    return bool(re.match(r"^[A-Z0-9]+：.+突变相应.+药物$", str(text or "").strip()))
+
+
+def _drug_variant_from_header(text: str) -> dict[str, str]:
+    value = str(text or "").strip()
+    gene, rest = value.split("：", 1)
+    variant, _tail = rest.split("突变相应", 1)
+    parts = [part.strip() for part in variant.split("，") if part.strip()]
+    return {
+        "gene": gene.upper(),
+        "c_hgvs": _part3_hgvs_key(parts[0] if parts else ""),
+        "p_hgvs": _part3_hgvs_key(parts[1] if len(parts) > 1 else ""),
+        "type": "caution" if "负相关" in value else "benefit",
+    }
+
+
+def _is_next_drug_name(lines: list[str], idx: int) -> bool:
+    return idx + 1 < len(lines) and lines[idx + 1] == "基因变异与药物关联分析："
+
+
+def _part3_hgvs_key(text: str) -> str:
+    return re.sub(r"\s+", "", str(text or "")).upper()
+
+
+def _normalize_part3_text(text: str) -> str:
+    value = str(text or "").replace("\u00a0", " ")
+    return re.sub(r"\s+", "", value)
 
 
 def _table_cell_diffs(

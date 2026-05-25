@@ -45,6 +45,8 @@ class GeneKnowledgeProvider:
         self._gene_intro_cache: Dict[str, str] = {}
         self._gene_analysis_cache: Dict[str, str] = {}
         self._reviewed_gene_analysis_cache: Dict[str, Dict[str, str]] = {}
+        self._reviewed_gene_section_overrides: Dict[str, Dict[str, str]] = {}
+        self._reviewed_drug_section_overrides: Dict[tuple[str, str], List[Dict[str, str]]] = {}
         self._drug_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._drug_full_cache: Dict[str, List[Dict[str, str]]] = {}  # 完整药物信息
         self._gene_transcript_cache: Dict[str, Dict[str, str]] = {}
@@ -77,6 +79,7 @@ class GeneKnowledgeProvider:
             db_path = base / gene_kb_config.get("path", "")
             if db_path.exists():
                 self._load_gene_knowledge_db(db_path, gene_kb_config)
+            self._load_reviewed_part3_overlays(base, gene_kb_config)
 
         # 加载基因-转录本-染色体信息
         transcript_config = self.config.get("gene_transcript_db", {})
@@ -132,6 +135,94 @@ class GeneKnowledgeProvider:
 
         except Exception as e:
             _log.warning("基因知识库加载失败: %s (path=%s)", e, path)
+
+    def _load_reviewed_part3_overlays(self, base: Path, config: Dict) -> None:
+        """Load reviewed Part 3 YAML overlays for final-report wording."""
+        import logging
+
+        _log = logging.getLogger("reportgen.knowledge")
+        paths: List[str] = []
+        for key in (
+            "reviewed_part3_overlay_path",
+            "reviewed_part3_overrides_path",
+            "reviewed_overrides_path",
+        ):
+            raw = config.get(key)
+            if raw:
+                paths.append(str(raw))
+        for key in ("reviewed_part3_overlay_paths", "reviewed_overrides_paths"):
+            raw_list = config.get(key) or []
+            if isinstance(raw_list, (list, tuple)):
+                paths.extend(str(item) for item in raw_list if item)
+
+        for raw_path in paths:
+            path = Path(raw_path)
+            if not path.is_absolute():
+                path = base / path
+            if not path.exists():
+                _log.warning("reviewed Part 3 overlay not found: %s", path)
+                continue
+            try:
+                import yaml
+
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except Exception as exc:
+                _log.warning("reviewed Part 3 overlay load failed: %s (%s)", exc, path)
+                continue
+
+            for row in data.get("gene_sections") or []:
+                if not isinstance(row, dict):
+                    continue
+                key = self._variant_key(
+                    row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs")
+                )
+                if key:
+                    self._reviewed_gene_section_overrides[key] = {
+                        k: self._norm_text(v)
+                        for k, v in row.items()
+                        if k in {"intro", "mutation_analysis"}
+                        and self._norm_text(v)
+                    }
+
+            for row in data.get("drug_sections") or []:
+                if not isinstance(row, dict):
+                    continue
+                variant_key = self._variant_key(
+                    row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs")
+                )
+                drug_type = self._norm_text(row.get("type")) or "benefit"
+                if not variant_key:
+                    continue
+                clean_row = {
+                    "gene": self._norm_text(row.get("gene")).upper(),
+                    "c_hgvs": self._norm_text(row.get("c_hgvs")),
+                    "p_hgvs": self._norm_text(row.get("p_hgvs")),
+                    "drug_type": drug_type,
+                    "drug_type_cn": "慎用药物" if drug_type == "caution" else "潜在获益药物",
+                    "header": self._norm_text(row.get("header")),
+                    "drug_name": self._norm_text(row.get("drug_name")),
+                    "relation": self._norm_text(row.get("relation")),
+                    "clinical": self._norm_text(row.get("clinical")),
+                }
+                self._reviewed_drug_section_overrides.setdefault(
+                    (variant_key, drug_type), []
+                ).append(clean_row)
+
+    def _hgvs_key(self, value: Any) -> str:
+        return re.sub(r"\s+", "", self._norm_text(value)).upper()
+
+    def _variant_key(self, gene: Any, c_hgvs: Any, p_hgvs: Any = "") -> str:
+        gene_key = self._hgvs_key(gene)
+        c_key = self._hgvs_key(c_hgvs)
+        p_key = self._hgvs_key(p_hgvs)
+        if not gene_key or not c_key:
+            return ""
+        return f"{gene_key}|{c_key}|{p_key}"
+
+    def _variant_key_from_row(self, row: Dict[str, Any]) -> str:
+        return self._variant_key(
+            row.get("gene"), row.get("cHGVS") or row.get("c_hgvs"), row.get("pHGVS") or row.get("p_hgvs")
+        )
 
     def _load_gene_transcript_db(self, path: Path, config: Dict) -> None:
         """加载基因-转录本-染色体信息"""
@@ -778,6 +869,14 @@ class GeneKnowledgeProvider:
             mutation_type=mutation_type,
             has_drug=has_drug,
         )
+        reviewed_override = self._reviewed_gene_section_overrides.get(
+            self._variant_key(gene, c_hgvs, p_hgvs),
+            {},
+        )
+        intro = reviewed_override.get("intro") or intro
+        mutation_analysis = (
+            reviewed_override.get("mutation_analysis") or mutation_analysis
+        )
 
         return {
             "gene": gene,
@@ -1050,6 +1149,8 @@ class GeneKnowledgeProvider:
                                 sections.append(
                                     {
                                         "gene": gene,
+                                        "c_hgvs": v.get("cHGVS", ""),
+                                        "p_hgvs": v.get("pHGVS", ""),
                                         "variant": variant_info,
                                         "drug_name": filtered_drug_name,
                                         "drug_type": "benefit",
@@ -1085,6 +1186,8 @@ class GeneKnowledgeProvider:
                                 sections.append(
                                     {
                                         "gene": gene,
+                                        "c_hgvs": v.get("cHGVS", ""),
+                                        "p_hgvs": v.get("pHGVS", ""),
                                         "variant": variant_info,
                                         "drug_name": filtered_drug_name,
                                         "drug_type": "caution",
@@ -1102,7 +1205,67 @@ class GeneKnowledgeProvider:
                                     }
                                 )
 
-        return sections
+        return self._apply_reviewed_drug_section_overrides(variants, sections)
+
+    def _variant_display_from_row(self, row: Dict[str, Any]) -> str:
+        c_hgvs = self._norm_text(row.get("cHGVS") or row.get("c_hgvs"))
+        p_hgvs = self._norm_text(row.get("pHGVS") or row.get("p_hgvs"))
+        return f"{c_hgvs}，{p_hgvs}" if p_hgvs else c_hgvs
+
+    def _has_drug_text(self, value: Any) -> bool:
+        text = self._norm_text(value)
+        return bool(text and text not in {"--", "无", "未检出"})
+
+    def _apply_reviewed_drug_section_overrides(
+        self,
+        variants: List[Dict[str, Any]],
+        sections: List[Dict[str, str]],
+    ) -> List[Dict[str, str]]:
+        if not self._reviewed_drug_section_overrides:
+            return sections
+
+        grouped: Dict[tuple[str, str], List[Dict[str, str]]] = {}
+        for section in sections:
+            key = self._variant_key(
+                section.get("gene"),
+                section.get("c_hgvs"),
+                section.get("p_hgvs"),
+            )
+            if not key:
+                continue
+            grouped.setdefault((key, section.get("drug_type", "benefit")), []).append(
+                section
+            )
+
+        result: List[Dict[str, str]] = []
+        visited: set[tuple[str, str]] = set()
+        for variant in variants:
+            variant_key = self._variant_key_from_row(variant)
+            if not variant_key:
+                continue
+            for drug_type, source_field in (
+                ("benefit", "benefit_drugs"),
+                ("caution", "caution_drugs"),
+            ):
+                key = (variant_key, drug_type)
+                visited.add(key)
+                overrides = self._reviewed_drug_section_overrides.get(key)
+                if overrides and self._has_drug_text(variant.get(source_field)):
+                    variant_display = self._variant_display_from_row(variant)
+                    for override in overrides:
+                        result.append(
+                            {
+                                **override,
+                                "variant": variant_display,
+                            }
+                        )
+                    continue
+                result.extend(grouped.get(key, []))
+
+        for key, rows in grouped.items():
+            if key not in visited:
+                result.extend(rows)
+        return result
 
     def build_references(
         self,

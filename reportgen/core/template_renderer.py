@@ -2446,12 +2446,16 @@ class TemplateRenderer:
                 variant = ds.get("variant", "")
                 drug_name = ds.get("drug_name", "")
                 clinical = ds.get("clinical", "")
+                header = ds.get("header")
+                if header is None:
+                    header = f"{gene}：{variant}突变相应靶向药物"
 
-                current = add_para_after(
-                    current,
-                    f"{gene}：{variant}突变相应靶向药物",
-                    bold=True, size=12, color="FF0000",
-                )
+                if header:
+                    current = add_para_after(
+                        current,
+                        header,
+                        bold=True, size=12, color="FF0000",
+                    )
                 if drug_name:
                     current = add_text_block(current, drug_name, size=10.5)
                 relation = ds.get("relation", "")
@@ -2483,12 +2487,16 @@ class TemplateRenderer:
                 variant = ds.get("variant", "")
                 drug_name = ds.get("drug_name", "")
                 clinical = ds.get("clinical", "")
+                header = ds.get("header")
+                if header is None:
+                    header = f"{gene}：{variant}突变相应负相关靶向药物"
 
-                current = add_para_after(
-                    current,
-                    f"{gene}：{variant}突变相应负相关靶向药物",
-                    bold=True, size=12, color="FF0000",
-                )
+                if header:
+                    current = add_para_after(
+                        current,
+                        header,
+                        bold=True, size=12, color="FF0000",
+                    )
                 if drug_name:
                     current = add_text_block(current, drug_name, size=10.5)
                 relation = ds.get("relation", "")

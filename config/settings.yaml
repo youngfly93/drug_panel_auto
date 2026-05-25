@@ -597,6 +597,7 @@ knowledge_bases:
   gene_knowledge_db:
     enabled: true
     path: "data/knowledge_bases/processed/gene_knowledge_db.xlsx"
+    reviewed_part3_overlay_path: "panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml"
     sheets:
       # 基因变异解析sheet：包含基因简介、基因变异说明模板、基因变异解析
       gene_analysis: "基因变异解析"
