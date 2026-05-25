@@ -10,5 +10,7 @@
 #   - name: 李四
 #     path: storage/signatures/reviewer_lisi.png
 
-detector: {}
-reviewer: {}
+detector:
+  TEST检测者: storage/signatures/registry/test_detector.png
+reviewer:
+  TEST审核者: storage/signatures/registry/test_reviewer.png

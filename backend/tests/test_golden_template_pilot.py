@@ -52,7 +52,7 @@ def test_crc358_golden_template_declares_template_level_processors():
     package = load_panel_package("crc_358_msi", project_root=ROOT)
     template = package.templates["crc_358_msi_golden_template_v0"]
 
-    assert template.status == "pilot"
+    assert template.status == "active"
     assert template.processors == (
         "part3_formatted_sections",
         "signature_placeholder",

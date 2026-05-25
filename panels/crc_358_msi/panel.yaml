@@ -24,7 +24,7 @@ project_detector_rules:
 
 enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
 
-default_template: "crc_358_msi_standard_v1"
+default_template: "crc_358_msi_golden_template_v0"
 templates:
   - id: "crc_358_msi_standard_v1"
     file: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
@@ -34,8 +34,8 @@ templates:
   - id: "crc_358_msi_golden_template_v0"
     file: "templates/crc_358_msi_golden_template_v0.docx"
     version: "0.4.4"
-    status: "pilot"
-    description: "Scrubbed golden-template pilot generated from the reviewed CRC358+MSI report. Not approved for default customer delivery until the PRD acceptance gates pass."
+    status: "active"
+    description: "Production CRC358+MSI template generated from the reviewed report and guarded by golden-case regression checks."
     processors:
       - "part3_formatted_sections"
       - "signature_placeholder"

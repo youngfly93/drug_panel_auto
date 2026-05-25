@@ -1210,7 +1210,7 @@ def test_panel_package_loader_reads_crc358_package():
     assert package.panel_id == "crc_358_msi"
     assert package.display_name == "结直肠癌358基因+MSI"
     assert "crc_358" in package.aliases
-    assert package.default_template.template_id == "crc_358_msi_standard_v1"
+    assert package.default_template.template_id == "crc_358_msi_golden_template_v0"
     assert package.resolve_template_file().exists()
     assert package.resolve_mapping_file().name == "mapping.yaml"
     assert package.resolve_rule_file("panel_rules").name == "crc.yaml"
