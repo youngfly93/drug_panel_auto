@@ -1,0 +1,38 @@
+# Runtime and generated data
+.git
+.vercel
+storage/
+tmp/
+output/
+backend/static/
+frontend/dist/
+frontend/node_modules/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local environments and secrets
+.env
+backend/.env
+.venv/
+venv/
+
+# Patient/test artifacts must not be uploaded.
+config/patient_info*.yaml
+config/**/*patient*.yaml
+*.docx
+*.xlsx
+*.xls
+*.csv
+*.pdf
+~$*
+
+# Keep deploy-time templates and packaged knowledge bases.
+!templates/**/*.docx
+!panels/**/*.docx
+!data/knowledge_bases/processed/*.xlsx
+
+# macOS metadata
+.DS_Store
+._*
