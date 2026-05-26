@@ -210,6 +210,20 @@ def _render_error_payload(exc: Exception) -> dict:
     return payload
 
 
+def _infer_project_type_from_name(
+    bridge: ReportGenBridge,
+    project_type: Optional[str],
+    project_name: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """Use trusted form/display project_name as a fallback project selector."""
+    if project_type or not project_name:
+        return project_type, project_name
+    inferred = bridge.infer_project_type_from_text(project_name)
+    if inferred.get("detected"):
+        return inferred.get("project_type"), project_name or inferred.get("project_name")
+    return project_type, project_name
+
+
 def _get_single_report_task(task_id: str, db: Session) -> Task:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -304,6 +318,16 @@ def generate_report(
 
     task_id = str(uuid.uuid4())
     output_dir = ensure_report_dir(task_id)
+    effective_project_name = (
+        req.project_name
+        or upload.detected_project_name
+        or (req.clinical_info or {}).get("project_name")
+    )
+    effective_project_type, effective_project_name = _infer_project_type_from_name(
+        bridge,
+        req.project_type or upload.detected_project_type,
+        effective_project_name,
+    )
 
     # Create task record
     task = Task(
@@ -311,7 +335,7 @@ def generate_report(
         upload_id=req.upload_id,
         task_type="single",
         status="running",
-        project_type=req.project_type or upload.detected_project_type,
+        project_type=effective_project_type,
         clinical_info_snapshot=(
             json.dumps(req.clinical_info, ensure_ascii=False)
             if req.clinical_info
@@ -328,8 +352,8 @@ def generate_report(
             output_dir=str(output_dir),
             template_name=req.template_name,
             clinical_info=req.clinical_info,
-            project_type=req.project_type or upload.detected_project_type,
-            project_name=req.project_name or upload.detected_project_name,
+            project_type=effective_project_type,
+            project_name=effective_project_name,
             strict_mode=req.strict_mode,
             template_contract_mode=req.template_contract_mode,
             qa_visual_render=req.qa_visual_render,
@@ -428,6 +452,11 @@ def generate_report_from_file(
             detected_project_name = detected_project_name or detect.get("project_name")
         except Exception:
             detected_project_type = project_type
+    detected_project_type, detected_project_name = _infer_project_type_from_name(
+        bridge,
+        detected_project_type,
+        detected_project_name or clinical_payload.get("project_name"),
+    )
 
     task_id = str(uuid.uuid4())
     output_dir = ensure_report_dir(task_id)
@@ -553,6 +582,11 @@ def generate_report_from_file_async(
             detected_project_name = detected_project_name or detect.get("project_name")
         except Exception:
             detected_project_type = project_type
+    detected_project_type, detected_project_name = _infer_project_type_from_name(
+        bridge,
+        detected_project_type,
+        detected_project_name or clinical_payload.get("project_name"),
+    )
 
     task_id = str(uuid.uuid4())
     output_dir = ensure_report_dir(task_id)

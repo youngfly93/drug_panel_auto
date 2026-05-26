@@ -267,12 +267,19 @@ class ReportGenBridge:
         try:
             result = self.detector.detect(excel_path, excel_data=excel_data)
             if isinstance(result, dict):
-                return {
+                detected = {
                     "project_type": result.get("project_type"),
                     "project_name": result.get("project_name"),
                     "confidence": result.get("confidence"),
                     "detected": result.get("detected", False),
                 }
+                if detected["detected"]:
+                    return detected
+
+                fallback = self._infer_project_type_from_excel_fields(excel_data)
+                if fallback.get("detected"):
+                    return fallback
+                return detected
             return {
                 "project_type": None,
                 "project_name": None,
@@ -286,6 +293,100 @@ class ReportGenBridge:
                 "confidence": None,
                 "detected": False,
             }
+
+    def infer_project_type_from_text(self, text: Optional[str]) -> dict[str, Any]:
+        """Infer a panel type from trusted project text such as form project_name."""
+        if text is None or not str(text).strip():
+            return {
+                "project_type": None,
+                "project_name": None,
+                "confidence": 0.0,
+                "detected": False,
+            }
+
+        best_match = None
+        best_score = 0.0
+        best_priority = float("-inf")
+        match_details = []
+        for ptype in self.detector.project_types:
+            score, details = self.detector._calculate_match_score(  # noqa: SLF001
+                ptype,
+                filename="",
+                detection_text=str(text),
+            )
+            priority = float(ptype.get("priority", 0) or 0)
+            match_details.append(
+                {
+                    "type": ptype.get("id"),
+                    "name": ptype.get("name"),
+                    "score": score,
+                    "priority": priority,
+                    "details": details,
+                }
+            )
+            if score > best_score or (score == best_score and priority > best_priority):
+                best_score = score
+                best_priority = priority
+                best_match = ptype
+
+        threshold = self.detector.default_config.get("match_threshold", 0.6)
+        if best_match and best_score >= threshold:
+            return {
+                "project_type": best_match.get("id"),
+                "project_name": best_match.get("name"),
+                "confidence": best_score,
+                "detected": True,
+                "match_details": match_details,
+                "source": "project_name_text",
+            }
+        return {
+            "project_type": None,
+            "project_name": None,
+            "confidence": best_score,
+            "detected": False,
+            "match_details": match_details,
+        }
+
+    def _infer_project_type_from_excel_fields(
+        self,
+        excel_data: Optional[ExcelDataSource],
+    ) -> dict[str, Any]:
+        if excel_data is None:
+            return {
+                "project_type": None,
+                "project_name": None,
+                "confidence": 0.0,
+                "detected": False,
+            }
+
+        candidates: list[Any] = []
+        single_values = getattr(excel_data, "single_values", None)
+        if isinstance(single_values, dict):
+            for key in ("project_name", "项目名称", "检测项目"):
+                value = single_values.get(key)
+                if value:
+                    candidates.append(value)
+
+        try:
+            mapped_fields = self.get_mapped_clinical_fields(excel_data)
+            for key in ("project_name", "项目名称", "检测项目"):
+                value = mapped_fields.get(key)
+                if value:
+                    candidates.append(value)
+        except Exception:
+            pass
+
+        for candidate in candidates:
+            inferred = self.infer_project_type_from_text(str(candidate))
+            if inferred.get("detected"):
+                inferred["source"] = "mapped_project_name"
+                return inferred
+        return {
+            "project_type": None,
+            "project_name": None,
+            "confidence": 0.0,
+            "detected": False,
+        }
 
     def generate_report(
         self,
@@ -307,6 +408,12 @@ class ReportGenBridge:
 
         Returns dict with: success, output_file, duration, errors, warnings
         """
+        if not project_type and project_name:
+            inferred = self.infer_project_type_from_text(project_name)
+            if inferred.get("detected"):
+                project_type = inferred.get("project_type")
+                project_name = project_name or inferred.get("project_name")
+
         template_path = self._resolve_template_path(template_name, project_type)
 
         # Read Excel first

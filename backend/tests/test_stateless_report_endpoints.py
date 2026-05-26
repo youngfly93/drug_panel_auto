@@ -20,9 +20,19 @@ from app.api import report as report_api  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.dependencies import get_bridge  # noqa: E402
 from app.config import settings  # noqa: E402
+from app.services.reportgen_bridge import ReportGenBridge  # noqa: E402
 
 
 class FakeBridge:
+    def __init__(self):
+        self.detect_result = {
+            "project_type": "crc_358_msi",
+            "project_name": "结直肠癌358基因+MSI",
+            "confidence": 0.99,
+            "detected": True,
+        }
+        self.last_generate_kwargs = None
+
     def read_excel(self, excel_path):
         return SimpleNamespace(path=excel_path)
 
@@ -33,10 +43,21 @@ class FakeBridge:
         return {"rows": 1 if sheet_name == "Meta" else 2, "columns": 3}
 
     def detect_project_type(self, _excel_path, excel_data=None):
+        return dict(self.detect_result)
+
+    def infer_project_type_from_text(self, text):
+        if "358" in str(text):
+            return {
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+                "confidence": 1.0,
+                "detected": True,
+            }
         return {
-            "project_type": "crc_358_msi",
-            "project_name": "结直肠癌358基因+MSI",
-            "confidence": 0.99,
+            "project_type": None,
+            "project_name": None,
+            "confidence": 0.0,
+            "detected": False,
         }
 
     def validate_excel_data(self, _excel_data):
@@ -46,6 +67,7 @@ class FakeBridge:
         return {"patient_name": "测试患者", "sample_id": "CASE001"}
 
     def generate_report(self, **kwargs):
+        self.last_generate_kwargs = kwargs
         output_dir = Path(kwargs["output_dir"])
         output_dir.mkdir(parents=True, exist_ok=True)
         output_file = output_dir / "fake_report.docx"
@@ -61,7 +83,8 @@ class FakeBridge:
         }
 
 
-def _client(tmp_path, monkeypatch):
+def _client(tmp_path, monkeypatch, bridge=None):
+    bridge = bridge or FakeBridge()
     monkeypatch.setattr(settings, "storage_root", tmp_path)
     monkeypatch.setattr(
         report_api.diff_svc,
@@ -93,7 +116,7 @@ def _client(tmp_path, monkeypatch):
     app = FastAPI()
     app.include_router(excel_api.router, prefix="/api/v1")
     app.include_router(report_api.router, prefix="/api/v1")
-    app.dependency_overrides[get_bridge] = lambda: FakeBridge()
+    app.dependency_overrides[get_bridge] = lambda: bridge
     app.dependency_overrides[get_db] = override_db
     return TestClient(app)
 
@@ -132,6 +155,39 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert data["qa_status"] == "PASS"
 
 
+def test_generate_file_infers_project_type_from_form_project_name(
+    tmp_path, monkeypatch
+):
+    bridge = FakeBridge()
+    bridge.detect_result = {
+        "project_type": None,
+        "project_name": None,
+        "confidence": 0.0,
+        "detected": False,
+    }
+
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file",
+            files={
+                "file": (
+                    "上传使用Excel表：lz258792.xlsx",
+                    b"placeholder",
+                    "application/vnd.ms-excel",
+                )
+            },
+            data={
+                "clinical_info": '{"patient_name":"测试患者","sample_id":"CASE001","project_name":"结直肠癌358基因+MSI"}',
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["success"] is True
+    assert bridge.last_generate_kwargs["project_type"] == "crc_358_msi"
+    assert bridge.last_generate_kwargs["project_name"] == "结直肠癌358基因+MSI"
+
+
 def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
     with _client(tmp_path, monkeypatch) as client:
         response = client.post(
@@ -160,3 +216,15 @@ def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
     status = status_response.json()["data"]
     assert status["status"] == "completed"
     assert status["output_path"].endswith("fake_report.docx")
+
+
+def test_bridge_infers_crc358_from_project_name_text():
+    bridge = ReportGenBridge(
+        config_dir=str(ROOT / "config"),
+        template_dir=str(ROOT / "templates"),
+    )
+
+    result = bridge.infer_project_type_from_text("结直肠癌358基因+MSI")
+
+    assert result["detected"] is True
+    assert result["project_type"] == "crc_358_msi"
