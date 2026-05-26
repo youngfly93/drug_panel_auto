@@ -1,0 +1,334 @@
+schema_version: "1.0"
+template_id: "crc_35_msi_golden_template_v0"
+description: >
+  Draft structural variable map for the CRC35+MSI reviewed-report layout. It is
+  safe to version because it contains positions and context variable names only,
+  not patient values or source paths. The generated DOCX remains local until the
+  chemotherapy/pharmacogenomics detail tables are finalized.
+
+part3_marker:
+  marker: "__PART3_MARKER__"
+  start_heading: "3.基因变异及相应靶向药物解析"
+  end_heading: "4.附录"
+  renderer: "part3_formatted_sections"
+
+paragraph_templates:
+  - id: "msi_result_summary_sentence"
+    contains: "该肿瘤样本为 微卫星稳定（MSS）型。该类患者"
+    text: "{{ msi_detail_sentence }}"
+  - id: "msi_result_detail_sentence"
+    contains: "该肿瘤样本为  微卫星稳定（MSS）型。"
+    text: "{{ msi_detail_sentence }}"
+
+table_loops:
+  - id: "variants_2_1"
+    table: 1
+    collection: "variants_2_1"
+    alias: "row"
+    template_row: 2
+    insert_at: 2
+    remove_from: 2
+    remove_to: "end"
+    columns:
+      - "gene"
+      - "transcript"
+      - "chr"
+      - "exon"
+      - "locus"
+      - "var_type_cn"
+      - "af_pct"
+      - "benefit_drugs"
+      - "caution_drugs"
+
+  - id: "chemotherapy"
+    table: 2
+    collection: "chemotherapy"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - "Drug"
+      - "Gene"
+      - "药物适应情况"
+
+  - id: "drug_shunbo"
+    table: 3
+    collection: "drug_shunbo"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "cisplatin 顺铂"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_kabo"
+    table: 4
+    collection: "drug_kabo"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "carboplatin 卡铂"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_aoshalibo"
+    table: 5
+    collection: "drug_aoshalibo"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "oxaliplatin 奥沙利铂"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_jiaandieling"
+    table: 6
+    collection: "drug_jiaandieling"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "methotrexate 甲氨蝶呤"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_zishanchun"
+    table: 7
+    collection: "drug_zishanchun"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "paclitaxel 紫杉醇"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_huanlinyanan"
+    table: 8
+    collection: "drug_huanlinyanan"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "cyclophosphamide 环磷酰胺"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_yilitikang"
+    table: 9
+    collection: "drug_yilitikang"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "irinotecan 伊立替康"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_yilitikang_dose_safety"
+    table: 10
+    collection: "drug_yilitikang"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "伊立替康"
+      - expr: "row.Gene ~ '基因型为' ~ row.Genotype"
+      - "Result"
+
+  - id: "drug_yituopogan"
+    table: 11
+    collection: "drug_yituopogan"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "etoposide 依托泊苷"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_genhuanlei"
+    table: 12
+    collection: "drug_genhuanlei"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "anthracyclines 蒽环类"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_kaipeibaibin"
+    table: 13
+    collection: "drug_kaipeibaibin"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "capecitabine 卡培他滨"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_fluorouracil"
+    table: 14
+    collection: "drug_fluorouracil"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "5-Fu、氟嘧啶类"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_jixitabin"
+    table: 15
+    collection: "drug_jixitabin"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "gemcitabine 吉西他滨"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_duoxitasai"
+    table: 16
+    collection: "drug_duoxitasai"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "docetaxel 多西他赛"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_peimeiqusai"
+    table: 17
+    collection: "drug_peimeiqusai"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "pemetrexed 培美曲塞"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_changchunjianlei"
+    table: 18
+    collection: "drug_changchunjianlei"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "vinca alkaloids 长春碱类"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+  - id: "drug_tegafur"
+    table: 19
+    collection: "drug_tegafur"
+    alias: "row"
+    template_row: 1
+    insert_at: 1
+    remove_from: 1
+    remove_to: "end"
+    columns:
+      - text: "tegafur 替加氟/替吉奥"
+      - "Gene"
+      - "Locus"
+      - "Level"
+      - "Genotype"
+      - "Result"
+
+unresolved_runtime_sections:
+  - id: "chemotherapy_pharmacogenomics_detail_tables"
+    tables: "10"
+    source_sheet: "CtDrug"
+    status: "tentative_loop_needs_two_case_validation"
+    note: >
+      The per-drug detail tables now reuse existing CtDrug-backed `drug_*`
+      context lists. Table 10 has a different dose-safety summary layout and
+      currently reuses `drug_yilitikang`; verify against a second CRC35 Excel
+      before committing a DOCX template.

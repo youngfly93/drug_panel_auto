@@ -84,19 +84,83 @@ be scrubbed into a working DOCX source after replacing known patient/sample
 tokens. It still needs structural variableization before it can become a panel
 template.
 
+Current seed-builder behavior:
+
+- Global replacement is limited to high-specific IDs (`report_number`,
+  `sample_id`).
+- Short/common values (`patient_name`, `gender`, `age`, `sample_type`,
+  `clinical_diagnosis`) are patched by table position or targeted paragraph
+  context to avoid corrupting ordinary medical text.
+- A final OOXML pass checks headers, footers, and text boxes for high-risk
+  residuals.
+
+Latest local check:
+
+```text
+global_replacement_count: 2
+targeted_scalar_count: 8
+high_risk_residual_total: 0
+```
+
+## Local Variableization Candidate
+
+The first CRC35+MSI variable map is versioned at:
+
+```text
+panels/crc_35_msi/templates/golden_template_v0_variables.yaml
+```
+
+It is metadata only; it contains no source paths or patient values.
+
+Local candidate build:
+
+```bash
+python scripts/insert_docx_block_marker.py \
+  tmp/golden_template_seed/crc_35_msi_seed.docx \
+  --output tmp/golden_template_seed/crc_35_msi_seed_part3_marker.docx \
+  --start-heading "3.基因变异及相应靶向药物解析" \
+  --end-heading "4.附录" \
+  --marker __PART3_MARKER__
+
+python scripts/variableize_golden_template.py \
+  tmp/golden_template_seed/crc_35_msi_seed_part3_marker.docx \
+  --map panels/crc_35_msi/templates/golden_template_v0_variables.yaml \
+  --output tmp/golden_template_seed/crc_35_msi_golden_template_v0_candidate.docx
+```
+
+Latest local variableization result:
+
+```text
+operation_count: 21
+Part 3 marker: present
+high_risk_residual_total: 0
+synthetic docxtpl smoke render: pass
+```
+
+Dynamic regions currently covered:
+
+- MSI result summary paragraphs now use `{{ msi_detail_sentence }}`.
+- `variants_2_1` uses a row loop.
+- `chemotherapy` overview uses a row loop.
+- CRC35 pharmacogenomics/detail tables 3-9 and 11-19 use existing CtDrug-backed
+  `drug_*` row loops.
+- Table 10 (`drug_yilitikang_dose_safety`) is a tentative reuse of
+  `drug_yilitikang` and needs a second-case Excel verification before a DOCX
+  template is committed.
+
 ## Required Before Committing A Template
 
 - Replace patient/sample/report fields with Jinja variables.
 - Replace variant result rows with table loops.
 - Replace CRC35 gene/drug interpretation with a dynamic marker.
-- Decide how to model the chemotherapy/pharmacogenomics tables without keeping
-  case-specific genotypes or drug result rows.
+- Verify the tentative table 10 dose-safety loop against another CRC35 Excel.
 - Run a known-token hardcoding scan against the original source values.
 - Generate at least two distinct synthetic CRC35 cases.
 - Run package validation and QA gates while template status is still `pilot`.
 
 ## Current Decision
 
-Proceed with a draft `crc_35_msi` package only after the chemotherapy and
-pharmacogenomics variable regions are mapped. Do not commit the scrubbed seed as
-a reusable template until those dynamic regions are removed or looped.
+The structural recipe can be committed, but the generated DOCX template remains
+local. Promote to a draft `crc_35_msi` package only after the table 10
+dose-safety behavior is verified on a second CRC35 Excel and at least two
+rendered reports pass privacy, structure, and layout checks.
