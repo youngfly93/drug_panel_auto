@@ -86,6 +86,119 @@ def test_crc358_golden_template_part3_uses_dynamic_marker():
     assert "46.29" not in dynamic_stub
 
 
+def test_crc301_golden_template_declares_pilot_processors():
+    package = load_panel_package("crc_301_msi", project_root=ROOT)
+    template = package.templates["crc_301_msi_golden_template_v0"]
+
+    assert template.status == "pilot"
+    assert package.default_template.template_id == "crc_301_msi_standard_v1"
+    assert template.processors == (
+        "part3_formatted_sections",
+        "signature_placeholder",
+        "bullet_lists",
+        "front_matter_spacing",
+        "blank_page_cleanup",
+        "toc_refresh",
+        "final_refresh_cleanup",
+        "underlines_and_styles",
+    )
+    assert package.resolve_template_file(template.template_id).exists()
+
+    report = validate_panel_package("crc_301_msi", project_root=ROOT)
+    assert report.ok, report.to_dict()
+
+
+def test_crc301_golden_template_part3_uses_dynamic_marker():
+    package = load_panel_package("crc_301_msi", project_root=ROOT)
+    template_path = package.resolve_template_file("crc_301_msi_golden_template_v0")
+    doc = Document(template_path)
+    paragraphs = [p.text.strip() for p in doc.paragraphs]
+    text = "\n".join(paragraphs)
+
+    assert "__PART3_MARKER__" in text
+    marker_idx = paragraphs.index("__PART3_MARKER__")
+    reading_idx = paragraphs.index("3. 阅读说明")
+    assert marker_idx < reading_idx
+    assert "__PATIENT_NAME__" not in text
+    assert "__SAMPLE_ID__" not in text
+    assert "__REPORT_NUMBER__" not in text
+
+
+def test_crc301_golden_template_docxtpl_renders_minimal_context(tmp_path):
+    package = load_panel_package("crc_301_msi", project_root=ROOT)
+    template_path = package.resolve_template_file("crc_301_msi_golden_template_v0")
+    output = tmp_path / "crc301_rendered.docx"
+
+    context = {
+        "patient_name": "测试患者",
+        "sample_id": "TEST301",
+        "report_number": "MLJY-TEST301",
+        "gender": "男",
+        "age": "58",
+        "sample_type": "组织",
+        "sampling_method": "手术",
+        "sample_site": "结肠",
+        "clinical_diagnosis": "结直肠癌",
+        "report_date_dot": "2026.01.15",
+        "total_variants_count": 1,
+        "drug_related_count": 1,
+        "tmb_summary": "6.0 mutations/Mb，TMB-L",
+        "immuno_tips": "未提示",
+        "msi_summary": "微卫星稳定型，MSS",
+        "msi_tips": "未提示",
+        "immune_positive_result": "未检出",
+        "immune_negative_result": "未检出",
+        "immune_hyperprogression_result": "未检出",
+        "tmb_detail_sentence": "本次检测TMB水平较低。",
+        "tmb_detail_interpretation": "测试TMB解读。",
+        "tmb_drug_note": "",
+        "msi_detail_sentence": "本次检测为MSS。",
+        "targeted_drug_tips": [
+            {
+                "gene": "KRAS",
+                "variant_site": "p.G12D",
+                "benefit_drugs": "--",
+                "caution_drugs": "西妥昔单抗",
+            }
+        ],
+        "variants_2_1": [
+            {
+                "gene": "KRAS",
+                "transcript": "NM_004985",
+                "chr": "12",
+                "exon": "2",
+                "locus": "25398284",
+                "var_type_cn": "错义突变",
+                "af_pct": "12.3%",
+                "benefit_drugs": "--",
+                "caution_drugs": "西妥昔单抗",
+            }
+        ],
+        "chemotherapy": [
+            {"Drug": "瑞戈非尼", "Gene": "VEGFR", "药物适应情况": "测试适应症"}
+        ],
+        "nccn_results": [{"gene": "KRAS", "content": "EX2", "result": "检出"}],
+        "immune_positive_results": [
+            {"gene": "TP53", "result": "未检出", "interpretation": "--"}
+        ],
+        "immune_negative_results": [
+            {"gene": "PTEN", "result": "未检出", "interpretation": "--"}
+        ],
+        "immune_hyperprogression_results": [
+            {"gene": "EGFR", "result": "未检出", "interpretation": "--"}
+        ],
+    }
+
+    template = DocxTemplate(template_path)
+    template.render(context)
+    template.save(output)
+
+    text = "\n".join(p.text for p in Document(output).paragraphs)
+    assert "{{" not in text
+    assert "{%" not in text
+    assert "TEST301" in text
+
+
 def test_web_bridge_resolves_panel_template_id():
     bridge = ReportGenBridge(
         config_dir=str(ROOT / "config"),

@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "crc_301_msi"
 display_name: "结直肠癌301基因+MSI"
-version: "0.1.0"
+version: "0.2.0"
 status: "active"
 description: "CRC 301 + MSI panel package reusing the CRC report pipeline."
 
@@ -31,6 +31,20 @@ templates:
     version: "1.0.0"
     status: "active"
     description: "Current aligned CRC template reused for CRC 301 + MSI."
+  - id: "crc_301_msi_golden_template_v0"
+    file: "templates/crc_301_msi_golden_template_v0.docx"
+    version: "0.1.0"
+    status: "pilot"
+    description: "Pilot CRC301+MSI golden template generated from a reviewed final report. Not promoted as default until two-case QA passes."
+    processors:
+      - "part3_formatted_sections"
+      - "signature_placeholder"
+      - "bullet_lists"
+      - "front_matter_spacing"
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
+      - "underlines_and_styles"
 
 mappings:
   default: "config/mapping.yaml"
