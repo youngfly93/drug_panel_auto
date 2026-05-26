@@ -71,6 +71,14 @@ Seed manifest:
 tmp/golden_template_seed/crc_35_msi_seed.manifest.json
 ```
 
+Reproducible command:
+
+```bash
+python scripts/build_crc35_msi_seed.py \
+  --manifest tmp/panel_inventory/crc_small_candidate_manifest.local.json \
+  --output tmp/golden_template_seed/crc_35_msi_seed.docx
+```
+
 The seed is not committed. It only confirms that a reviewed CRC35+MSI report can
 be scrubbed into a working DOCX source after replacing known patient/sample
 tokens. It still needs structural variableization before it can become a panel
