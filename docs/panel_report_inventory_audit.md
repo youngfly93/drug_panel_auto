@@ -150,14 +150,15 @@ de-identified knowledge records and extraction scripts.
 
 ## Immediate Migration Candidates
 
-1. CRC301 golden template migration.
-   It is the largest historical group and shares the CRC358 architecture.
-2. CRC35/CRC20 small CRC family.
+1. CRC35/CRC20 small CRC family.
    This validates optional omission of TMB/immune-heavy sections.
-3. Lung13 small targeted family.
+2. Lung13 small targeted family.
    This creates the first non-CRC template family.
-4. Lung62+PD.
+3. Lung62+PD.
    This introduces PD-L1 handling before the larger lung329+PD template.
-5. Endometrial molecular typing 29-gene report.
+4. Endometrial molecular typing 29-gene report.
    This introduces molecular typing, QC, MSI, and hereditary-risk sections.
 
+CRC301 golden-template migration has already moved into the local default path.
+The next candidate rationale is tracked in
+`docs/panel_next_candidate_analysis.md`.

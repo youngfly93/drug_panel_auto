@@ -129,11 +129,11 @@ Rationale:
 
 Expected work:
 
-- create `crc_301_msi_golden_template_v0`;
-- reuse CRC rule files where valid;
-- add any CRC301-specific table-loop positions;
-- keep `crc_301_msi_standard_v1` until golden passes QA;
-- promote `default_template` only after two-case validation.
+- completed locally on `codex/panel-crc301-golden`;
+- current local default is `crc_301_msi_golden_template_v1`;
+- `crc_301_msi_standard_v1` is retained as rollback;
+- server deployment has not been performed while the server is under external
+  testing.
 
 ### 2. Small CRC MSI Family
 
@@ -209,10 +209,21 @@ rules should filter or override shared records by cancer type and panel scope.
 
 ## Current First Action
 
-The current implementation step is `codex/panel-inventory-roadmap` scope:
+CRC301 local promotion is complete and documented in:
 
-- ignore the raw historical report folder;
-- add reproducible sanitized inventory tooling;
-- document structure findings and migration order;
-- keep the existing CRC358/CRC301 behavior unchanged.
+```text
+docs/crc301_local_promotion_release_note.md
+```
 
+The next implementation step is `codex/panel-crc-small-msi` scope:
+
+- build a local candidate manifest for CRC35+MSI and CRC20+MSI;
+- select a reviewed CRC35+MSI final DOCX as the layout source of truth;
+- compare its variable regions against CRC301 golden v1;
+- create a pilot `crc_35_msi` panel package without changing server state.
+
+Candidate rationale is tracked in:
+
+```text
+docs/panel_next_candidate_analysis.md
+```
