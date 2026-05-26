@@ -135,6 +135,7 @@ operation_count: 21
 Part 3 marker: present
 high_risk_residual_total: 0
 synthetic docxtpl smoke render: pass
+runtime context smoke render: pass
 ```
 
 Dynamic regions currently covered:
@@ -147,6 +148,11 @@ Dynamic regions currently covered:
 - Table 10 (`drug_yilitikang_dose_safety`) is a tentative reuse of
   `drug_yilitikang` and needs a second-case Excel verification before a DOCX
   template is committed.
+
+The runtime smoke render used a local Excel artifact only to verify context
+shape. It did not commit or document any source path, patient value, or rendered
+report. The checked context contained non-empty `variants_2_1`, the CRC approved
+`chemotherapy` list, and populated `drug_*` CtDrug lists.
 
 ## Required Before Committing A Template
 
