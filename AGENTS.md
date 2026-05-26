@@ -9,6 +9,7 @@ This file provides project memory for Codex when working in this repository.
 - Panel package specification: `docs/panel_package_spec.md`
 - M6-M9 refactor implementation PRD: `docs/prd_refactor_implementation_m6_m9.md`
 - Release checklist: `docs/release_checklist.md`
+- Maintainer handoff and deployment map: `docs/HANDOFF.md`
 
 ## Refactor Direction
 
