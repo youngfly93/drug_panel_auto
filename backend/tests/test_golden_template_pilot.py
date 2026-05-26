@@ -86,13 +86,13 @@ def test_crc358_golden_template_part3_uses_dynamic_marker():
     assert "46.29" not in dynamic_stub
 
 
-def test_crc301_golden_template_declares_pilot_processors():
+def test_crc301_golden_template_declares_active_default_processors():
     package = load_panel_package("crc_301_msi", project_root=ROOT)
     template = package.templates["crc_301_msi_golden_template_v1"]
 
-    assert template.status == "pilot"
+    assert template.status == "active"
     assert package.templates["crc_301_msi_golden_template_v0"].status == "deprecated"
-    assert package.default_template.template_id == "crc_301_msi_standard_v1"
+    assert package.default_template.template_id == "crc_301_msi_golden_template_v1"
     assert template.processors == (
         "part3_formatted_sections",
         "signature_placeholder",
@@ -222,6 +222,11 @@ def test_web_bridge_resolves_panel_template_id():
     assert resolved.name == "crc_358_msi_golden_template_v0.docx"
     assert resolved.exists()
     assert "panels/crc_358_msi/templates" in resolved.as_posix()
+
+    crc301_default = Path(bridge._resolve_template_path(None, "crc_301_msi"))
+    assert crc301_default.name == "crc_301_msi_golden_template_v1.docx"
+    assert crc301_default.exists()
+    assert "panels/crc_301_msi/templates" in crc301_default.as_posix()
 
 
 def test_report_generator_uses_template_level_processors():

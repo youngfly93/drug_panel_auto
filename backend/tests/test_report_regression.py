@@ -1243,7 +1243,7 @@ def test_panel_package_loader_reads_crc301_package():
     assert package.panel_id == "crc_301_msi"
     assert package.display_name == "结直肠癌301基因+MSI"
     assert "crc_301" in package.aliases
-    assert package.default_template.template_id == "crc_301_msi_standard_v1"
+    assert package.default_template.template_id == "crc_301_msi_golden_template_v1"
     assert package.resolve_template_file().exists()
     assert package.resolve_rule_file("panel_rules").name == "crc.yaml"
     assert "panels/crc_301_msi/rules" in str(package.resolve_rule_file("panel_rules"))

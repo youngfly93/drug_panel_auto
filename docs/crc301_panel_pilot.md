@@ -31,9 +31,9 @@ Filename/body conflicts found: 0.
   project wording.
 - Synthetic CRC 301 golden workbook is now generated directly instead of
   mutating the CRC 358 fixture.
-- Pilot golden-template asset exists as
-  `crc_301_msi_golden_template_v1`, but the default template remains
-  `crc_301_msi_standard_v1` until two-case QA and layout review are accepted.
+- Golden-template asset `crc_301_msi_golden_template_v1` is the local default
+  template after two-case QA and layout review passed.
+  `crc_301_msi_standard_v1` is retained as the rollback template.
   `crc_301_msi_golden_template_v0` is kept as a deprecated rollback artifact.
 - `reportgen qa run --panel crc_301_msi` is supported.
 - Default `reportgen qa gate` includes `crc_301_msi`.
@@ -93,9 +93,9 @@ Layout review for v1 rendered the generated DOCX files to PDF:
 - Previous logo-only separator pages before appendix headings are removed while
   keeping headings with their following content.
 
-The pilot remains `status: pilot` and `crc_301_msi_standard_v1` remains the
-default template. Promotion still requires manual layout review of the generated
-DOCX pages.
+`crc_301_msi_golden_template_v1` is `status: active` and is the local
+`default_template`. This repository change has not been deployed to the server;
+server promotion should wait until the current server testing window is clear.
 
 CRC 358 follows the same historical gate pattern:
 
@@ -118,8 +118,5 @@ python -m reportgen.cli qa gate \
   section presence, table-shape fingerprints, and privacy redaction are checked
   against historical CRC 301 reports. Required fields and severities are owned
   by `panels/crc_301_msi/qa.yaml`.
-- Review the two-case pilot manifest at
-  `tmp/crc301_pilot_two_case_qa/manifest.json`. Promote the golden template only
-  after the manifest is `ok: true`, no Jinja/Part 3 markers remain in outputs,
-  QA is `PASS` for both cases, and layout review accepts the generated DOCX
-  pages.
+- Before server deployment, rerun a local Web/API smoke for CRC301 and record
+  the generated DOCX/PDF review artifacts with the commit hash.

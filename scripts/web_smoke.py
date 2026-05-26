@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Local Web API smoke test for the report-generation platform.
 
-The test uses a synthetic CRC 358 + MSI workbook, so it is safe to run before
-release or on a staging server without exposing patient data.
+The test uses synthetic workbooks, so it is safe to run before release or on a
+staging server without exposing patient data.
 """
 
 from __future__ import annotations
@@ -23,7 +23,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from docx import Document  # noqa: E402
-from reportgen.core.golden_case import build_crc_358_msi_golden_excel  # noqa: E402
+from reportgen.core.golden_case import (  # noqa: E402
+    build_crc_301_msi_golden_excel,
+    build_crc_358_msi_golden_excel,
+)
 
 
 BASE_URL = os.environ.get("WEB_SMOKE_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -34,6 +37,48 @@ ADMIN_USERNAME = os.environ.get("WEB_SMOKE_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("WEB_SMOKE_ADMIN_PASSWORD", "admin123")
 TIMEOUT_SECONDS = int(os.environ.get("WEB_SMOKE_TIMEOUT_SECONDS", "240"))
 MIN_DOCX_BYTES = int(os.environ.get("WEB_SMOKE_MIN_DOCX_BYTES", "1000000"))
+SMOKE_PANEL = os.environ.get("WEB_SMOKE_PANEL", "crc_358_msi")
+
+PANEL_SPECS = {
+    "crc_358_msi": {
+        "builder": build_crc_358_msi_golden_excel,
+        "input_filename": "LZ999001_crc_358_msi_golden.xlsx",
+        "project_type": "crc_358_msi",
+        "project_name": "结直肠癌358基因+MSI",
+        "sample_id": "LZ999001",
+        "patient_name": "黄金测试患者",
+        "required_text": [
+            "本次共检出体细胞变异：2个",
+            "与靶向药物用药相关的变异有：1个",
+            "微卫星稳定型，MSS",
+            "多项临床研究表明，TMB-H的肿瘤",
+            "研究表明，MSI-H的实体瘤",
+            "ERBB2",
+            "c.1979G>A",
+            "p.G660D",
+        ],
+    },
+    "crc_301_msi": {
+        "builder": build_crc_301_msi_golden_excel,
+        "input_filename": "LZ999301_crc_301_msi_golden.xlsx",
+        "project_type": "crc_301_msi",
+        "project_name": "结直肠癌301基因+MSI",
+        "sample_id": "LZ999301",
+        "patient_name": "黄金测试患者",
+        "required_text": [
+            "本次共检出体细胞变异：2个",
+            "与靶向药物用药相关的变异有：1个",
+            "微卫星稳定型，MSS",
+            "多项临床研究表明，TMB-H的肿瘤",
+            "研究表明，MSI-H的实体瘤",
+            "检测者：",
+            "审核者：",
+            "ERBB2",
+            "c.1979G>A",
+            "p.G660D",
+        ],
+    },
+}
 
 
 class SmokeFailure(RuntimeError):
@@ -136,29 +181,25 @@ def _assert(condition: bool, message: str) -> None:
         raise SmokeFailure(message)
 
 
-def _check_docx_text(path: Path) -> None:
+def _check_docx_text(path: Path, required_text: list[str]) -> None:
     doc = Document(str(path))
     chunks: list[str] = [p.text for p in doc.paragraphs]
     chunks.extend(cell.text for table in doc.tables for row in table.rows for cell in row.cells)
     text = "\n".join(chunks)
-    for needle in [
-        "本次共检出体细胞变异：2个",
-        "与靶向药物用药相关的变异有：1个",
-        "微卫星稳定型，MSS",
-        "多项临床研究表明，TMB-H的肿瘤",
-        "研究表明，MSI-H的实体瘤",
-        "ERBB2",
-        "c.1979G>A",
-        "p.G660D",
-    ]:
+    for needle in required_text:
         _assert(needle in text, f"generated DOCX is missing text: {needle}")
 
 
 def main() -> int:
     started = time.monotonic()
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    spec = PANEL_SPECS.get(SMOKE_PANEL)
+    if spec is None:
+        supported = ", ".join(sorted(PANEL_SPECS))
+        raise SmokeFailure(f"unsupported WEB_SMOKE_PANEL={SMOKE_PANEL!r}; choose {supported}")
     print("Web smoke test")
     print(f"  base_url: {BASE_URL}")
+    print(f"  panel: {spec['project_type']}")
     print(f"  output_root: {OUTPUT_ROOT}")
 
     status, body, _headers = _request("GET", "/", timeout=30)
@@ -185,15 +226,13 @@ def main() -> int:
     _assert(isinstance(stats.get("data"), dict), "task stats payload is invalid")
     print("  ✅ task stats")
 
-    excel_path = build_crc_358_msi_golden_excel(
-        OUTPUT_ROOT / "LZ999001_crc_358_msi_golden.xlsx"
-    )
+    excel_path = spec["builder"](OUTPUT_ROOT / spec["input_filename"])
     upload = _upload_excel(excel_path)
     upload_data = upload["data"]
     upload_id = upload_data["upload_id"]
     _assert(
-        upload_data.get("detected_project_type") == "crc_358_msi",
-        f"expected crc_358_msi, got {upload_data.get('detected_project_type')!r}",
+        upload_data.get("detected_project_type") == spec["project_type"],
+        f"expected {spec['project_type']}, got {upload_data.get('detected_project_type')!r}",
     )
     print(f"  ✅ upload + detect ({upload_id})")
 
@@ -219,7 +258,7 @@ def main() -> int:
         f"/api/v1/excel/{upload_id}/sheets/{urllib.parse.quote('Meta')}?page=1&page_size=5",
         timeout=30,
     )
-    _assert(meta["data"]["rows"][0]["样本编号"] == "LZ999001", "Meta preview is wrong")
+    _assert(meta["data"]["rows"][0]["样本编号"] == spec["sample_id"], "Meta preview is wrong")
     variations = _json_request(
         "GET",
         f"/api/v1/excel/{upload_id}/sheets/Variations?page=1&page_size=5",
@@ -233,7 +272,7 @@ def main() -> int:
 
     schema = _json_request(
         "GET",
-        "/api/v1/clinical-schema?project_type=crc_358_msi",
+        f"/api/v1/clinical-schema?project_type={spec['project_type']}",
         timeout=30,
     )
     _assert(len(schema["data"].get("groups") or []) > 0, "clinical schema is empty")
@@ -243,8 +282,8 @@ def main() -> int:
         timeout=30,
     )
     clinical_info = single_values["data"]["fields"]
-    _assert(clinical_info.get("sample_id") == "LZ999001", "sample_id extraction failed")
-    _assert(clinical_info.get("patient_name") == "黄金测试患者", "patient extraction failed")
+    _assert(clinical_info.get("sample_id") == spec["sample_id"], "sample_id extraction failed")
+    _assert(clinical_info.get("patient_name") == spec["patient_name"], "patient extraction failed")
     print("  ✅ schema + single values")
 
     generate = _json_request(
@@ -253,8 +292,8 @@ def main() -> int:
         payload={
             "upload_id": upload_id,
             "clinical_info": clinical_info,
-            "project_type": "crc_358_msi",
-            "project_name": "结直肠癌358基因+MSI",
+            "project_type": spec["project_type"],
+            "project_name": spec["project_name"],
             "strict_mode": False,
             "template_contract_mode": "warn",
         },
@@ -280,12 +319,13 @@ def main() -> int:
     _assert(len(raw_docx) >= MIN_DOCX_BYTES, f"DOCX is too small: {len(raw_docx)} bytes")
     downloaded = OUTPUT_ROOT / "downloaded.docx"
     downloaded.write_bytes(raw_docx)
-    _check_docx_text(downloaded)
+    _check_docx_text(downloaded, spec["required_text"])
     print(f"  ✅ download + DOCX text ({len(raw_docx)} bytes)")
 
     summary = {
         "status": "PASS",
         "base_url": BASE_URL,
+        "panel": spec["project_type"],
         "upload_id": upload_id,
         "task_id": task_id,
         "qa_status": report_data["qa_status"],

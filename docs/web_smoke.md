@@ -1,7 +1,7 @@
 # Web Smoke Test
 
 `make web-smoke` runs a local production-style Web API smoke test with a
-synthetic CRC 358 + MSI workbook. It does not use real patient data.
+synthetic workbook. It does not use real patient data.
 
 The smoke test checks:
 
@@ -23,8 +23,9 @@ Default:
 make web-smoke
 ```
 
-This builds the frontend, starts a local backend on `127.0.0.1:8000` if one is
-not already running, executes the smoke flow, and stops the backend it started.
+This uses the synthetic CRC 358 + MSI workbook by default. It builds the
+frontend, starts a local backend on `127.0.0.1:8000` if one is not already
+running, executes the smoke flow, and stops the backend it started.
 
 Useful overrides:
 
@@ -33,6 +34,13 @@ WEB_SMOKE_BUILD=0 make web-smoke
 ```
 
 Skip frontend build when `backend/static` is already current.
+
+```bash
+WEB_SMOKE_PANEL=crc_301_msi WEB_SMOKE_BUILD=0 make web-smoke
+```
+
+Run the same Web API flow for the CRC301+MSI panel and its current default
+template.
 
 ```bash
 WEB_SMOKE_PORT=8010 make web-smoke

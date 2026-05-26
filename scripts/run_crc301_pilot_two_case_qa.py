@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Run a two-case QA gate for the CRC301 golden-template pilot.
+"""Run a two-case QA gate for the CRC301 golden-template v1 path.
 
 The inputs are synthetic and contain no patient data. The script explicitly
-uses the pilot template; it does not change the CRC301 default template.
+uses the golden template id so the gate remains stable even if defaults change.
 """
 
 from __future__ import annotations
