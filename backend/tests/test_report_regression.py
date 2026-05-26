@@ -3886,6 +3886,41 @@ def test_blank_page_cleanup_processor_is_idempotent(tmp_path):
     )
 
 
+def test_blank_heading_cleanup_does_not_cross_tables(tmp_path):
+    docx_path = tmp_path / "heading_cleanup.docx"
+    doc = Document()
+    doc.add_paragraph("正文")
+    doc.add_table(rows=1, cols=2)
+    doc.add_paragraph("")
+    doc.add_table(rows=1, cols=2)
+    breaker = doc.add_paragraph()
+    breaker.add_run().add_break(WD_BREAK.PAGE)
+    doc.add_paragraph("2. 结直肠癌诊疗知识")
+    doc.add_paragraph("章节正文")
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._remove_blank_page_breaks_before_headings(
+        str(docx_path),
+        ("2. 结直肠癌诊疗知识",),
+    )
+
+    cleaned = Document(docx_path)
+    assert len(cleaned.tables) == 2
+    paragraphs = [p for p in cleaned.paragraphs if p.text.strip()]
+    assert [p.text.strip() for p in paragraphs][-2:] == [
+        "2. 结直肠癌诊疗知识",
+        "章节正文",
+    ]
+    assert "w:keepNext" in paragraphs[-2]._p.xml
+
+
+def test_pdf_footer_page_number_scans_bottom_lines():
+    text = "表格内容\n--\n9\n--\n"
+
+    assert TemplateRenderer._extract_pdf_footer_page_number(text) == 9
+
+
 def test_toc_refresh_processor_is_idempotent(tmp_path, monkeypatch):
     _assert_processors_idempotent(
         tmp_path,

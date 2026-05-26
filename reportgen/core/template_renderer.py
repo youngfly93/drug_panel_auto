@@ -1944,24 +1944,84 @@ class TemplateRenderer:
         if not target_headings:
             return
 
-        doc = Document(file_path)
-        paragraphs = list(doc.paragraphs)
+        import os
+        import shutil
+        import tempfile
+        import xml.etree.ElementTree as ET
+        from zipfile import ZIP_DEFLATED, ZipFile
+
+        ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        for prefix, uri in {
+            "w": ns_w,
+            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        }.items():
+            ET.register_namespace(prefix, uri)
+
+        w_body = f"{{{ns_w}}}body"
+        w_p = f"{{{ns_w}}}p"
+        w_ppr = f"{{{ns_w}}}pPr"
+        w_keep_next = f"{{{ns_w}}}keepNext"
+        w_t = f"{{{ns_w}}}t"
+        w_br = f"{{{ns_w}}}br"
+        w_type = f"{{{ns_w}}}type"
+        w_last_rendered_page_break = f"{{{ns_w}}}lastRenderedPageBreak"
+        w_drawing = f"{{{ns_w}}}drawing"
+        w_pict = f"{{{ns_w}}}pict"
+
+        def paragraph_text(elem) -> str:
+            return "".join((node.text or "") for node in elem.iter(w_t)).strip()
+
+        def has_page_break(elem) -> bool:
+            return any(
+                (br.get(w_type) or br.get("type")) == "page"
+                for br in elem.iter(w_br)
+            ) or any(elem.iter(w_last_rendered_page_break))
+
+        def is_blank_paragraph(elem) -> bool:
+            return (
+                elem.tag == w_p
+                and not paragraph_text(elem)
+                and not any(elem.iter(w_drawing))
+                and not any(elem.iter(w_pict))
+            )
+
+        def ensure_keep_next(elem) -> bool:
+            ppr = elem.find(w_ppr)
+            if ppr is None:
+                ppr = ET.Element(w_ppr)
+                elem.insert(0, ppr)
+            if ppr.find(w_keep_next) is not None:
+                return False
+            ppr.append(ET.Element(w_keep_next))
+            return True
+
+        with ZipFile(file_path, "r") as zin:
+            document_xml = zin.read("word/document.xml")
+            document_info = zin.getinfo("word/document.xml")
+            other_entries = [
+                (info, zin.read(info.filename))
+                for info in zin.infolist()
+                if info.filename != "word/document.xml"
+            ]
+
+        root = ET.fromstring(document_xml)
+        body = root.find(w_body)
+        if body is None:
+            return
+
+        children = list(body)
         to_remove = []
+        changed = False
 
-        def has_page_break(paragraph) -> bool:
-            return 'w:type="page"' in paragraph._p.xml or "w:lastRenderedPageBreak" in paragraph._p.xml
-
-        def is_blank(paragraph) -> bool:
-            return not (paragraph.text or "").strip()
-
-        for idx, paragraph in enumerate(paragraphs):
-            if (paragraph.text or "").strip() not in target_headings:
+        for idx, elem in enumerate(children):
+            if elem.tag != w_p or paragraph_text(elem) not in target_headings:
                 continue
+            changed = ensure_keep_next(elem) or changed
             cluster = []
             saw_page_break = False
             prev_idx = idx - 1
-            while prev_idx >= 0 and is_blank(paragraphs[prev_idx]):
-                prev = paragraphs[prev_idx]
+            while prev_idx >= 0 and is_blank_paragraph(children[prev_idx]):
+                prev = children[prev_idx]
                 cluster.append(prev)
                 saw_page_break = saw_page_break or has_page_break(prev)
                 prev_idx -= 1
@@ -1971,19 +2031,33 @@ class TemplateRenderer:
         removed = 0
         seen = set()
         for paragraph in to_remove:
-            marker = id(paragraph._element)
+            marker = id(paragraph)
             if marker in seen:
                 continue
-            parent = paragraph._element.getparent()
-            if parent is None:
-                continue
-            parent.remove(paragraph._element)
+            body.remove(paragraph)
             seen.add(marker)
             removed += 1
 
-        if removed:
-            doc.save(file_path)
-            self.logger.debug("已移除标题前空白分页段落", removed=removed)
+        changed = changed or bool(removed)
+        if not changed:
+            return
+
+        fd, tmp_name = tempfile.mkstemp(suffix=".docx")
+        os.close(fd)
+        try:
+            with ZipFile(tmp_name, "w", compression=ZIP_DEFLATED) as zout:
+                zout.writestr(
+                    document_info,
+                    ET.tostring(root, encoding="utf-8", xml_declaration=True),
+                )
+                for info, data in other_entries:
+                    zout.writestr(info, data)
+            shutil.move(tmp_name, file_path)
+        finally:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+
+        self.logger.debug("已移除标题前空白分页段落", removed=removed)
 
     def _normalize_front_matter_spacing(self, file_path: str) -> None:
         """Keep the report guide on its own page without template spacer blanks.
@@ -3711,14 +3785,18 @@ class TemplateRenderer:
                 "第三部分：基因变异及相应靶向/免疫药物解析",
                 "第四部分：附录",
             ]
+            optional_labels = {
+                "靶向药物/免疫用药提示解析",
+            }
             display_labels = {
                 normalize_label(label): label
-                for label in [*section_labels, *page_numbers.keys()]
+                for label in [*section_labels, *page_numbers.keys(), *optional_labels]
             }
             normalized_numbers = {
                 normalize_label(label): str(number)
                 for label, number in page_numbers.items()
             }
+            optional_normalized = {normalize_label(label) for label in optional_labels}
             changed = False
 
             def make_run(
@@ -3767,6 +3845,14 @@ class TemplateRenderer:
                 is_section = normalize_label(display_label) in {
                     normalize_label(item) for item in section_labels
                 }
+                if not is_section and label not in normalized_numbers:
+                    if label in optional_normalized:
+                        parent = para.getparent()
+                        if parent is not None:
+                            parent.remove(para)
+                            changed = True
+                    continue
+
                 para.append(make_run(display_label, section=is_section))
                 if label in normalized_numbers:
                     para.append(make_run(tab=True))
@@ -3846,28 +3932,27 @@ class TemplateRenderer:
         import tempfile
 
         toc_entries: list[tuple[str, tuple[str, ...]]] = [
-            ("患者及样本信息", ("患者信息", "患者及样本信息")),
-            ("检测内容", ("检测内容",)),
-            ("检测结果小结", ("1.检测结果小结", "检测结果小结")),
-            ("靶向药物相关检测结果", ("2.靶向药物相关检测结果", "靶向药物相关检测结果")),
-            ("免疫治疗疗效评估", ("3.免疫治疗疗效评估", "免疫治疗疗效评估")),
-            ("检测结果说明", ("4.检测结果说明", "检测结果说明")),
-            ("基因变异解析", ("基因变异解析",)),
+            ("患者及样本信息", ("第一部分：基本信息患者信息", "患者信息样本信息")),
+            ("检测内容", ("第一部分：基本信息患者信息", "检测内容")),
+            ("检测结果小结", ("1.检测结果小结",)),
+            ("靶向药物相关检测结果", ("2.靶向药物相关检测结果",)),
+            ("免疫治疗疗效评估", ("3.免疫治疗疗效评估",)),
+            ("临床常用化疗药物评估及解析", ("4.临床常用化疗药物评估及解析",)),
+            ("检测结果说明", ("5.检测结果说明",)),
+            ("基因变异解析", ("基因变异说明", "5.检测结果说明")),
             ("靶向药物/免疫用药提示解析", ("靶向药物/免疫用药提示解析",)),
-            ("阅读说明", ("阅读说明",)),
-            ("常见问题解答", ("常见问题解答",)),
-            ("结直肠癌诊疗知识", ("结直肠癌诊疗知识",)),
-            ("癌症相关信号通路", ("癌症相关信号通路",)),
-            ("基因检测列表", ("基因检测列表", "GeneListforMLseq")),
+            ("阅读说明", ("3.阅读说明",)),
+            ("常见问题解答", ("1.常见问题解答",)),
+            ("结直肠癌诊疗知识", ("2.结直肠癌诊疗知识",)),
+            ("癌症相关信号通路", ("3.癌症相关信号通路",)),
+            ("基因检测列表", ("4.基因检测列表", "GeneListforMLseq")),
             ("参考文献", ("5.参考文献",)),
         ]
 
         def normalize(text: str) -> str:
             return re.sub(r"\s+", "", text or "")
 
-        with tempfile.TemporaryDirectory(prefix="reportgen_pdf_") as tmp_dir, tempfile.TemporaryDirectory(
-            prefix="reportgen_pdf_profile_"
-        ) as profile_dir:
+        with tempfile.TemporaryDirectory(prefix="reportgen_pdf_") as tmp_dir:
             tmp_dir_path = Path(tmp_dir)
             input_dir = tmp_dir_path / "input"
             output_dir = tmp_dir_path / "output"
@@ -3878,11 +3963,9 @@ class TemplateRenderer:
 
             cmd = [
                 soffice,
-                f"-env:UserInstallation=file://{Path(profile_dir).as_posix()}",
                 "--headless",
                 "--nologo",
                 "--nolockcheck",
-                "--nodefault",
                 "--convert-to",
                 "pdf",
                 "--outdir",
@@ -3927,7 +4010,16 @@ class TemplateRenderer:
             for page in range(1, page_count + 1):
                 try:
                     text = subprocess.run(
-                        [pdftotext, "-f", str(page), "-l", str(page), str(pdf_path), "-"],
+                        [
+                            pdftotext,
+                            "-layout",
+                            "-f",
+                            str(page),
+                            "-l",
+                            str(page),
+                            str(pdf_path),
+                            "-",
+                        ],
                         check=True,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
@@ -3986,16 +4078,10 @@ class TemplateRenderer:
         """Return the visible report-page footer number from one PDF text page."""
         import re
 
-        for line in reversed((page_text or "").splitlines()):
-            text = line.strip()
-            if not text:
-                continue
+        lines = [line.strip() for line in (page_text or "").splitlines() if line.strip()]
+        for text in reversed(lines[-12:]):
             if re.fullmatch(r"\d{1,3}", text):
                 return int(text)
-            # Footer page numbers are the last visible token; once a non-empty
-            # non-number line is encountered near the bottom, stop scanning to
-            # avoid matching numbered evidence or section text higher up.
-            return None
         return None
 
     def _compact_gene_list_tables(self, file_path: str, context: dict | None = None) -> None:

@@ -32,8 +32,9 @@ Filename/body conflicts found: 0.
 - Synthetic CRC 301 golden workbook is now generated directly instead of
   mutating the CRC 358 fixture.
 - Pilot golden-template asset exists as
-  `crc_301_msi_golden_template_v0`, but the default template remains
+  `crc_301_msi_golden_template_v1`, but the default template remains
   `crc_301_msi_standard_v1` until two-case QA and layout review are accepted.
+  `crc_301_msi_golden_template_v0` is kept as a deprecated rollback artifact.
 - `reportgen qa run --panel crc_301_msi` is supported.
 - Default `reportgen qa gate` includes `crc_301_msi`.
 - `panels/crc_301_msi/qa.yaml` enables the CRC 301 legacy reference snapshot
@@ -76,10 +77,21 @@ python scripts/run_crc301_pilot_two_case_qa.py \
 
 Result:
 
-| Case | Generation | QA | Tables | Marker/Jinja Cleanup |
-|---|---|---|---:|---|
-| `crc301_case_a` | PASS | PASS | 63 | PASS |
-| `crc301_case_b` | PASS | PASS | 63 | PASS |
+| Case | Generation | QA | Tables | Marker/Jinja Cleanup | Signature Block |
+|---|---|---|---:|---|---|
+| `crc301_case_a` | PASS | PASS | 63 | PASS | PASS |
+| `crc301_case_b` | PASS | PASS | 63 | PASS | PASS |
+
+Layout review for v1 rendered the generated DOCX files to PDF:
+
+- `crc301_case_a`: 67 A4 pages
+- `crc301_case_b`: 72 A4 pages
+- TOC page numbers match the rendered PDF for all detected sections.
+- Case A omits the optional `靶向药物/免疫用药提示解析` TOC row because no
+  matching section is generated for that case.
+- The detector/reviewer/report-date signature block is present before Part 3.
+- Previous logo-only separator pages before appendix headings are removed while
+  keeping headings with their following content.
 
 The pilot remains `status: pilot` and `crc_301_msi_standard_v1` remains the
 default template. Promotion still requires manual layout review of the generated

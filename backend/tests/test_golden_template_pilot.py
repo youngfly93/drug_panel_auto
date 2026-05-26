@@ -88,14 +88,16 @@ def test_crc358_golden_template_part3_uses_dynamic_marker():
 
 def test_crc301_golden_template_declares_pilot_processors():
     package = load_panel_package("crc_301_msi", project_root=ROOT)
-    template = package.templates["crc_301_msi_golden_template_v0"]
+    template = package.templates["crc_301_msi_golden_template_v1"]
 
     assert template.status == "pilot"
+    assert package.templates["crc_301_msi_golden_template_v0"].status == "deprecated"
     assert package.default_template.template_id == "crc_301_msi_standard_v1"
     assert template.processors == (
         "part3_formatted_sections",
         "signature_placeholder",
         "bullet_lists",
+        "signature_layout",
         "front_matter_spacing",
         "blank_page_cleanup",
         "toc_refresh",
@@ -110,7 +112,7 @@ def test_crc301_golden_template_declares_pilot_processors():
 
 def test_crc301_golden_template_part3_uses_dynamic_marker():
     package = load_panel_package("crc_301_msi", project_root=ROOT)
-    template_path = package.resolve_template_file("crc_301_msi_golden_template_v0")
+    template_path = package.resolve_template_file("crc_301_msi_golden_template_v1")
     doc = Document(template_path)
     paragraphs = [p.text.strip() for p in doc.paragraphs]
     text = "\n".join(paragraphs)
@@ -122,11 +124,14 @@ def test_crc301_golden_template_part3_uses_dynamic_marker():
     assert "__PATIENT_NAME__" not in text
     assert "__SAMPLE_ID__" not in text
     assert "__REPORT_NUMBER__" not in text
+    assert "检测者：" in text
+    assert "审核者：" in text
+    assert "报告日期：{{ report_date_dot }}" in text
 
 
 def test_crc301_golden_template_docxtpl_renders_minimal_context(tmp_path):
     package = load_panel_package("crc_301_msi", project_root=ROOT)
-    template_path = package.resolve_template_file("crc_301_msi_golden_template_v0")
+    template_path = package.resolve_template_file("crc_301_msi_golden_template_v1")
     output = tmp_path / "crc301_rendered.docx"
 
     context = {
@@ -197,6 +202,8 @@ def test_crc301_golden_template_docxtpl_renders_minimal_context(tmp_path):
     assert "{{" not in text
     assert "{%" not in text
     assert "TEST301" in text
+    assert "检测者：" in text
+    assert "审核者：" in text
 
 
 def test_web_bridge_resolves_panel_template_id():

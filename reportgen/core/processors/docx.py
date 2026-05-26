@@ -163,7 +163,15 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
     ctx.renderer._normalize_quality_control_tables(ctx.output_path)
     ctx.renderer._optimize_variant_table_layout(ctx.output_path)
     ctx.renderer._cleanup_trailing_blank_page(ctx.output_path)
-    ctx.renderer._remove_blank_page_breaks_before_headings(ctx.output_path)
+    ctx.renderer._remove_blank_page_breaks_before_headings(
+        ctx.output_path,
+        (
+            "2. 结直肠癌诊疗知识",
+            "3. 癌症相关信号通路",
+            "4. 基因检测列表",
+            "5. 参考文献",
+        ),
+    )
     try:
         ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
         ctx.renderer._set_update_fields(ctx.output_path)

@@ -26,7 +26,7 @@ from reportgen.panels.loader import load_panel_package  # noqa: E402
 
 
 PANEL_ID = "crc_301_msi"
-TEMPLATE_ID = "crc_301_msi_golden_template_v0"
+TEMPLATE_ID = "crc_301_msi_golden_template_v1"
 
 
 def _write_case_b(path: Path) -> Path:
@@ -149,6 +149,7 @@ def _docx_summary(path: Path) -> dict[str, Any]:
         "part3_marker_removed": "__PART3_MARKER__" not in text,
         "jinja_removed": "{{" not in text and "{%" not in text,
         "has_reading_section": "3. 阅读说明" in text,
+        "has_signature_block": "检测者：" in text and "审核者：" in text,
     }
 
 
@@ -188,6 +189,7 @@ def _run_case(
         and summary["qa_issue_count"] == 0
         and summary["docx"].get("part3_marker_removed")
         and summary["docx"].get("jinja_removed")
+        and summary["docx"].get("has_signature_block")
     )
     return summary
 
