@@ -31,6 +31,9 @@ Filename/body conflicts found: 0.
   project wording.
 - Synthetic CRC 301 golden workbook is now generated directly instead of
   mutating the CRC 358 fixture.
+- Pilot golden-template asset exists as
+  `crc_301_msi_golden_template_v0`, but the default template remains
+  `crc_301_msi_standard_v1` until two-case QA and layout review are accepted.
 - `reportgen qa run --panel crc_301_msi` is supported.
 - Default `reportgen qa gate` includes `crc_301_msi`.
 - `panels/crc_301_msi/qa.yaml` enables the CRC 301 legacy reference snapshot
@@ -54,9 +57,33 @@ python -m reportgen.cli qa gate \
   --legacy-panel crc_301_msi \
   --legacy-source-root /Volumes/KINGSTON/work/肠癌358基因/legacy_reports_by_panel \
   --legacy-reference-required
+python scripts/run_crc301_pilot_two_case_qa.py \
+  --output-root tmp/crc301_pilot_two_case_qa
 ```
 
 Expected result for each command: `PASS`.
+
+## Current CRC301 Golden Pilot Two-Case Result
+
+Last local run: 2026-05-26
+
+Command:
+
+```bash
+python scripts/run_crc301_pilot_two_case_qa.py \
+  --output-root tmp/crc301_pilot_two_case_qa
+```
+
+Result:
+
+| Case | Generation | QA | Tables | Marker/Jinja Cleanup |
+|---|---|---|---:|---|
+| `crc301_case_a` | PASS | PASS | 63 | PASS |
+| `crc301_case_b` | PASS | PASS | 63 | PASS |
+
+The pilot remains `status: pilot` and `crc_301_msi_standard_v1` remains the
+default template. Promotion still requires manual layout review of the generated
+DOCX pages.
 
 CRC 358 follows the same historical gate pattern:
 
@@ -79,5 +106,8 @@ python -m reportgen.cli qa gate \
   section presence, table-shape fingerprints, and privacy redaction are checked
   against historical CRC 301 reports. Required fields and severities are owned
   by `panels/crc_301_msi/qa.yaml`.
-- Decide whether CRC 301 needs separate template assets or can keep sharing the
-  current CRC template.
+- Review the two-case pilot manifest at
+  `tmp/crc301_pilot_two_case_qa/manifest.json`. Promote the golden template only
+  after the manifest is `ok: true`, no Jinja/Part 3 markers remain in outputs,
+  QA is `PASS` for both cases, and layout review accepts the generated DOCX
+  pages.

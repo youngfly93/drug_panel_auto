@@ -93,14 +93,12 @@ template_contract:
   required_variables:
     - "patient_name"
     - "sample_id"
-    - "report_date"
     - "total_variants_count"
     - "drug_related_count"
     - "tmb_summary"
     - "msi_summary"
     - "immuno_tips"
     - "msi_tips"
-    - "nccn_KRAS_EX2"
   required_lists:
     - "targeted_drug_tips"
     - "variants_2_1"
