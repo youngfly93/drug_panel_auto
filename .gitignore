@@ -47,6 +47,7 @@ tmp/
 
 # Patient data — NEVER commit real patient files
 # But DO commit templates and knowledge bases needed for deployment
+各癌种基因报告近年汇总/
 *.pdf
 !templates/**/*.docx
 !panels/**/*.docx
