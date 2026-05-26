@@ -126,6 +126,10 @@ python scripts/variableize_golden_template.py \
   tmp/golden_template_seed/crc_35_msi_seed_part3_marker.docx \
   --map panels/crc_35_msi/templates/golden_template_v0_variables.yaml \
   --output tmp/golden_template_seed/crc_35_msi_golden_template_v0_candidate.docx
+
+python scripts/scrub_docx_signature_images.py \
+  tmp/golden_template_seed/crc_35_msi_golden_template_v0_candidate.docx \
+  --output tmp/golden_template_seed/crc_35_msi_golden_template_v0_candidate.docx
 ```
 
 Latest local variableization result:
@@ -136,6 +140,7 @@ Part 3 marker: present
 high_risk_residual_total: 0
 synthetic docxtpl smoke render: pass
 runtime context smoke render: pass
+signature/media metadata scrub: 2 handwritten-signature-like images replaced
 ```
 
 Dynamic regions currently covered:
@@ -154,6 +159,40 @@ shape. It did not commit or document any source path, patient value, or rendered
 report. The checked context contained non-empty `variants_2_1`, the CRC approved
 `chemotherapy` list, and populated `drug_*` CtDrug lists.
 
+The reusable verification script is:
+
+```bash
+python scripts/verify_crc35_msi_candidate.py \
+  --template tmp/golden_template_seed/crc_35_msi_golden_template_v0_candidate.docx \
+  --excel <local_excel_a> \
+  --excel <local_excel_b>
+```
+
+Latest two-case smoke result after signature/metadata scrubbing:
+
+```text
+case_count: 2
+ok: true
+case_01 variants_2_1_rows: 25
+case_02 variants_2_1_rows: 62
+table10_rows: 50 in both cases
+unresolved Jinja/Part3 markers: 0
+```
+
+Panel package validation and generation smoke:
+
+```text
+python -m reportgen.cli panel validate crc_35_msi --project-root . --format json
+status: PASS
+
+python -m reportgen.cli panel validate --project-root . --format json
+status: PASS
+
+ReportGenerator.generate(project_type="crc_35_msi") two-case smoke: PASS
+panel_package_ok: true
+generated unresolved Jinja/Part3 markers: 0
+```
+
 ## Required Before Committing A Template
 
 - Replace patient/sample/report fields with Jinja variables.
@@ -166,7 +205,6 @@ report. The checked context contained non-empty `variants_2_1`, the CRC approved
 
 ## Current Decision
 
-The structural recipe can be committed, but the generated DOCX template remains
-local. Promote to a draft `crc_35_msi` package only after the table 10
-dose-safety behavior is verified on a second CRC35 Excel and at least two
-rendered reports pass privacy, structure, and layout checks.
+The structural recipe and scrubbed pilot DOCX template can be committed as a
+`crc_35_msi` pilot package. Keep the package in `pilot` status until real CRC35
+fixtures are added to the QA gate and a layout review passes.

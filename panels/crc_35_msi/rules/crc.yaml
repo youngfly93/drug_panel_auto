@@ -1,0 +1,174 @@
+# CRC 35 + MSI panel rule sets.
+#
+# This file contains gene symbols and display metadata only. Do not store
+# patient-level identifiers or reviewed report content here.
+schema_version: "1.0"
+panel_id: "crc_35_msi"
+rule_id: "crc"
+version: "0.1.0"
+updated: "2026-05-26"
+status: "pilot"
+notes:
+  - "CRC35+MSI pilot rules derived from the reviewed template gene list."
+  - "Drug interpretation rules reuse the existing CRC knowledge pipeline."
+
+class_i_genes:
+  - KRAS
+  - NRAS
+  - BRAF
+  - PIK3CA
+  - HER2
+  - NTRK1
+  - NTRK2
+  - NTRK3
+
+class_ii_genes:
+  - APC
+  - TP53
+  - SMAD4
+
+crc_important_genes:
+  - ABCB1
+  - APC
+  - BRAF
+  - C8orf34
+  - CBR3
+  - CDA
+  - CEP72
+  - DPYD
+  - DYNC2H1
+  - EGFR
+  - ERCC1
+  - ERCC2
+  - GGH
+  - GSTM1
+  - GSTP1
+  - HER2
+  - KRAS
+  - MTHFR
+  - MTRR
+  - NRAS
+  - NTRK1
+  - NTRK2
+  - NTRK3
+  - PIK3CA
+  - RRM1
+  - SLC19A1
+  - SLCO1B1
+  - SMAD4
+  - SOD2
+  - TP53
+  - UGT1A1
+  - UMPS
+  - VEGFA
+  - XPC
+  - XRCC1
+
+panel_display_genes:
+  - name: ABCB1
+    transcript: ""
+    chromosome: ""
+  - name: APC
+    transcript: ""
+    chromosome: ""
+  - name: BRAF
+    transcript: ""
+    chromosome: ""
+  - name: C8orf34
+    transcript: ""
+    chromosome: ""
+  - name: CBR3
+    transcript: ""
+    chromosome: ""
+  - name: CDA
+    transcript: ""
+    chromosome: ""
+  - name: CEP72
+    transcript: ""
+    chromosome: ""
+  - name: DPYD
+    transcript: ""
+    chromosome: ""
+  - name: DYNC2H1
+    transcript: ""
+    chromosome: ""
+  - name: EGFR
+    transcript: ""
+    chromosome: ""
+  - name: ERCC1
+    transcript: ""
+    chromosome: ""
+  - name: ERCC2
+    transcript: ""
+    chromosome: ""
+  - name: GGH
+    transcript: ""
+    chromosome: ""
+  - name: GSTM1
+    transcript: ""
+    chromosome: ""
+  - name: GSTP1
+    transcript: ""
+    chromosome: ""
+  - name: HER2
+    transcript: ""
+    chromosome: ""
+  - name: KRAS
+    transcript: ""
+    chromosome: ""
+  - name: MTHFR
+    transcript: ""
+    chromosome: ""
+  - name: MTRR
+    transcript: ""
+    chromosome: ""
+  - name: NRAS
+    transcript: ""
+    chromosome: ""
+  - name: NTRK1
+    transcript: ""
+    chromosome: ""
+  - name: NTRK2
+    transcript: ""
+    chromosome: ""
+  - name: NTRK3
+    transcript: ""
+    chromosome: ""
+  - name: PIK3CA
+    transcript: ""
+    chromosome: ""
+  - name: RRM1
+    transcript: ""
+    chromosome: ""
+  - name: SLC19A1
+    transcript: ""
+    chromosome: ""
+  - name: SLCO1B1
+    transcript: ""
+    chromosome: ""
+  - name: SMAD4
+    transcript: ""
+    chromosome: ""
+  - name: SOD2
+    transcript: ""
+    chromosome: ""
+  - name: TP53
+    transcript: ""
+    chromosome: ""
+  - name: UGT1A1
+    transcript: ""
+    chromosome: ""
+  - name: UMPS
+    transcript: ""
+    chromosome: ""
+  - name: VEGFA
+    transcript: ""
+    chromosome: ""
+  - name: XPC
+    transcript: ""
+    chromosome: ""
+  - name: XRCC1
+    transcript: ""
+    chromosome: ""
+
+reviewed_variant_overrides: []

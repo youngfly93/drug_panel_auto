@@ -1,0 +1,131 @@
+schema_version: "1.0"
+panel_id: "crc_35_msi"
+display_name: "结直肠癌35基因+MSI"
+version: "0.1.0"
+status: "pilot"
+description: "CRC 35 + MSI pilot panel package derived from a reviewed report layout."
+
+aliases:
+  - "crc35"
+  - "crc_35"
+  - "crc_35_msi"
+  - "colorectal_35_msi"
+
+project_detector_rules:
+  keywords:
+    - "35基因"
+    - "结直肠癌35"
+  keyword_groups:
+    - any:
+        - "结直肠癌35"
+        - "35基因"
+        - type: regex
+          pattern: "(^|\\D)35(\\D|$)"
+      weight: 1
+
+enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
+
+default_template: "crc_35_msi_golden_template_v0"
+templates:
+  - id: "crc_35_msi_golden_template_v0"
+    file: "templates/crc_35_msi_golden_template_v0.docx"
+    version: "0.1.0"
+    status: "pilot"
+    description: "CRC35+MSI pilot template generated from a scrubbed reviewed report."
+    processors:
+      - "part3_formatted_sections"
+      - "signature_placeholder"
+      - "bullet_lists"
+      - "signature_layout"
+      - "front_matter_spacing"
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
+      - "underlines_and_styles"
+
+mappings:
+  default: "config/mapping.yaml"
+
+rules:
+  panel_rules: "rules/crc.yaml"
+  report_text: "panels/crc_301_msi/rules/report_text.yaml"
+  biomarkers: "panels/crc_301_msi/rules/biomarkers.yaml"
+  guideline_tables: "panels/crc_301_msi/rules/guideline_tables.yaml"
+  drugs: "panels/crc_301_msi/rules/drugs.yaml"
+  style: "panels/crc_301_msi/rules/style.yaml"
+  filtering: "config/filtering.yaml"
+  drug_brands: "config/drug_brands.yaml"
+
+input_contract:
+  required_tables:
+    - "Variations"
+  optional_tables:
+    - "TMB"
+    - "Msisensor"
+    - "QC"
+    - "Cnv"
+    - "Fusion"
+    - "HLA"
+    - "CtDrug"
+  required_single_fields:
+    - "patient_name"
+    - "sample_id"
+    - "project_name"
+    - "report_date"
+  required_columns:
+    Variations:
+      - "Gene_Symbol"
+      - "cHGVS"
+      - "ExistIn552"
+  biomarkers:
+    msi_status:
+      required: true
+      allowed_values: ["MSS", "MSI-L", "MSI-H", "未检测"]
+
+template_contract:
+  required_variables:
+    - "patient_name"
+    - "sample_id"
+    - "report_number"
+    - "report_date"
+    - "msi_detail_sentence"
+    - "total_variants_count"
+    - "drug_related_count"
+  required_lists:
+    - "variants_2_1"
+    - "chemotherapy"
+    - "drug_yilitikang"
+  required_table_structures:
+    variant_detail:
+      columns: 9
+      required_headers:
+        - "基因名称"
+        - "转录本号"
+        - "染色体"
+        - "外显子"
+        - "频率"
+        - "潜在获益靶向药物"
+        - "可能耐药"
+    chemotherapy:
+      columns: 3
+      required_headers:
+        - "药物名称"
+        - "相关基因"
+        - "药物适应情况"
+
+processors:
+  - "part3_formatted_sections"
+  - "signature_placeholder"
+  - "bullet_lists"
+  - "signature_layout"
+  - "front_matter_spacing"
+  - "blank_page_cleanup"
+  - "toc_refresh"
+  - "final_refresh_cleanup"
+  - "underlines_and_styles"
+
+golden_cases:
+  - id: "crc_35_msi_candidate_two_case_smoke"
+    command: "python scripts/verify_crc35_msi_candidate.py --excel <local_excel_a> --excel <local_excel_b>"
+    synthetic: false
+    expected_qa_status: "PILOT_SMOKE_PASS"
