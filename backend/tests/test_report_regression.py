@@ -126,6 +126,45 @@ def test_data_cleaner_exposes_date_display_aliases():
     assert report_data.get_field("report_date_dot") == "2025.12.04"
 
 
+def test_field_mapper_derives_report_number_from_sample_id(tmp_path):
+    excel_data = _excel(tmp_path)
+    excel_data.metadata["sample_id_from_filename"] = "lz258792"
+
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
+        excel_data
+    )
+
+    assert report_data.get_field("report_number") == "MLJY-LZ258792"
+
+
+def test_field_mapper_keeps_explicit_report_number(tmp_path):
+    excel_data = _excel(tmp_path, single_values={"报告编号": "CUSTOM-REPORT-001"})
+    excel_data.metadata["sample_id_from_filename"] = "lz258792"
+
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
+        excel_data
+    )
+
+    assert report_data.get_field("report_number") == "CUSTOM-REPORT-001"
+
+
+def test_field_mapper_receive_date_becomes_cover_compact_alias(tmp_path):
+    excel_data = _excel(
+        tmp_path,
+        single_values={"送检日期": "2025.11.21", "报告日期": "2025-12-04"},
+    )
+    excel_data.metadata["sample_id_from_filename"] = "lz258792"
+
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
+        excel_data
+    )
+    DataCleaner(log_level="ERROR").validate_and_clean(report_data)
+
+    assert report_data.get_field("receive_date") == "2025-11-21"
+    assert report_data.get_field("receive_date_compact") == "20251121"
+    assert report_data.get_field("report_date_compact") == "20251204"
+
+
 class _FakeDrugLookup:
     def _lookup_targeted_drugs_for_variant(
         self,
@@ -1243,7 +1282,7 @@ def test_panel_package_loader_reads_crc301_package():
     assert package.panel_id == "crc_301_msi"
     assert package.display_name == "结直肠癌301基因+MSI"
     assert "crc_301" in package.aliases
-    assert package.default_template.template_id == "crc_301_msi_standard_v1"
+    assert package.default_template.template_id == "crc_301_msi_golden_template_v1"
     assert package.resolve_template_file().exists()
     assert package.resolve_rule_file("panel_rules").name == "crc.yaml"
     assert "panels/crc_301_msi/rules" in str(package.resolve_rule_file("panel_rules"))
@@ -1280,6 +1319,7 @@ def test_panel_package_registry_validator_accepts_builtin_packages():
     assert report.panels_checked == [
         "crc_301_msi",
         "crc_358_msi",
+        "crc_35_msi",
         "lung_methylation",
     ]
     assert report.errors == []
@@ -1418,9 +1458,14 @@ def test_crc_style_rule_contains_active_table_tokens():
     assert rule["version"] == "0.2.0"
     assert rule["status"] == "active"
     assert style["variant_summary_table"]["link_underline"] is True
+    assert "未见突变" in style["variant_summary_table"]["plain_texts"]
     assert style["variant_detail_table"]["link_color"] == "0000FF"
+    assert "未见突变" in style["variant_detail_table"]["plain_texts"]
     assert style["toc"]["section_font_color"] == "00C4D8"
+    assert style["toc"]["content_top_padding_pt"] == 57
     assert style["biomarker_table"]["header_fill"] == "00B7C7"
+    assert style["clinical_result_tables"]["border_color"] == "000000"
+    assert style["clinical_result_tables"]["detected_result_color"] == "FF0000"
     assert "style" not in engine.get("panel_rules")
 
 
@@ -1432,6 +1477,7 @@ def test_report_generator_loads_panel_style_from_style_rule():
     assert style["variant_detail_table"]["link_color"] == "0000FF"
     assert style["toc"]["section_font_size"] == 16
     assert style["biomarker_table"]["header_fill"] == "00B7C7"
+    assert style["clinical_result_tables"]["border_color"] == "000000"
 
 
 def test_panel_package_validator_rejects_missing_report_text_rule(tmp_path):
@@ -2224,6 +2270,90 @@ def test_detector_and_reviewer_signature_images_are_context_driven(tmp_path):
     assert "reportgen_signature_detector" not in document_xml
 
 
+def test_signature_processors_replace_uploaded_images_after_layout(tmp_path):
+    from PIL import Image
+
+    def write_png(path: Path, color: tuple[int, int, int]) -> None:
+        Image.new("RGB", (12, 6), color).save(path)
+
+    old_detector = tmp_path / "old_detector.png"
+    old_reviewer = tmp_path / "old_reviewer.png"
+    new_detector = tmp_path / "new_detector.png"
+    new_reviewer = tmp_path / "new_reviewer.png"
+    write_png(old_detector, (255, 0, 0))
+    write_png(old_reviewer, (0, 255, 0))
+    write_png(new_detector, (0, 0, 255))
+    write_png(new_reviewer, (255, 255, 0))
+
+    docx_path = tmp_path / "signature_processor_chain.docx"
+    doc = Document()
+    paragraph = doc.add_paragraph()
+    paragraph.add_run().add_picture(str(old_detector), width=Cm(2))
+    paragraph.add_run(" ")
+    paragraph.add_run().add_picture(str(old_reviewer), width=Cm(2))
+    doc.add_paragraph("检测者：                    审核者：                    报告日期：2026.05.24")
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._run_post_render_processors(
+        str(docx_path),
+        {
+            "detector_signature_image_path": str(new_detector),
+            "reviewer_signature_image_path": str(new_reviewer),
+            "report_date": "2026.05.24",
+        },
+        str(docx_path),
+        processor_names=["signature_placeholder", "signature_layout"],
+    )
+
+    with ZipFile(docx_path) as zf:
+        assert (
+            zf.read("word/media/reportgen_signature_detector.png")
+            == new_detector.read_bytes()
+        )
+        assert (
+            zf.read("word/media/reportgen_signature_reviewer.png")
+            == new_reviewer.read_bytes()
+        )
+        document_xml = zf.read("word/document.xml").decode("utf-8")
+        rels_xml = zf.read("word/_rels/document.xml.rels").decode("utf-8")
+
+    assert "reportgen_signature_detector.png" in rels_xml
+    assert "reportgen_signature_reviewer.png" in rels_xml
+    assert "检测者" in document_xml
+    assert "审核者" in document_xml
+
+
+def test_template_signature_images_are_removed_without_context_paths(tmp_path):
+    from PIL import Image
+
+    def write_png(path: Path, color: tuple[int, int, int]) -> None:
+        Image.new("RGB", (12, 6), color).save(path)
+
+    old_detector = tmp_path / "old_detector.png"
+    old_reviewer = tmp_path / "old_reviewer.png"
+    write_png(old_detector, (255, 0, 0))
+    write_png(old_reviewer, (0, 255, 0))
+
+    docx_path = tmp_path / "signature_blank.docx"
+    doc = Document()
+    paragraph = doc.add_paragraph()
+    paragraph.add_run().add_picture(str(old_detector), width=Cm(2))
+    paragraph.add_run(" ")
+    paragraph.add_run().add_picture(str(old_reviewer), width=Cm(2))
+    doc.add_paragraph("检测者：                    审核者：                    报告日期：2026.05.24")
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._replace_signature_anchor_images(str(docx_path), {})
+
+    with ZipFile(docx_path) as zf:
+        document_xml = zf.read("word/document.xml").decode("utf-8")
+
+    assert "<w:drawing>" not in document_xml
+    assert "检测者" in document_xml
+    assert "审核者" in document_xml
+
+
 def test_signature_library_resolves_names_to_paths(tmp_path):
     detector_png = tmp_path / "detector.png"
     reviewer_png = tmp_path / "reviewer.png"
@@ -2500,6 +2630,86 @@ def test_variant_summary_table_can_disable_link_underlines_from_panel_style(tmp_
     assert str(drug_run.font.color.rgb) == "000000"
 
 
+def test_variant_summary_table_keeps_undetected_text_plain(tmp_path):
+    docx_path = tmp_path / "variant_summary_undetected.docx"
+    doc = Document()
+    table = doc.add_table(rows=2, cols=4)
+    headers = ["基因", "突变位点", "潜在获益靶向药物\n（证据等级）", "可能耐药或慎重药物\n（证据等级）"]
+    values = ["FBXW7", "未见突变", "--", "--"]
+    for idx, value in enumerate(headers):
+        table.rows[0].cells[idx].text = value
+    for idx, value in enumerate(values):
+        table.rows[1].cells[idx].text = value
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._restore_variant_summary_table_style(str(docx_path))
+
+    table = Document(docx_path).tables[0]
+    undetected_run = table.rows[1].cells[1].paragraphs[0].runs[0]
+    benefit_run = table.rows[1].cells[2].paragraphs[0].runs[0]
+
+    assert undetected_run.text == "未见突变"
+    assert undetected_run.font.underline is False
+    assert str(undetected_run.font.color.rgb) == "000000"
+    assert benefit_run.font.underline is False
+    assert str(benefit_run.font.color.rgb) == "000000"
+
+
+def test_variant_detail_table_keeps_undetected_drug_text_plain(tmp_path):
+    docx_path = tmp_path / "variant_detail_undetected.docx"
+    doc = Document()
+    table = doc.add_table(rows=3, cols=9)
+    row0 = [
+        "基因名称",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "靶向药物信息",
+        "靶向药物信息",
+    ]
+    row1 = [
+        "基因名称",
+        "转录本号",
+        "染色体",
+        "外显子",
+        "位点",
+        "突变\n类型",
+        "频率\n(%)",
+        "潜在获益靶向药物\n（证据等级）",
+        "可能耐药或\n慎重药物\n（证据等级）",
+    ]
+    row2 = [
+        "FBXW7",
+        "NM_033632.4",
+        "4",
+        "10",
+        "未见突变",
+        "--",
+        "--",
+        "未见突变",
+        "--",
+    ]
+    for row, values in zip(table.rows, [row0, row1, row2]):
+        for idx, value in enumerate(values):
+            row.cells[idx].text = value
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._restore_variant_detail_table_style(str(docx_path))
+
+    table = Document(docx_path).tables[0]
+    site_run = table.rows[2].cells[4].paragraphs[0].runs[0]
+    drug_run = table.rows[2].cells[7].paragraphs[0].runs[0]
+
+    assert site_run.font.underline is False
+    assert str(site_run.font.color.rgb) == "000000"
+    assert drug_run.font.underline is False
+    assert str(drug_run.font.color.rgb) == "000000"
+    assert drug_run.style.name == "Default Paragraph Font"
+
+
 def test_variant_detail_table_restores_reviewed_template_style(tmp_path):
     docx_path = tmp_path / "variant_detail.docx"
     doc = Document()
@@ -2643,6 +2853,7 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
                 "item_font_color": "000000",
                 "item_font_size": 11,
                 "item_bold": False,
+                "content_top_padding_pt": 57,
             }
         }
     }
@@ -2653,6 +2864,11 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
             "检测内容": 1,
             "检测结果小结": 2,
             "靶向药物相关检测结果": 4,
+            "免疫治疗疗效评估": 10,
+            "检测结果说明": 15,
+            "基因变异解析": 16,
+            "靶向药物/免疫用药提示解析": 20,
+            "阅读说明": 25,
             "参考文献": 71,
         },
         context,
@@ -2671,6 +2887,18 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
     assert 'w:val="22"' in item_xml
     assert "<w:u" not in section_xml
     assert "<w:u" not in item_xml
+    assert 'w:leader="dot"' not in xml
+    assert "HYPERLINK \\l" in xml
+    assert "PAGEREF" in xml
+    assert "_Toc24274" in xml
+    assert "1.检测结果小结" not in xml
+    assert "靶向药物/免疫用药提示解析" in xml
+    assert '<w:ind w:left="1980" w:leftChars="900"/>' in xml
+    assert '<w:spacing w:before="1140" w:after="0" w:line="312" w:lineRule="auto"/>' in xml
+    assert "<w:sectPr>" in xml
+    settings_xml = _read_docx_part(docx_path, "word/settings.xml")
+    assert "<w:updateFields" in settings_xml
+    assert 'w:val="true"' in settings_xml
 
 
 def test_biomarker_table_restores_template_typography(tmp_path):
@@ -2742,6 +2970,63 @@ def test_biomarker_table_uses_panel_style_tokens(tmp_path):
     assert shd is not None
     assert shd.get(qn("w:fill")) == "00B7C7"
     assert str(header_run.font.color.rgb) == "FFFFFF"
+
+
+def test_clinical_result_tables_restore_black_borders_and_red_detected_results(tmp_path):
+    docx_path = tmp_path / "clinical_result_tables.docx"
+    doc = Document()
+
+    chemo = doc.add_table(rows=2, cols=3)
+    chemo.rows[0].cells[0].text = "药物名称"
+    chemo.rows[0].cells[1].text = "相关基因"
+    chemo.rows[0].cells[2].text = "药物适应情况"
+    chemo.rows[1].cells[0].text = "瑞戈非尼"
+    chemo.rows[1].cells[1].text = "VEGFR"
+    chemo.rows[1].cells[2].text = "FDA批准用于治疗结直肠癌。"
+
+    nccn = doc.add_table(rows=2, cols=3)
+    nccn.rows[0].cells[0].text = "检测基因"
+    nccn.rows[0].cells[1].text = "检测内容"
+    nccn.rows[0].cells[2].text = "检测结果"
+    nccn.rows[1].cells[0].text = "KRAS"
+    nccn.rows[1].cells[1].text = "外显子2"
+    nccn.rows[1].cells[2].text = "c.34G>A，p.G12S"
+
+    immune = doc.add_table(rows=3, cols=3)
+    immune.rows[0].cells[0].text = "基因"
+    immune.rows[0].cells[1].text = "检测结果"
+    immune.rows[0].cells[2].text = "临床解读"
+    immune.rows[1].cells[0].text = "KRAS"
+    immune.rows[1].cells[1].text = "c.34G>A，p.G12S"
+    immune.rows[1].cells[2].text = "检出有害变异时可能疗效较好。"
+    immune.rows[2].cells[0].text = "PTEN"
+    immune.rows[2].cells[1].text = "未检出有害变异"
+    immune.rows[2].cells[2].text = "检出有害变异时可能耐药。"
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._restore_clinical_result_table_style(str(docx_path))
+
+    doc = Document(docx_path)
+
+    def cell_border_colors(table):
+        colors = set()
+        for row in table.rows:
+            for cell in row.cells:
+                borders = cell._tc.get_or_add_tcPr().find(qn("w:tcBorders"))
+                assert borders is not None
+                for child in borders:
+                    colors.add(child.get(qn("w:color")))
+        return colors
+
+    assert cell_border_colors(doc.tables[0]) == {"000000"}
+    assert cell_border_colors(doc.tables[1]) == {"000000"}
+    assert cell_border_colors(doc.tables[2]) == {"000000"}
+
+    detected_run = doc.tables[2].rows[1].cells[1].paragraphs[0].runs[0]
+    undetected_run = doc.tables[2].rows[2].cells[1].paragraphs[0].runs[0]
+    assert str(detected_run.font.color.rgb) == "FF0000"
+    assert detected_run.font.underline is False
+    assert str(undetected_run.font.color.rgb) != "FF0000"
 
 
 def test_report_content_fixes_remove_tmb_h_only_notes_when_tmb_low(tmp_path):
@@ -3114,8 +3399,8 @@ def test_toc_decoration_line_is_moved_left_and_up(tmp_path):
 
     assert line_offsets
     assert circle_offsets
-    assert all(x == 127000 and y == 533400 for x, y in line_offsets)
-    assert all(x == 92710 and y == 457200 for x, y in circle_offsets)
+    assert all(x == 862965 and y == 1119505 for x, y in line_offsets)
+    assert all(x == 828675 and y == 1043305 for x, y in circle_offsets)
 
 
 def test_section_layouts_are_normalized(tmp_path):
@@ -3884,6 +4169,41 @@ def test_blank_page_cleanup_processor_is_idempotent(tmp_path):
         ["blank_page_cleanup"],
         _write_trailing_blank_page_docx,
     )
+
+
+def test_blank_heading_cleanup_does_not_cross_tables(tmp_path):
+    docx_path = tmp_path / "heading_cleanup.docx"
+    doc = Document()
+    doc.add_paragraph("正文")
+    doc.add_table(rows=1, cols=2)
+    doc.add_paragraph("")
+    doc.add_table(rows=1, cols=2)
+    breaker = doc.add_paragraph()
+    breaker.add_run().add_break(WD_BREAK.PAGE)
+    doc.add_paragraph("2. 结直肠癌诊疗知识")
+    doc.add_paragraph("章节正文")
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._remove_blank_page_breaks_before_headings(
+        str(docx_path),
+        ("2. 结直肠癌诊疗知识",),
+    )
+
+    cleaned = Document(docx_path)
+    assert len(cleaned.tables) == 2
+    paragraphs = [p for p in cleaned.paragraphs if p.text.strip()]
+    assert [p.text.strip() for p in paragraphs][-2:] == [
+        "2. 结直肠癌诊疗知识",
+        "章节正文",
+    ]
+    assert "w:keepNext" in paragraphs[-2]._p.xml
+
+
+def test_pdf_footer_page_number_scans_bottom_lines():
+    text = "表格内容\n--\n9\n--\n"
+
+    assert TemplateRenderer._extract_pdf_footer_page_number(text) == 9
 
 
 def test_toc_refresh_processor_is_idempotent(tmp_path, monkeypatch):
