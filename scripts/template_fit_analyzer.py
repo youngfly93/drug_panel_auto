@@ -488,6 +488,20 @@ def main() -> int:
     ap.add_argument("--output", type=Path, default=None)
     ap.add_argument("--report", type=Path, default=None)
     ap.add_argument("--max-reports", type=int, default=None)
+    ap.add_argument(
+        "--filename-contains",
+        action="append",
+        default=[],
+        help="Only analyze reports whose filename contains ANY of these substrings "
+        "(repeatable). Useful to pre-filter one product, e.g. --filename-contains 329基因.",
+    )
+    ap.add_argument(
+        "--group-by",
+        default=None,
+        help="Regex with one capture group; split reports into product groups by the "
+        "captured value and emit a per-group comparison. E.g. --group-by '(\\d+)基因'. "
+        "With --output/--report DIR, each group is written as <stem>__<group>.<ext>.",
+    )
     args = ap.parse_args()
 
     if not args.golden.exists():
@@ -510,6 +524,12 @@ def main() -> int:
         for p in args.corpus.rglob("*.docx")
         if not p.name.startswith("~$") and not p.name.startswith("._")
     )
+    if args.filename_contains:
+        reports = [p for p in reports if any(s in p.name for s in args.filename_contains)]
+        print(
+            f"Filtered to {len(reports)} reports matching {args.filename_contains}",
+            file=sys.stderr,
+        )
     if args.max_reports:
         reports = reports[: args.max_reports]
     print(f"Analyzing {len(reports)} reports ...", file=sys.stderr)
@@ -530,8 +550,53 @@ def main() -> int:
     )
 
     family_name = args.family_hint or args.corpus.name
-    agg = aggregate_family(fits, family_name, golden)
     meta = _build_metadata(args.golden, Path(__file__).resolve())
+
+    # ---- Grouped mode: split by a filename capture group, compare products ----
+    if args.group_by:
+        import os
+        pat = re.compile(args.group_by)
+        groups: dict[str, list[ReportFit]] = {}
+        for f in fits:
+            m = pat.search(os.path.basename(f.report_path))
+            key = m.group(1) if (m and m.groups()) else "未识别"
+            groups.setdefault(key, []).append(f)
+
+        rows = []
+        for key in sorted(groups, key=lambda k: -len(groups[k])):
+            members = groups[key]
+            g_agg = aggregate_family(members, f"{family_name}:{key}", golden)
+            rows.append((key, g_agg))
+            # per-group files
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                gp = args.output.with_name(f"{args.output.stem}__{key}{args.output.suffix}")
+                gp.write_text(json.dumps(
+                    {"meta": meta, "golden": str(args.golden), "family": f"{family_name}:{key}",
+                     "aggregate": g_agg,
+                     "reports": [{"path": x.report_path, "fit_score": x.fit_score,
+                                  "section_hit_rate": x.section_hit_rate} for x in members]},
+                    ensure_ascii=False, indent=2), encoding="utf-8")
+            if args.report:
+                args.report.parent.mkdir(parents=True, exist_ok=True)
+                rp = args.report.with_name(f"{args.report.stem}__{key}{args.report.suffix}")
+                rp.write_text(render_brief(g_agg, str(args.golden), meta=meta), encoding="utf-8")
+
+        # comparison table (stdout)
+        print(f"\n=== Grouped fit comparison: {family_name} by /{args.group_by}/ ===")
+        print("{:<14} {:>5} {:>10} {:>16}".format("group", "n", "class", "fit p25/50/75"))
+        print("-" * 50)
+        for key, g_agg in rows:
+            fs = g_agg["fit_score"]
+            print("{:<14} {:>5} {:>10} {:>6.0f}/{:.0f}/{:.0f}%".format(
+                key, g_agg["n_reports"], g_agg["classification"],
+                fs["p25"] * 100, fs["median"] * 100, fs["p75"] * 100))
+        if args.output or args.report:
+            print(f"\nPer-group files written next to {args.output or args.report}",
+                  file=sys.stderr)
+        return 0
+
+    agg = aggregate_family(fits, family_name, golden)
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
