@@ -160,10 +160,35 @@ def match_section_title(text: str) -> str | None:
 # Golden template signature
 # ---------------------------------------------------------------------------
 
+def _strip_template_tokens(text: str) -> str:
+    """Remove jinja vars / loop tags / __MARKERS__ so the fixed skeleton remains.
+
+    The golden template stores variables as ``{{ x }}`` / ``{% %}`` / ``__M__``;
+    a filled real report has them substituted with concrete values. Comparing the
+    raw text would systematically miss the overlap. Stripping the variable tokens
+    leaves the fixed boilerplate skeleton, which IS comparable across both.
+    """
+    return JINJA_OR_MARKER_PATTERN.sub("", text)
+
+
+def _bigrams(text: str) -> set[str]:
+    """Character 2-grams of a normalized string (whitespace removed).
+
+    Bigram overlap is robust to (a) variable substitution — variables are a small
+    fraction of any paragraph, so most bigrams still match — and (b) minor punctuation
+    / version edits — they only perturb a few local bigrams. Avoids the brittleness
+    of exact paragraph set-intersection.
+    """
+    compact = re.sub(r"\s+", "", text)
+    if len(compact) < 2:
+        return {compact} if compact else set()
+    return {compact[i : i + 2] for i in range(len(compact) - 1)}
+
+
 @dataclass
 class SectionSignature:
     title: str
-    fixed_paragraphs: set[str] = field(default_factory=set)
+    skeleton_bigrams: set[str] = field(default_factory=set)
     table_signatures: list[dict] = field(default_factory=list)
 
 
@@ -174,6 +199,7 @@ class TemplateSignature:
 
 def build_template_signature(template_path: Path) -> TemplateSignature:
     sections: dict[str, SectionSignature] = {}
+    section_texts: dict[str, list[str]] = {}
     current: str | None = None
     for kind, content in extract_paragraphs_and_tables(template_path):
         if kind == "p":
@@ -182,13 +208,17 @@ def build_template_signature(template_path: Path) -> TemplateSignature:
             if matched:
                 current = matched
                 sections.setdefault(current, SectionSignature(title=current))
+                section_texts.setdefault(current, [])
                 continue
-            if current and text and not JINJA_OR_MARKER_PATTERN.search(text):
-                sections[current].fixed_paragraphs.add(text)
+            if current and text:
+                # keep variable-bearing paragraphs too — strip the tokens, keep skeleton
+                section_texts[current].append(_strip_template_tokens(text))
         elif kind == "tbl" and current:
             sections[current].table_signatures.append(
                 {"columns": content["columns"], "header_cells": content["header_cells"]}
             )
+    for sec, texts in section_texts.items():
+        sections[sec].skeleton_bigrams = _bigrams("".join(texts))
     return TemplateSignature(sections=sections)
 
 
@@ -218,12 +248,12 @@ def analyze_report(report_path: Path, golden: TemplateSignature) -> ReportFit:
             matched = match_section_title(text)
             if matched:
                 current = matched
-                report_secs.setdefault(current, {"paragraphs": set(), "tables": []})
+                report_secs.setdefault(current, {"texts": [], "tables": []})
                 continue
             if current and text:
-                report_secs[current]["paragraphs"].add(text)
+                report_secs[current]["texts"].append(text)
         elif kind == "tbl" and current:
-            report_secs.setdefault(current, {"paragraphs": set(), "tables": []})
+            report_secs.setdefault(current, {"texts": [], "tables": []})
             report_secs[current]["tables"].append(
                 {"columns": content["columns"], "header_cells": content["header_cells"]}
             )
@@ -235,12 +265,19 @@ def analyze_report(report_path: Path, golden: TemplateSignature) -> ReportFit:
     novel_sections = sorted(found - target)
     section_hit_rate = len(matched_sections) / max(len(target), 1)
 
+    # Per-section similarity = bigram OVERLAP COEFFICIENT (golden skeleton coverage):
+    #   |golden_bigrams ∩ report_bigrams| / |golden_bigrams|
+    # i.e. "how much of the golden fixed skeleton is present in this report".
+    # Asymmetric on purpose: a real report is golden skeleton + lots of case fill,
+    # so we ask coverage of the skeleton, not symmetric similarity. Robust to
+    # variable substitution and minor edits (see _bigrams).
     section_jaccards: dict[str, float] = {}
     for s in matched_sections:
-        a = golden.sections[s].fixed_paragraphs
-        b = report_secs[s]["paragraphs"]
-        union = a | b
-        section_jaccards[s] = (len(a & b) / len(union)) if union else 0.0
+        a = golden.sections[s].skeleton_bigrams
+        if not a:
+            continue
+        b = _bigrams("".join(report_secs[s]["texts"]))
+        section_jaccards[s] = len(a & b) / len(a)
     paragraph_jaccard_mean = (
         statistics.mean(section_jaccards.values()) if section_jaccards else 0.0
     )
@@ -462,9 +499,9 @@ def main() -> int:
 
     print(f"Building golden signature from {args.golden} ...", file=sys.stderr)
     golden = build_template_signature(args.golden)
-    n_paras = sum(len(s.fixed_paragraphs) for s in golden.sections.values())
+    n_grams = sum(len(s.skeleton_bigrams) for s in golden.sections.values())
     print(
-        f"  {len(golden.sections)} sections, {n_paras} fixed paragraphs.",
+        f"  {len(golden.sections)} sections, {n_grams} skeleton bigrams.",
         file=sys.stderr,
     )
 
