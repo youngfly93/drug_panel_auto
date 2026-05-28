@@ -15,6 +15,40 @@
 
 ---
 
+## 0.5 · 跑 Template-Fit 分析(数据驱动的设计起点)
+
+在动手拷目录、写 panel.yaml 之前,先用脚本扫一遍 family 语料,**量化它和 CRC358 golden template 的兼容度**,据此决定接入策略:
+
+```bash
+python -m scripts.template_fit_analyzer \
+  --golden panels/crc_358_msi/templates/crc_358_msi_golden_template_v0.docx \
+  --corpus "各癌种基因报告近年汇总/<your_cancer>" \
+  --family-hint <your_family_id> \
+  --report tmp/template_fit/<your_family>_brief.md
+```
+
+读输出的 markdown(`<your_family>_brief.md`),它会告诉你:
+
+| Fit Score | 分类 | 该做什么 |
+|---|---|---|
+| **≥ 85%** | 兄弟 panel | 直接 `cp panels/crc_358_msi panels/<new>`,改癌种内容即可,~1-2 天 |
+| **60-85%** | 表亲 panel | 复用骨架,但有 N 个低契合章节要重新设计,~3-5 天 |
+| **< 60%** | 陌生 panel | CRC358 不是合适 base。换 family 内另一份 reviewed final 当 golden,或走无监督模式挖掘 |
+
+输出里还会列:
+- ✅ 高契合章节(直接复用)
+- 🟡 中契合章节(可复用骨架,改内容)
+- 🔴 低契合章节(必须新设计)
+- 🆕 该 family 独有章节(CRC358 没有)
+
+**这一步是为后面的 Step 1-3 节省时间**——你拿到这份 brief 后,Step 1 的 `cp` 不用拍脑袋选 base,Step 3 的变量化也知道哪几个章节要重点画。
+
+算法细节、阈值、为什么用 Jaccard 等:见 [`template_fit_methodology.md`](template_fit_methodology.md)。
+
+如果你的脚本还没写好(`scripts/template_fit_analyzer.py` 是后续工作),退而求其次:**用 git diff 或文本对比工具手工对一份 reviewed final 和 CRC358 golden** 的章节标题与段落,得到同样的"高/中/低/新"分类,只是更慢更主观。
+
+---
+
 ## 1 · 选 `panel_id` 与目录骨架
 
 ```

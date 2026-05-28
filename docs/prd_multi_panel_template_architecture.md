@@ -99,6 +99,8 @@ panels/
 
 主流程只读取 `panel.yaml`，根据声明动态加载该 Panel 的字段映射、规则、模板和处理器。
 
+接入新 Panel 时，采用**数据驱动的 template-fit 分析法**：对每个候选 family 的报告语料，量化其与已有 golden template（如 CRC358）的兼容度，据此决定是直接复用骨架、扩展若干章节，还是为该 family 重新选择 golden base。算法、阈值与输出格式见 [`template_fit_methodology.md`](template_fit_methodology.md)；接入流程里的具体步骤见 [`onboarding_new_panel.md`](onboarding_new_panel.md) 的 Step 0.5。
+
 ## 6. 目标架构
 
 ```mermaid
