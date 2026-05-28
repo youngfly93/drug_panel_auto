@@ -449,12 +449,18 @@ async function downloadReport(taskId: string) {
 }
 
 async function downloadGenerated(generated: GenerateResult) {
+  // 优先走 /download 流式接口（快、不占内存、不经 base64 膨胀）；
+  // 只有缺 task_id 时才 fallback 到 base64 内联。
   try {
+    if (generated.task_id) {
+      await downloadReport(generated.task_id)
+      return
+    }
     if (generated.output_file_base64) {
       reportApi.downloadInline(generated)
       return
     }
-    await downloadReport(generated.task_id)
+    throw new Error('报告没有可下载的内容')
   } catch (err: any) {
     ElMessage.error(err.message || '下载失败')
   }
