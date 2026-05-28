@@ -4952,11 +4952,11 @@ class TemplateRenderer:
                     para.append(make_field_run(instruction=f' HYPERLINK \\l "{anchor}" '))
                     para.append(make_field_run(field_char_type="separate"))
                 para.append(make_run(label, section=section))
+                if anchor:
+                    para.append(make_field_run(field_char_type="end"))
                 if number is not None:
                     para.append(make_run(tab=True))
                     para.append(make_run(number))
-                if anchor:
-                    para.append(make_field_run(field_char_type="end"))
                 return para
 
             def make_page_break_paragraph() -> Any:

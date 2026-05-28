@@ -2957,6 +2957,32 @@ def test_static_toc_links_target_numbered_appendix_headings(tmp_path):
     assert "4.基因检测列表" in toc_anchor_target_text("基因检测列表")
     assert "5.参考文献" in toc_anchor_target_text("参考文献")
 
+    def toc_field_end_precedes_static_page_number(label: str, page_number: str) -> bool:
+        for paragraph in root.xpath(".//w:p", namespaces=ns):
+            text = paragraph_text(paragraph)
+            instr = paragraph_instr(paragraph)
+            if label not in text or "HYPERLINK" not in instr:
+                continue
+            state = "before_label"
+            for run in paragraph.xpath("./w:r", namespaces=ns):
+                fld_types = [
+                    value
+                    for value in run.xpath(".//w:fldChar/@w:fldCharType", namespaces=ns)
+                ]
+                run_text = "".join(run.xpath(".//w:t/text()", namespaces=ns))
+                if label in run_text:
+                    assert state == "before_label"
+                    state = "after_label"
+                if "end" in fld_types:
+                    assert state == "after_label"
+                    state = "after_field"
+                if page_number in run_text:
+                    return state == "after_field"
+        return False
+
+    assert toc_field_end_precedes_static_page_number("基因检测列表", "73")
+    assert toc_field_end_precedes_static_page_number("参考文献", "75")
+
 
 def test_biomarker_table_restores_template_typography(tmp_path):
     docx_path = tmp_path / "biomarker.docx"
