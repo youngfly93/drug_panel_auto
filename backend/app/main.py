@@ -72,7 +72,22 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    # P0 perf: start a persistent LibreOffice listener so template-render's
+    # 2–3 field-refresh calls reuse one warm soffice process instead of cold-
+    # starting one each time (~5–8 s saved per call). Non-fatal on failure.
+    try:
+        from app.services.libreoffice_listener import start_listener
+        start_listener()
+    except Exception as exc:
+        _log.warning("LibreOffice listener startup skipped (non-fatal): %s", exc)
+
     yield
+
+    try:
+        from app.services.libreoffice_listener import stop_listener
+        stop_listener()
+    except Exception:
+        pass
 
 
 def create_app() -> FastAPI:

@@ -5329,7 +5329,14 @@ class TemplateRenderer:
         self._refresh_fields_with_libreoffice_convert(file_path, soffice)
 
     def _refresh_fields_with_libreoffice_uno(self, file_path: str, soffice: str) -> None:
-        """通过 LibreOffice UNO 显式更新目录索引并重新保存 docx。"""
+        """通过 LibreOffice UNO 显式更新目录索引并重新保存 docx。
+
+        如果环境变量 ``REPORTGEN_LO_LISTENER_PORT`` 已设(由 web 端 lifespan
+        启动的常驻 LibreOffice listener 注入),则跳过每次的 ``soffice`` 冷启
+        和 socket port 探测,直接连那个常驻端口 —— 每次 refresh 大约省 5–8 秒。
+        """
+        import contextlib
+        import os
         import shutil
         import socket
         import subprocess
@@ -5355,9 +5362,10 @@ class TemplateRenderer:
         if not uno_python:
             raise RuntimeError("未找到支持 python3-uno 的系统 Python")
 
-        with tempfile.TemporaryDirectory(prefix="reportgen_lo_") as tmp_dir, tempfile.TemporaryDirectory(
-            prefix="reportgen_lo_profile_"
-        ) as profile_dir:
+        persistent_port_raw = os.environ.get("REPORTGEN_LO_LISTENER_PORT", "")
+        persistent_port = int(persistent_port_raw) if persistent_port_raw.isdigit() else None
+
+        with tempfile.TemporaryDirectory(prefix="reportgen_lo_") as tmp_dir, contextlib.ExitStack() as stack:
             input_dir = Path(tmp_dir) / "input"
             output_dir = Path(tmp_dir) / "output"
             input_dir.mkdir(parents=True, exist_ok=True)
@@ -5367,10 +5375,17 @@ class TemplateRenderer:
             refreshed = output_dir / "refreshed.docx"
             shutil.copy2(file_path, tmp_input)
 
-            probe_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            probe_sock.bind(("127.0.0.1", 0))
-            port = probe_sock.getsockname()[1]
-            probe_sock.close()
+            if persistent_port is not None:
+                port = persistent_port
+                profile_dir = None
+            else:
+                profile_dir = stack.enter_context(
+                    tempfile.TemporaryDirectory(prefix="reportgen_lo_profile_")
+                )
+                probe_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                probe_sock.bind(("127.0.0.1", 0))
+                port = probe_sock.getsockname()[1]
+                probe_sock.close()
 
             uno_script = Path(tmp_dir) / "refresh_with_uno.py"
             uno_script.write_text(
@@ -5450,21 +5465,23 @@ class TemplateRenderer:
                 encoding="utf-8",
             )
 
-            listener_cmd = [
-                soffice,
-                f"-env:UserInstallation=file://{Path(profile_dir).as_posix()}",
-                "--headless",
-                "--nologo",
-                "--nolockcheck",
-                "--nodefault",
-                f"--accept=socket,host=127.0.0.1,port={port};urp;StarOffice.ComponentContext",
-            ]
-            listener = subprocess.Popen(
-                listener_cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                text=True,
-            )
+            listener = None
+            if persistent_port is None:
+                listener_cmd = [
+                    soffice,
+                    f"-env:UserInstallation=file://{Path(profile_dir).as_posix()}",
+                    "--headless",
+                    "--nologo",
+                    "--nolockcheck",
+                    "--nodefault",
+                    f"--accept=socket,host=127.0.0.1,port={port};urp;StarOffice.ComponentContext",
+                ]
+                listener = subprocess.Popen(
+                    listener_cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                )
             try:
                 result = subprocess.run(
                     [uno_python, str(uno_script), str(tmp_input), str(refreshed), str(port)],
@@ -5482,12 +5499,13 @@ class TemplateRenderer:
                     f"LibreOffice UNO 刷新失败: {log or exc}"
                 ) from exc
             finally:
-                listener.terminate()
-                try:
-                    listener.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    listener.kill()
-                    listener.wait(timeout=5)
+                if listener is not None:
+                    listener.terminate()
+                    try:
+                        listener.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        listener.kill()
+                        listener.wait(timeout=5)
 
             if not refreshed.exists():
                 log = "\n".join(
