@@ -322,6 +322,96 @@ def analyze_report(report_path: Path, golden: TemplateSignature) -> ReportFit:
 
 
 # ---------------------------------------------------------------------------
+# Layer 2: unsupervised section mining
+# ---------------------------------------------------------------------------
+#
+# The supervised path (analyze_report) only recognizes the golden template's
+# known section titles, so it can say "this family doesn't fit" but not "this
+# family has sections the golden lacks". Mining fills that gap WITHOUT a title
+# list: a genuine section heading recurs verbatim across most reports in a
+# family, while patient-specific text (names, variants) appears in only one.
+# So pure cross-report document-frequency of short lines surfaces the fixed
+# headings/boilerplate, and patient data falls away automatically.
+
+# A short line that could be a heading/fixed-label (<= this many chars, after
+# stripping a trailing TOC page number).
+_MINE_MAX_LEN = 30
+_TRAILING_PAGENUM = re.compile(r"[ \t\.·…]*\d{1,4}$")
+_TOC_DOTS = re.compile(r"[·.…]{2,}")
+
+
+def _mine_normalize(text: str) -> str:
+    """Normalize a candidate heading line for cross-report frequency counting."""
+    t = re.sub(r"\s+", "", text)
+    t = _TOC_DOTS.sub("", t)          # drop TOC dot leaders
+    t = _TRAILING_PAGENUM.sub("", t)  # drop trailing page number
+    return t
+
+
+# noise that recurs but is NOT a section heading: contact info, figure/table
+# captions, sentence fragments.
+_CONTACT_NOISE = re.compile(r"www\.|@|电话|邮箱|网址|网站|地址[:：]|marvelbio|http")
+_FIGURE_CAPTION = re.compile(r"^[图表]\s*\d")
+_SENTENCE_END = ("。", "，", "；", "！", "？", ",", ".", ")", "）")
+
+
+def _heading_like(line: str) -> bool:
+    """Heuristic: does this recurring line look like a section heading (vs contact
+    info / figure caption / sentence fragment)? Used only to sort mining output;
+    nothing is discarded — non-heading recurring text is shown in a separate list."""
+    if _CONTACT_NOISE.search(line):
+        return False
+    if _FIGURE_CAPTION.match(line):
+        return False
+    # headings rarely end in sentence punctuation (but a trailing colon is fine,
+    # e.g. 基因简介：)
+    if line.endswith(_SENTENCE_END):
+        return False
+    if len(line) < 3:  # too short to be a meaningful heading (e.g. "TP", "HER")
+        return False
+    return True
+
+
+def mine_section_titles(
+    reports: list[Path], known_titles: list, *, min_doc_freq: float = 0.4
+) -> dict:
+    """Cross-report document-frequency of short lines → recurring fixed headings.
+
+    Returns dict with 'n_reports', and a list of (line, doc_freq, is_known_section).
+    is_known_section uses the supervised SECTION_PATTERNS so we can split mined
+    headings into "already in golden" vs "novel to this family".
+    """
+    from collections import Counter
+
+    doc_freq: Counter = Counter()
+    n = 0
+    for path in reports:
+        seen_in_doc: set[str] = set()
+        any_para = False
+        for kind, content in extract_paragraphs_and_tables(path):
+            if kind != "p" or not content:
+                continue
+            any_para = True
+            norm = _mine_normalize(content)
+            if 2 <= len(norm) <= _MINE_MAX_LEN:
+                seen_in_doc.add(norm)
+        if any_para:
+            n += 1
+            for line in seen_in_doc:
+                doc_freq[line] += 1
+
+    results = []
+    for line, cnt in doc_freq.items():
+        freq = cnt / n if n else 0.0
+        if freq < min_doc_freq:
+            continue
+        known = match_section_title(line) is not None
+        results.append((line, freq, known))
+    results.sort(key=lambda x: -x[1])
+    return {"n_reports": n, "lines": results}
+
+
+# ---------------------------------------------------------------------------
 # Family-level aggregation + markdown brief
 # ---------------------------------------------------------------------------
 
@@ -502,6 +592,21 @@ def main() -> int:
         "captured value and emit a per-group comparison. E.g. --group-by '(\\d+)基因'. "
         "With --output/--report DIR, each group is written as <stem>__<group>.<ext>.",
     )
+    ap.add_argument(
+        "--mine-sections",
+        action="store_true",
+        help="Unsupervised mode: instead of scoring fit, mine recurring section "
+        "headings from the corpus by cross-report frequency, and split them into "
+        "'already in golden' vs 'novel to this family'. Answers what sections a "
+        "stranger family adds. Honors --filename-contains and --min-doc-freq.",
+    )
+    ap.add_argument(
+        "--min-doc-freq",
+        type=float,
+        default=0.4,
+        help="For --mine-sections: a line must recur in at least this fraction of "
+        "reports to count as a fixed heading (default 0.4).",
+    )
     args = ap.parse_args()
 
     if not args.golden.exists():
@@ -532,6 +637,67 @@ def main() -> int:
         )
     if args.max_reports:
         reports = reports[: args.max_reports]
+
+    # ---- Unsupervised section mining mode ----
+    if args.mine_sections:
+        family_name = args.family_hint or args.corpus.name
+        print(f"Mining section headings from {len(reports)} reports ...", file=sys.stderr)
+        mined = mine_section_titles(
+            reports, list(SECTION_PATTERNS.keys()), min_doc_freq=args.min_doc_freq
+        )
+        known = [(l, f) for l, f, k in mined["lines"] if k]
+        novel_all = [(l, f) for l, f, k in mined["lines"] if not k]
+        novel_headings = [(l, f) for l, f in novel_all if _heading_like(l)]
+        novel_other = [(l, f) for l, f in novel_all if not _heading_like(l)]
+        meta = _build_metadata(args.golden, Path(__file__).resolve())
+        lines_out = []
+        lines_out.append(f"# Unsupervised Section Mining: {family_name}")
+        lines_out.append("")
+        lines_out.append(f"- Reports mined: **{mined['n_reports']}**")
+        lines_out.append(f"- Min doc-frequency threshold: {args.min_doc_freq}")
+        lines_out.append(f"- Golden compared: `{Path(args.golden).stem}`")
+        lines_out.append("")
+        lines_out.append("## 🆕 Novel section headings (NOT in golden — candidate new sections)")
+        lines_out.append("")
+        if novel_headings:
+            for l, f in novel_headings[:60]:
+                lines_out.append(f"- `{l}` — 出现率 {f*100:.0f}%")
+        else:
+            lines_out.append("(none above threshold)")
+        lines_out.append("")
+        lines_out.append("## ✓ Recurring headings already covered by golden")
+        lines_out.append("")
+        for l, f in known[:40]:
+            lines_out.append(f"- `{l}` — 出现率 {f*100:.0f}%")
+        lines_out.append("")
+        lines_out.append("## 📎 Other recurring fixed text (contact info / captions / sentences)")
+        lines_out.append("")
+        lines_out.append("> Not section headings; shown for completeness (these also need to be "
+                         "carried over verbatim when building the panel template).")
+        lines_out.append("")
+        for l, f in novel_other[:30]:
+            lines_out.append(f"- `{l}` — 出现率 {f*100:.0f}%")
+        lines_out.append("")
+        lines_out.append("---")
+        lines_out.append("## Provenance")
+        lines_out.append(f"- Generated at: `{meta.get('generated_at')}` (UTC)")
+        lines_out.append(f"- Analyzer: `{meta.get('analyzer_path')}` @ `{meta.get('analyzer_git_commit') or 'unknown'}`")
+        lines_out.append("")
+        lines_out.append("> Method: cross-report document-frequency of short lines. A real heading "
+                         "recurs across most reports; patient-specific text appears once and is "
+                         "filtered out. Lines are page-number/dot-leader stripped before counting.")
+        brief = "\n".join(lines_out)
+
+        if args.report:
+            args.report.parent.mkdir(parents=True, exist_ok=True)
+            args.report.write_text(brief, encoding="utf-8")
+            print(f"Mining brief: {args.report}", file=sys.stderr)
+        else:
+            print(brief)
+        print(f"\n[mined {mined['n_reports']} reports: {len(novel_headings)} novel headings, "
+              f"{len(novel_other)} other fixed text, {len(known)} known]", file=sys.stderr)
+        return 0
+
     print(f"Analyzing {len(reports)} reports ...", file=sys.stderr)
 
     fits: list[ReportFit] = []
