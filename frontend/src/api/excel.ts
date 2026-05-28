@@ -32,10 +32,20 @@ export interface SheetData {
   page_size: number
 }
 
+export interface PatientEnrichment {
+  sample_id: string
+  found: boolean
+  source: string | null
+  fields: Record<string, any>
+  field_sources: Record<string, string>
+  warnings: string[]
+}
+
 export interface InspectResult {
   upload: UploadResult
   sheets: SheetInfo[]
   single_values: Record<string, any>
+  patient_enrichment?: PatientEnrichment | null
 }
 
 export const excelApi = {

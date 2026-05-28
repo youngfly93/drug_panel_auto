@@ -4,6 +4,10 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
+      path: '/reports/generate',
+      redirect: '/generate',
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
@@ -53,6 +57,10 @@ const router = createRouter({
           component: () => import('@/views/TaskDetailView.vue'),
         },
       ],
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: '/',
     },
   ],
 })
