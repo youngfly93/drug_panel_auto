@@ -141,18 +141,26 @@ def _run_variant_tables(ctx: ProcessorContext) -> None:
 
 
 def _run_toc_refresh(ctx: ProcessorContext) -> None:
+    # P1 perf: the actual LO field-refresh here is redundant — the layout
+    # modifications in final_refresh_cleanup shift page numbers anyway, and
+    # final_refresh_cleanup re-refreshes after. Keeping the LO call here just
+    # produces a TOC that gets immediately invalidated. Skip the LO refresh,
+    # keep set_update_fields (cheap XML flag, no LO process). Saves ~6 s per
+    # report. Set REPORTGEN_KEEP_EARLY_TOC_REFRESH=1 to restore old behavior.
+    import os
     try:
         ctx.renderer._set_update_fields(ctx.output_path)
     except Exception:
         pass
-    try:
-        ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
-    except Exception as refresh_err:
-        ctx.logger.warning("目录页码刷新失败，将继续最终刷新兜底", error=str(refresh_err))
-    try:
-        ctx.renderer._set_update_fields(ctx.output_path)
-    except Exception:
-        pass
+    if os.environ.get("REPORTGEN_KEEP_EARLY_TOC_REFRESH") == "1":
+        try:
+            ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
+        except Exception as refresh_err:
+            ctx.logger.warning("目录页码刷新失败，将继续最终刷新兜底", error=str(refresh_err))
+        try:
+            ctx.renderer._set_update_fields(ctx.output_path)
+        except Exception:
+            pass
 
 
 def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
