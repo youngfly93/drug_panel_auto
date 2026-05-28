@@ -61,6 +61,20 @@ class Settings(BaseSettings):
     # --- Worker ---
     max_workers: int = 2
 
+    # --- Patient enrichment ---
+    # Optional external patient registry / operation-system lookup.
+    # When set, the app will query this URL by sample_id after Excel upload.
+    patient_enrichment_url: str = ""
+    patient_enrichment_token: str = ""
+    patient_enrichment_timeout_seconds: float = 5.0
+    patient_enrichment_source_name: str = "patient_registry"
+
+    # --- Report download filename ---
+    # Business naming format:
+    # 患者姓名-癌种-项目名称-机构码-样本号-版本标签.docx
+    report_filename_org_code: str = "mljy"
+    report_filename_revision_label: str = "修改版"
+
     model_config = {"env_prefix": "RG_WEB_", "env_file": ".env", "extra": "ignore"}
 
     def model_post_init(self, __context) -> None:

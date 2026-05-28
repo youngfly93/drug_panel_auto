@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.router import api_router
 from app.ws.progress import router as ws_router
@@ -13,6 +14,20 @@ from app.config import settings
 from app.database import Base, engine
 from app.dependencies import pwd_context
 from app.models import User  # noqa: F401 — ensure models are registered
+
+
+class SPAStaticFiles(StaticFiles):
+    """Serve Vite assets and fall back to index.html for frontend routes."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            if path.startswith(("api/", "ws/")):
+                raise
+            return await super().get_response("index.html", scope)
 
 
 @asynccontextmanager
@@ -89,7 +104,7 @@ def create_app() -> FastAPI:
     # Serve frontend static files if built
     static_dir = Path(__file__).parent.parent / "static"
     if static_dir.exists():
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+        app.mount("/", SPAStaticFiles(directory=str(static_dir), html=True), name="static")
 
     return app
 

@@ -45,11 +45,25 @@ class PatientInfo(BaseModel):
     patient_name: Optional[str] = None
     gender: Optional[str] = None
     age: Optional[str] = None
+    cancer_type: Optional[str] = None
+    clinical_diagnosis: Optional[str] = None
     pathology_id: Optional[str] = None
     hospital: Optional[str] = None
     department: Optional[str] = None
+    sample_type: Optional[str] = None
+    sampling_method: Optional[str] = None
+    sample_site: Optional[str] = None
     collection_date: Optional[str] = None
     receive_date: Optional[str] = None
+
+
+class PatientEnrichment(BaseModel):
+    sample_id: str
+    found: bool = False
+    source: Optional[str] = None
+    fields: dict[str, Any] = {}
+    field_sources: dict[str, str] = {}
+    warnings: list[str] = []
 
 
 class PatientDefaults(BaseModel):

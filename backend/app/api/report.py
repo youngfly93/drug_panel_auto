@@ -2,6 +2,7 @@
 
 import base64
 import json
+import re
 import shutil
 import threading
 import uuid
@@ -20,7 +21,9 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 from reportgen.utils.docx_render import render_docx_to_pngs
+from reportgen.utils.file_utils import safe_filename
 from sqlalchemy.orm import Session
+import yaml
 
 from app.config import settings
 from app.database import SessionLocal, get_db
@@ -29,6 +32,7 @@ from app.models.task import Task
 from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.schemas.report import GenerateRequest, GenerateResponse, TaskStatus
+from app.services import clinical_info_service as clinical_svc
 from app.services import reference_report_service as diff_svc
 from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.reportgen_bridge import ReportGenBridge
@@ -224,6 +228,106 @@ def _infer_project_type_from_name(
     return project_type, project_name
 
 
+def _enrich_clinical_payload(
+    clinical_info: Optional[dict],
+    project_type: Optional[str],
+) -> dict:
+    """Fill missing form values from the runtime patient registry/ops lookup."""
+    payload = dict(clinical_info or {})
+    sample_id = str(payload.get("sample_id") or payload.get("样本编号") or "").strip()
+    if not sample_id:
+        return payload
+    enrichment = clinical_svc.enrich_patient(sample_id, project_type=project_type)
+    return clinical_svc.merge_enrichment_into_values(payload, enrichment)
+
+
+def _compact_filename_part(value: object, fallback: str) -> str:
+    text = "" if value is None else str(value).strip()
+    text = re.sub(r"\s+", "", text)
+    if text.lower() in {"", "-", "--", "未知", "unknown", "none", "null", "nan", "n/a", "na"}:
+        text = ""
+    return safe_filename(text or fallback, replacement="_")
+
+
+def _normalize_project_filename_part(
+    project_name: Optional[str], project_type: Optional[str]
+) -> str:
+    text = project_name or _panel_display_name(project_type) or "基因检测"
+    text = str(text).strip().replace("＋", "+")
+    text = re.sub(r"\s+", "", text)
+    text = re.sub(r"检测项目$", "", text)
+    text = re.sub(r"MSI", "msi", text, flags=re.IGNORECASE)
+    text = re.sub(r"PD[-_\\s]?L1", "pd-l1", text, flags=re.IGNORECASE)
+    return _compact_filename_part(text, "基因检测")
+
+
+def _panel_display_name(project_type: Optional[str]) -> Optional[str]:
+    if not project_type:
+        return None
+    panel_yaml = settings.upstream_root / "panels" / project_type / "panel.yaml"
+    if not panel_yaml.exists():
+        panel_yaml = Path(__file__).resolve().parents[3] / "panels" / project_type / "panel.yaml"
+    if not panel_yaml.exists():
+        return None
+    try:
+        payload = yaml.safe_load(panel_yaml.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return None
+    display_name = payload.get("display_name")
+    return str(display_name).strip() if display_name else None
+
+
+def _clinical_snapshot(task: Task) -> dict:
+    if not task.clinical_info_snapshot:
+        return {}
+    try:
+        payload = json.loads(task.clinical_info_snapshot)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _business_report_filename(
+    *,
+    clinical_info: Optional[dict],
+    project_type: Optional[str],
+    project_name: Optional[str],
+    output_path: Optional[str] = None,
+) -> str:
+    info = clinical_info or {}
+    patient_name = info.get("patient_name") or info.get("患者姓名") or info.get("姓名")
+    sample_id = info.get("sample_id") or info.get("报告编号") or info.get("样本号")
+    cancer = (
+        info.get("cancer_type")
+        or info.get("clinical_diagnosis")
+        or info.get("diagnosis")
+        or info.get("临床诊断")
+        or info.get("癌种")
+    )
+    resolved_project_name = (
+        project_name
+        or info.get("project_name")
+        or info.get("项目名称")
+        or info.get("检测项目")
+    )
+
+    if not any([patient_name, sample_id, cancer, resolved_project_name, project_type]):
+        return Path(output_path).name if output_path else "report.docx"
+
+    patient_part = _compact_filename_part(patient_name, "患者未填")
+    cancer_part = _compact_filename_part(cancer, "癌种未填")
+    project_part = _normalize_project_filename_part(resolved_project_name, project_type)
+    org_part = _compact_filename_part(settings.report_filename_org_code, "mljy")
+    sample_part = _compact_filename_part(sample_id, "编号未填").lower()
+    revision_part = _compact_filename_part(
+        settings.report_filename_revision_label, "修改版"
+    )
+    return (
+        f"{patient_part}-{cancer_part}-{project_part}-"
+        f"{org_part}-{sample_part}-{revision_part}.docx"
+    )
+
+
 def _get_single_report_task(task_id: str, db: Session) -> Task:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -268,13 +372,22 @@ def _generate_response_from_result(
     warnings: list[str],
     diff_summary: dict,
     auto_diff_ran: bool,
+    clinical_info: Optional[dict] = None,
+    project_type: Optional[str] = None,
+    project_name: Optional[str] = None,
     include_inline_file: bool = False,
 ) -> GenerateResponse:
     output_filename = None
     output_file_base64 = None
     if include_inline_file and result.get("success", False):
-        output_filename, output_file_base64 = _inline_docx_payload(
+        _physical_filename, output_file_base64 = _inline_docx_payload(
             result.get("output_file")
+        )
+        output_filename = _business_report_filename(
+            clinical_info=clinical_info,
+            project_type=project_type,
+            project_name=project_name,
+            output_path=result.get("output_file"),
         )
 
     return GenerateResponse(
@@ -328,6 +441,10 @@ def generate_report(
         req.project_type or upload.detected_project_type,
         effective_project_name,
     )
+    clinical_payload = _enrich_clinical_payload(
+        req.clinical_info,
+        effective_project_type,
+    )
 
     # Create task record
     task = Task(
@@ -337,8 +454,8 @@ def generate_report(
         status="running",
         project_type=effective_project_type,
         clinical_info_snapshot=(
-            json.dumps(req.clinical_info, ensure_ascii=False)
-            if req.clinical_info
+            json.dumps(clinical_payload, ensure_ascii=False)
+            if clinical_payload
             else None
         ),
         started_at=datetime.utcnow(),
@@ -351,7 +468,7 @@ def generate_report(
             excel_path=upload.stored_path,
             output_dir=str(output_dir),
             template_name=req.template_name,
-            clinical_info=req.clinical_info,
+            clinical_info=clinical_payload,
             project_type=effective_project_type,
             project_name=effective_project_name,
             strict_mode=req.strict_mode,
@@ -391,6 +508,9 @@ def generate_report(
                 warnings=warnings,
                 diff_summary=diff_summary,
                 auto_diff_ran=auto_diff_result is not None,
+                clinical_info=clinical_payload,
+                project_type=effective_project_type,
+                project_name=effective_project_name,
             )
         )
     except Exception as e:
@@ -457,6 +577,10 @@ def generate_report_from_file(
         detected_project_type,
         detected_project_name or clinical_payload.get("project_name"),
     )
+    clinical_payload = _enrich_clinical_payload(
+        clinical_payload,
+        detected_project_type,
+    )
 
     task_id = str(uuid.uuid4())
     output_dir = ensure_report_dir(task_id)
@@ -520,6 +644,9 @@ def generate_report_from_file(
                 warnings=warnings,
                 diff_summary=diff_summary,
                 auto_diff_ran=auto_diff_result is not None,
+                clinical_info=clinical_payload,
+                project_type=detected_project_type,
+                project_name=detected_project_name,
                 include_inline_file=True,
             )
         )
@@ -586,6 +713,10 @@ def generate_report_from_file_async(
         bridge,
         detected_project_type,
         detected_project_name or clinical_payload.get("project_name"),
+    )
+    clinical_payload = _enrich_clinical_payload(
+        clinical_payload,
+        detected_project_type,
     )
 
     task_id = str(uuid.uuid4())
@@ -990,8 +1121,7 @@ def download_report_diff_artifact(
     )
 
 
-@router.get("/{task_id}/download")
-def download_report(task_id: str, db: Session = Depends(get_db)):
+def _download_report_response(task_id: str, db: Session) -> FileResponse:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -1002,8 +1132,26 @@ def download_report(task_id: str, db: Session = Depends(get_db)):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="报告文件已被删除")
 
+    clinical_info = _clinical_snapshot(task)
+    download_filename = _business_report_filename(
+        clinical_info=clinical_info,
+        project_type=task.project_type,
+        project_name=clinical_info.get("project_name") or clinical_info.get("项目名称"),
+        output_path=task.output_path,
+    )
+
     return FileResponse(
         path=str(file_path),
-        filename=file_path.name,
+        filename=download_filename,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
+
+@router.head("/{task_id}/download", include_in_schema=False)
+def head_download_report(task_id: str, db: Session = Depends(get_db)):
+    return _download_report_response(task_id, db)
+
+
+@router.get("/{task_id}/download")
+def download_report(task_id: str, db: Session = Depends(get_db)):
+    return _download_report_response(task_id, db)

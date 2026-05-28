@@ -19,6 +19,7 @@ from app.schemas.excel import (
     UploadResponse,
 )
 from app.services.file_manager import save_upload
+from app.services import clinical_info_service as clinical_svc
 from app.services.reportgen_bridge import ReportGenBridge
 
 router = APIRouter(prefix="/excel", tags=["excel"])
@@ -133,11 +134,27 @@ def inspect_excel(
         validation_warnings=bridge.validate_excel_data(excel_data),
     )
 
+    single_values = bridge.get_mapped_clinical_fields(excel_data)
+    sample_id = single_values.get("sample_id")
+    enrichment = None
+    if sample_id:
+        enrichment = clinical_svc.enrich_patient(
+            str(sample_id),
+            project_type=detect.get("project_type"),
+        )
+        single_values = clinical_svc.merge_enrichment_into_values(
+            single_values,
+            enrichment,
+        )
+
     return ApiResponse(
         data=InspectResponse(
             upload=upload,
             sheets=sheets,
-            single_values=bridge.get_mapped_clinical_fields(excel_data),
+            single_values=single_values,
+            patient_enrichment=(
+                enrichment.model_dump() if enrichment is not None else None
+            ),
         )
     )
 

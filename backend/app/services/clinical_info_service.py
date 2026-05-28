@@ -5,9 +5,12 @@ Reads mapping.yaml to build the dynamic form schema,
 and reads/writes patient_info.yaml for patient management.
 """
 
+import json
 import threading
 from pathlib import Path
 from typing import Any, Optional
+from urllib import error as urlerror
+from urllib import parse, request
 
 import yaml
 
@@ -17,6 +20,7 @@ from app.schemas.clinical_info import (
     FieldGroup,
     FieldSchema,
     FieldUiHints,
+    PatientEnrichment,
     PatientDefaults,
     PatientInfo,
     ProjectInfo,
@@ -30,7 +34,13 @@ _yaml_lock = threading.Lock()
 FIELD_GROUPS = {
     "demographics": {
         "label": "患者基本信息",
-        "fields": ["patient_name", "gender", "age", "cancer_type"],
+        "fields": [
+            "patient_name",
+            "gender",
+            "age",
+            "cancer_type",
+            "clinical_diagnosis",
+        ],
     },
     "identifiers": {
         "label": "标识信息",
@@ -46,7 +56,13 @@ FIELD_GROUPS = {
     },
     "sample": {
         "label": "样本与项目",
-        "fields": ["sample_type", "detection_method", "panel_name"],
+        "fields": [
+            "sample_type",
+            "sampling_method",
+            "sample_site",
+            "detection_method",
+            "panel_name",
+        ],
     },
     "approval": {
         "label": "签发信息",
@@ -63,6 +79,55 @@ FIELD_GROUPS = {
         "fields": ["msi_status", "msi_score", "tmb_value", "tmb_unit", "final_conclusion"],
     },
 }
+
+ENRICHABLE_FIELDS = {
+    "patient_name",
+    "gender",
+    "age",
+    "cancer_type",
+    "clinical_diagnosis",
+    "pathology_id",
+    "hospital",
+    "department",
+    "sample_type",
+    "sampling_method",
+    "sample_site",
+    "collection_date",
+    "receive_date",
+}
+
+ENRICHMENT_KEY_ALIASES = {
+    "患者姓名": "patient_name",
+    "姓名": "patient_name",
+    "病人姓名": "patient_name",
+    "性别": "gender",
+    "年龄": "age",
+    "癌种": "cancer_type",
+    "肿瘤类型": "cancer_type",
+    "临床诊断": "clinical_diagnosis",
+    "诊断": "clinical_diagnosis",
+    "病理号": "pathology_id",
+    "病理编号": "pathology_id",
+    "送检医院": "hospital",
+    "医院": "hospital",
+    "送检科室": "department",
+    "科室": "department",
+    "样本类型": "sample_type",
+    "标本类型": "sample_type",
+    "取材手段": "sampling_method",
+    "取样方式": "sampling_method",
+    "采样方式": "sampling_method",
+    "取材部位": "sample_site",
+    "取样部位": "sample_site",
+    "采样部位": "sample_site",
+    "采样日期": "collection_date",
+    "采集日期": "collection_date",
+    "接收日期": "receive_date",
+    "收样日期": "receive_date",
+    "送检日期": "receive_date",
+}
+
+MISSING_MARKERS = {"", "-", "--", "未知", "unknown", "none", "null", "nan", "n/a", "na"}
 
 # Fields hidden from web form (auto-computed or not applicable)
 ALWAYS_HIDE = ["project_name"]
@@ -258,6 +323,178 @@ def get_patient(sample_id: str) -> Optional[PatientInfo]:
     if info is None:
         return None
     return PatientInfo(sample_id=sample_id, **{k: str(v) if v else None for k, v in info.items()})
+
+
+def enrich_patient(sample_id: str, project_type: Optional[str] = None) -> PatientEnrichment:
+    """
+    Enrich clinical fields by sample_id.
+
+    Source order:
+    1. local patient_info.yaml registry;
+    2. optional external operation-system API configured with
+       RG_WEB_PATIENT_ENRICHMENT_URL.
+
+    This function never embeds patient data in code. Real patient values must
+    come from runtime storage or the external registry.
+    """
+    sample_id = str(sample_id or "").strip()
+    if not sample_id:
+        return PatientEnrichment(sample_id="", warnings=["sample_id is empty"])
+
+    warnings: list[str] = []
+    fields: dict[str, Any] = {}
+    field_sources: dict[str, str] = {}
+
+    local_fields = _patient_fields_from_local_registry(sample_id)
+    if local_fields:
+        _merge_enrichment_fields(
+            fields,
+            field_sources,
+            local_fields,
+            source="patient_info",
+            overwrite=False,
+        )
+
+    external_fields, external_source, external_warnings = _fetch_external_patient(
+        sample_id,
+        project_type=project_type,
+    )
+    warnings.extend(external_warnings)
+    if external_fields:
+        _merge_enrichment_fields(
+            fields,
+            field_sources,
+            external_fields,
+            source=external_source or settings.patient_enrichment_source_name,
+            overwrite=True,
+        )
+
+    source = None
+    if fields:
+        sources = set(field_sources.values())
+        source = "mixed" if len(sources) > 1 else next(iter(field_sources.values()))
+
+    return PatientEnrichment(
+        sample_id=sample_id,
+        found=bool(fields),
+        source=source,
+        fields=fields,
+        field_sources=field_sources,
+        warnings=warnings,
+    )
+
+
+def merge_enrichment_into_values(
+    values: dict[str, Any],
+    enrichment: PatientEnrichment,
+) -> dict[str, Any]:
+    """Return values + enrichment, filling only missing placeholder fields."""
+    merged = dict(values or {})
+    for key, value in enrichment.fields.items():
+        if _is_missing_value(merged.get(key)):
+            merged[key] = value
+    return merged
+
+
+def _patient_fields_from_local_registry(sample_id: str) -> dict[str, Any]:
+    data = _load_patient_info()
+    patients = data.get("patients", {}) or {}
+    info = patients.get(sample_id)
+    if info is None:
+        normalized = sample_id.upper()
+        for key, value in patients.items():
+            if str(key).upper() == normalized:
+                info = value
+                break
+    return _normalize_patient_payload(info or {})
+
+
+def _fetch_external_patient(
+    sample_id: str,
+    project_type: Optional[str] = None,
+) -> tuple[dict[str, Any], Optional[str], list[str]]:
+    url = str(settings.patient_enrichment_url or "").strip()
+    if not url:
+        return {}, None, []
+
+    params = {"sample_id": sample_id}
+    if project_type:
+        params["project_type"] = project_type
+    if "{sample_id}" in url:
+        endpoint = url.format(sample_id=parse.quote(sample_id))
+        if project_type:
+            separator = "&" if "?" in endpoint else "?"
+            endpoint = f"{endpoint}{separator}{parse.urlencode({'project_type': project_type})}"
+    else:
+        separator = "&" if "?" in url else "?"
+        endpoint = f"{url}{separator}{parse.urlencode(params)}"
+
+    headers = {"Accept": "application/json"}
+    if settings.patient_enrichment_token:
+        headers["Authorization"] = f"Bearer {settings.patient_enrichment_token}"
+
+    req = request.Request(endpoint, headers=headers, method="GET")
+    try:
+        with request.urlopen(
+            req,
+            timeout=float(settings.patient_enrichment_timeout_seconds),
+        ) as response:
+            raw = response.read().decode("utf-8")
+    except (urlerror.URLError, TimeoutError, OSError) as exc:
+        return {}, None, [f"patient enrichment lookup failed: {exc}"]
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return {}, None, [f"patient enrichment returned invalid JSON: {exc}"]
+
+    source = None
+    if isinstance(payload, dict):
+        source = str(payload.get("source") or "").strip() or None
+        if payload.get("success") is False:
+            message = str(payload.get("error") or payload.get("message") or "lookup failed")
+            return {}, source, [message]
+        payload = payload.get("data") or payload.get("patient") or payload.get("fields") or payload
+
+    return _normalize_patient_payload(payload), source, []
+
+
+def _normalize_patient_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    fields: dict[str, Any] = {}
+    for raw_key, value in payload.items():
+        key = ENRICHMENT_KEY_ALIASES.get(str(raw_key), str(raw_key))
+        if key not in ENRICHABLE_FIELDS:
+            continue
+        if _is_missing_value(value):
+            continue
+        fields[key] = value
+    return fields
+
+
+def _merge_enrichment_fields(
+    target: dict[str, Any],
+    field_sources: dict[str, str],
+    incoming: dict[str, Any],
+    *,
+    source: str,
+    overwrite: bool,
+) -> None:
+    for key, value in incoming.items():
+        if key not in ENRICHABLE_FIELDS or _is_missing_value(value):
+            continue
+        if overwrite or _is_missing_value(target.get(key)):
+            target[key] = value
+            field_sources[key] = source
+
+
+def _is_missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, float) and value != value:
+        return True
+    return str(value).strip().lower() in MISSING_MARKERS
 
 
 def upsert_patient(patient: PatientInfo) -> None:

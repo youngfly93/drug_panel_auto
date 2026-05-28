@@ -2,10 +2,11 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from app.schemas.clinical_info import (
     ClinicalFormSchema,
+    PatientEnrichment,
     PatientDefaults,
     PatientInfo,
     ProjectInfo,
@@ -73,6 +74,14 @@ def get_project_info():
 def update_project_info(info: ProjectInfo):
     svc.update_project_info(info)
     return ApiResponse(data=info)
+
+
+@router.get("/patients/enrich/{sample_id}", response_model=ApiResponse[PatientEnrichment])
+def enrich_patient(
+    sample_id: str,
+    project_type: Optional[str] = Query(default=None),
+):
+    return ApiResponse(data=svc.enrich_patient(sample_id, project_type=project_type))
 
 
 @router.get("/patients/{sample_id}", response_model=ApiResponse[PatientInfo])
