@@ -53,6 +53,10 @@ naming:
   # 输出报告文件命名模板
   # 可用变量: {patient_name}, {sample_id}, {project_name}, {report_date}, {timestamp}
   output_pattern: "{patient_name}_{sample_id}_{project_name}_{report_date}_终版.docx"
+
+  # 报告编号前缀。若 Excel/运营系统未提供报告编号，但有样本号，
+  # 则运行时按 "<prefix>-<sample_id>" 生成，如 MLJY-LZ258792。
+  report_number_prefix: "MLJY"
   
   # 日志文件命名模板
   log_pattern: "reportgen_{timestamp}.log"
