@@ -200,6 +200,7 @@ def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
     assert result.fields["patient_name"] == "运营患者"
     assert result.fields["gender"] == "男"
     assert result.fields["age"] == 70
+    assert result.fields["cancer_type"] == "乙状结肠癌"
     assert result.fields["clinical_diagnosis"] == "乙状结肠癌"
     assert result.fields["sample_type"] == "新鲜组织"
     assert result.fields["collection_date"] == "2025-11-21"

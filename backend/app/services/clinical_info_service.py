@@ -530,7 +530,12 @@ def _fetch_marvelbio_patient(
         message = str(result.get("message") or "lookup failed")
         return {}, "marvelbio", [f"MarvelBio enrichment failed: {message}"]
 
-    fields = _normalize_patient_payload(result.get("data") or {})
+    data = result.get("data") or {}
+    fields = _normalize_patient_payload(data)
+    if isinstance(data, dict) and not _is_missing_value(data.get("cancerName")):
+        cancer_name = data.get("cancerName")
+        fields.setdefault("cancer_type", cancer_name)
+        fields.setdefault("clinical_diagnosis", cancer_name)
     return fields, "marvelbio", []
 
 
