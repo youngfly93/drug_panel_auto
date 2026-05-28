@@ -209,6 +209,12 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     # survive as implicit defaults, and uploaded signatures remain effective.
     ctx.renderer._replace_signature_anchor_images(ctx.output_path, ctx.template_context)
     ctx.renderer._remove_empty_numbered_paragraphs(ctx.output_path)
+    try:
+        ctx.renderer._populate_static_toc_page_numbers(
+            ctx.output_path, ctx.template_context
+        )
+    except Exception as refresh_err:
+        ctx.logger.warning("样式修复后目录页码回写失败", error=str(refresh_err))
 
 
 def _run_signature_placeholders(ctx: ProcessorContext) -> None:

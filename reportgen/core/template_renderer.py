@@ -4453,6 +4453,10 @@ class TemplateRenderer:
         """
         import shutil
 
+        if not self._document_contains_toc_or_static_toc(file_path):
+            self.logger.debug("文档不包含目录域/静态目录，跳过静态目录页码写回", output=file_path)
+            return
+
         soffice = shutil.which("soffice") or shutil.which("libreoffice")
         pdftotext = shutil.which("pdftotext")
         pdfinfo = shutil.which("pdfinfo")
@@ -4474,23 +4478,99 @@ class TemplateRenderer:
         if not page_numbers:
             return
 
-        if not self._write_static_toc_page_numbers(file_path, page_numbers, context):
-            return
+        stable_numbers = page_numbers
+        for attempt in range(1, 5):
+            if not self._write_static_toc_page_numbers(file_path, stable_numbers, context):
+                return
 
-        # Re-render after TOC rewriting. The visible field results can slightly
-        # change layout, so the second pass is the number set users will
-        # actually see in PDF/Word before opening-time field updates.
-        final_numbers = self._detect_toc_page_numbers_from_pdf_layout(
-            file_path=file_path,
-            soffice=soffice,
-            pdftotext=pdftotext,
-            pdfinfo=pdfinfo,
+            visible_numbers = self._read_static_toc_page_numbers(file_path)
+            detected_numbers = self._detect_toc_page_numbers_from_pdf_layout(
+                file_path=file_path,
+                soffice=soffice,
+                pdftotext=pdftotext,
+                pdfinfo=pdfinfo,
+            )
+            if self._toc_page_numbers_match(visible_numbers, detected_numbers):
+                self.logger.info(
+                    "已按最终 PDF 版式写回目录页码",
+                    output=file_path,
+                    page_numbers=visible_numbers,
+                    attempts=attempt,
+                )
+                return
+            if not detected_numbers:
+                break
+            stable_numbers = detected_numbers
+
+        self.logger.info(
+            "已按最终 PDF 版式写回目录页码",
+            output=file_path,
+            page_numbers=stable_numbers,
+            attempts="unstable",
         )
-        if final_numbers and final_numbers != page_numbers:
-            self._write_static_toc_page_numbers(file_path, final_numbers, context)
-            page_numbers = final_numbers
 
-        self.logger.info("已按最终 PDF 版式写回目录页码", output=file_path, page_numbers=page_numbers)
+    def _read_static_toc_page_numbers(self, file_path: str) -> dict[str, int]:
+        """Read visible static TOC numbers from DOCX XML."""
+        import re
+        from zipfile import ZipFile
+
+        try:
+            from lxml import etree
+        except Exception:
+            return {}
+
+        labels = (
+            "患者及样本信息",
+            "检测内容",
+            "检测结果小结",
+            "靶向药物相关检测结果",
+            "免疫治疗疗效评估",
+            "检测结果说明",
+            "基因变异解析",
+            "靶向药物/免疫用药提示解析",
+            "阅读说明",
+            "常见问题解答",
+            "结直肠癌诊疗知识",
+            "癌症相关信号通路",
+            "基因检测列表",
+            "参考文献",
+        )
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        try:
+            with ZipFile(file_path, "r") as zf:
+                root = etree.fromstring(zf.read("word/document.xml"))
+        except Exception:
+            return {}
+
+        result: dict[str, int] = {}
+        for paragraph in root.xpath(".//w:p", namespaces=ns):
+            text = "".join(paragraph.xpath(".//w:t/text()", namespaces=ns))
+            compact = re.sub(r"\s+", "", text or "")
+            if not compact:
+                continue
+            match = re.search(r"(\d{1,3})$", compact)
+            if not match:
+                continue
+            for label in labels:
+                if label in compact and label not in result:
+                    result[label] = int(match.group(1))
+                    break
+        return result
+
+    def _toc_page_numbers_match(
+        self,
+        visible_numbers: dict[str, int],
+        detected_numbers: dict[str, int],
+    ) -> bool:
+        """Return true when written TOC numbers match rendered target pages."""
+        common = [
+            label
+            for label in detected_numbers
+            if label in visible_numbers
+        ]
+        if not common:
+            return False
+        return all(visible_numbers[label] == detected_numbers[label] for label in common)
 
     def _write_static_toc_page_numbers(
         self,
@@ -4500,11 +4580,12 @@ class TemplateRenderer:
     ) -> bool:
         """Write visible TOC labels/page numbers while keeping Word jump fields.
 
-        The reviewed report uses Word field codes rather than plain hyperlinks:
-        each TOC row wraps the label in ``HYPERLINK \\l`` and the page number in
-        ``PAGEREF ... \\h``. Keep that structure so clicking the TOC works in
-        Word/WPS while still using PDF-derived page numbers as the visible field
-        result.
+        Word/WPS/LibreOffice can disagree on PAGEREF pagination when a document
+        contains floating text boxes and section-level page-number restarts.
+        Keep the row clickable through ``HYPERLINK \\l`` but write the page
+        number as static text derived from the final PDF layout. This prevents
+        opening-time field refresh from changing the visible TOC number away
+        from the page footer users see.
         """
         import copy
         import os
@@ -4609,6 +4690,40 @@ class TemplateRenderer:
                 "靶向药物/免疫用药提示解析": ["靶向药物/免疫用药提示解析"],
                 "阅读说明": ["阅读说明"],
             }
+            toc_target_rules = {
+                "检测结果小结": {"needles": ["1.检测结果小结"]},
+                "靶向药物相关检测结果": {"needles": ["2.靶向药物相关检测结果"]},
+                "免疫治疗疗效评估": {"needles": ["3.免疫治疗疗效评估"]},
+                "检测结果说明": {
+                    "needles": ["4.检测结果说明", "5.检测结果说明"],
+                    "fallback": ["检测结果说明"],
+                },
+                "基因变异解析": {
+                    "needles": ["1.基因变异解析"],
+                    "fallback": ["基因变异解析"],
+                },
+                "靶向药物/免疫用药提示解析": {
+                    "needles": ["2.靶向药物/免疫用药提示解析"],
+                    "fallback": ["靶向药物/免疫用药提示解析"],
+                },
+                "阅读说明": {"needles": ["3.阅读说明"]},
+                "常见问题解答": {"needles": ["1.常见问题解答"]},
+                "结直肠癌诊疗知识": {"needles": ["2.结直肠癌诊疗知识"]},
+                "癌症相关信号通路": {"needles": ["3.癌症相关信号通路"]},
+                # Appendix titles also occur in explanatory prose. Keep these
+                # anchors tied to the numbered appendix headings so WPS/Word
+                # PAGEREF refreshes and TOC clicks cannot jump to earlier text.
+                "基因检测列表": {
+                    "needles": ["4.基因检测列表"],
+                    "fallback": ["GeneListforMLseq", "基因检测列表"],
+                    "prefer_last": True,
+                },
+                "参考文献": {
+                    "needles": ["5.参考文献"],
+                    "fallback": ["参考文献"],
+                    "prefer_last": True,
+                },
+            }
 
             def paragraph_text(elem: Any) -> str:
                 return "".join(elem.xpath(".//w:t/text()", namespaces=ns))
@@ -4634,6 +4749,15 @@ class TemplateRenderer:
                         if name.startswith(prefix):
                             return name
                 return names[0] if names else None
+
+            def compact_target(text: str) -> str:
+                text = re.sub(r"\s+", "", text or "")
+                return (
+                    text.replace("．", ".")
+                    .replace("。", ".")
+                    .replace("、", ".")
+                    .replace("：", ":")
+                )
 
             existing_bookmark_ids = [
                 int(value)
@@ -4666,15 +4790,53 @@ class TemplateRenderer:
                 return bookmark_name
 
             def find_or_create_target_bookmark(label: str) -> str | None:
+                paragraph_entries: list[tuple[Any, str, str]] = []
+                for paragraph in root.xpath(".//w:p", namespaces=ns):
+                    if is_inside_toc(paragraph):
+                        continue
+                    text = paragraph_text(paragraph)
+                    text_norm = normalize_label(text)
+                    text_compact = compact_target(text)
+                    if text_norm or text_compact:
+                        paragraph_entries.append((paragraph, text_norm, text_compact))
+
+                rule = toc_target_rules.get(label)
+                if rule:
+                    needles = [
+                        compact_target(str(needle))
+                        for needle in rule.get("needles", [])
+                        if compact_target(str(needle))
+                    ]
+                    matches = [
+                        paragraph
+                        for paragraph, _text_norm, text_compact in paragraph_entries
+                        if any(needle in text_compact for needle in needles)
+                    ]
+                    if not matches and rule.get("fallback"):
+                        fallback_norms = [
+                            normalize_label(str(needle))
+                            for needle in rule.get("fallback", [])
+                            if normalize_label(str(needle))
+                        ]
+                        matches = [
+                            paragraph
+                            for paragraph, text_norm, _text_compact in paragraph_entries
+                            if any(needle in text_norm for needle in fallback_norms)
+                        ]
+                    if matches:
+                        target = matches[-1] if rule.get("prefer_last") else matches[0]
+                        names = existing_bookmark_names(target)
+                        selected = preferred_bookmark(names)
+                        if selected:
+                            return selected
+                        return add_bookmark_to_paragraph(target, label)
+
                 candidate_labels = toc_target_aliases.get(label, [label])
                 candidate_norms = [normalize_label(candidate) for candidate in candidate_labels]
                 candidate_norms = [value for value in candidate_norms if value]
 
                 fallback_para = None
-                for paragraph in root.xpath(".//w:p", namespaces=ns):
-                    if is_inside_toc(paragraph):
-                        continue
-                    text_norm = normalize_label(paragraph_text(paragraph))
+                for paragraph, text_norm, _text_compact in paragraph_entries:
                     if not text_norm:
                         continue
                     if not any(candidate in text_norm for candidate in candidate_norms):
@@ -4792,13 +4954,7 @@ class TemplateRenderer:
                 para.append(make_run(label, section=section))
                 if number is not None:
                     para.append(make_run(tab=True))
-                    if anchor:
-                        para.append(make_field_run(field_char_type="begin"))
-                        para.append(make_field_run(instruction=f" PAGEREF {anchor} \\h "))
-                        para.append(make_field_run(field_char_type="separate"))
                     para.append(make_run(number))
-                    if anchor:
-                        para.append(make_field_run(field_char_type="end"))
                 if anchor:
                     para.append(make_field_run(field_char_type="end"))
                 return para
@@ -5233,6 +5389,24 @@ class TemplateRenderer:
             raise RuntimeError(f"读取文档目录域失败: {exc}") from exc
 
         return "TOC" in document_xml
+
+    def _document_contains_toc_or_static_toc(self, file_path: str) -> bool:
+        """Check whether a docx has a Word TOC field or our static TOC rows."""
+        from zipfile import ZipFile
+
+        try:
+            with ZipFile(file_path, "r") as zf:
+                document_xml = zf.read("word/document.xml").decode("utf-8", "ignore")
+        except Exception as exc:
+            raise RuntimeError(f"读取文档目录域失败: {exc}") from exc
+
+        if "TOC" in document_xml:
+            return True
+        return (
+            "HYPERLINK" in document_xml
+            and "第一部分" in document_xml
+            and "参考文献" in document_xml
+        )
 
     def _refresh_fields_with_word_macos(self, file_path: str) -> None:
         """使用 macOS 上的 Microsoft Word 最佳努力刷新目录和页码域。"""
