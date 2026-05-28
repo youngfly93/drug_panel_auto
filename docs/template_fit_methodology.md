@@ -57,21 +57,60 @@ fit = 0.4 × 章节命中率 + 0.4 × 段落级Jaccard均值 + 0.2 × 表格签�
 
 ## 4. 输出格式
 
-### 4.1 Per-report JSON(机器可读)
+### 4.1 JSON 输出 schema(机器可读)
+
+完整结构(顶层):
 ```json
 {
-  "report_path": "肠癌/CRC301/2025-09-21-脱敏.docx",
-  "family_hint": "CRC301",
+  "meta": { ... },          // 见 4.1.1
+  "golden": "<path>",        // 输入的 golden 模板路径(冗余,与 meta.golden_path 一致)
+  "family": "<family_id>",   // 由 --family-hint 指定,否则取 corpus 目录名
+  "aggregate": { ... },      // 见 4.1.2 — family 级聚合
+  "reports": [ ... ]         // 见 4.1.3 — 每份报告的详细 fit
+}
+```
+
+#### 4.1.1 `meta`(provenance,所有 brief 必带)
+```json
+{
+  "generated_at": "2026-05-28T15:27:19+00:00",
+  "golden_path": "panels/crc_358_msi/templates/crc_358_msi_golden_template_v0.docx",
+  "golden_git_commit": "5c278bf",
+  "analyzer_path": "/abs/path/to/scripts/template_fit_analyzer.py",
+  "analyzer_git_commit": "b79f6b6"
+}
+```
+任意一个 git commit 字段在仓库外/无 git 时回退为 `null`,markdown brief 显示 `unknown`。如果 brief 写完后某个 commit 已经前进,说明 baseline 已变,需重跑。
+
+#### 4.1.2 `aggregate`(family 级)
+```json
+{
+  "family": "Lung13",
+  "n_reports": 130,
+  "fit_score": { "p25": 0.61, "median": 0.72, "p75": 0.83 },
+  "classification": "cousin",       // "sibling" | "cousin" | "stranger"
+  "high_fit_sections":   [["报告导读", 0.97, 1.00], ...],   // [name, jaccard_mean, hit_rate]
+  "medium_fit_sections": [["主变异表", 0.81, 1.00], ...],
+  "low_fit_sections":    [["TMB 解读", 0.39, 1.00], ...],
+  "novel_sections":      [["肿瘤微环境分子分型", 0.83], ...] // [name, occurrence_rate]
+}
+```
+
+#### 4.1.3 `reports[]`(逐份报告)
+```json
+{
+  "path": "<corpus relative path>",
   "fit_score": 0.91,
   "section_hit_rate": 1.0,
   "paragraph_jaccard_mean": 0.88,
   "table_signature_match_rate": 1.0,
-  "high_fit_sections": ["报告导读", "致患者信", "阅读说明", ...],
-  "low_fit_sections": [],
-  "novel_sections": [],
-  "missing_sections": []
+  "matched_sections": ["报告导读", "致患者信", ...],
+  "missing_sections": [],
+  "novel_sections": []
 }
 ```
+
+> 兼容性约定:文档增字段不算 breaking;改字段语义/删字段算 breaking,需 bump `meta.schema_version`(目前实现里未显式声明,默认是 v1)。后续 analyzer 改算法时,如果改了 `fit_score` 公式或阈值,必须同步在 methodology 改记录,并提示运行者重跑 baseline。
 
 ### 4.2 Per-family markdown(人读)
 就是 `onboarding_new_panel.md` Step 0.5 期望的那份 design brief。例:
