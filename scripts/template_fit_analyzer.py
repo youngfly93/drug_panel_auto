@@ -20,14 +20,57 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import re
 import statistics
+import subprocess
 import sys
 import zipfile
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Reproducibility metadata: pin which golden and which analyzer produced the
+# brief, so stale results can't silently masquerade as current.
+# ---------------------------------------------------------------------------
+
+def _git_commit_for_path(path: Path) -> str | None:
+    """Return the short SHA of the most recent commit touching ``path``, or None.
+
+    Uses absolute paths so it works regardless of caller's cwd.
+    """
+    try:
+        abs_path = path.resolve()
+    except OSError:
+        return None
+    cwd = abs_path.parent if abs_path.is_file() else abs_path
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%h", "--", str(abs_path)],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        sha = result.stdout.strip()
+        return sha or None
+    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        return None
+
+
+def _build_metadata(golden_path: Path, analyzer_path: Path) -> dict:
+    return {
+        "generated_at": datetime.datetime.now(datetime.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat(),
+        "golden_path": str(golden_path),
+        "golden_git_commit": _git_commit_for_path(golden_path),
+        "analyzer_path": str(analyzer_path),
+        "analyzer_git_commit": _git_commit_for_path(analyzer_path),
+    }
 
 # ---------------------------------------------------------------------------
 # Known section title patterns (CRC358-style; tolerant of "1. " / "二、" prefixes)
@@ -307,7 +350,7 @@ def aggregate_family(reports: list[ReportFit], family: str, golden: TemplateSign
     }
 
 
-def render_brief(agg: dict, golden_path: str) -> str:
+def render_brief(agg: dict, golden_path: str, meta: dict | None = None) -> str:
     if agg["n_reports"] == 0:
         return f"# Template-fit Analysis: family `{agg['family']}`\n\nNo reports analyzed (corpus empty or all skipped).\n"
 
@@ -373,6 +416,26 @@ def render_brief(agg: dict, golden_path: str) -> str:
         )
     out.append("")
 
+    if meta:
+        out.append("---")
+        out.append("## Provenance")
+        out.append("")
+        out.append(f"- Generated at: `{meta.get('generated_at', '?')}` (UTC)")
+        out.append(
+            f"- Golden template: `{meta.get('golden_path')}` "
+            f"@ commit `{meta.get('golden_git_commit') or 'unknown'}`"
+        )
+        out.append(
+            f"- Analyzer: `{meta.get('analyzer_path')}` "
+            f"@ commit `{meta.get('analyzer_git_commit') or 'unknown'}`"
+        )
+        out.append("")
+        out.append(
+            "> If either commit has moved since this brief was generated, "
+            "re-run the analyzer to confirm conclusions are still valid."
+        )
+        out.append("")
+
     return "\n".join(out)
 
 
@@ -431,12 +494,14 @@ def main() -> int:
 
     family_name = args.family_hint or args.corpus.name
     agg = aggregate_family(fits, family_name, golden)
+    meta = _build_metadata(args.golden, Path(__file__).resolve())
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(
             json.dumps(
                 {
+                    "meta": meta,
                     "golden": str(args.golden),
                     "family": family_name,
                     "aggregate": agg,
@@ -461,7 +526,7 @@ def main() -> int:
         )
         print(f"JSON: {args.output}", file=sys.stderr)
 
-    brief = render_brief(agg, str(args.golden))
+    brief = render_brief(agg, str(args.golden), meta=meta)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(brief, encoding="utf-8")
