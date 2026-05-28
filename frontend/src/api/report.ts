@@ -160,6 +160,67 @@ function buildReportFileForm(file: File, req: Omit<GenerateRequest, 'upload_id'>
   return form
 }
 
+function parseContentDispositionFilename(disposition: string, fallback: string): string {
+  const filenameStar = disposition.match(/(?:^|;)\s*filename\*=([^;]+)/i)?.[1]
+  if (filenameStar) {
+    const raw = filenameStar.trim().replace(/^"|"$/g, '')
+    const encoded = raw.includes("''") ? raw.split("''").slice(1).join("''") : raw
+    try {
+      return decodeURIComponent(encoded)
+    } catch {
+      return encoded || fallback
+    }
+  }
+
+  const filename = disposition.match(/(?:^|;)\s*filename="?([^";]+)"?/i)?.[1]
+  if (filename) {
+    try {
+      return decodeURIComponent(filename.trim())
+    } catch {
+      return filename.trim() || fallback
+    }
+  }
+
+  return fallback
+}
+
+async function parseErrorPayload(data: any): Promise<string | null> {
+  if (!data) return null
+  if (typeof data === 'string') {
+    try {
+      const parsed = JSON.parse(data)
+      return parsed.detail || parsed.error || parsed.message || data
+    } catch {
+      return data
+    }
+  }
+  if (data instanceof Blob) {
+    const text = await data.text()
+    if (!text) return null
+    try {
+      const parsed = JSON.parse(text)
+      return parsed.detail || parsed.error || parsed.message || text
+    } catch {
+      return text
+    }
+  }
+  if (typeof data === 'object') {
+    return data.detail || data.error || data.message || null
+  }
+  return null
+}
+
+async function buildApiErrorMessage(error: any, fallback: string): Promise<string> {
+  const status = error?.response?.status
+  const payloadMessage = await parseErrorPayload(error?.response?.data)
+  if (payloadMessage) return payloadMessage
+  if (status === 401) return '登录已过期，请重新登录'
+  if (status === 404) return '报告文件不存在或已过期，请重新生成后下载'
+  if (error?.code === 'ECONNABORTED') return '请求超时，请稍后重试'
+  if (error?.message === 'Network Error') return '网络连接失败，请检查服务是否在线'
+  return error?.message || fallback
+}
+
 export const reportApi = {
   async generate(req: GenerateRequest): Promise<GenerateResult> {
     const { data } = await client.post('/reports/generate', req)
@@ -172,7 +233,9 @@ export const reportApi = {
 
   async generateFromFile(file: File, req: Omit<GenerateRequest, 'upload_id'>): Promise<GenerateResult> {
     const form = buildReportFileForm(file, req)
-    const { data } = await client.post('/reports/generate-file', form)
+    const { data } = await client.post('/reports/generate-file', form, {
+      timeout: 180000,
+    })
     return data.data
   },
 
@@ -266,20 +329,24 @@ export const reportApi = {
   },
 
   async download(taskId: string): Promise<void> {
-    const response = await client.get(`/reports/${taskId}/download`, {
-      responseType: 'blob',
-    })
-    const disposition = String(response.headers['content-disposition'] || '')
-    const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/)
-    const filename = decodeURIComponent(match?.[1] || match?.[2] || `${taskId}.docx`)
-    const url = window.URL.createObjectURL(response.data)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    try {
+      const response = await client.get(`/reports/${taskId}/download`, {
+        responseType: 'blob',
+        timeout: 120000,
+      })
+      const disposition = String(response.headers['content-disposition'] || '')
+      const filename = parseContentDispositionFilename(disposition, `${taskId}.docx`)
+      const url = window.URL.createObjectURL(response.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      throw new Error(await buildApiErrorMessage(error, '报告下载失败'))
+    }
   },
 
   downloadInline(result: GenerateResult): void {

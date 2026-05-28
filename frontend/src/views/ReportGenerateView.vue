@@ -8,16 +8,35 @@
       <el-upload
         drag
         accept=".xlsx"
+        v-loading="excelStore.loading"
+        element-loading-text="正在上传并解析 Excel，请稍候..."
+        :disabled="excelStore.loading"
         :auto-upload="false"
         :show-file-list="false"
         @change="handleFileChange"
       >
         <el-icon class="el-icon--upload" :size="40"><UploadFilled /></el-icon>
-        <div class="el-upload__text">拖拽文件到此处，或<em>点击上传</em></div>
+        <div class="el-upload__text">
+          <template v-if="excelStore.loading">
+            正在解析 Excel，请稍候...
+          </template>
+          <template v-else>
+            拖拽文件到此处，或<em>点击上传</em>
+          </template>
+        </div>
         <template #tip>
           <div class="el-upload__tip">仅支持 .xlsx 格式的基因检测 Excel 文件</div>
         </template>
       </el-upload>
+
+      <el-alert
+        v-if="uploadStatusMessage"
+        :title="uploadStatusMessage"
+        :type="uploadStatusType"
+        show-icon
+        :closable="false"
+        style="margin-top: 12px"
+      />
 
       <div v-if="excelStore.upload" style="margin-top: 16px">
         <el-descriptions :column="3" border size="small">
@@ -66,7 +85,7 @@
           show-icon
           :closable="false"
           style="margin-top: 12px"
-          :title="`已识别 ${excelStore.sheets.length} 个 Sheet。当前使用无状态生成模式。`"
+          :title="`已识别 ${excelStore.sheets.length} 个 Sheet。当前使用${generationMode === 'async' ? '后台异步' : '无状态'}生成模式。`"
         />
       </div>
     </el-card>
@@ -110,6 +129,23 @@
         :form-data="form.formData"
         :errors="form.errors.value"
         :loading="form.loading.value"
+      />
+      <el-alert
+        v-if="enrichmentMessage"
+        :title="enrichmentMessage"
+        :type="excelStore.patientEnrichment?.found ? 'success' : 'warning'"
+        show-icon
+        :closable="false"
+        style="margin-top: 12px"
+      />
+      <el-alert
+        v-for="(warning, i) in excelStore.patientEnrichment?.warnings || []"
+        :key="`enrichment-warning-${i}`"
+        :title="warning"
+        type="warning"
+        show-icon
+        :closable="false"
+        style="margin-top: 8px"
       />
     </el-card>
 
@@ -198,7 +234,9 @@ const projectType = ref<string | null>(null)
 const templateName = ref<string | null>(null)
 const generating = ref(false)
 const result = ref<GenerateResult | null>(null)
-const generationMode = import.meta.env.VITE_REPORT_GENERATION_MODE || 'stateless'
+const uploadError = ref('')
+const selectedFileName = ref('')
+const generationMode = import.meta.env.VITE_REPORT_GENERATION_MODE || 'async'
 
 const templateOptions = computed(() => {
   if (projectType.value === 'crc_358_msi') {
@@ -214,6 +252,40 @@ const templateOptions = computed(() => {
     ]
   }
   return []
+})
+
+const enrichmentMessage = computed(() => {
+  const enrichment = excelStore.patientEnrichment
+  const sampleId = excelStore.singleValues?.sample_id
+  if (!sampleId) return ''
+  if (enrichment?.found) {
+    const source = enrichment.source || '患者信息源'
+    const keys = Object.keys(enrichment.fields || {})
+    return `已根据样本号 ${sampleId} 从 ${source} 补全 ${keys.length} 个临床字段`
+  }
+  if (excelStore.upload && !form.formData.patient_name) {
+    return `Excel 未提供患者姓名，且未在患者信息库/运营系统中查到样本号 ${sampleId}。请手动填写或接入运营系统。`
+  }
+  return ''
+})
+
+const uploadStatusMessage = computed(() => {
+  if (excelStore.loading && selectedFileName.value) {
+    return `正在解析 ${selectedFileName.value}，请不要重复点击上传`
+  }
+  if (uploadError.value) {
+    return uploadError.value
+  }
+  if (excelStore.upload?.original_filename) {
+    return `已完成上传解析：${excelStore.upload.original_filename}`
+  }
+  return ''
+})
+
+const uploadStatusType = computed(() => {
+  if (uploadError.value) return 'error'
+  if (excelStore.upload) return 'success'
+  return 'info'
 })
 
 // Initialize projectType from detection
@@ -252,15 +324,27 @@ watch(
   },
 )
 
+watch(
+  () => excelStore.patientEnrichment,
+  (enrichment) => {
+    if (enrichment?.found) {
+      form.mergePatientInfo(enrichment.fields)
+    }
+  },
+)
+
 async function handleFileChange(uploadFile: any) {
   const file = uploadFile.raw || uploadFile
   if (!file) return
   result.value = null
+  uploadError.value = ''
+  selectedFileName.value = file.name || ''
   try {
     await excelStore.uploadFile(file)
     ElMessage.success('Excel 上传成功')
   } catch (err: any) {
-    ElMessage.error(err.response?.data?.detail || 'Excel 上传失败')
+    uploadError.value = err.response?.data?.detail || err.message || 'Excel 上传失败'
+    ElMessage.error(uploadError.value)
   }
 }
 
@@ -298,7 +382,7 @@ async function handleGenerate() {
       ElMessage.error('报告生成失败')
     }
   } catch (err: any) {
-    ElMessage.error(err.response?.data?.error || '报告生成异常')
+    ElMessage.error(err.response?.data?.error || err.response?.data?.detail || err.message || '报告生成异常')
   } finally {
     generating.value = false
   }
@@ -343,9 +427,24 @@ async function waitForReportTask(taskId: string): Promise<GenerateResult> {
 
 async function downloadReport(taskId: string) {
   try {
-    await reportApi.download(taskId)
+    const task = await reportApi.getTaskStatus(taskId)
+    if (task.status !== 'completed') {
+      ElMessage.warning('报告仍在生成中，请稍后再下载')
+      return
+    }
+    if (!task.output_path) {
+      ElMessage.error('报告文件不存在，请重新生成后下载')
+      return
+    }
+    const link = document.createElement('a')
+    link.href = reportApi.getDownloadUrl(taskId)
+    link.target = '_blank'
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
   } catch (err: any) {
-    ElMessage.error(err.response?.data?.detail || '下载失败，请重新登录后再试')
+    ElMessage.error(err.response?.data?.detail || err.message || '报告下载失败')
   }
 }
 
