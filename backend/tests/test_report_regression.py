@@ -2888,7 +2888,7 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
     assert "<w:u" not in item_xml
     assert 'w:leader="dot"' not in xml
     assert "HYPERLINK \\l" in xml
-    assert "PAGEREF" in xml
+    assert "PAGEREF" not in xml
     assert "_Toc24274" in xml
     assert "1.检测结果小结" not in xml
     assert "靶向药物/免疫用药提示解析" in xml
@@ -2898,6 +2898,64 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
     settings_xml = _read_docx_part(docx_path, "word/settings.xml")
     assert "<w:updateFields" in settings_xml
     assert 'w:val="true"' in settings_xml
+
+
+def test_static_toc_links_target_numbered_appendix_headings(tmp_path):
+    import re
+
+    from lxml import etree
+
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    template_path = package.resolve_template_file("crc_358_msi_golden_template_v0")
+    docx_path = tmp_path / "toc_targets.docx"
+    shutil.copy2(template_path, docx_path)
+
+    ok = TemplateRenderer(log_level="ERROR")._write_static_toc_page_numbers(
+        str(docx_path),
+        {
+            "基因检测列表": 73,
+            "参考文献": 75,
+        },
+        {"panel_style": {"toc": {}}},
+    )
+
+    assert ok is True
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    w_ns = ns["w"]
+    with ZipFile(docx_path) as zf:
+        root = etree.fromstring(zf.read("word/document.xml"))
+
+    def paragraph_text(elem):
+        return "".join(elem.xpath(".//w:t/text()", namespaces=ns))
+
+    def paragraph_instr(elem):
+        return "".join(elem.xpath(".//w:instrText/text()", namespaces=ns))
+
+    bookmark_by_name = {
+        bookmark.get(f"{{{w_ns}}}name"): bookmark
+        for bookmark in root.xpath(".//w:bookmarkStart", namespaces=ns)
+        if bookmark.get(f"{{{w_ns}}}name")
+    }
+
+    def toc_anchor_target_text(label: str) -> str:
+        for paragraph in root.xpath(".//w:p", namespaces=ns):
+            text = paragraph_text(paragraph)
+            instr = paragraph_instr(paragraph)
+            if label not in text or "HYPERLINK" not in instr:
+                continue
+            match = re.search(r'HYPERLINK\s+\\l\s+"([^"]+)"', instr)
+            assert match, f"TOC row for {label} has no HYPERLINK anchor"
+            bookmark = bookmark_by_name.get(match.group(1))
+            assert bookmark is not None
+            target = bookmark
+            while target is not None and target.tag != f"{{{w_ns}}}p":
+                target = target.getparent()
+            assert target is not None
+            return re.sub(r"\s+", "", paragraph_text(target))
+        raise AssertionError(f"TOC row for {label} not found")
+
+    assert "4.基因检测列表" in toc_anchor_target_text("基因检测列表")
+    assert "5.参考文献" in toc_anchor_target_text("参考文献")
 
 
 def test_biomarker_table_restores_template_typography(tmp_path):
