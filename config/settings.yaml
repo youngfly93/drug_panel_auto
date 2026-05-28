@@ -538,7 +538,9 @@ knowledge_bases:
         # 若报告未提供 cancer_type（为 "-" 或空），默认放行（避免输出为空）
         # 设为 reject 可强制要求每份报告都明确癌种后才能输出公共库条目
         if_missing_patient_cancer: "allow"  # allow|reject
-        # 识别“结直肠癌/CRC”的关键词（用于启用 CRC 专用过滤）
+        # 通用：识别本 panel 目标癌种的关键词（患者癌种命中才启用按癌种过滤）。
+        #   新接入 panel 用 match_keywords（如肺癌 ["肺","lung","nsclc","sclc"]）。
+        #   crc_keywords 为历史命名，仅在未设 match_keywords 时作为回退（向后兼容）。
         crc_keywords: ["结直肠", "结肠", "直肠", "乙状结肠", "sigmoid", "colon", "rectal", "colorectal"]
         # CGI: CRC 对应的主癌种代码（CGI Primary Tumor type）
         cgi_allowed_primary_tumor_types: ["COREAD"]

@@ -242,11 +242,20 @@ class TargetedDrugMixin:
         return -1
 
     @staticmethod
-    def _infer_crc(cancer_type: str, *, crc_keywords: list[str]) -> bool:
+    def _cancer_type_matches(cancer_type: str, *, keywords: list[str]) -> bool:
+        """患者癌种是否命中本 panel 配置的癌种关键词（命中才启用按癌种过滤）。
+
+        癌种无关：CRC 传结直肠关键词，肺癌传肺癌关键词，逻辑相同。
+        """
         s = str(cancer_type or "").strip().lower()
         if not s or s in {"-", "--"}:
             return False
-        return any(str(k).strip().lower() in s for k in crc_keywords if str(k).strip())
+        return any(str(k).strip().lower() in s for k in keywords if str(k).strip())
+
+    @classmethod
+    def _infer_crc(cls, cancer_type: str, *, crc_keywords: list[str]) -> bool:
+        """向后兼容别名（历史 CRC 专用命名）；新代码请用 _cancer_type_matches。"""
+        return cls._cancer_type_matches(cancer_type, keywords=crc_keywords)
 
     @classmethod
     def _p_point_matches(cls, db_p: str, patient_p: str) -> bool:
@@ -356,26 +365,29 @@ class TargetedDrugMixin:
         cancer_filter_enabled = (
             bool(cancer_cfg.get("enabled", False)) and filters_enabled
         )
-        crc_keywords = (
-            cancer_cfg.get(
-                "crc_keywords",
-                [
-                    "结直肠",
-                    "结肠",
-                    "直肠",
-                    "乙状结肠",
-                    "sigmoid",
-                    "colon",
-                    "rectal",
-                    "colorectal",
-                ],
+        # 癌种匹配关键词：优先用通用 match_keywords（panel 可配置任意癌种）；
+        # 缺省回退历史 crc_keywords（向后兼容，保证 CRC 行为不变）。
+        _default_crc_keywords = [
+            "结直肠",
+            "结肠",
+            "直肠",
+            "乙状结肠",
+            "sigmoid",
+            "colon",
+            "rectal",
+            "colorectal",
+        ]
+        if isinstance(cancer_cfg, dict):
+            match_keywords = (
+                cancer_cfg.get("match_keywords")
+                or cancer_cfg.get("crc_keywords")
+                or _default_crc_keywords
             )
-            if isinstance(cancer_cfg, dict)
-            else []
-        )
-        is_crc = self._infer_crc(
+        else:
+            match_keywords = []
+        cancer_matches = self._cancer_type_matches(
             cancer_type,
-            crc_keywords=crc_keywords if isinstance(crc_keywords, list) else [],
+            keywords=match_keywords if isinstance(match_keywords, list) else [],
         )
         cgi_allowed_tumor_types = set(
             str(x).strip().upper()
@@ -466,12 +478,13 @@ class TargetedDrugMixin:
             if should_filter and require_position_match and not (db_c or db_p):
                 continue
 
-            # 生产筛选：按癌种过滤（当前仅对"结直肠癌/CRC"启用分组逻辑；其他癌种默认不做过滤）
+            # 生产筛选：按癌种过滤（panel 配置 match_keywords + cgi_allowed_primary_tumor_types /
+            # civic_disease_keywords 驱动；患者癌种命中关键词时才过滤，否则放行）
             if should_filter and cancer_filter_enabled:
                 if not cancer_type or str(cancer_type).strip() in {"-", "--"}:
                     if missing_patient_cancer_action == "reject":
                         continue
-                elif is_crc:
+                elif cancer_matches:
                     if source_db == "CGI":
                         tt = self._norm_text(row.get("cgi_primary_tumor_type"))
                         if tt:
