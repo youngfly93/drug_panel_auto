@@ -113,3 +113,80 @@ def is_alive() -> bool:
 def get_lock() -> threading.Lock:
     """Module-level lock to serialize concurrent UNO calls against the shared listener."""
     return _lock
+
+
+def warmup_async(*, port: int = _DEFAULT_PORT, timeout: float = 60.0) -> None:
+    """Spawn a daemon thread that exercises the listener once.
+
+    Without this, the first real report after server start pays a ~28 s warmup
+    cost while LO lazy-loads Writer/text/index modules. By touching those
+    modules eagerly (load+close a blank Writer doc), the first user request
+    arrives to a fully-warm listener.
+
+    Fire-and-forget: the service can start accepting requests immediately;
+    if a request races warmup, it just waits as before.
+    """
+    import time
+
+    def _do_warmup() -> None:
+        import shutil
+        import subprocess
+
+        soffice_python = "/usr/bin/python3"
+        if not Path(soffice_python).exists():
+            soffice_python = shutil.which("python3") or ""
+        if not soffice_python:
+            _log.warning("warmup skipped: no python3 with uno on PATH")
+            return
+
+        # Inline UNO script — load a blank Writer doc and close it. That forces
+        # the listener to fully initialize Writer module + text/field machinery.
+        warmup_code = (
+            "import uno\n"
+            "from com.sun.star.beans import PropertyValue\n"
+            "ctx = uno.getComponentContext()\n"
+            "resolver = ctx.ServiceManager.createInstanceWithContext("
+            "'com.sun.star.bridge.UnoUrlResolver', ctx)\n"
+            f"rctx = resolver.resolve('uno:socket,host=127.0.0.1,port={port};"
+            "urp;StarOffice.ComponentContext')\n"
+            "desktop = rctx.ServiceManager.createInstanceWithContext("
+            "'com.sun.star.frame.Desktop', rctx)\n"
+            "def _prop(n,v):\n"
+            "    p = PropertyValue(); p.Name=n; p.Value=v; return p\n"
+            "doc = desktop.loadComponentFromURL("
+            "'private:factory/swriter', '_blank', 0, (_prop('Hidden', True),))\n"
+            "try:\n"
+            "    doc.refresh()\n"
+            "    doc.TextFields.refresh()\n"
+            "finally:\n"
+            "    doc.close(True)\n"
+        )
+
+        # Listener may still be coming up; UNO resolve() in the script will
+        # retry naturally via exception (script does not retry, so we retry here)
+        start = time.time()
+        deadline = start + timeout
+        last_err = ""
+        while time.time() < deadline:
+            try:
+                proc = subprocess.run(
+                    [soffice_python, "-c", warmup_code],
+                    capture_output=True,
+                    text=True,
+                    timeout=min(30, deadline - time.time() + 1),
+                )
+                if proc.returncode == 0:
+                    _log.info(
+                        "LibreOffice listener warmup completed in %.1f s",
+                        time.time() - start,
+                    )
+                    return
+                last_err = (proc.stderr or proc.stdout or "").strip().splitlines()
+                last_err = last_err[-1] if last_err else "unknown"
+            except subprocess.TimeoutExpired:
+                last_err = "subprocess timeout"
+            time.sleep(1)
+        _log.warning("LO warmup did not complete in %.0fs: %s", timeout, last_err)
+
+    t = threading.Thread(target=_do_warmup, name="lo-warmup", daemon=True)
+    t.start()

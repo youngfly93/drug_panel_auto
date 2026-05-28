@@ -76,8 +76,11 @@ async def lifespan(app: FastAPI):
     # 2–3 field-refresh calls reuse one warm soffice process instead of cold-
     # starting one each time (~5–8 s saved per call). Non-fatal on failure.
     try:
-        from app.services.libreoffice_listener import start_listener
+        from app.services.libreoffice_listener import start_listener, warmup_async
         start_listener()
+        # P0.1 perf: fire-and-forget warmup so the first report after startup
+        # doesn't pay the ~28 s LO module-load cost.
+        warmup_async()
     except Exception as exc:
         _log.warning("LibreOffice listener startup skipped (non-fatal): %s", exc)
 
