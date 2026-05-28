@@ -169,6 +169,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
 
         # 映射单值字段
         self._map_single_values(excel_data, report_data)
+        self._apply_identifier_defaults(report_data)
 
         # 映射表格数据
         self._map_tables(excel_data, report_data)
@@ -356,6 +357,48 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
 
                 # 设置默认值
                 report_data.set_field(var_name, mapping.default_value)
+
+    def _apply_identifier_defaults(self, report_data: ReportData) -> None:
+        """补齐可由已有标识稳定推导的报告标识字段。"""
+        report_number = self._clean_identifier_value(
+            report_data.get_field("report_number")
+        )
+        if report_number:
+            report_data.set_field("report_number", report_number)
+            return
+
+        sample_id = self._clean_identifier_value(report_data.get_field("sample_id"))
+        if not sample_id:
+            return
+
+        prefix = self._clean_identifier_value(
+            self.config_loader.get_setting("naming.report_number_prefix", "")
+        )
+        if not prefix:
+            return
+
+        normalized_prefix = prefix.upper().rstrip("-")
+        normalized_sample = sample_id.upper()
+        if normalized_sample.startswith(f"{normalized_prefix}-"):
+            derived = normalized_sample
+        else:
+            derived = f"{normalized_prefix}-{normalized_sample}"
+
+        report_data.set_field("report_number", derived)
+        self.logger.info(
+            "根据样本号补齐报告编号",
+            report_number=derived,
+            sample_id=normalized_sample,
+        )
+
+    @staticmethod
+    def _clean_identifier_value(value: Any) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip()
+        if text.lower() in {"", "-", "--", "none", "null", "nan"}:
+            return ""
+        return text
 
     def _map_tables(self, excel_data: ExcelDataSource, report_data: ReportData) -> None:
         """

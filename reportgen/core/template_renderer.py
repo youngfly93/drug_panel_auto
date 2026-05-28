@@ -624,6 +624,463 @@ class TemplateRenderer:
         if changed:
             doc.save(file_path)
 
+    def _restore_msi_result_emphasis(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
+        """Restore reviewed emphasis in the MSI result section.
+
+        The global underline cleanup intentionally removes template placeholder
+        underlines from tables, but the reviewed CRC reports emphasize the
+        result-specific MSI conclusion and the interpretation bullet matching
+        the current MSI status. Apply that emphasis from the generated context
+        instead of preserving a source-case hardcoded run layout.
+        """
+        from docx.oxml.ns import qn
+
+        doc = Document(file_path)
+        changed = False
+        context = context or {}
+
+        def normalized_status() -> str:
+            raw = str(
+                context.get("msi_status")
+                or context.get("MSI状态")
+                or context.get("msi_summary")
+                or ""
+            ).upper()
+            raw = raw.replace(" ", "").replace("_", "-")
+            if "MSI-H" in raw or "MSIH" in raw or "高度不稳定" in raw:
+                return "MSI-H"
+            if "MSI-L" in raw or "MSIL" in raw or "低度不稳定" in raw:
+                return "MSI-L"
+            if "MSS" in raw or "稳定" in raw:
+                return "MSS"
+            return ""
+
+        def set_font(run, *, bold: bool = False, underline: bool = False) -> None:
+            run.bold = bold
+            run.underline = underline
+            font_name = "微软雅黑"
+            run.font.name = font_name
+            run._element.rPr.rFonts.set(qn("w:eastAsia"), font_name)
+
+        def rewrite_conclusion(paragraph) -> bool:
+            text = paragraph.text or ""
+            prefix = "依据本次检测结果，"
+            marker = "该肿瘤样本为"
+            if marker not in text:
+                return False
+            before, after_marker = text.split(marker, 1)
+            if prefix in before:
+                before = prefix
+            if not after_marker.strip():
+                return False
+
+            paragraph.clear()
+            normal = paragraph.add_run(before)
+            set_font(normal)
+            label = paragraph.add_run(marker)
+            set_font(label, bold=True)
+            result = paragraph.add_run(after_marker)
+            set_font(result, bold=True, underline=True)
+            return True
+
+        def should_underline_interpretation(text: str, status: str) -> bool:
+            compact = "".join((text or "").split())
+            if status in {"MSS", "MSI-L"}:
+                return "肿瘤组织为MSS" in compact and "MSI-L" in compact
+            if status == "MSI-H":
+                return "肿瘤组织为MSI-H" in compact
+            return False
+
+        status = normalized_status()
+        for paragraph in doc.paragraphs:
+            text = paragraph.text or ""
+            if rewrite_conclusion(paragraph):
+                changed = True
+                continue
+            if should_underline_interpretation(text, status):
+                for run in paragraph.runs:
+                    if run.text:
+                        set_font(run, underline=True)
+                        changed = True
+
+        if changed:
+            doc.save(file_path)
+
+    def _restore_part3_dynamic_styles(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
+        """Restore reviewed Part 3 paragraph/run styles after underline cleanup.
+
+        The golden Part 3 body is rendered dynamically from structured context.
+        Later global cleanup removes template-inherited underlines, so the
+        intentional reviewed styles for Part 3 need to be restored by semantic
+        paragraph role rather than by case-specific text.
+        """
+        import re
+        import xml.etree.ElementTree as ET
+        from zipfile import ZipFile
+
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+        from docx.shared import Pt, RGBColor
+
+        context = context or {}
+        doc = Document(file_path)
+        paragraphs = list(doc.paragraphs)
+        changed = False
+
+        start = None
+        end = len(paragraphs)
+        for idx, paragraph in enumerate(paragraphs):
+            text = (paragraph.text or "").strip()
+            if text.startswith("第三部分：基因变异及相应靶向/免疫药物解析"):
+                start = idx
+                continue
+            if start is not None and (
+                text.startswith("3. 阅读说明")
+                or text.startswith("第四部分：")
+                or text.startswith("4. 附录")
+            ):
+                end = idx
+                break
+        if start is None:
+            return
+
+        label_texts = {
+            "基因简介：",
+            "基因变异说明：",
+            "基因变异解析：",
+            "基因变异与药物关联分析：",
+            "药物疗效临床解析：",
+        }
+        main_headings = {
+            "基因变异解析",
+            "靶向药物/免疫用药提示解析",
+        }
+        sub_headings = {
+            "潜在获益靶向/免疫药物解析",
+            "潜在负相关靶向/免疫药物解析",
+        }
+        variant_header_re = re.compile(r"^u\s+[^：]{1,20}：.+[；;]\s*\d")
+        drug_variant_re = re.compile(r"^[A-Za-z0-9_-]+：.+突变相应.*药物$")
+        summary_prefix = "在本次检测范围内，检出体细胞变异"
+        context_drug_names = {
+            line.strip()
+            for section_key in ("drug_benefit_sections", "drug_caution_sections")
+            for item in (context.get(section_key) or [])
+            for line in str((item or {}).get("drug_name") or "").splitlines()
+            if line.strip()
+        }
+
+        def decimal_outline_num_id() -> int:
+            """Find the template's own 1 / 2 / 2.1 numbering id.
+
+            Word ``numId`` values are local to each DOCX. The reviewed source
+            uses one id, while the variableized template may assign another
+            one after cleanup. Match the numbering definition instead of
+            hardcoding a source-document id. Prefer a numbering instance that
+            has not already been used in the document, otherwise Word/LibreOffice
+            may continue a previous list and render "3. 基因变异解析" instead of
+            the reviewed "1. 基因变异解析".
+            """
+            def paragraph_num_id(paragraph) -> str | None:
+                p_pr = paragraph._p.pPr
+                if p_pr is None:
+                    return None
+                num_pr = p_pr.find(qn("w:numPr"))
+                if num_pr is None:
+                    return None
+                num_id_elem = num_pr.find(qn("w:numId"))
+                return (
+                    num_id_elem.get(qn("w:val"))
+                    if num_id_elem is not None
+                    else None
+                )
+
+            used_all = {
+                num_id
+                for paragraph in paragraphs
+                for num_id in [paragraph_num_id(paragraph)]
+                if num_id
+            }
+            used_before_part3 = {
+                num_id
+                for paragraph in paragraphs[:start]
+                for num_id in [paragraph_num_id(paragraph)]
+                if num_id
+            }
+
+            try:
+                with ZipFile(file_path, "r") as zf:
+                    numbering_xml = zf.read("word/numbering.xml")
+                nroot = ET.fromstring(numbering_xml)
+            except Exception:
+                return 9
+
+            ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            w_num = f"{{{ns_w}}}num"
+            w_abstract_num = f"{{{ns_w}}}abstractNum"
+            w_abstract_num_id = f"{{{ns_w}}}abstractNumId"
+            w_num_id = f"{{{ns_w}}}numId"
+            w_val = f"{{{ns_w}}}val"
+            w_lvl = f"{{{ns_w}}}lvl"
+            w_ilvl = f"{{{ns_w}}}ilvl"
+            w_num_fmt = f"{{{ns_w}}}numFmt"
+            w_lvl_text = f"{{{ns_w}}}lvlText"
+
+            abstract_by_id = {
+                elem.get(w_abstract_num_id): elem
+                for elem in nroot.findall(w_abstract_num)
+            }
+            candidates: list[int] = []
+            for num in nroot.findall(w_num):
+                num_id = num.get(w_num_id)
+                abstract_ref = num.find(w_abstract_num_id)
+                abstract_id = abstract_ref.get(w_val) if abstract_ref is not None else None
+                abstract = abstract_by_id.get(abstract_id)
+                if not num_id or abstract is None:
+                    continue
+                levels = {lvl.get(w_ilvl): lvl for lvl in abstract.findall(w_lvl)}
+                level0 = levels.get("0")
+                level1 = levels.get("1")
+                if level0 is None:
+                    continue
+                fmt0 = level0.find(w_num_fmt)
+                text0 = level0.find(w_lvl_text)
+                fmt1 = level1.find(w_num_fmt) if level1 is not None else None
+                text1 = level1.find(w_lvl_text) if level1 is not None else None
+                if (
+                    fmt0 is not None
+                    and fmt0.get(w_val) == "decimal"
+                    and text0 is not None
+                    and "%1" in (text0.get(w_val) or "")
+                    and (
+                        level1 is None
+                        or (
+                            fmt1 is not None
+                            and fmt1.get(w_val) == "decimal"
+                            and text1 is not None
+                            and "%1.%2" in (text1.get(w_val) or "")
+                        )
+                    )
+                ):
+                    try:
+                        candidates.append(int(num_id))
+                    except ValueError:
+                        continue
+            if not candidates:
+                return 9
+            for candidate in sorted(candidates):
+                if str(candidate) not in used_all:
+                    return candidate
+            for candidate in sorted(candidates):
+                if str(candidate) not in used_before_part3:
+                    return candidate
+            return min(candidates)
+
+        heading_num_id = decimal_outline_num_id()
+
+        def ensure_num_pr(paragraph, num_id: int, ilvl_value: int = 0) -> None:
+            p_pr = paragraph._p.get_or_add_pPr()
+            existing = p_pr.find(qn("w:numPr"))
+            if existing is not None:
+                p_pr.remove(existing)
+            num_pr = OxmlElement("w:numPr")
+            ilvl = OxmlElement("w:ilvl")
+            ilvl.set(qn("w:val"), str(ilvl_value))
+            num_id_elem = OxmlElement("w:numId")
+            num_id_elem.set(qn("w:val"), str(num_id))
+            num_pr.append(ilvl)
+            num_pr.append(num_id_elem)
+            p_pr.insert(0, num_pr)
+
+        def set_ind_xml(
+            paragraph,
+            *,
+            first_line: int | None = None,
+            first_line_chars: int | None = None,
+            left: int | None = None,
+            hanging: int | None = None,
+        ) -> None:
+            p_pr = paragraph._p.get_or_add_pPr()
+            ind = p_pr.find(qn("w:ind"))
+            if ind is None:
+                ind = OxmlElement("w:ind")
+                p_pr.append(ind)
+            for attr in ("firstLine", "firstLineChars", "left", "start", "hanging"):
+                q_attr = qn(f"w:{attr}")
+                if q_attr in ind.attrib:
+                    del ind.attrib[q_attr]
+            if first_line is not None:
+                ind.set(qn("w:firstLine"), str(first_line))
+            if first_line_chars is not None:
+                ind.set(qn("w:firstLineChars"), str(first_line_chars))
+            if left is not None:
+                ind.set(qn("w:left"), str(left))
+            if hanging is not None:
+                ind.set(qn("w:hanging"), str(hanging))
+
+        def set_outline_level(paragraph, level: int | None) -> None:
+            p_pr = paragraph._p.get_or_add_pPr()
+            existing = p_pr.find(qn("w:outlineLvl"))
+            if existing is not None:
+                p_pr.remove(existing)
+            if level is None:
+                return
+            outline = OxmlElement("w:outlineLvl")
+            outline.set(qn("w:val"), str(level))
+            p_pr.append(outline)
+
+        def set_keep_next(paragraph, enabled: bool) -> None:
+            p_pr = paragraph._p.get_or_add_pPr()
+            existing = p_pr.find(qn("w:keepNext"))
+            if enabled and existing is None:
+                p_pr.append(OxmlElement("w:keepNext"))
+            elif not enabled and existing is not None:
+                p_pr.remove(existing)
+
+        def set_spacing(paragraph, before: int | None = None, after: int | None = 0):
+            paragraph.paragraph_format.space_before = (
+                Pt(before / 20) if before is not None else None
+            )
+            paragraph.paragraph_format.space_after = (
+                Pt(after / 20) if after is not None else None
+            )
+
+        def style_runs(
+            paragraph,
+            *,
+            bold: bool,
+            underline: bool,
+            size: float,
+            color: str | None = None,
+            skip_prefix: bool = False,
+        ) -> None:
+            for run in paragraph.runs:
+                if not (run.text or ""):
+                    continue
+                self._set_run_font_name(run, "微软雅黑")
+                if skip_prefix and run.text.strip() == "u":
+                    self._set_run_font_name(run, "Wingdings")
+                    run.font.bold = False
+                    run.font.underline = False
+                    run.font.size = Pt(size)
+                    continue
+                run.font.bold = bold
+                run.font.underline = underline
+                run.font.size = Pt(size)
+                if color:
+                    run.font.color.rgb = RGBColor.from_string(color)
+
+        in_drug_section = False
+        awaiting_drug_names = False
+        for paragraph in paragraphs[start + 1 : end]:
+            text = (paragraph.text or "").strip()
+            if not text:
+                continue
+
+            if text in main_headings:
+                in_drug_section = text == "靶向药物/免疫用药提示解析"
+                paragraph.alignment = (
+                    WD_ALIGN_PARAGRAPH.JUSTIFY
+                    if text == "靶向药物/免疫用药提示解析"
+                    else None
+                )
+                ensure_num_pr(paragraph, heading_num_id, ilvl_value=0)
+                set_ind_xml(paragraph)
+                set_outline_level(paragraph, 0)
+                set_spacing(paragraph, before=0, after=0)
+                set_keep_next(paragraph, text == "基因变异解析")
+                style_runs(paragraph, bold=True, underline=False, size=12)
+                changed = True
+                continue
+
+            if text in sub_headings:
+                in_drug_section = True
+                paragraph.alignment = None
+                ensure_num_pr(paragraph, heading_num_id, ilvl_value=1)
+                set_ind_xml(paragraph)
+                set_spacing(paragraph, before=200, after=0)
+                set_keep_next(paragraph, True)
+                style_runs(paragraph, bold=True, underline=False, size=12)
+                changed = True
+                continue
+
+            if text.startswith(summary_prefix):
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                ensure_num_pr(paragraph, 10, ilvl_value=0)
+                set_ind_xml(paragraph)
+                set_spacing(paragraph, after=0)
+                set_keep_next(paragraph, False)
+                style_runs(paragraph, bold=False, underline=False, size=10.5)
+                changed = True
+                continue
+
+            if variant_header_re.match(text):
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                set_spacing(paragraph, before=200, after=0)
+                set_keep_next(paragraph, False)
+                style_runs(
+                    paragraph,
+                    bold=True,
+                    underline=True,
+                    size=12,
+                    skip_prefix=True,
+                )
+                changed = True
+                continue
+
+            if in_drug_section and drug_variant_re.match(text):
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                ensure_num_pr(paragraph, 11)
+                set_ind_xml(paragraph, left=420, hanging=420)
+                set_spacing(paragraph, before=200, after=0)
+                set_keep_next(paragraph, True)
+                style_runs(paragraph, bold=True, underline=False, size=12, color="FF0000")
+                awaiting_drug_names = True
+                changed = True
+                continue
+
+            if in_drug_section and (
+                text in context_drug_names
+                or (awaiting_drug_names and text not in label_texts)
+            ):
+                ensure_num_pr(paragraph, 12)
+                set_ind_xml(paragraph, left=420, hanging=420)
+                set_spacing(paragraph, before=200, after=0)
+                set_keep_next(paragraph, True)
+                style_runs(paragraph, bold=True, underline=True, size=12, color="0000FF")
+                changed = True
+                continue
+
+            if text in label_texts:
+                awaiting_drug_names = False
+                paragraph.alignment = (
+                    WD_ALIGN_PARAGRAPH.JUSTIFY
+                    if in_drug_section and text in {"基因变异与药物关联分析：", "药物疗效临床解析："}
+                    else None
+                )
+                set_spacing(paragraph, after=0)
+                set_keep_next(paragraph, True)
+                style_runs(paragraph, bold=True, underline=False, size=10.5)
+                changed = True
+                continue
+
+            # Narrative text: reviewed report uses two-character first-line
+            # indent and both-side alignment for gene/drug analyses.
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            set_ind_xml(paragraph, first_line=420, first_line_chars=200)
+            set_spacing(paragraph, after=0)
+            set_keep_next(paragraph, False)
+            style_runs(paragraph, bold=False, underline=False, size=10.5)
+            changed = True
+
+        if changed:
+            doc.save(file_path)
+
     def _restore_variant_summary_table_style(
         self, file_path: str, context: dict | None = None
     ) -> None:
@@ -653,6 +1110,14 @@ class TemplateRenderer:
         link_color = RGBColor.from_string(
             self._hex_color_config(style_cfg.get("link_color"), "0000FF")
         )
+        plain_texts = {
+            str(value).strip()
+            for value in (
+                style_cfg.get("plain_texts")
+                or ["未见突变", "未检出", "未检出有害变异", "-", "--", "—"]
+            )
+            if str(value).strip()
+        }
 
         def is_variant_summary_table(table) -> bool:
             if len(table.columns) != 4 or not table.rows:
@@ -689,10 +1154,31 @@ class TemplateRenderer:
                 border.set(qn("w:space"), "0")
                 border.set(qn("w:color"), border_color)
 
+        def is_plain_text(text: str) -> bool:
+            normalized = (text or "").strip()
+            return normalized in plain_texts or any(
+                token in normalized for token in plain_texts if len(token) > 1
+            )
+
+        def force_plain_run(run) -> None:
+            run.font.bold = False
+            run.font.underline = False
+            run.font.color.rgb = body_font_color
+            try:
+                run.style = doc.styles["Default Paragraph Font"]
+            except Exception:
+                pass
+
         def style_cell(cell, row_idx: int, col_idx: int) -> None:
             header = row_idx == 0
-            dash_only = (cell.text or "").strip() in {"-", "--", "—"}
-            link_cell = row_idx > 0 and (col_idx == 0 or (col_idx in {2, 3} and not dash_only))
+            normalized_text = (cell.text or "").strip()
+            plain_cell = is_plain_text(normalized_text)
+            dash_only = normalized_text in {"-", "--", "—"}
+            link_cell = (
+                row_idx > 0
+                and not plain_cell
+                and (col_idx == 0 or (col_idx in {2, 3} and not dash_only))
+            )
 
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
             set_cell_borders(cell)
@@ -716,9 +1202,9 @@ class TemplateRenderer:
                         run.font.underline = link_underline
                         run.font.color.rgb = link_color
                     else:
-                        run.font.bold = False
-                        run.font.underline = False
-                        run.font.color.rgb = body_font_color
+                        force_plain_run(run)
+                    if not header and is_plain_text(run.text):
+                        force_plain_run(run)
 
         for table in doc.tables:
             if not is_variant_summary_table(table):
@@ -765,6 +1251,14 @@ class TemplateRenderer:
         link_color = RGBColor.from_string(
             self._hex_color_config(style_cfg.get("link_color"), "0000FF")
         )
+        plain_texts = {
+            str(value).strip()
+            for value in (
+                style_cfg.get("plain_texts")
+                or ["未见突变", "未检出", "未检出有害变异", "-", "--", "—"]
+            )
+            if str(value).strip()
+        }
 
         def is_variant_detail_table(table) -> bool:
             if len(table.columns) != 9 or len(table.rows) < 2:
@@ -803,6 +1297,21 @@ class TemplateRenderer:
                 border.set(qn("w:space"), "0")
                 border.set(qn("w:color"), border_color)
 
+        def is_plain_text(text: str) -> bool:
+            normalized = (text or "").strip()
+            return normalized in plain_texts or any(
+                token in normalized for token in plain_texts if len(token) > 1
+            )
+
+        def force_plain_run(run) -> None:
+            run.font.bold = False
+            run.font.underline = False
+            run.font.color.rgb = body_font_color
+            try:
+                run.style = doc.styles["Default Paragraph Font"]
+            except Exception:
+                pass
+
         def set_run_font(run, *, header: bool, link: bool) -> None:
             self._set_run_font_name(run, font_name)
             run.font.size = Pt(header_font_size if header else body_font_size)
@@ -814,8 +1323,9 @@ class TemplateRenderer:
                 run.font.underline = link_underline
                 run.font.color.rgb = link_color
             else:
-                run.font.underline = False
-                run.font.color.rgb = body_font_color
+                force_plain_run(run)
+            if not header and is_plain_text(run.text):
+                force_plain_run(run)
 
         for table in doc.tables:
             if not is_variant_detail_table(table):
@@ -825,8 +1335,13 @@ class TemplateRenderer:
                 for col_idx, cell in enumerate(row.cells):
                     header = row_idx in {0, 1}
                     text = (cell.text or "").strip()
+                    plain_cell = is_plain_text(text)
                     dash_only = text in {"", "-", "--", "—"}
-                    link = row_idx >= 2 and (col_idx == 0 or (col_idx in {7, 8} and not dash_only))
+                    link = (
+                        row_idx >= 2
+                        and not plain_cell
+                        and (col_idx == 0 or (col_idx in {7, 8} and not dash_only))
+                    )
                     cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
                     set_cell_borders(cell)
                     if header:
@@ -928,6 +1443,124 @@ class TemplateRenderer:
         if changed:
             doc.save(file_path)
 
+    def _restore_clinical_result_table_style(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
+        """Normalize reviewed borders for 2.2/2.3/3.3 tables and mark detected 3.3 results."""
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+        from docx.shared import RGBColor
+
+        doc = Document(file_path)
+        changed = False
+        style_cfg = self._panel_style_config(context, "clinical_result_tables")
+        border_color = self._hex_color_config(style_cfg.get("border_color"), "000000")
+        border_size = self._int_text_config(style_cfg.get("border_size"), "6")
+        detected_result_color = RGBColor.from_string(
+            self._hex_color_config(style_cfg.get("detected_result_color"), "FF0000")
+        )
+        undetected_values = {
+            str(value).strip()
+            for value in (
+                style_cfg.get("undetected_values")
+                or ["", "-", "--", "—", "未检出", "未检出有害变异"]
+            )
+        }
+
+        def clean_text(value: str) -> str:
+            return "".join((value or "").split())
+
+        def header_text(table) -> str:
+            if not table.rows:
+                return ""
+            return clean_text(" ".join(cell.text for cell in table.rows[0].cells))
+
+        def table_kind(table) -> str | None:
+            header = header_text(table)
+            if (
+                len(table.columns) == 3
+                and "药物名称" in header
+                and "相关基因" in header
+                and "药物适应情况" in header
+            ):
+                return "chemotherapy"
+            if (
+                len(table.columns) == 3
+                and "检测基因" in header
+                and "检测内容" in header
+                and "检测结果" in header
+            ):
+                return "nccn"
+            if (
+                len(table.columns) == 3
+                and "基因" in header
+                and "检测结果" in header
+                and "临床解读" in header
+            ):
+                return "immune"
+            return None
+
+        def set_table_borders(table) -> None:
+            tbl_pr = table._tbl.tblPr
+            borders = tbl_pr.find(qn("w:tblBorders"))
+            if borders is None:
+                borders = OxmlElement("w:tblBorders")
+                tbl_pr.append(borders)
+            for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
+                border = borders.find(qn(f"w:{side}"))
+                if border is None:
+                    border = OxmlElement(f"w:{side}")
+                    borders.append(border)
+                border.set(qn("w:val"), "single")
+                border.set(qn("w:sz"), border_size)
+                border.set(qn("w:space"), "0")
+                border.set(qn("w:color"), border_color)
+
+        def set_cell_borders(cell) -> None:
+            tc_pr = cell._tc.get_or_add_tcPr()
+            borders = tc_pr.find(qn("w:tcBorders"))
+            if borders is None:
+                borders = OxmlElement("w:tcBorders")
+                tc_pr.append(borders)
+            for side in ("top", "left", "bottom", "right"):
+                border = borders.find(qn(f"w:{side}"))
+                if border is None:
+                    border = OxmlElement(f"w:{side}")
+                    borders.append(border)
+                border.set(qn("w:val"), "single")
+                border.set(qn("w:sz"), border_size)
+                border.set(qn("w:space"), "0")
+                border.set(qn("w:color"), border_color)
+
+        def is_detected_result(text: str) -> bool:
+            normalized = (text or "").strip()
+            compact = clean_text(normalized)
+            return bool(
+                normalized
+                and compact not in {clean_text(value) for value in undetected_values}
+                and not compact.startswith("未检出")
+            )
+
+        for table in doc.tables:
+            kind = table_kind(table)
+            if kind is None:
+                continue
+            set_table_borders(table)
+            for row_idx, row in enumerate(table.rows):
+                for cell in row.cells:
+                    set_cell_borders(cell)
+                if kind == "immune" and row_idx > 0 and len(row.cells) >= 2:
+                    result_cell = row.cells[1]
+                    if is_detected_result(result_cell.text):
+                        for paragraph in result_cell.paragraphs:
+                            for run in paragraph.runs:
+                                run.font.color.rgb = detected_result_color
+                                run.font.underline = False
+            changed = True
+
+        if changed:
+            doc.save(file_path)
+
     def _apply_report_content_fixes(
         self,
         file_path: str,
@@ -939,6 +1572,7 @@ class TemplateRenderer:
         This keeps one shared template usable for both 358 and 301 CRC reports while
         matching the reviewed final-report layout.
         """
+        import copy
         import os
         import re
         import tempfile
@@ -1944,24 +2578,84 @@ class TemplateRenderer:
         if not target_headings:
             return
 
-        doc = Document(file_path)
-        paragraphs = list(doc.paragraphs)
+        import os
+        import shutil
+        import tempfile
+        import xml.etree.ElementTree as ET
+        from zipfile import ZIP_DEFLATED, ZipFile
+
+        ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        for prefix, uri in {
+            "w": ns_w,
+            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        }.items():
+            ET.register_namespace(prefix, uri)
+
+        w_body = f"{{{ns_w}}}body"
+        w_p = f"{{{ns_w}}}p"
+        w_ppr = f"{{{ns_w}}}pPr"
+        w_keep_next = f"{{{ns_w}}}keepNext"
+        w_t = f"{{{ns_w}}}t"
+        w_br = f"{{{ns_w}}}br"
+        w_type = f"{{{ns_w}}}type"
+        w_last_rendered_page_break = f"{{{ns_w}}}lastRenderedPageBreak"
+        w_drawing = f"{{{ns_w}}}drawing"
+        w_pict = f"{{{ns_w}}}pict"
+
+        def paragraph_text(elem) -> str:
+            return "".join((node.text or "") for node in elem.iter(w_t)).strip()
+
+        def has_page_break(elem) -> bool:
+            return any(
+                (br.get(w_type) or br.get("type")) == "page"
+                for br in elem.iter(w_br)
+            ) or any(elem.iter(w_last_rendered_page_break))
+
+        def is_blank_paragraph(elem) -> bool:
+            return (
+                elem.tag == w_p
+                and not paragraph_text(elem)
+                and not any(elem.iter(w_drawing))
+                and not any(elem.iter(w_pict))
+            )
+
+        def ensure_keep_next(elem) -> bool:
+            ppr = elem.find(w_ppr)
+            if ppr is None:
+                ppr = ET.Element(w_ppr)
+                elem.insert(0, ppr)
+            if ppr.find(w_keep_next) is not None:
+                return False
+            ppr.append(ET.Element(w_keep_next))
+            return True
+
+        with ZipFile(file_path, "r") as zin:
+            document_xml = zin.read("word/document.xml")
+            document_info = zin.getinfo("word/document.xml")
+            other_entries = [
+                (info, zin.read(info.filename))
+                for info in zin.infolist()
+                if info.filename != "word/document.xml"
+            ]
+
+        root = ET.fromstring(document_xml)
+        body = root.find(w_body)
+        if body is None:
+            return
+
+        children = list(body)
         to_remove = []
+        changed = False
 
-        def has_page_break(paragraph) -> bool:
-            return 'w:type="page"' in paragraph._p.xml or "w:lastRenderedPageBreak" in paragraph._p.xml
-
-        def is_blank(paragraph) -> bool:
-            return not (paragraph.text or "").strip()
-
-        for idx, paragraph in enumerate(paragraphs):
-            if (paragraph.text or "").strip() not in target_headings:
+        for idx, elem in enumerate(children):
+            if elem.tag != w_p or paragraph_text(elem) not in target_headings:
                 continue
+            changed = ensure_keep_next(elem) or changed
             cluster = []
             saw_page_break = False
             prev_idx = idx - 1
-            while prev_idx >= 0 and is_blank(paragraphs[prev_idx]):
-                prev = paragraphs[prev_idx]
+            while prev_idx >= 0 and is_blank_paragraph(children[prev_idx]):
+                prev = children[prev_idx]
                 cluster.append(prev)
                 saw_page_break = saw_page_break or has_page_break(prev)
                 prev_idx -= 1
@@ -1971,19 +2665,33 @@ class TemplateRenderer:
         removed = 0
         seen = set()
         for paragraph in to_remove:
-            marker = id(paragraph._element)
+            marker = id(paragraph)
             if marker in seen:
                 continue
-            parent = paragraph._element.getparent()
-            if parent is None:
-                continue
-            parent.remove(paragraph._element)
+            body.remove(paragraph)
             seen.add(marker)
             removed += 1
 
-        if removed:
-            doc.save(file_path)
-            self.logger.debug("已移除标题前空白分页段落", removed=removed)
+        changed = changed or bool(removed)
+        if not changed:
+            return
+
+        fd, tmp_name = tempfile.mkstemp(suffix=".docx")
+        os.close(fd)
+        try:
+            with ZipFile(tmp_name, "w", compression=ZIP_DEFLATED) as zout:
+                zout.writestr(
+                    document_info,
+                    ET.tostring(root, encoding="utf-8", xml_declaration=True),
+                )
+                for info, data in other_entries:
+                    zout.writestr(info, data)
+            shutil.move(tmp_name, file_path)
+        finally:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+
+        self.logger.debug("已移除标题前空白分页段落", removed=removed)
 
     def _normalize_front_matter_spacing(self, file_path: str) -> None:
         """Keep the report guide on its own page without template spacer blanks.
@@ -2285,13 +2993,78 @@ class TemplateRenderer:
             underline=False,
             font_name="微软雅黑",
             prefix_font_name=None,
+            justify=False,
+            spacing_before=None,
+            spacing_after=None,
+            first_line_twips=None,
+            first_line_chars=None,
+            left_twips=None,
+            hanging_twips=None,
+            num_id=None,
+            ilvl=0,
+            keep_next=False,
         ):
             new_p = OxmlElement("w:p")
+
+            ppr = None
+
+            def ensure_ppr():
+                nonlocal ppr
+                if ppr is None:
+                    ppr = OxmlElement("w:pPr")
+                    new_p.append(ppr)
+                return ppr
+
             if page_break_before:
-                ppr = OxmlElement("w:pPr")
+                ppr = ensure_ppr()
                 page_break = OxmlElement("w:pageBreakBefore")
                 ppr.append(page_break)
-                new_p.append(ppr)
+            if keep_next:
+                ppr = ensure_ppr()
+                ppr.append(OxmlElement("w:keepNext"))
+            if num_id is not None:
+                ppr = ensure_ppr()
+                num_pr = OxmlElement("w:numPr")
+                ilvl_elem = OxmlElement("w:ilvl")
+                ilvl_elem.set(qn("w:val"), str(ilvl))
+                num_id_elem = OxmlElement("w:numId")
+                num_id_elem.set(qn("w:val"), str(num_id))
+                num_pr.append(ilvl_elem)
+                num_pr.append(num_id_elem)
+                ppr.append(num_pr)
+            if spacing_before is not None or spacing_after is not None:
+                ppr = ensure_ppr()
+                spacing = OxmlElement("w:spacing")
+                if spacing_before is not None:
+                    spacing.set(qn("w:before"), str(spacing_before))
+                if spacing_after is not None:
+                    spacing.set(qn("w:after"), str(spacing_after))
+                ppr.append(spacing)
+            if any(
+                value is not None
+                for value in (
+                    first_line_twips,
+                    first_line_chars,
+                    left_twips,
+                    hanging_twips,
+                )
+            ):
+                ppr = ensure_ppr()
+                ind = OxmlElement("w:ind")
+                if left_twips is not None:
+                    ind.set(qn("w:left"), str(left_twips))
+                if hanging_twips is not None:
+                    ind.set(qn("w:hanging"), str(hanging_twips))
+                if first_line_twips is not None:
+                    ind.set(qn("w:firstLine"), str(first_line_twips))
+                if first_line_chars is not None:
+                    ind.set(qn("w:firstLineChars"), str(first_line_chars))
+                ppr.append(ind)
+            if justify:
+                ppr = ensure_ppr()
+                jc = OxmlElement("w:jc")
+                jc.set(qn("w:val"), "both")
+                ppr.append(jc)
             if prefix:
                 # 前缀 run
                 pr = OxmlElement("w:r")
@@ -2369,6 +3142,19 @@ class TemplateRenderer:
         # 从占位标记位置开始，链式插入
         current = placeholder_para._element
 
+        body_options = {
+            "size": 10.5,
+            "justify": True,
+            "first_line_twips": 420,
+            "first_line_chars": 200,
+            "spacing_after": 0,
+        }
+        label_options = {
+            "bold": True,
+            "size": 10.5,
+            "spacing_after": 0,
+        }
+
         # 总述
         current = add_para_after(
             current,
@@ -2376,10 +3162,10 @@ class TemplateRenderer:
             f"其中与靶向/免疫药物相关的变异：{drug_count}个。"
             "（下面红色标注的为有对应靶向/免疫药物的基因变异。）",
             size=10.5,
+            justify=True,
+            spacing_after=0,
+            num_id=10,
         )
-
-        # 空行
-        current = add_para_after(current, "")
 
         # === 基因变异解读 ===
         for section in sections:
@@ -2396,50 +3182,57 @@ class TemplateRenderer:
                 prefix="u ",
                 prefix_font_name="Wingdings",
                 underline=True,
+                justify=True,
+                spacing_before=200,
             )
 
             # 基因简介（紧跟标题，无多余空行）
             intro = section.get("intro", "")
             if intro:
                 current = add_para_after(
-                    current, "基因简介：", bold=True, size=10.5
+                    current, "基因简介：", **label_options
                 )
-                current = add_text_block(current, intro, size=10.5)
+                current = add_text_block(current, intro, **body_options)
 
             # 基因变异说明
             desc = section.get("mutation_desc", "")
             if desc:
                 current = add_para_after(
-                    current, "基因变异说明：", bold=True, size=10.5
+                    current, "基因变异说明：", **label_options
                 )
-                current = add_text_block(current, desc, size=10.5)
+                current = add_text_block(current, desc, **body_options)
 
             # 基因变异解析
             analysis = section.get("mutation_analysis", "")
             if analysis:
                 current = add_para_after(
-                    current, "基因变异解析：", bold=True, size=10.5
+                    current, "基因变异解析：", **label_options
                 )
-                current = add_text_block(current, analysis, size=10.5)
-
-            # 变异之间留一个空行分隔
-            current = add_para_after(current, "")
+                current = add_text_block(current, analysis, **body_options)
 
         # === 靶向药物解析 ===
         if benefit_sections or caution_sections:
+            current = add_para_after(current, "")
             current = add_para_after(
                 current, "靶向药物/免疫用药提示解析",
-                bold=True, size=12,
+                bold=True,
+                size=12,
+                justify=True,
+                spacing_after=0,
+                num_id=9,
             )
-            current = add_para_after(current, "")
 
         # 获益药物
         if benefit_sections:
             current = add_para_after(
                 current, "潜在获益靶向/免疫药物解析",
-                bold=True, size=11,
+                bold=True,
+                size=12,
+                spacing_before=200,
+                keep_next=True,
+                num_id=9,
+                ilvl=1,
             )
-            current = add_para_after(current, "")
 
             for ds in benefit_sections:
                 gene = ds.get("gene", "")
@@ -2455,32 +3248,53 @@ class TemplateRenderer:
                         current,
                         header,
                         bold=True, size=12, color="FF0000",
+                        justify=True,
+                        spacing_before=200,
+                        left_twips=420,
+                        hanging_twips=420,
+                        num_id=11,
+                        keep_next=True,
                     )
                 if drug_name:
-                    current = add_text_block(current, drug_name, size=10.5)
+                    current = add_text_block(
+                        current,
+                        drug_name,
+                        bold=True,
+                        size=12,
+                        color="0000FF",
+                        underline=True,
+                        spacing_before=200,
+                        left_twips=420,
+                        hanging_twips=420,
+                        num_id=12,
+                        keep_next=True,
+                    )
                 relation = ds.get("relation", "")
                 if relation:
                     current = add_para_after(
                         current,
                         "基因变异与药物关联分析：",
-                        bold=True,
-                        size=10.5,
+                        **label_options,
+                        justify=True,
                     )
-                    current = add_text_block(current, relation, size=10.5)
+                    current = add_text_block(current, relation, **body_options)
                 if clinical:
                     current = add_para_after(
-                        current, "药物疗效临床解析：", bold=True, size=10.5
+                        current, "药物疗效临床解析：", **label_options, justify=True
                     )
-                    current = add_text_block(current, clinical, size=10.5)
-                current = add_para_after(current, "")
+                    current = add_text_block(current, clinical, **body_options)
 
         # 负相关药物
         if caution_sections:
             current = add_para_after(
                 current, "潜在负相关靶向/免疫药物解析",
-                bold=True, size=11,
+                bold=True,
+                size=12,
+                spacing_before=200,
+                keep_next=True,
+                num_id=9,
+                ilvl=1,
             )
-            current = add_para_after(current, "")
 
             for ds in caution_sections:
                 gene = ds.get("gene", "")
@@ -2496,24 +3310,41 @@ class TemplateRenderer:
                         current,
                         header,
                         bold=True, size=12, color="FF0000",
+                        justify=True,
+                        spacing_before=200,
+                        left_twips=420,
+                        hanging_twips=420,
+                        num_id=11,
+                        keep_next=True,
                     )
                 if drug_name:
-                    current = add_text_block(current, drug_name, size=10.5)
+                    current = add_text_block(
+                        current,
+                        drug_name,
+                        bold=True,
+                        size=12,
+                        color="0000FF",
+                        underline=True,
+                        spacing_before=200,
+                        left_twips=420,
+                        hanging_twips=420,
+                        num_id=12,
+                        keep_next=True,
+                    )
                 relation = ds.get("relation", "")
                 if relation:
                     current = add_para_after(
                         current,
                         "基因变异与药物关联分析：",
-                        bold=True,
-                        size=10.5,
+                        **label_options,
+                        justify=True,
                     )
-                    current = add_text_block(current, relation, size=10.5)
+                    current = add_text_block(current, relation, **body_options)
                 if clinical:
                     current = add_para_after(
-                        current, "药物疗效临床解析：", bold=True, size=10.5
+                        current, "药物疗效临床解析：", **label_options, justify=True
                     )
-                    current = add_text_block(current, clinical, size=10.5)
-                current = add_para_after(current, "")
+                    current = add_text_block(current, clinical, **body_options)
 
         # === 参考文献 ===
         # The CRC golden template keeps the reviewed appendix-level reference
@@ -2642,8 +3473,6 @@ class TemplateRenderer:
         role_paths = {
             role: path for role, path in role_paths.items() if path and Path(path).exists()
         }
-        if not role_paths:
-            return
 
         def paragraph_text(paragraph) -> str:
             return "".join(paragraph.xpath(".//w:t/text()", namespaces=ns))
@@ -2734,7 +3563,7 @@ class TemplateRenderer:
         for order, drawing in enumerate(drawings):
             blip = drawing.xpath(".//a:blip[@r:embed]", namespaces=ns)
             if blip:
-                drawing_blips.append((drawing_offset(drawing, order), blip[0]))
+                drawing_blips.append((drawing_offset(drawing, order), drawing, blip[0]))
         drawing_blips.sort(key=lambda item: item[0])
         if len(drawing_blips) < 2:
             return
@@ -2746,9 +3575,28 @@ class TemplateRenderer:
         replacements: dict[str, bytes] = {}
         changed = False
 
-        for role, (_, blip) in zip(("detector", "reviewer"), drawing_blips[:2]):
+        def remove_drawing(drawing) -> None:
+            drawing_container = drawing.getparent()
+            run = drawing_container.getparent() if drawing_container is not None else None
+            if run is not None and run.tag.endswith("}r"):
+                parent = run.getparent()
+                if parent is not None:
+                    parent.remove(run)
+                    return
+            if drawing_container is not None:
+                parent = drawing_container.getparent()
+                if parent is not None:
+                    parent.remove(drawing_container)
+                    return
+            parent = drawing.getparent()
+            if parent is not None:
+                parent.remove(drawing)
+
+        for role, (_, drawing, blip) in zip(("detector", "reviewer"), drawing_blips[:2]):
             image_path = role_paths.get(role)
             if not image_path:
+                remove_drawing(drawing)
+                changed = True
                 continue
             image_bytes, extension, content_type = prepare_image(image_path)
             target = f"media/reportgen_signature_{role}.{extension}"
@@ -3421,12 +4269,13 @@ class TemplateRenderer:
             self.logger.debug("已恢复后置章节页眉页脚", sections=changed)
 
     def _normalize_toc_decoration_layout(self, file_path: str) -> None:
-        """Move the TOC decorative vertical line left of the generated entries.
+        """Restore the reviewed TOC decorative vertical line coordinates.
 
         The template keeps the cyan TOC line as a floating shape anchored to the
         "目    录" paragraph. Word/WPS/LibreOffice can lay out refreshed TOC text
-        slightly differently, so the fixed template offset may cross the entry
-        text. We only touch the line and small circle anchored to the TOC title.
+        slightly differently, so after static TOC rewriting we restore the
+        reviewed report's line and circle offsets. We only touch the line and
+        small circle anchored to the TOC title.
         """
         import os
         import re
@@ -3465,14 +4314,14 @@ class TemplateRenderer:
         v_line = f"{{{ns_v}}}line"
         v_shape = f"{{{ns_v}}}shape"
 
-        line_offset_emu = 127000  # 10pt from the text area
-        circle_offset_emu = 92710  # keep the circle centered on the line
-        line_offset_top_emu = 533400  # 42pt below the TOC title anchor
-        circle_offset_top_emu = 457200  # 36pt, centered above the line
-        line_margin_left_pt = 10.0
-        circle_margin_left_pt = 7.3
-        line_margin_top_pt = 42.0
-        circle_margin_top_pt = 36.0
+        line_offset_emu = 862965
+        circle_offset_emu = 828675
+        line_offset_top_emu = 1119505
+        circle_offset_top_emu = 1043305
+        line_margin_left_pt = 67.95
+        circle_margin_left_pt = 65.25
+        line_margin_top_pt = 88.15
+        circle_margin_top_pt = 82.15
 
         def para_text(elem) -> str:
             return "".join((node.text or "") for node in elem.iter(w_t))
@@ -3628,9 +4477,9 @@ class TemplateRenderer:
         if not self._write_static_toc_page_numbers(file_path, page_numbers, context):
             return
 
-        # Re-render after removing TOC fields and updateFields. Static TOC
-        # rewriting can slightly change layout, so the second pass is the
-        # number set users will actually see in PDF/Word.
+        # Re-render after TOC rewriting. The visible field results can slightly
+        # change layout, so the second pass is the number set users will
+        # actually see in PDF/Word before opening-time field updates.
         final_numbers = self._detect_toc_page_numbers_from_pdf_layout(
             file_path=file_path,
             soffice=soffice,
@@ -3649,7 +4498,15 @@ class TemplateRenderer:
         page_numbers: dict[str, int],
         context: dict | None = None,
     ) -> bool:
-        """Replace TOC field results with plain visible labels and page numbers."""
+        """Write visible TOC labels/page numbers while keeping Word jump fields.
+
+        The reviewed report uses Word field codes rather than plain hyperlinks:
+        each TOC row wraps the label in ``HYPERLINK \\l`` and the page number in
+        ``PAGEREF ... \\h``. Keep that structure so clicking the TOC works in
+        Word/WPS while still using PDF-derived page numbers as the visible field
+        result.
+        """
+        import copy
         import os
         import re
         import shutil
@@ -3671,6 +4528,7 @@ class TemplateRenderer:
         def normalize_label(text: str) -> str:
             text = re.sub(r"\s+", "", text or "")
             text = re.sub(r"\d+$", "", text)
+            text = re.sub(r"^\d+[.．、]", "", text)
             return text
 
         style_cfg = self._panel_style_config(context, "toc")
@@ -3687,6 +4545,17 @@ class TemplateRenderer:
         )
         section_bold = self._bool_config(style_cfg.get("section_bold"), True)
         item_bold = self._bool_config(style_cfg.get("item_bold"), False)
+        content_top_padding_twips = max(
+            0,
+            int(
+                round(
+                    self._float_config(
+                        style_cfg.get("content_top_padding_pt"), 0.0
+                    )
+                    * 20
+                )
+            ),
+        )
 
         src = Path(file_path)
         with ZipFile(src, "r") as zin:
@@ -3705,21 +4574,121 @@ class TemplateRenderer:
             if toc_sdt is None:
                 return False
 
-            section_labels = [
-                "第一部分：基本信息",
-                "第二部分：检测结果",
-                "第三部分：基因变异及相应靶向/免疫药物解析",
-                "第四部分：附录",
-            ]
-            display_labels = {
-                normalize_label(label): label
-                for label in [*section_labels, *page_numbers.keys()]
-            }
             normalized_numbers = {
                 normalize_label(label): str(number)
                 for label, number in page_numbers.items()
             }
-            changed = False
+
+            toc_groups = [
+                (
+                    "第一部分：基本信息",
+                    ["患者及样本信息", "检测内容"],
+                ),
+                (
+                    "第二部分：检测结果",
+                    [
+                        "检测结果小结",
+                        "靶向药物相关检测结果",
+                        "免疫治疗疗效评估",
+                        "检测结果说明",
+                    ],
+                ),
+                (
+                    "第三部分：基因变异及相应靶向/免疫药物解析",
+                    ["基因变异解析", "靶向药物/免疫用药提示解析", "阅读说明"],
+                ),
+                (
+                    "第四部分：附录",
+                    ["常见问题解答", "结直肠癌诊疗知识", "癌症相关信号通路", "基因检测列表", "参考文献"],
+                ),
+            ]
+
+            toc_target_aliases = {
+                "患者及样本信息": ["患者信息", "样本信息"],
+                "靶向药物相关检测结果": ["靶向药物相关检测结果"],
+                "靶向药物/免疫用药提示解析": ["靶向药物/免疫用药提示解析"],
+                "阅读说明": ["阅读说明"],
+            }
+
+            def paragraph_text(elem: Any) -> str:
+                return "".join(elem.xpath(".//w:t/text()", namespaces=ns))
+
+            def is_inside_toc(elem: Any) -> bool:
+                current = elem
+                while current is not None:
+                    if current is toc_sdt:
+                        return True
+                    current = current.getparent()
+                return False
+
+            def existing_bookmark_names(elem: Any) -> list[str]:
+                return [
+                    bookmark.get(qn("name")) or ""
+                    for bookmark in elem.xpath(".//w:bookmarkStart", namespaces=ns)
+                    if bookmark.get(qn("name"))
+                ]
+
+            def preferred_bookmark(names: list[str]) -> str | None:
+                for prefix in ("_Toc", "__RefHeading"):
+                    for name in names:
+                        if name.startswith(prefix):
+                            return name
+                return names[0] if names else None
+
+            existing_bookmark_ids = [
+                int(value)
+                for value in root.xpath(".//w:bookmarkStart/@w:id", namespaces=ns)
+                if str(value).isdigit()
+            ]
+            next_bookmark_id = max(existing_bookmark_ids, default=0) + 1
+
+            def make_auto_bookmark_name(label: str) -> str:
+                safe = re.sub(r"[^A-Za-z0-9_]+", "_", label)
+                safe = safe.strip("_")[:24] or "toc"
+                return f"_TocAuto_{safe}_{next_bookmark_id}"
+
+            def add_bookmark_to_paragraph(elem: Any, label: str) -> str:
+                nonlocal next_bookmark_id
+                bookmark_name = make_auto_bookmark_name(label)
+                bookmark_id = str(next_bookmark_id)
+                next_bookmark_id += 1
+                start = etree.Element(qn("bookmarkStart"))
+                start.set(qn("id"), bookmark_id)
+                start.set(qn("name"), bookmark_name)
+                end = etree.Element(qn("bookmarkEnd"))
+                end.set(qn("id"), bookmark_id)
+
+                insert_at = 0
+                if len(elem) and elem[0].tag == qn("pPr"):
+                    insert_at = 1
+                elem.insert(insert_at, start)
+                elem.append(end)
+                return bookmark_name
+
+            def find_or_create_target_bookmark(label: str) -> str | None:
+                candidate_labels = toc_target_aliases.get(label, [label])
+                candidate_norms = [normalize_label(candidate) for candidate in candidate_labels]
+                candidate_norms = [value for value in candidate_norms if value]
+
+                fallback_para = None
+                for paragraph in root.xpath(".//w:p", namespaces=ns):
+                    if is_inside_toc(paragraph):
+                        continue
+                    text_norm = normalize_label(paragraph_text(paragraph))
+                    if not text_norm:
+                        continue
+                    if not any(candidate in text_norm for candidate in candidate_norms):
+                        continue
+                    names = existing_bookmark_names(paragraph)
+                    selected = preferred_bookmark(names)
+                    if selected:
+                        return selected
+                    if fallback_para is None:
+                        fallback_para = paragraph
+
+                if fallback_para is not None:
+                    return add_bookmark_to_paragraph(fallback_para, label)
+                return None
 
             def make_run(
                 text: str | None = None,
@@ -3750,31 +4719,154 @@ class TemplateRenderer:
                     t.text = text or ""
                 return run
 
-            for para in toc_sdt.xpath(".//w:p", namespaces=ns):
-                text_nodes = para.xpath(".//w:t", namespaces=ns)
-                para_text = "".join(node.text or "" for node in text_nodes)
-                label = normalize_label(para_text)
-                display_label = display_labels.get(label)
-                if display_label is None:
-                    continue
+            def make_field_run(
+                *,
+                field_char_type: str | None = None,
+                instruction: str | None = None,
+            ) -> Any:
+                run = etree.Element(qn("r"))
+                if field_char_type:
+                    field_char = etree.SubElement(run, qn("fldChar"))
+                    field_char.set(qn("fldCharType"), field_char_type)
+                if instruction is not None:
+                    instr = etree.SubElement(run, qn("instrText"))
+                    instr.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+                    instr.text = instruction
+                return run
 
-                # Replace the field/hyperlink result with plain static runs.
-                # This prevents later Office/PDF engines from hiding or
-                # regenerating the PAGEREF result differently.
-                for child in list(para):
-                    if child.tag != qn("pPr"):
-                        para.remove(child)
-                is_section = normalize_label(display_label) in {
-                    normalize_label(item) for item in section_labels
-                }
-                para.append(make_run(display_label, section=is_section))
-                if label in normalized_numbers:
+            def make_toc_ppr(section: bool, before_twips: int = 0) -> Any:
+                p_pr = etree.Element(qn("pPr"))
+                tabs = etree.SubElement(p_pr, qn("tabs"))
+                tab = etree.SubElement(tabs, qn("tab"))
+                tab.set(qn("val"), "right")
+                tab.set(qn("pos"), "7700")
+                etree.SubElement(p_pr, qn("adjustRightInd")).set(qn("val"), "0")
+                etree.SubElement(p_pr, qn("snapToGrid")).set(qn("val"), "0")
+                spacing = etree.SubElement(p_pr, qn("spacing"))
+                if before_twips:
+                    spacing.set(qn("before"), str(before_twips))
+                spacing.set(qn("after"), "0")
+                spacing.set(qn("line"), "312")
+                spacing.set(qn("lineRule"), "auto")
+                indent = etree.SubElement(p_pr, qn("ind"))
+                indent.set(qn("left"), "1980")
+                indent.set(qn("leftChars"), "900")
+                r_pr = etree.SubElement(p_pr, qn("rPr"))
+                fonts = etree.SubElement(r_pr, qn("rFonts"))
+                fonts.set(qn("ascii"), "Tahoma")
+                fonts.set(qn("hAnsi"), "Tahoma")
+                fonts.set(qn("eastAsia"), font_name)
+                fonts.set(qn("cs"), "Times New Roman")
+                if section and section_bold:
+                    etree.SubElement(r_pr, qn("b"))
+                    etree.SubElement(r_pr, qn("bCs"))
+                    color = etree.SubElement(r_pr, qn("color"))
+                    color.set(qn("val"), section_color)
+                elif not section and item_color:
+                    color = etree.SubElement(r_pr, qn("color"))
+                    color.set(qn("val"), item_color)
+                size = etree.SubElement(r_pr, qn("sz"))
+                size.set(qn("val"), section_size if section else item_size)
+                size_cs = etree.SubElement(r_pr, qn("szCs"))
+                size_cs.set(qn("val"), section_size if section else item_size)
+                lang = etree.SubElement(r_pr, qn("lang"))
+                lang.set(qn("val"), "en-US")
+                lang.set(qn("eastAsia"), "zh-CN")
+                lang.set(qn("bidi"), "ar-SA")
+                return p_pr
+
+            def make_toc_paragraph(
+                label: str,
+                number: str | None,
+                *,
+                section: bool,
+                before_twips: int = 0,
+            ) -> Any:
+                para = etree.Element(qn("p"))
+                para.append(make_toc_ppr(section, before_twips=before_twips))
+                anchor = find_or_create_target_bookmark(label)
+                if anchor:
+                    para.append(make_field_run(field_char_type="begin"))
+                    para.append(make_field_run(instruction=f' HYPERLINK \\l "{anchor}" '))
+                    para.append(make_field_run(field_char_type="separate"))
+                para.append(make_run(label, section=section))
+                if number is not None:
                     para.append(make_run(tab=True))
-                    para.append(make_run(normalized_numbers[label]))
-                changed = True
+                    if anchor:
+                        para.append(make_field_run(field_char_type="begin"))
+                        para.append(make_field_run(instruction=f" PAGEREF {anchor} \\h "))
+                        para.append(make_field_run(field_char_type="separate"))
+                    para.append(make_run(number))
+                    if anchor:
+                        para.append(make_field_run(field_char_type="end"))
+                if anchor:
+                    para.append(make_field_run(field_char_type="end"))
+                return para
 
-            if not changed:
+            def make_page_break_paragraph() -> Any:
+                para = etree.Element(qn("p"))
+                run = etree.SubElement(para, qn("r"))
+                br = etree.SubElement(run, qn("br"))
+                br.set(qn("type"), "page")
+                return para
+
+            toc_content = toc_sdt.find(qn("sdtContent"))
+            if toc_content is None:
                 return False
+            reviewed_section_break = None
+            for child in toc_content:
+                if child.xpath(".//w:sectPr", namespaces=ns):
+                    reviewed_section_break = etree.Element(qn("p"))
+                    p_pr = child.find(qn("pPr"))
+                    if p_pr is not None:
+                        reviewed_section_break.append(copy.deepcopy(p_pr))
+                    break
+            for child in list(toc_content):
+                toc_content.remove(child)
+
+            static_count = 0
+            first_visible_toc_entry = True
+            for section_label, item_labels in toc_groups:
+                present_items = [
+                    label
+                    for label in item_labels
+                    if normalize_label(label) in normalized_numbers
+                ]
+                if not present_items:
+                    continue
+                toc_content.append(
+                    make_toc_paragraph(
+                        section_label,
+                        None,
+                        section=True,
+                        before_twips=(
+                            content_top_padding_twips
+                            if first_visible_toc_entry
+                            else 0
+                        ),
+                    )
+                )
+                first_visible_toc_entry = False
+                static_count += 1
+                for label in present_items:
+                    number = normalized_numbers[normalize_label(label)]
+                    toc_content.append(make_toc_paragraph(label, number, section=False))
+                    static_count += 1
+
+            if not static_count:
+                return False
+
+            # The reviewed Word TOC keeps its next-section boundary inside the
+            # SDT content. Rebuilding the SDT without restoring it lets
+            # "第一部分：基本信息" flow onto the TOC page, crosses the vertical
+            # decoration line, and makes footer page numbers count the TOC
+            # itself. Preserve that boundary instead of replacing it with a
+            # plain page break; only fall back to a page break for synthetic
+            # test templates that do not carry section properties.
+            if reviewed_section_break is not None:
+                toc_content.append(reviewed_section_break)
+            else:
+                toc_content.append(make_page_break_paragraph())
 
             patched_xml = etree.tostring(
                 root,
@@ -3795,12 +4887,11 @@ class TemplateRenderer:
                     for item in zin.infolist():
                         if item.filename == "word/document.xml":
                             data = patched_xml
-                        elif item.filename == "word/settings.xml":
-                            data = self._remove_update_fields_setting(zin.read(item.filename))
                         else:
                             data = zin.read(item.filename)
                         zout.writestr(item, data)
                 shutil.move(str(tmp_path), str(src))
+                self._set_update_fields(str(src))
             finally:
                 if tmp_path.exists():
                     tmp_path.unlink()
@@ -3846,28 +4937,27 @@ class TemplateRenderer:
         import tempfile
 
         toc_entries: list[tuple[str, tuple[str, ...]]] = [
-            ("患者及样本信息", ("患者信息", "患者及样本信息")),
-            ("检测内容", ("检测内容",)),
-            ("检测结果小结", ("1.检测结果小结", "检测结果小结")),
-            ("靶向药物相关检测结果", ("2.靶向药物相关检测结果", "靶向药物相关检测结果")),
-            ("免疫治疗疗效评估", ("3.免疫治疗疗效评估", "免疫治疗疗效评估")),
-            ("检测结果说明", ("4.检测结果说明", "检测结果说明")),
-            ("基因变异解析", ("基因变异解析",)),
+            ("患者及样本信息", ("第一部分：基本信息患者信息", "患者信息样本信息")),
+            ("检测内容", ("第一部分：基本信息患者信息", "检测内容")),
+            ("检测结果小结", ("1.检测结果小结",)),
+            ("靶向药物相关检测结果", ("2.靶向药物相关检测结果",)),
+            ("免疫治疗疗效评估", ("3.免疫治疗疗效评估",)),
+            ("临床常用化疗药物评估及解析", ("4.临床常用化疗药物评估及解析",)),
+            ("检测结果说明", ("4.检测结果说明", "5.检测结果说明", "检测结果说明")),
+            ("基因变异解析", ("基因变异说明", "5.检测结果说明")),
             ("靶向药物/免疫用药提示解析", ("靶向药物/免疫用药提示解析",)),
-            ("阅读说明", ("阅读说明",)),
-            ("常见问题解答", ("常见问题解答",)),
-            ("结直肠癌诊疗知识", ("结直肠癌诊疗知识",)),
-            ("癌症相关信号通路", ("癌症相关信号通路",)),
-            ("基因检测列表", ("基因检测列表", "GeneListforMLseq")),
+            ("阅读说明", ("3.阅读说明",)),
+            ("常见问题解答", ("1.常见问题解答",)),
+            ("结直肠癌诊疗知识", ("2.结直肠癌诊疗知识",)),
+            ("癌症相关信号通路", ("3.癌症相关信号通路",)),
+            ("基因检测列表", ("4.基因检测列表", "GeneListforMLseq")),
             ("参考文献", ("5.参考文献",)),
         ]
 
         def normalize(text: str) -> str:
             return re.sub(r"\s+", "", text or "")
 
-        with tempfile.TemporaryDirectory(prefix="reportgen_pdf_") as tmp_dir, tempfile.TemporaryDirectory(
-            prefix="reportgen_pdf_profile_"
-        ) as profile_dir:
+        with tempfile.TemporaryDirectory(prefix="reportgen_pdf_") as tmp_dir:
             tmp_dir_path = Path(tmp_dir)
             input_dir = tmp_dir_path / "input"
             output_dir = tmp_dir_path / "output"
@@ -3878,11 +4968,9 @@ class TemplateRenderer:
 
             cmd = [
                 soffice,
-                f"-env:UserInstallation=file://{Path(profile_dir).as_posix()}",
                 "--headless",
                 "--nologo",
                 "--nolockcheck",
-                "--nodefault",
                 "--convert-to",
                 "pdf",
                 "--outdir",
@@ -3927,7 +5015,16 @@ class TemplateRenderer:
             for page in range(1, page_count + 1):
                 try:
                     text = subprocess.run(
-                        [pdftotext, "-f", str(page), "-l", str(page), str(pdf_path), "-"],
+                        [
+                            pdftotext,
+                            "-layout",
+                            "-f",
+                            str(page),
+                            "-l",
+                            str(page),
+                            str(pdf_path),
+                            "-",
+                        ],
                         check=True,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
@@ -3986,16 +5083,10 @@ class TemplateRenderer:
         """Return the visible report-page footer number from one PDF text page."""
         import re
 
-        for line in reversed((page_text or "").splitlines()):
-            text = line.strip()
-            if not text:
-                continue
+        lines = [line.strip() for line in (page_text or "").splitlines() if line.strip()]
+        for text in reversed(lines[-12:]):
             if re.fullmatch(r"\d{1,3}", text):
                 return int(text)
-            # Footer page numbers are the last visible token; once a non-empty
-            # non-number line is encountered near the bottom, stop scanning to
-            # avoid matching numbered evidence or section text higher up.
-            return None
         return None
 
     def _compact_gene_list_tables(self, file_path: str, context: dict | None = None) -> None:

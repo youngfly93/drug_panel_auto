@@ -62,9 +62,7 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
         FunctionProcessor(
             "signature_layout",
             "签名区布局修复失败",
-            lambda c: c.renderer._normalize_signature_layout(
-                c.output_path, c.template_context
-            ),
+            _run_signature_layout,
         ),
         FunctionProcessor(
             "cover_artifacts",
@@ -163,7 +161,15 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
     ctx.renderer._normalize_quality_control_tables(ctx.output_path)
     ctx.renderer._optimize_variant_table_layout(ctx.output_path)
     ctx.renderer._cleanup_trailing_blank_page(ctx.output_path)
-    ctx.renderer._remove_blank_page_breaks_before_headings(ctx.output_path)
+    ctx.renderer._remove_blank_page_breaks_before_headings(
+        ctx.output_path,
+        (
+            "2. 结直肠癌诊疗知识",
+            "3. 癌症相关信号通路",
+            "4. 基因检测列表",
+            "5. 参考文献",
+        ),
+    )
     try:
         ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
         ctx.renderer._set_update_fields(ctx.output_path)
@@ -183,10 +189,24 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
         ctx.output_path, ctx.template_context
     )
     ctx.renderer._restore_biomarker_table_style(ctx.output_path, ctx.template_context)
+    ctx.renderer._restore_clinical_result_table_style(
+        ctx.output_path, ctx.template_context
+    )
     ctx.renderer._restore_detection_content_underlines(ctx.output_path)
     ctx.renderer._restore_patient_letter_fill_underlines(ctx.output_path)
+    ctx.renderer._restore_msi_result_emphasis(ctx.output_path, ctx.template_context)
+    ctx.renderer._restore_part3_dynamic_styles(ctx.output_path, ctx.template_context)
+    # LibreOffice/Word field refresh can rewrite image relationships. Re-apply
+    # dynamic signatures at the very end so source-template signatures never
+    # survive as implicit defaults, and uploaded signatures remain effective.
+    ctx.renderer._replace_signature_anchor_images(ctx.output_path, ctx.template_context)
+    ctx.renderer._remove_empty_numbered_paragraphs(ctx.output_path)
 
 
 def _run_signature_placeholders(ctx: ProcessorContext) -> None:
     ctx.renderer._render_signature_placeholder(ctx.output_path, ctx.template_context)
+
+
+def _run_signature_layout(ctx: ProcessorContext) -> None:
+    ctx.renderer._normalize_signature_layout(ctx.output_path, ctx.template_context)
     ctx.renderer._replace_signature_anchor_images(ctx.output_path, ctx.template_context)

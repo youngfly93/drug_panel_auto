@@ -40,6 +40,7 @@ templates:
       - "part3_formatted_sections"
       - "signature_placeholder"
       - "bullet_lists"
+      - "signature_layout"
       - "front_matter_spacing"
       - "blank_page_cleanup"
       - "toc_refresh"
