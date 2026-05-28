@@ -1,0 +1,257 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/youngfly93/drug_panel_auto/docs/schemas/panel.schema.json",
+  "title": "Panel Package Manifest (panel.yaml)",
+  "description": "Contract for a panel package under panels/<panel_id>/panel.yaml. Drives panel discovery, template selection, input/output contracts, QA gates, and golden-case regression.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "panel_id",
+    "display_name",
+    "version",
+    "status",
+    "default_template",
+    "templates",
+    "rules",
+    "input_contract",
+    "template_contract"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Manifest schema version. Currently \"1.0\".",
+      "enum": ["1.0"]
+    },
+    "panel_id": {
+      "type": "string",
+      "description": "Stable identifier, lowercase snake_case. Must match the directory name under panels/.",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Human-readable name shown in the web UI and report front matter."
+    },
+    "version": {
+      "type": "string",
+      "description": "Panel package semver. Bumped on rule/template changes.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "type": "string",
+      "description": "Lifecycle. active = serving customers; pilot = internal validation only; deprecated = scheduled for removal.",
+      "enum": ["active", "pilot", "deprecated"]
+    },
+    "description": {
+      "type": "string"
+    },
+    "aliases": {
+      "type": "array",
+      "description": "Alternate identifiers (legacy names, shortcodes). Project detector tries these for back-compat.",
+      "items": { "type": "string" }
+    },
+    "project_detector_rules": {
+      "type": "object",
+      "description": "Heuristics for auto-detecting this panel from Excel filename / sheet content.",
+      "additionalProperties": false,
+      "properties": {
+        "keywords": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "keyword_groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "any": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    { "type": "string" },
+                    {
+                      "type": "object",
+                      "required": ["type", "pattern"],
+                      "properties": {
+                        "type": { "type": "string", "enum": ["regex"] },
+                        "pattern": { "type": "string" }
+                      }
+                    }
+                  ]
+                }
+              },
+              "weight": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "enhancer": {
+      "type": "string",
+      "description": "Fully-qualified Python class path of a PanelEnhancer (module:Class). Empty string = no enhancement (NoopEnhancer). Same enhancer can serve multiple panels (e.g. CRC358Enhancer serves both crc_358_msi and crc_301_msi)."
+    },
+    "default_template": {
+      "type": "string",
+      "description": "Template id (from the templates list) used when the web form does not override. Must match exactly one templates[].id."
+    },
+    "templates": {
+      "type": "array",
+      "minItems": 1,
+      "description": "All templates this panel can render. At least one must be active for the default_template to resolve.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "file", "version", "status"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(_v\\d+)?$" },
+          "file": {
+            "type": "string",
+            "description": "Path relative to the panel directory, typically templates/<id>.docx"
+          },
+          "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+          "status": {
+            "type": "string",
+            "enum": ["active", "pilot", "deprecated"]
+          },
+          "description": { "type": "string" },
+          "processors": {
+            "type": "array",
+            "description": "Optional override of the panel-level processors chain for this specific template.",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "mappings": {
+      "type": "object",
+      "description": "Excel→template variable mappings. Paths relative to the repo root (typically config/mapping.yaml).",
+      "properties": {
+        "default": { "type": "string" }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "description": "Panel-specific business rule files. Paths relative to the panel directory (rules/*.yaml) or repo root (config/*.yaml).",
+      "additionalProperties": { "type": "string" },
+      "properties": {
+        "panel_rules": { "type": "string" },
+        "report_text": { "type": "string" },
+        "biomarkers": { "type": "string" },
+        "guideline_tables": { "type": "string" },
+        "drugs": { "type": "string" },
+        "style": { "type": "string" },
+        "filtering": { "type": "string" },
+        "drug_brands": { "type": "string" }
+      }
+    },
+    "input_contract": {
+      "type": "object",
+      "description": "What the input Excel must look like for this panel.",
+      "additionalProperties": false,
+      "required": ["required_tables", "required_single_fields"],
+      "properties": {
+        "required_tables": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "optional_tables": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "required_single_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "required_columns": {
+          "type": "object",
+          "description": "Per-table required columns. Keys are sheet names, values are arrays of column names.",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "biomarkers": {
+          "type": "object",
+          "description": "Biomarker source declarations (tmb_value / msi_status).",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "required": { "type": "boolean" },
+              "source_priority": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "allowed_values": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "template_contract": {
+      "type": "object",
+      "description": "What variables/loops the template must reference. Validated at render time.",
+      "additionalProperties": false,
+      "required": ["required_variables", "required_lists"],
+      "properties": {
+        "required_variables": {
+          "type": "array",
+          "description": "Scalar {{ var }} placeholders that must appear in the template.",
+          "items": { "type": "string" }
+        },
+        "required_lists": {
+          "type": "array",
+          "description": "List names referenced by {%tr for row in <list> %} loops.",
+          "items": { "type": "string" }
+        },
+        "required_table_structures": {
+          "type": "object",
+          "description": "Per-table column count + required header row.",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["columns", "required_headers"],
+            "properties": {
+              "columns": { "type": "integer", "minimum": 1 },
+              "required_headers": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "context_contracts": {
+      "type": "object",
+      "description": "Named context-contract fixture files (under context_contracts/) used by regression tests.",
+      "additionalProperties": { "type": "string" }
+    },
+    "processors": {
+      "type": "array",
+      "description": "Default chain of post-render DOCX processors (e.g. blank_page_cleanup, toc_refresh, final_refresh_cleanup). Empty array = no post-processing.",
+      "items": { "type": "string" }
+    },
+    "golden_cases": {
+      "type": "array",
+      "description": "Reviewed-case fixtures used as regression gates. Each entry runs a command and expects a QA status.",
+      "items": {
+        "type": "object",
+        "required": ["id", "runner", "command", "expected_qa_status"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "runner": { "type": "string" },
+          "command": { "type": "string" },
+          "synthetic": { "type": "boolean" },
+          "expected_qa_status": {
+            "type": "string",
+            "enum": ["PASS", "WARN", "FAIL"]
+          }
+        }
+      }
+    }
+  }
+}
