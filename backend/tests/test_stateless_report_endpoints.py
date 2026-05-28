@@ -1,3 +1,4 @@
+import json
 import sys
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ from app.api import report as report_api  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.dependencies import get_bridge  # noqa: E402
 from app.config import settings  # noqa: E402
+from app.services import clinical_info_service as clinical_svc  # noqa: E402
 from app.services.reportgen_bridge import ReportGenBridge  # noqa: E402
 
 
@@ -135,6 +137,76 @@ def test_inspect_excel_returns_sheet_and_field_payload(tmp_path, monkeypatch):
     assert data["single_values"]["sample_id"] == "CASE001"
 
 
+def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {
+                    "result": {
+                        "status": 200,
+                        "message": "成功",
+                        "data": {
+                            "userName": "运营患者",
+                            "sex": "男",
+                            "age": 70,
+                            "cancerName": "乙状结肠癌",
+                            "sampleType": "新鲜组织",
+                            "sampleTime": "2025-11-21",
+                            "sampleReachTime": "2025-11-22",
+                            "hospital": "运营医院",
+                            "department": "肿瘤科",
+                        },
+                    }
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+    requests = []
+
+    def fake_urlopen(req, timeout):
+        requests.append(req)
+        assert timeout == 5.0
+        assert req.full_url == "https://webapi.example.test/ngsapi/getNgsSample"
+        assert req.headers["Content-type"] == "application/json"
+        body = json.loads(req.data.decode("utf-8"))
+        assert body["encryptFlag"] == "fixed-flag"
+        assert body["encryptCode"]
+        assert body["encryptCode"] != "CASE001"
+        return FakeResponse()
+
+    monkeypatch.setattr(clinical_svc, "_load_patient_info", lambda: {"patients": {}})
+    monkeypatch.setattr(clinical_svc.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(settings, "patient_enrichment_provider", "marvelbio")
+    monkeypatch.setattr(
+        settings,
+        "patient_enrichment_url",
+        "https://webapi.example.test/ngsapi/getNgsSample",
+    )
+    monkeypatch.setattr(settings, "patient_enrichment_aes_key", "0123456789abcdef0123456789abcdef")
+    monkeypatch.setattr(settings, "patient_enrichment_encrypt_flag", "fixed-flag")
+    monkeypatch.setattr(settings, "patient_enrichment_timeout_seconds", 5.0)
+
+    result = clinical_svc.enrich_patient("CASE001", project_type="crc_358_msi")
+
+    assert len(requests) == 1
+    assert result.found is True
+    assert result.source == "marvelbio"
+    assert result.fields["patient_name"] == "运营患者"
+    assert result.fields["gender"] == "男"
+    assert result.fields["age"] == 70
+    assert result.fields["clinical_diagnosis"] == "乙状结肠癌"
+    assert result.fields["sample_type"] == "新鲜组织"
+    assert result.fields["collection_date"] == "2025-11-21"
+    assert result.fields["receive_date"] == "2025-11-22"
+    assert result.fields["hospital"] == "运营医院"
+
+
 def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     with _client(tmp_path, monkeypatch) as client:
         response = client.post(
@@ -150,7 +222,7 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["success"] is True
-    assert data["output_filename"] == "fake_report.docx"
+    assert data["output_filename"] == "测试患者-癌种未填-结直肠癌358基因+msi-mljy-case001-修改版.docx"
     assert data["output_file_base64"].startswith("UEsD")
     assert data["qa_status"] == "PASS"
 

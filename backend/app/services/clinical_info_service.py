@@ -5,6 +5,7 @@ Reads mapping.yaml to build the dynamic form schema,
 and reads/writes patient_info.yaml for patient management.
 """
 
+import base64
 import json
 import threading
 from pathlib import Path
@@ -13,6 +14,7 @@ from urllib import error as urlerror
 from urllib import parse, request
 
 import yaml
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from app.config import settings
 from app.schemas.clinical_info import (
@@ -125,6 +127,16 @@ ENRICHMENT_KEY_ALIASES = {
     "接收日期": "receive_date",
     "收样日期": "receive_date",
     "送检日期": "receive_date",
+    "userName": "patient_name",
+    "sex": "gender",
+    "age": "age",
+    "cancerName": "clinical_diagnosis",
+    "pathologyNumber": "pathology_id",
+    "hospital": "hospital",
+    "department": "department",
+    "sampleType": "sample_type",
+    "sampleTime": "collection_date",
+    "sampleReachTime": "receive_date",
 }
 
 MISSING_MARKERS = {"", "-", "--", "未知", "unknown", "none", "null", "nan", "n/a", "na"}
@@ -413,6 +425,10 @@ def _fetch_external_patient(
     sample_id: str,
     project_type: Optional[str] = None,
 ) -> tuple[dict[str, Any], Optional[str], list[str]]:
+    provider = str(settings.patient_enrichment_provider or "generic").strip().lower()
+    if provider == "marvelbio":
+        return _fetch_marvelbio_patient(sample_id)
+
     url = str(settings.patient_enrichment_url or "").strip()
     if not url:
         return {}, None, []
@@ -457,6 +473,79 @@ def _fetch_external_patient(
         payload = payload.get("data") or payload.get("patient") or payload.get("fields") or payload
 
     return _normalize_patient_payload(payload), source, []
+
+
+def _fetch_marvelbio_patient(
+    sample_id: str,
+) -> tuple[dict[str, Any], Optional[str], list[str]]:
+    url = str(settings.patient_enrichment_url or "").strip()
+    aes_key = str(settings.patient_enrichment_aes_key or "")
+    encrypt_flag = str(settings.patient_enrichment_encrypt_flag or "").strip()
+    if not url:
+        return {}, None, []
+    if not aes_key or not encrypt_flag:
+        return {}, "marvelbio", ["MarvelBio enrichment is missing AES key or encrypt flag"]
+
+    try:
+        encrypt_code = _aes_cbc_pkcs5_base64(sample_id, aes_key)
+    except ValueError as exc:
+        return {}, "marvelbio", [str(exc)]
+
+    body = json.dumps(
+        {
+            "encryptCode": encrypt_code,
+            "encryptFlag": encrypt_flag,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    req = request.Request(
+        url,
+        data=body,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with request.urlopen(
+            req,
+            timeout=float(settings.patient_enrichment_timeout_seconds),
+        ) as response:
+            raw = response.read().decode("utf-8")
+    except (urlerror.URLError, TimeoutError, OSError) as exc:
+        return {}, "marvelbio", [f"MarvelBio enrichment lookup failed: {exc}"]
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return {}, "marvelbio", [f"MarvelBio enrichment returned invalid JSON: {exc}"]
+
+    result = payload.get("result") if isinstance(payload, dict) else None
+    if not isinstance(result, dict):
+        return {}, "marvelbio", ["MarvelBio enrichment returned unexpected payload"]
+
+    status = str(result.get("status") or "").strip()
+    if status and status != "200":
+        message = str(result.get("message") or "lookup failed")
+        return {}, "marvelbio", [f"MarvelBio enrichment failed: {message}"]
+
+    fields = _normalize_patient_payload(result.get("data") or {})
+    return fields, "marvelbio", []
+
+
+def _aes_cbc_pkcs5_base64(text: str, key: str) -> str:
+    key_bytes = key.encode("utf-8")
+    if len(key_bytes) not in {16, 24, 32}:
+        raise ValueError("MarvelBio AES key must be 16, 24, or 32 bytes")
+    iv = key_bytes[:16]
+    data = str(text).encode("utf-8")
+    pad_len = 16 - (len(data) % 16)
+    padded = data + bytes([pad_len]) * pad_len
+    cipher = Cipher(algorithms.AES(key_bytes), modes.CBC(iv))
+    encryptor = cipher.encryptor()
+    encrypted = encryptor.update(padded) + encryptor.finalize()
+    return base64.b64encode(encrypted).decode("ascii")
 
 
 def _normalize_patient_payload(payload: Any) -> dict[str, Any]:

@@ -64,10 +64,13 @@ class Settings(BaseSettings):
     # --- Patient enrichment ---
     # Optional external patient registry / operation-system lookup.
     # When set, the app will query this URL by sample_id after Excel upload.
+    patient_enrichment_provider: str = "generic"
     patient_enrichment_url: str = ""
     patient_enrichment_token: str = ""
     patient_enrichment_timeout_seconds: float = 5.0
     patient_enrichment_source_name: str = "patient_registry"
+    patient_enrichment_aes_key: str = ""
+    patient_enrichment_encrypt_flag: str = ""
 
     # --- Report download filename ---
     # Business naming format:
