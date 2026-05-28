@@ -546,6 +546,15 @@ knowledge_bases:
         cgi_allowed_primary_tumor_types: ["COREAD"]
         # CIViC: disease 关键词（英文为主；如需也可补充中文）
         civic_disease_keywords: ["colorectal", "colon", "rectal"]
+        # 多癌种（推荐）：用 profiles 列表，按患者 cancer_type 命中哪条就用哪条的
+        # cgi/civic。一份配置同时正确服务 CRC/肺/胃……（未配 profiles 时回退上面的单组）。
+        # profiles:
+        #   - match_keywords: ["结直肠", "结肠", "直肠", "colon", "rectal", "colorectal"]
+        #     cgi_allowed_primary_tumor_types: ["COREAD"]
+        #     civic_disease_keywords: ["colorectal", "colon", "rectal"]
+        #   - match_keywords: ["肺", "lung", "nsclc", "sclc"]
+        #     cgi_allowed_primary_tumor_types: ["LUAD", "LUSC", "NSCLC", "SCLC"]
+        #     civic_disease_keywords: ["lung", "non-small cell", "small cell"]
       evidence:
         enabled: true
         # 若缺失证据字段，默认放行；设为 reject 可更严格

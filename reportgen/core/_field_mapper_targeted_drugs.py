@@ -257,6 +257,80 @@ class TargetedDrugMixin:
         """向后兼容别名（历史 CRC 专用命名）；新代码请用 _cancer_type_matches。"""
         return cls._cancer_type_matches(cancer_type, keywords=crc_keywords)
 
+    @staticmethod
+    def _norm_keyword_list(value: Any, default: list[str]) -> list[str]:
+        """规范化关键词列表；value 为空/非列表时回退 default。"""
+        src = value if isinstance(value, list) and value else default
+        return [str(x).strip() for x in src if str(x).strip()]
+
+    # CRC 单组配置的历史默认（向后兼容）
+    _DEFAULT_CRC_MATCH_KEYWORDS = [
+        "结直肠",
+        "结肠",
+        "直肠",
+        "乙状结肠",
+        "sigmoid",
+        "colon",
+        "rectal",
+        "colorectal",
+    ]
+
+    def _resolve_cancer_profile(
+        self, cancer_cfg: Any, cancer_type: str
+    ) -> tuple[bool, set[str], list[str]]:
+        """按患者癌种选出适用的过滤参数。
+
+        返回 (cancer_matches, cgi_allowed_tumor_types, civic_disease_keywords)。
+
+        支持两种配置形态：
+        - ``profiles`` 列表（多癌种）：取首个 ``match_keywords`` 命中患者癌种的
+          profile，用其 cgi/civic。配了 profiles 但无命中 → 不按癌种过滤。
+        - 单组（历史/向后兼容）：``match_keywords|crc_keywords`` +
+          ``cgi_allowed_primary_tumor_types`` + ``civic_disease_keywords``。
+        """
+        if not isinstance(cancer_cfg, dict):
+            return False, set(), []
+
+        def _cgi(value: Any, default: list[str]) -> set[str]:
+            return {s.upper() for s in self._norm_keyword_list(value, default)}
+
+        def _civic(value: Any, default: list[str]) -> list[str]:
+            return [s.lower() for s in self._norm_keyword_list(value, default)]
+
+        profiles = cancer_cfg.get("profiles")
+        if isinstance(profiles, list) and profiles:
+            for prof in profiles:
+                if not isinstance(prof, dict):
+                    continue
+                kws = self._norm_keyword_list(
+                    prof.get("match_keywords") or prof.get("crc_keywords"), []
+                )
+                if self._cancer_type_matches(cancer_type, keywords=kws):
+                    return (
+                        True,
+                        _cgi(prof.get("cgi_allowed_primary_tumor_types"), []),
+                        _civic(prof.get("civic_disease_keywords"), []),
+                    )
+            # profiles 已配但患者癌种无命中 → 不按癌种过滤（放行）
+            return False, set(), []
+
+        # 单组（向后兼容，CRC 默认）
+        match_keywords = self._norm_keyword_list(
+            cancer_cfg.get("match_keywords") or cancer_cfg.get("crc_keywords"),
+            self._DEFAULT_CRC_MATCH_KEYWORDS,
+        )
+        cancer_matches = self._cancer_type_matches(
+            cancer_type, keywords=match_keywords
+        )
+        return (
+            cancer_matches,
+            _cgi(cancer_cfg.get("cgi_allowed_primary_tumor_types"), ["COREAD"]),
+            _civic(
+                cancer_cfg.get("civic_disease_keywords"),
+                ["colorectal", "colon", "rectal"],
+            ),
+        )
+
     @classmethod
     def _p_point_matches(cls, db_p: str, patient_p: str) -> bool:
         """判断数据库 p_point 是否能匹配样本 pHGVS_S（支持 p.G12X 这类写法）。"""
@@ -365,56 +439,12 @@ class TargetedDrugMixin:
         cancer_filter_enabled = (
             bool(cancer_cfg.get("enabled", False)) and filters_enabled
         )
-        # 癌种匹配关键词：优先用通用 match_keywords（panel 可配置任意癌种）；
-        # 缺省回退历史 crc_keywords（向后兼容，保证 CRC 行为不变）。
-        _default_crc_keywords = [
-            "结直肠",
-            "结肠",
-            "直肠",
-            "乙状结肠",
-            "sigmoid",
-            "colon",
-            "rectal",
-            "colorectal",
-        ]
-        if isinstance(cancer_cfg, dict):
-            match_keywords = (
-                cancer_cfg.get("match_keywords")
-                or cancer_cfg.get("crc_keywords")
-                or _default_crc_keywords
-            )
-        else:
-            match_keywords = []
-        cancer_matches = self._cancer_type_matches(
-            cancer_type,
-            keywords=match_keywords if isinstance(match_keywords, list) else [],
-        )
-        cgi_allowed_tumor_types = set(
-            str(x).strip().upper()
-            for x in (
-                (
-                    cancer_cfg.get("cgi_allowed_primary_tumor_types", ["COREAD"])
-                    if isinstance(cancer_cfg, dict)
-                    else ["COREAD"]
-                )
-                or ["COREAD"]
-            )
-            if str(x).strip()
-        )
-        civic_disease_keywords = [
-            str(x).strip().lower()
-            for x in (
-                (
-                    cancer_cfg.get(
-                        "civic_disease_keywords", ["colorectal", "colon", "rectal"]
-                    )
-                    if isinstance(cancer_cfg, dict)
-                    else []
-                )
-                or []
-            )
-            if str(x).strip()
-        ]
+        # 按患者癌种解析过滤参数：支持 profiles 多癌种列表，回退单组（CRC 向后兼容）。
+        (
+            cancer_matches,
+            cgi_allowed_tumor_types,
+            civic_disease_keywords,
+        ) = self._resolve_cancer_profile(cancer_cfg, cancer_type)
         missing_patient_cancer_action = (
             str(
                 (
