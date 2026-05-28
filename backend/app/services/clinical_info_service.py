@@ -140,6 +140,11 @@ ENRICHMENT_KEY_ALIASES = {
 }
 
 MISSING_MARKERS = {"", "-", "--", "未知", "unknown", "none", "null", "nan", "n/a", "na"}
+FIELD_MISSING_MARKERS = {
+    "hospital": {"某某医院"},
+    "department": {"肿瘤科"},
+    "sample_type": {"组织"},
+}
 
 # Fields hidden from web form (auto-computed or not applicable)
 ALWAYS_HIDE = ["project_name"]
@@ -403,7 +408,7 @@ def merge_enrichment_into_values(
     """Return values + enrichment, filling only missing placeholder fields."""
     merged = dict(values or {})
     for key, value in enrichment.fields.items():
-        if _is_missing_value(merged.get(key)):
+        if _is_missing_value(merged.get(key), field=key):
             merged[key] = value
     return merged
 
@@ -583,12 +588,17 @@ def _merge_enrichment_fields(
             field_sources[key] = source
 
 
-def _is_missing_value(value: Any) -> bool:
+def _is_missing_value(value: Any, field: Optional[str] = None) -> bool:
     if value is None:
         return True
     if isinstance(value, float) and value != value:
         return True
-    return str(value).strip().lower() in MISSING_MARKERS
+    text = str(value).strip()
+    if text.lower() in MISSING_MARKERS:
+        return True
+    if field and text in FIELD_MISSING_MARKERS.get(field, set()):
+        return True
+    return False
 
 
 def upsert_patient(patient: PatientInfo) -> None:

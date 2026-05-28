@@ -160,7 +160,7 @@ def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
                             "sampleTime": "2025-11-21",
                             "sampleReachTime": "2025-11-22",
                             "hospital": "运营医院",
-                            "department": "肿瘤科",
+                            "department": "结直肠肿瘤科",
                         },
                     }
                 },
@@ -206,6 +206,21 @@ def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
     assert result.fields["collection_date"] == "2025-11-21"
     assert result.fields["receive_date"] == "2025-11-22"
     assert result.fields["hospital"] == "运营医院"
+    assert result.fields["department"] == "结直肠肿瘤科"
+
+    merged = clinical_svc.merge_enrichment_into_values(
+        {
+            "hospital": "某某医院",
+            "department": "肿瘤科",
+            "sample_type": "组织",
+            "patient_name": "已手动填写",
+        },
+        result,
+    )
+    assert merged["hospital"] == "运营医院"
+    assert merged["department"] == "结直肠肿瘤科"
+    assert merged["sample_type"] == "新鲜组织"
+    assert merged["patient_name"] == "已手动填写"
 
 
 def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
