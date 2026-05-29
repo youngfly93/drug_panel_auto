@@ -4578,22 +4578,14 @@ class TemplateRenderer:
         page_numbers: dict[str, int],
         context: dict | None = None,
     ) -> bool:
-        """Rebuild the TOC rows: clickable label + live ``PAGEREF`` page number.
+        """Write visible TOC labels/page numbers while keeping Word jump fields.
 
-        Each row stays clickable through ``HYPERLINK \\l``. The page number is a
-        live ``PAGEREF <anchor> \\h`` field whose *cached* result is the number
-        derived from the final LibreOffice PDF layout, so the TOC looks correct
-        immediately even in viewers that never refresh fields.
-
-        Why live instead of frozen static text: LibreOffice (the build engine)
-        and WPS/Word (the delivery engine) paginate the same document
-        differently — empirically by up to ~6 pages on a full CRC358 report.
-        A frozen number would therefore be wrong for the customer. With
-        ``updateFields=true`` (see ``_set_update_fields``) WPS/Word recompute
-        every PAGEREF against their own layout on open, so the visible number
-        matches the footer the reader actually sees, on whichever engine they
-        use. ``make_toc_paragraph`` falls back to static text only when a row has
-        no resolvable bookmark anchor.
+        Word/WPS/LibreOffice can disagree on PAGEREF pagination when a document
+        contains floating text boxes and section-level page-number restarts.
+        Keep the row clickable through ``HYPERLINK \\l`` but write the page
+        number as static text derived from the final PDF layout. This prevents
+        opening-time field refresh from changing the visible TOC number away
+        from the page footer users see.
         """
         import copy
         import os
@@ -4964,26 +4956,7 @@ class TemplateRenderer:
                     para.append(make_field_run(field_char_type="end"))
                 if number is not None:
                     para.append(make_run(tab=True))
-                    if anchor:
-                        # Emit the page number as a live ``PAGEREF`` field instead
-                        # of static text. The build engine (LibreOffice) and the
-                        # delivery engine (WPS/Word) paginate differently, so a
-                        # frozen number drifts by several pages once the customer
-                        # opens the docx. With ``updateFields=true`` (set below in
-                        # ``_set_update_fields``) WPS/Word recompute PAGEREF against
-                        # their own layout on open, so the visible number matches
-                        # the footer the reader actually sees. The static number is
-                        # kept as the field's cached result, so the TOC still looks
-                        # correct in viewers that do not refresh fields.
-                        para.append(make_field_run(field_char_type="begin"))
-                        para.append(
-                            make_field_run(instruction=f" PAGEREF {anchor} \\h ")
-                        )
-                        para.append(make_field_run(field_char_type="separate"))
-                        para.append(make_run(number))
-                        para.append(make_field_run(field_char_type="end"))
-                    else:
-                        para.append(make_run(number))
+                    para.append(make_run(number))
                 return para
 
             def make_page_break_paragraph() -> Any:
