@@ -782,6 +782,58 @@ def test_mixed_reviewed_class_labels_control_counts_and_drug_rows(tmp_path):
     assert "FBXW7" not in report_data.get_field("targeted_drug_brand_summary")
 
 
+def test_drug_related_count_matches_variants_2_1_table(tmp_path):
+    """The footnote drug count (drug_related_count) must be counted from the
+    same variants_2_1 table the reader sees in section 2.1 — not a separate
+    variant pipeline. Regression: the footnote showed 4 while the 2.1 table
+    listed 6 drug-bearing rows (audit "变异计数一致" failure).
+    """
+    report_data = ReportData()
+    # FieldMapper populates variants_2_1 before the enhancers run. Pre-set it
+    # with 2 drug-bearing rows (+ 1 plain row + 1 未见突变 baseline). The
+    # variations below would otherwise be counted as 3 drug-bearing by the old
+    # `variants` pipeline (_FakeDrugLookup gives every gene a drug), so a result
+    # of 2 proves the count comes from variants_2_1.
+    report_data.set_table(
+        "variants_2_1",
+        [
+            {"gene": "TP53", "locus": "c.1A>T", "af_pct": "30",
+             "benefit_drugs": "DrugX（C）", "caution_drugs": "--"},
+            {"gene": "ATR", "locus": "c.2A>T", "af_pct": "5",
+             "benefit_drugs": "--", "caution_drugs": "DrugY（A）"},
+            {"gene": "APC", "locus": "c.3A>T", "af_pct": "20",
+             "benefit_drugs": "--", "caution_drugs": "--"},
+            {"gene": "BRAF", "locus": "未见突变", "af_pct": "--",
+             "benefit_drugs": "--", "caution_drugs": "--"},
+        ],
+    )
+    variations = [
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "KRAS",
+         "Transcript": "NM_a", "Chr": "chr12", "ExIn_ID": "EX2",
+         "cHGVS": "c.34G>T", "pHGVS_S": "p.G12C", "Function": "Missense",
+         "Freq(%)": 40.0, "CLNSIG": "Pathogenic"},
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "PIK3CA",
+         "Transcript": "NM_b", "Chr": "chr3", "ExIn_ID": "EX10",
+         "cHGVS": "c.1624G>A", "pHGVS_S": "p.E542K", "Function": "Missense",
+         "Freq(%)": 15.0, "CLNSIG": "Pathogenic"},
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "ATM",
+         "Transcript": "NM_c", "Chr": "chr11", "ExIn_ID": "EX47",
+         "cHGVS": "c.6874C>T", "pHGVS_S": "p.Q2292*", "Function": "Nonsense",
+         "Freq(%)": 10.0, "CLNSIG": "Pathogenic"},
+    ]
+    result = enhance_report_data(
+        report_data,
+        _excel(
+            tmp_path,
+            single_values={"TMB": 6.0, "MSI状态": "MSS", "样本类型": "组织"},
+            variations=variations,
+        ),
+        field_mapper=_FakeDrugLookup(),
+        base_path=str(ROOT),
+    )
+    assert result.get_field("drug_related_count") == 2
+
+
 def test_variants_2_1_keeps_all_detected_panel_variants(tmp_path):
     variations = [
         {

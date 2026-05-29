@@ -2241,8 +2241,17 @@ def enhance_report_data(
     # total_variants_count: 总变异数（all_variants包含Ⅰ/Ⅱ/Ⅲ类）
     report_data.set_field("total_variants_count", len(all_variants))
 
-    # drug_related_count: 药物相关变异数
-    report_data.set_field("drug_related_count", count_drug_related_variants(variants))
+    # drug_related_count: 药物相关变异数。
+    # 必须与读者实际看到的 2.1 表(variants_2_1)同源计数，否则脚注"与靶向药物
+    # 用药相关的变异 X 个"会与 2.1 表里带药的行数对不上（审计"变异计数一致"
+    # 不通过）。2.1 表由 FieldMapper 经 _lookup_targeted_drugs_for_variant 生成，
+    # 与此处旧的 build_variants_for_template 列表口径不同（曾出现脚注 4、表格 6
+    # 的偏差）。优先用 variants_2_1，缺失时回退旧列表。
+    variants_2_1_rows = report_data.get_table("variants_2_1")
+    drug_related_source = variants_2_1_rows if variants_2_1_rows else variants
+    report_data.set_field(
+        "drug_related_count", count_drug_related_variants(drug_related_source)
+    )
 
     # Build undetected genes
     detected_genes = {v["gene"] for v in all_variants}
