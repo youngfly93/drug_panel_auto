@@ -854,6 +854,44 @@ def test_variants_2_1_keeps_all_detected_panel_variants(tmp_path):
     assert fanci["var_type_cn"] == "点突变"
 
 
+def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
+    """Detected-variant rows are ordered by 频率 high→low, grouped by gene.
+
+    A gene's variants share merged 基因名/转录本/染色体 cells in the reviewed
+    report, so they must stay adjacent — genes are ordered by their highest
+    frequency, and variants within a gene by frequency descending.
+    """
+    variations = [
+        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "TP53",
+         "Transcript": "NM_000546.6", "Chr": "chr17", "ExIn_ID": "EX8",
+         "cHGVS": "c.844C>T", "pHGVS_S": "p.R282W", "Function": "Missense", "Freq(%)": 50.0},
+        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "APC",
+         "Transcript": "NM_000038.6", "Chr": "chr5", "ExIn_ID": "EX10",
+         "cHGVS": "c.994C>T", "pHGVS_S": "p.R332*", "Function": "Nonsense", "Freq(%)": 10.0},
+        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "KRAS",
+         "Transcript": "NM_004985.5", "Chr": "chr12", "ExIn_ID": "EX2",
+         "cHGVS": "c.34G>T", "pHGVS_S": "p.G12C", "Function": "Missense", "Freq(%)": 30.0},
+        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "APC",
+         "Transcript": "NM_000038.6", "Chr": "chr5", "ExIn_ID": "EX16",
+         "cHGVS": "c.4348C>T", "pHGVS_S": "p.R1450*", "Function": "Nonsense", "Freq(%)": 40.0},
+    ]
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    rows = mapper._build_variants_2_1(
+        _excel(tmp_path, variations=variations), ReportData()
+    )
+
+    def af(row):
+        try:
+            return float(str(row.get("af_pct")).replace("%", "").strip())
+        except (TypeError, ValueError):
+            return None
+
+    detected = [(row["gene"], af(row)) for row in rows if af(row) is not None]
+    # genes by max freq (TP53 50 > APC 40 > KRAS 30); APC's two variants stay
+    # together and ordered 40 then 10.
+    assert detected == [("TP53", 50.0), ("APC", 40.0), ("APC", 10.0), ("KRAS", 30.0)]
+
+
 def test_reviewed_variant_override_replaces_existing_targeted_tip():
     report_data = ReportData()
     report_data.set_table(

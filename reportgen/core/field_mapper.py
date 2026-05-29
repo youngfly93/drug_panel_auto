@@ -1065,6 +1065,36 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
             out.append(row)
             mutated_genes.add(gene)
 
+        # 按频率从高到低排序检出变异行。
+        # 同一基因的多个变异在终版里共用合并的基因名/转录本/染色体单元格，
+        # 必须保持相邻，因此不能纯按行频率排（否则会把同基因变异拆开、破坏合并）。
+        # 规则：基因之间按该基因的最高频率降序；基因内部按频率降序；频率相同或
+        # 无法解析的，保持原始出现顺序作为稳定兜底。"未见突变"基线行在此之后追加，
+        # 自然排在所有检出变异之后。
+        def _af_value(value: Any) -> float:
+            text = self._norm_text(value).replace("%", "").strip()
+            try:
+                return float(text)
+            except (TypeError, ValueError):
+                return float("-inf")
+
+        gene_max_af: dict[str, float] = {}
+        gene_first_index: dict[str, int] = {}
+        for index, variant_row in enumerate(out):
+            gene_name = variant_row.get("gene", "")
+            af_value = _af_value(variant_row.get("af_pct"))
+            if gene_name not in gene_max_af or af_value > gene_max_af[gene_name]:
+                gene_max_af[gene_name] = af_value
+            gene_first_index.setdefault(gene_name, index)
+
+        out.sort(
+            key=lambda variant_row: (
+                -gene_max_af[variant_row.get("gene", "")],
+                gene_first_index[variant_row.get("gene", "")],
+                -_af_value(variant_row.get("af_pct")),
+            )
+        )
+
         # 补齐"未见突变"基线行（若配置存在）
         for base in self._load_variants_2_1_baseline():
             gene = self._norm_text(base.get("gene"))
