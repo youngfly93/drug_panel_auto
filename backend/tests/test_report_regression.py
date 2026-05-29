@@ -892,6 +892,45 @@ def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
     assert detected == [("TP53", 50.0), ("APC", 40.0), ("APC", 10.0), ("KRAS", 30.0)]
 
 
+def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path):
+    """The 1.检测结果小结 summary table (targeted_drug_tips) is ordered by
+    frequency high→low and grouped by gene — consistent with the 2.1 table.
+    """
+    variations = [
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "GENEB",
+         "Transcript": "NM_1", "Chr": "chr1", "ExIn_ID": "EX1",
+         "cHGVS": "c.100A>T", "pHGVS_S": "p.K34N", "Function": "Missense", "Freq(%)": 50.0},
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "GENEA",
+         "Transcript": "NM_2", "Chr": "chr2", "ExIn_ID": "EX1",
+         "cHGVS": "c.200G>C", "pHGVS_S": "p.G67A", "Function": "Missense", "Freq(%)": 10.0},
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "GENEC",
+         "Transcript": "NM_3", "Chr": "chr3", "ExIn_ID": "EX1",
+         "cHGVS": "c.300T>A", "pHGVS_S": "p.S100T", "Function": "Missense", "Freq(%)": 30.0},
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "GENEA",
+         "Transcript": "NM_2", "Chr": "chr2", "ExIn_ID": "EX2",
+         "cHGVS": "c.400C>G", "pHGVS_S": "p.P133A", "Function": "Missense", "Freq(%)": 40.0},
+    ]
+    # CtDrug fallback guarantees each gene gets a benefit tip (so it appears in
+    # the summary) independent of the production knowledge base.
+    ctdrug = [
+        {"检测基因": "GENEA", "药物": "DrugA", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
+        {"检测基因": "GENEB", "药物": "DrugB", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
+        {"检测基因": "GENEC", "药物": "DrugC", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
+    ]
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    rows = mapper._build_targeted_drug_tips(
+        _excel(tmp_path, variations=variations, tables={"CtDrug": ctdrug}),
+        ReportData(),
+    )
+
+    genes = [row["gene"] for row in rows]
+    # gene max freq: GENEB 50 > GENEA 40 > GENEC 30; GENEA's two sites adjacent
+    # and ordered 40 then 10.
+    assert genes == ["GENEB", "GENEA", "GENEA", "GENEC"], genes
+    # The internal sort-only frequency field must not leak into output rows.
+    assert all("af" not in row for row in rows)
+
+
 def test_reviewed_variant_override_replaces_existing_targeted_tip():
     report_data = ReportData()
     report_data.set_table(

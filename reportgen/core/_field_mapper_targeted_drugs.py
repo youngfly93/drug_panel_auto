@@ -626,7 +626,13 @@ class TargetedDrugMixin:
                 continue
             site = format_variant_site(c, p) or c
             gene_to_sites.setdefault(gene, []).append(
-                {"c": c, "p": p, "level": level, "site": site}
+                {
+                    "c": c,
+                    "p": p,
+                    "level": level,
+                    "site": site,
+                    "af": self._norm_text(r.get("Freq(%)") or r.get("AF")),
+                }
             )
 
         if not gene_to_sites:
@@ -758,18 +764,39 @@ class TargetedDrugMixin:
                         "variant_site": s["site"],
                         "benefit_drugs": b,
                         "caution_drugs": c,
+                        "af": s.get("af", ""),
                     }
                 )
 
-        # 保持与 Variations 中出现顺序一致
-        order: list[str] = []
-        seen: set[str] = set()
-        for r in variations:
+        # 按频率从高到低排序，与 2.1 明细表保持一致：基因按其最高频率降序，
+        # 基因内部按位点频率降序；同基因相邻。频率相同/缺失时，以基因在
+        # Variations 中的首次出现顺序作为稳定兜底。
+        def _af_value(value) -> float:
+            text = self._norm_text(value).replace("%", "").strip()
+            try:
+                return float(text)
+            except (TypeError, ValueError):
+                return float("-inf")
+
+        gene_max_af: dict[str, float] = {}
+        gene_first_index: dict[str, int] = {}
+        for index, r in enumerate(variations):
             g = get_gene_from_row(r)
-            if g and g in gene_to_sites and g not in seen:
-                order.append(g)
-                seen.add(g)
+            if not g or g not in gene_to_sites:
+                continue
+            af = _af_value(r.get("Freq(%)") or r.get("AF"))
+            if g not in gene_max_af or af > gene_max_af[g]:
+                gene_max_af[g] = af
+            gene_first_index.setdefault(g, index)
+
         results.sort(
-            key=lambda x: order.index(x["gene"]) if x["gene"] in order else 9999
+            key=lambda x: (
+                -gene_max_af.get(x["gene"], float("-inf")),
+                gene_first_index.get(x["gene"], 9999),
+                -_af_value(x.get("af")),
+            )
         )
+        # 移除仅用于排序的临时频率字段，保持输出列与模板一致。
+        for x in results:
+            x.pop("af", None)
         return results
