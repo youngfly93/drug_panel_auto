@@ -1297,36 +1297,17 @@ def build_immune_variants(
     negative_variants = []
     hyperprogression_variants = []
 
-    # 构建 CLNSIG 快速查找（从原始 Variations）
-    _raw_variations = excel_data.get_table_data("Variations") or []
-    _clnsig_map: Dict[str, str] = {}
-    for r in _raw_variations:
-        g = _norm_text(r.get("Gene_Symbol") or r.get("Gene"))
-        c = _norm_text(r.get("cHGVS"))
-        clnsig = _norm_text(r.get("CLNSIG"))
-        if g and c:
-            _clnsig_map[f"{g.upper()}:{c}"] = clnsig
-
-    # Pathogenicity 白名单：免疫摘要只包含致病性/可能致病性变异
-    _pathogenic_keywords = {"pathogenic", "likely_pathogenic", "致病", "可能致病"}
-
-    def _is_pathogenic(gene: str, chgvs: str) -> bool:
-        clnsig = _clnsig_map.get(f"{gene.upper()}:{chgvs}", "").lower()
-        if not clnsig or clnsig in ("*", "-", ""):
-            return False
-        return any(kw in clnsig for kw in _pathogenic_keywords)
-
+    # 免疫摘要与 3.3 详表口径保持一致：仅按 Ⅰ/Ⅱ 类过滤，不再叠加 CLNSIG
+    # 致病性白名单。早前的致病性二次过滤会把 CLNSIG 为空的 Ⅰ/Ⅱ 类移码变异
+    # （如 PMS2 c.1273delT、ATR c.1291delA）从前面的汇总中漏掉，使汇总表的
+    # 变异数少于后面 3.3 详表（报告解读反馈的问题）。详表用的是
+    # _immune_eligible_variants（仅 Ⅰ/Ⅱ 类），此处与之对齐。
     for v in all_variants:
         gene = v["gene"].upper()
         gene_class = v.get("gene_class", "")
 
         # 批注#12: 只显示Ⅰ类和Ⅱ类
         if filter_class_i_ii_only and gene_class == "Ⅲ类":
-            continue
-
-        # 免疫摘要二次过滤：排除 Benign/Likely_benign/Uncertain_significance
-        chgvs = v.get("cHGVS", "")
-        if not _is_pathogenic(v.get("gene", ""), chgvs):
             continue
 
         # Add "(意义未明突变)" annotation for Ⅲ类 if not filtered out

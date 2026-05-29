@@ -931,6 +931,40 @@ def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path):
     assert all("af" not in row for row in rows)
 
 
+def test_immune_positive_summary_includes_class_i_ii_without_clnsig(tmp_path):
+    """The immune-summary positive list must include Ⅰ/Ⅱ class variants even
+    when CLNSIG is blank (e.g. frameshift PMS2/ATR), matching the 3.3 detail
+    table. Regression: a CLNSIG pathogenicity whitelist used to drop blank-CLNSIG
+    variants, so the front summary showed fewer variants than the 3.3 detail.
+    """
+    from reportgen.core.template_bridge_358 import build_immune_variants
+
+    variations = [
+        # PMS2 frameshift, Ⅰ类, BLANK CLNSIG — was wrongly dropped from summary.
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "PMS2",
+         "Transcript": "NM_000535", "Chr": "chr7", "ExIn_ID": "EX11",
+         "cHGVS": "c.1273delT", "pHGVS_S": "p.S425Lfs*23",
+         "Function": "Frameshift", "Freq(%)": 30.0, "CLNSIG": ""},
+        # ATR frameshift, Ⅰ类, BLANK CLNSIG — was wrongly dropped from summary.
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "ATR",
+         "Transcript": "NM_001184", "Chr": "chr3", "ExIn_ID": "EX9",
+         "cHGVS": "c.1291delA", "pHGVS_S": "p.R431Gfs*8",
+         "Function": "Frameshift", "Freq(%)": 5.0, "CLNSIG": ""},
+        # KRAS missense, Ⅰ类, pathogenic — always included.
+        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "KRAS",
+         "Transcript": "NM_004985", "Chr": "chr12", "ExIn_ID": "EX2",
+         "cHGVS": "c.34G>T", "pHGVS_S": "p.G12C",
+         "Function": "Missense", "Freq(%)": 13.0, "CLNSIG": "Pathogenic"},
+    ]
+
+    result = build_immune_variants(
+        _excel(tmp_path, variations=variations), filter_class_i_ii_only=True
+    )
+    positive_genes = {v["gene"].upper() for v in result["positive"]}
+    # Blank-CLNSIG Ⅰ/Ⅱ class variants are included alongside the pathogenic one.
+    assert {"PMS2", "ATR", "KRAS"} <= positive_genes
+
+
 def test_reviewed_variant_override_replaces_existing_targeted_tip():
     report_data = ReportData()
     report_data.set_table(
