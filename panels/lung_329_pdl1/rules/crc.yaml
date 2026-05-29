@@ -1,0 +1,188 @@
+# CRC 358 + MSI panel rule sets (gene lists)
+#
+# This file contains *only* gene symbols / panel display metadata.
+# Do NOT put any patient-level identifiers or real reports into git.
+schema_version: "1.0"
+panel_id: "lung_329_pdl1"
+rule_id: "crc"
+version: "0.1.0"
+updated: "2026-05-17"
+status: "active"
+notes:
+  - "CRC 358 + MSI panel package rules for gene set and reviewed override口径"
+  - "仅保留 gene symbol + 显示用 transcript/chr 信息，不包含任何患者数据"
+
+# Class I genes: primary drug targets and MSI genes
+class_i_genes:
+  - KRAS
+  - NRAS
+  - BRAF
+  - PIK3CA
+  - ERBB2
+  - HER2
+  - MLH1
+  - MSH2
+  - MSH6
+  - PMS2
+  - EPCAM
+
+# Class II genes: secondary targets and tumor suppressors
+class_ii_genes:
+  - APC
+  - TP53
+  - SMAD4
+  - PTEN
+  - STK11
+  - FBXW7
+
+# CRC important genes (main table shows only Class I/II within this set)
+crc_important_genes:
+  - KRAS
+  - NRAS
+  - BRAF
+  - MLH1
+  - MSH2
+  - MSH6
+  - PMS2
+  - HER2
+  - NTRK1
+  - NTRK2
+  - NTRK3
+  - TP53
+  - APC
+  - PIK3CA
+  - SMAD4
+  - FBXW7
+  - RNF43
+  - CTNNB1
+  - KMT2D
+  - ACVR2A
+  - TCF7L2
+  - ATM
+  - FAT4
+  - KMT2C
+  - ARID1A
+  - LRP1B
+  - PTEN
+  - FAT1
+  - ZFHX3
+  - AMER1
+  - GNAS
+  - ERBB3
+  - PTPRT
+  - NF1
+  - MUTYH
+  - ERBB2
+  - SETD2
+
+# Subset list used for "undetected genes" display in the template.
+panel_display_genes:
+  - name: BRAF
+    transcript: NM_004333.4
+    chromosome: "7"
+  - name: ERBB2
+    transcript: NM_004448.4
+    chromosome: "17"
+  - name: NRAS
+    transcript: NM_002524.5
+    chromosome: "1"
+  - name: PIK3CA
+    transcript: NM_006218.4
+    chromosome: "3"
+  - name: SMAD4
+    transcript: NM_005359.6
+    chromosome: "18"
+  - name: MLH1
+    transcript: NM_000249.4
+    chromosome: "3"
+  - name: MSH2
+    transcript: NM_000251.3
+    chromosome: "2"
+  - name: MSH6
+    transcript: NM_000179.3
+    chromosome: "2"
+  - name: PMS2
+    transcript: NM_000535.7
+    chromosome: "7"
+  - name: PTEN
+    transcript: NM_000314.8
+    chromosome: "10"
+  - name: AKT1
+    transcript: NM_001014431.2
+    chromosome: "14"
+  - name: EGFR
+    transcript: NM_005228.5
+    chromosome: "7"
+  - name: MET
+    transcript: NM_000245.4
+    chromosome: "7"
+  - name: RET
+    transcript: NM_020975.6
+    chromosome: "10"
+  - name: ROS1
+    transcript: NM_002944.2
+    chromosome: "6"
+  - name: ALK
+    transcript: NM_004304.5
+    chromosome: "2"
+  - name: KRAS
+    transcript: NM_033360.4
+    chromosome: "12"
+  - name: APC
+    transcript: NM_000038.6
+    chromosome: "5"
+  - name: TP53
+    transcript: NM_000546.6
+    chromosome: "17"
+
+# Reviewed variant-level overrides.
+# Use this only for lab-reviewed rules that should override the public/internal KB.
+reviewed_variant_overrides:
+  - gene: KRAS
+    c_hgvs: "c.34G>A"
+    p_hgvs: "p.G12S"
+    variant_site: "c.34G>A,\np.G12S"
+    benefit_drugs:
+      - "司美替尼（C）"
+      - "曲美替尼+Navitoclax（C）"
+      - "帕尼单抗+曲美替尼（C）"
+      - "贝美替尼+哌柏西利（C）"
+      - "BI 1701963（C）"
+      - "BI 1701963+曲美替尼（C）"
+      - "PD0325901+哌柏西利（C）"
+      - "奈拉替尼+曲美替尼（C）"
+      - "福巴替尼+贝美替尼（C） Defactinib+Avutometinib（C）"
+      - "依维莫司+Avutometinib（C）"
+      - "RMC-6236（C）"
+      - "PD0325901（D）"
+    caution_drugs:
+      - "西妥昔单抗（A）"
+      - "帕尼单抗（A）"
+      - "依维莫司（C）"
+  - gene: ERBB2
+    c_hgvs: "c.1979G>A"
+    p_hgvs:
+      - "p.G660D"
+      - "p.Gly660Asp"
+    clinical_significance: "致病"
+    variant_site: "c.1979G>A,\np.G660D"
+    benefit_drugs:
+      - "阿法替尼（C）"
+      - "曲妥珠单抗（C）"
+      - "恩美曲妥珠单抗（C）"
+      - "曲妥珠单抗+帕妥珠单抗（C）"
+      - "吡咯替尼（C）"
+      - "德曲妥珠单抗（C）"
+      - "曲妥珠单抗+图卡替尼（C）"
+      - "奈拉替尼+依维莫司（C）"
+      - "奈拉替尼+哌柏西利（C）"
+      - "奈拉替尼+曲美替尼（C）"
+      - "波齐替尼（C）"
+      - "吡咯替尼+曲妥珠单抗（C）"
+      - "德曲妥珠单抗+奈拉替尼（C）"
+      - "奈拉替尼±曲妥珠单抗（C）"
+      - "拉帕替尼（D）"
+    caution_drugs:
+      - "西妥昔单抗（D）"
+      - "帕尼单抗（D）"
+      - "奈拉替尼（D）"

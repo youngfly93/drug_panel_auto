@@ -1,0 +1,63 @@
+schema_version: "1.0"
+panel_id: "lung_329_pdl1"
+rule_id: "style"
+version: "0.2.0"
+updated: "2026-05-21"
+status: "active"
+description: "CRC table style tokens used by the DOCX post-render processors."
+
+style:
+  defaults:
+    font_name: "微软雅黑"
+    header_fill: "00B7C7"
+    header_font_color: "FFFFFF"
+    body_font_color: "000000"
+    border_color: "000000"
+    border_size: "6"
+  variant_summary_table:
+    font_name: "微软雅黑"
+    header_fill: "00B7C7"
+    header_font_color: "FFFFFF"
+    body_font_color: "000000"
+    body_font_size: 9
+    header_font_size: 9
+    border_color: "000000"
+    border_size: "6"
+    link_underline: true
+    link_color: "0000FF"
+    plain_texts: ["未见突变", "未检出", "未检出有害变异", "-", "--", "—"]
+  variant_detail_table:
+    font_name: "微软雅黑"
+    header_fill: "00B7C7"
+    header_font_color: "FFFFFF"
+    body_font_color: "000000"
+    body_font_size: 9
+    header_font_size: 9
+    border_color: "000000"
+    border_size: "6"
+    link_underline: true
+    link_color: "0000FF"
+    plain_texts: ["未见突变", "未检出", "未检出有害变异", "-", "--", "—"]
+  biomarker_table:
+    header_fill: "00B7C7"
+    header_font_color: "FFFFFF"
+    body_font_color: "000000"
+    font_name: "微软雅黑"
+    body_font_size: 9
+    header_font_size: 10
+    border_color: "000000"
+    border_size: "6"
+  clinical_result_tables:
+    border_color: "000000"
+    border_size: "6"
+    detected_result_color: "FF0000"
+    undetected_values: ["", "-", "--", "—", "未检出", "未检出有害变异"]
+  toc:
+    font_name: "微软雅黑"
+    section_font_color: "00C4D8"
+    section_font_size: 16
+    section_bold: true
+    item_font_color: "000000"
+    item_font_size: 11
+    item_bold: false
+    content_top_padding_pt: 57

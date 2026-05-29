@@ -1,0 +1,124 @@
+schema_version: "1.0"
+panel_id: "lung_329_pdl1"
+display_name: "肺癌329基因+PD-L1"
+version: "0.0.1"
+status: "draft"
+description: >
+  Lung 329-gene + PD-L1 panel package. Phase C-alpha MVP: reuses the CRC report
+  pipeline (enhancer/rules) to prove end-to-end plumbing. Lung-specific content
+  (PD-L1 module, per-variant analysis, per-drug PGx, lung NCCN tables) is added
+  in Phase C-beta. NOT production-ready.
+
+aliases:
+  - "lung_329"
+  - "lung329"
+  - "lung_329_pdl1"
+
+project_detector_rules:
+  keywords:
+    - "肺癌329"
+    - "329基因+pd-l1"
+    - "肺癌329基因"
+  keyword_groups:
+    - any:
+        - "肺癌329"
+        - "肺癌329基因"
+        - "329基因+pd-l1"
+        - "329基因+PD-L1"
+      weight: 1
+
+# Reuse the CRC enhancer (panel-parameterized) for the MVP, as crc_301 does.
+enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
+
+default_template: "lung_329_pdl1_golden_template_v0"
+templates:
+  - id: "lung_329_pdl1_golden_template_v0"
+    file: "templates/lung_329_pdl1_golden_template_v0.docx"
+    version: "0.0.1"
+    status: "draft"
+    description: "Lung 329 + PD-L1 golden template (variableized from a reviewed final report)."
+    processors:
+      - "part3_formatted_sections"
+      - "signature_placeholder"
+      - "bullet_lists"
+      - "signature_layout"
+      - "front_matter_spacing"
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
+      - "underlines_and_styles"
+
+mappings:
+  default: "config/mapping.yaml"
+
+rules:
+  panel_rules: "rules/crc.yaml"
+  report_text: "rules/report_text.yaml"
+  biomarkers: "rules/biomarkers.yaml"
+  guideline_tables: "rules/guideline_tables.yaml"
+  drugs: "rules/drugs.yaml"
+  style: "rules/style.yaml"
+  filtering: "config/filtering.yaml"
+  drug_brands: "config/drug_brands.yaml"
+
+input_contract:
+  required_tables:
+    - "Variations"
+  optional_tables:
+    - "TMB"
+    - "Msisensor"
+    - "QC"
+    - "Cnv"
+    - "Fusion"
+    - "HLA"
+    - "CtDrug"
+  required_single_fields:
+    - "patient_name"
+    - "sample_id"
+    - "project_name"
+    - "report_date"
+  required_columns:
+    Variations:
+      - "Gene_Symbol"
+      - "cHGVS"
+      - "ExistIn552"
+  biomarkers:
+    tmb_value:
+      required: false
+      source_priority: ["excel", "form", "patient_info"]
+    msi_status:
+      required: false
+      allowed_values: ["MSS", "MSI-L", "MSI-H", "未检测"]
+
+template_contract:
+  required_variables:
+    - "patient_name"
+    - "sample_id"
+  required_lists:
+    - "targeted_drug_tips"
+    - "variants_2_1"
+
+processors:
+  - "empty_table_rows"
+  - "part3_formatted_sections"
+  - "signature_placeholder"
+  - "report_content"
+  - "bullet_lists"
+  - "signature_layout"
+  - "cover_artifacts"
+  - "section_spacing"
+  - "page_layout"
+  - "gene_list_and_qc"
+  - "variant_tables"
+  - "hla_tail"
+  - "blank_page_cleanup"
+  - "toc_refresh"
+  - "final_refresh_cleanup"
+  - "underlines_and_styles"
+
+golden_cases:
+  - id: "lung_329_pdl1_smoke_generation"
+    runner: "reportgen.core.golden_case:run_golden_case"
+    command: "pytest backend/tests/test_lung329_smoke.py -q"
+    synthetic: true
+    expected_qa_status: "PASS"

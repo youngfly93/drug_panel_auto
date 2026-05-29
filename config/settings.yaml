@@ -538,23 +538,21 @@ knowledge_bases:
         # 若报告未提供 cancer_type（为 "-" 或空），默认放行（避免输出为空）
         # 设为 reject 可强制要求每份报告都明确癌种后才能输出公共库条目
         if_missing_patient_cancer: "allow"  # allow|reject
-        # 通用：识别本 panel 目标癌种的关键词（患者癌种命中才启用按癌种过滤）。
-        #   新接入 panel 用 match_keywords（如肺癌 ["肺","lung","nsclc","sclc"]）。
-        #   crc_keywords 为历史命名，仅在未设 match_keywords 时作为回退（向后兼容）。
-        crc_keywords: ["结直肠", "结肠", "直肠", "乙状结肠", "sigmoid", "colon", "rectal", "colorectal"]
-        # CGI: CRC 对应的主癌种代码（CGI Primary Tumor type）
+        # 多癌种 profiles（按患者 cancer_type 命中哪条就用哪条的 cgi/civic）。
+        # 一份配置同时正确服务 CRC/肺/胃……（未配 profiles 时回退下方单组字段）。
+        profiles:
+          # 结直肠癌（CRC358/301 等）—— 行为与历史单组配置等价
+          - match_keywords: ["结直肠", "结肠", "直肠", "乙状结肠", "sigmoid", "colon", "rectal", "colorectal"]
+            cgi_allowed_primary_tumor_types: ["COREAD"]
+            civic_disease_keywords: ["colorectal", "colon", "rectal"]
+          # 肺癌（lung_329_pdl1 等）
+          - match_keywords: ["肺", "lung", "nsclc", "sclc", "肺腺", "肺鳞"]
+            cgi_allowed_primary_tumor_types: ["LUAD", "LUSC", "NSCLC", "SCLC", "LUCA", "LUNG"]
+            civic_disease_keywords: ["lung", "non-small cell", "small cell"]
+        # ---- 单组回退字段（profiles 缺省时生效；保留作向后兼容文档）----
+        # crc_keywords / match_keywords + cgi_allowed_primary_tumor_types + civic_disease_keywords
         cgi_allowed_primary_tumor_types: ["COREAD"]
-        # CIViC: disease 关键词（英文为主；如需也可补充中文）
         civic_disease_keywords: ["colorectal", "colon", "rectal"]
-        # 多癌种（推荐）：用 profiles 列表，按患者 cancer_type 命中哪条就用哪条的
-        # cgi/civic。一份配置同时正确服务 CRC/肺/胃……（未配 profiles 时回退上面的单组）。
-        # profiles:
-        #   - match_keywords: ["结直肠", "结肠", "直肠", "colon", "rectal", "colorectal"]
-        #     cgi_allowed_primary_tumor_types: ["COREAD"]
-        #     civic_disease_keywords: ["colorectal", "colon", "rectal"]
-        #   - match_keywords: ["肺", "lung", "nsclc", "sclc"]
-        #     cgi_allowed_primary_tumor_types: ["LUAD", "LUSC", "NSCLC", "SCLC"]
-        #     civic_disease_keywords: ["lung", "non-small cell", "small cell"]
       evidence:
         enabled: true
         # 若缺失证据字段，默认放行；设为 reject 可更严格
