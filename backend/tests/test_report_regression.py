@@ -906,6 +906,29 @@ def test_variants_2_1_keeps_all_detected_panel_variants(tmp_path):
     assert fanci["var_type_cn"] == "点突变"
 
 
+def test_flt3_reviewed_override_brings_out_curated_drugs(tmp_path):
+    """FLT3 c.2537G>A (Ⅱ类) has only gene-level KB entries (excluded by
+    require_position_match) and the KB drugs are AML-specific. A reviewed
+    per-variant override pins the clinically-curated CRC TKIs so the variant is
+    drug-related (matches the reviewed final report and keeps the footnote count
+    in sync with the 2.1 table).
+    """
+    variations = [
+        {"ExistIn552": "Ⅱ类", "ExistInsmall358": 1, "Gene_Symbol": "FLT3",
+         "Transcript": "NM_004119.3", "Chr": "chr13", "ExIn_ID": "EX20",
+         "cHGVS": "c.2537G>A", "pHGVS_S": "p.G846D", "Function": "Missense",
+         "Freq(%)": 1.02},
+    ]
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    rows = mapper._build_variants_2_1(
+        _excel(tmp_path, variations=variations), ReportData()
+    )
+    flt3 = next(row for row in rows if row["gene"] == "FLT3")
+    for drug in ("瑞戈非尼", "索拉非尼", "舒尼替尼"):
+        assert drug in flt3["benefit_drugs"], flt3["benefit_drugs"]
+    assert flt3["caution_drugs"] == "--"
+
+
 def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
     """Detected-variant rows are ordered by 频率 high→low, grouped by gene.
 

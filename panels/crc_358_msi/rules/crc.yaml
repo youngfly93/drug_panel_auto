@@ -138,6 +138,16 @@ panel_display_genes:
 # Reviewed variant-level overrides.
 # Use this only for lab-reviewed rules that should override the public/internal KB.
 reviewed_variant_overrides:
+  # FLT3 c.2537G>A (p.G846D) Ⅱ类：公共库仅有"基因级"FLT3 条目（被
+  # require_position_match 排除），且库内为 AML 专用药；终版按临床判断给出
+  # CRC 相关多激酶 TKI（C级）。此处按终版口径固定，使 2.1 表与脚注计数一致。
+  - gene: FLT3
+    c_hgvs: "c.2537G>A"
+    variant_site: "c.2537G>A,\np.G846D"
+    benefit_drugs:
+      - "瑞戈非尼（C）"
+      - "索拉非尼（C）"
+      - "舒尼替尼（C）"
   - gene: KRAS
     c_hgvs: "c.34G>A"
     p_hgvs: "p.G12S"
