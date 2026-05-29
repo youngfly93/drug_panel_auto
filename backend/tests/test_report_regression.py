@@ -2889,7 +2889,11 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
     assert "<w:u" not in item_xml
     assert 'w:leader="dot"' not in xml
     assert "HYPERLINK \\l" in xml
-    assert "PAGEREF" not in xml
+    # Page numbers are live ``PAGEREF`` fields (cached to the LibreOffice number)
+    # so Word/WPS recompute them against their own pagination on open. Frozen
+    # static text drifted by several pages in WPS/Word — the delivery engines —
+    # because they paginate differently from the LibreOffice build engine.
+    assert "PAGEREF" in xml
     assert "_Toc24274" in xml
     assert "1.检测结果小结" not in xml
     assert "靶向药物/免疫用药提示解析" in xml
