@@ -90,6 +90,33 @@ def _read_docx_part(docx_path: Path, part_name: str) -> str:
         return zf.read(part_name).decode("utf-8")
 
 
+def _toc_sdt_xml(docx_path: Path) -> str:
+    """Return the serialized XML of the TOC content control only.
+
+    The report body legitimately contains external HYPERLINK fields (reference
+    URLs), so field-absence checks for the TOC must be scoped to the TOC SDT
+    rather than the whole document.
+    """
+    import re
+
+    from lxml import etree
+
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    with ZipFile(docx_path) as zf:
+        root = etree.fromstring(zf.read("word/document.xml"))
+
+    def sdt_text(elem) -> str:
+        return "".join(elem.xpath(".//w:t/text()", namespaces=ns))
+
+    for sdt in root.xpath(".//w:sdt", namespaces=ns):
+        text = sdt_text(sdt)
+        # The TOC SDT carries 参考文献 plus a 第N部分 part marker. (A partial
+        # rebuild may include only the appendix part, so match any 第N部分.)
+        if "参考文献" in text and re.search(r"第[一二三四]部分", text):
+            return etree.tostring(sdt, encoding="unicode")
+    raise AssertionError("TOC content control not found")
+
+
 def _excel(
     tmp_path: Path,
     *,
@@ -2888,9 +2915,15 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
     assert "<w:u" not in section_xml
     assert "<w:u" not in item_xml
     assert 'w:leader="dot"' not in xml
-    assert "HYPERLINK \\l" in xml
-    assert "PAGEREF" not in xml
-    assert "_Toc24274" in xml
+    # Pure static-text TOC: neither click-to-jump (HYPERLINK) nor live page
+    # fields (PAGEREF) inside the TOC itself. A field-free TOC always displays
+    # exactly the static number written, so Word/WPS cannot re-resolve it (which
+    # collapsed every entry to page 1 on malformed-bookmark docs). Note: the
+    # report body legitimately contains external HYPERLINKs (reference URLs), so
+    # this check is scoped to the TOC content control, not the whole document.
+    toc_xml = _toc_sdt_xml(docx_path)
+    assert "HYPERLINK" not in toc_xml
+    assert "PAGEREF" not in toc_xml
     assert "1.检测结果小结" not in xml
     assert "靶向药物/免疫用药提示解析" in xml
     assert '<w:ind w:left="1980" w:leftChars="900"/>' in xml
@@ -2901,7 +2934,7 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
     assert 'w:val="true"' in settings_xml
 
 
-def test_static_toc_links_target_numbered_appendix_headings(tmp_path):
+def test_static_toc_is_pure_static_text_without_jump_fields(tmp_path):
     import re
 
     from lxml import etree
@@ -2921,68 +2954,60 @@ def test_static_toc_links_target_numbered_appendix_headings(tmp_path):
     )
 
     assert ok is True
+    # Pure static TOC: no jump fields (HYPERLINK) and no live page fields
+    # (PAGEREF) *inside the TOC*. The rendered numbers are plain text the reader
+    # cannot re-resolve, which is the whole point — Word's lazy field update on
+    # malformed-bookmark docs otherwise collapsed every entry to page 1. The
+    # body keeps its external reference HYPERLINKs, so scope to the TOC SDT.
+    toc_xml = _toc_sdt_xml(docx_path)
+    assert "HYPERLINK" not in toc_xml
+    assert "PAGEREF" not in toc_xml
+
     ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-    w_ns = ns["w"]
     with ZipFile(docx_path) as zf:
         root = etree.fromstring(zf.read("word/document.xml"))
 
     def paragraph_text(elem):
         return "".join(elem.xpath(".//w:t/text()", namespaces=ns))
 
-    def paragraph_instr(elem):
-        return "".join(elem.xpath(".//w:instrText/text()", namespaces=ns))
+    toc = [
+        sdt
+        for sdt in root.xpath(".//w:sdt", namespaces=ns)
+        if "参考文献" in paragraph_text(sdt)
+        and re.search(r"第[一二三四]部分", paragraph_text(sdt))
+    ]
+    assert toc, "TOC sdt not found"
+    toc = toc[0]
 
-    bookmark_by_name = {
-        bookmark.get(f"{{{w_ns}}}name"): bookmark
-        for bookmark in root.xpath(".//w:bookmarkStart", namespaces=ns)
-        if bookmark.get(f"{{{w_ns}}}name")
-    }
+    def toc_row_number(label: str) -> str | None:
+        needle = label.replace(" ", "")
+        for paragraph in toc.xpath(".//w:p", namespaces=ns):
+            text = re.sub(r"\s+", "", paragraph_text(paragraph))
+            match = re.search(r"(\d{1,3})$", text)
+            if match and needle in text:
+                return match.group(1)
+        return None
 
-    def toc_anchor_target_text(label: str) -> str:
-        for paragraph in root.xpath(".//w:p", namespaces=ns):
-            text = paragraph_text(paragraph)
-            instr = paragraph_instr(paragraph)
-            if label not in text or "HYPERLINK" not in instr:
-                continue
-            match = re.search(r'HYPERLINK\s+\\l\s+"([^"]+)"', instr)
-            assert match, f"TOC row for {label} has no HYPERLINK anchor"
-            bookmark = bookmark_by_name.get(match.group(1))
-            assert bookmark is not None
-            target = bookmark
-            while target is not None and target.tag != f"{{{w_ns}}}p":
-                target = target.getparent()
-            assert target is not None
-            return re.sub(r"\s+", "", paragraph_text(target))
-        raise AssertionError(f"TOC row for {label} not found")
+    # Static page numbers land in the right rows.
+    assert toc_row_number("基因检测列表") == "73"
+    assert toc_row_number("参考文献") == "75"
 
-    assert "4.基因检测列表" in toc_anchor_target_text("基因检测列表")
-    assert "5.参考文献" in toc_anchor_target_text("参考文献")
 
-    def toc_field_end_precedes_static_page_number(label: str, page_number: str) -> bool:
-        for paragraph in root.xpath(".//w:p", namespaces=ns):
-            text = paragraph_text(paragraph)
-            instr = paragraph_instr(paragraph)
-            if label not in text or "HYPERLINK" not in instr:
-                continue
-            state = "before_label"
-            for run in paragraph.xpath("./w:r", namespaces=ns):
-                fld_types = [
-                    value
-                    for value in run.xpath(".//w:fldChar/@w:fldCharType", namespaces=ns)
-                ]
-                run_text = "".join(run.xpath(".//w:t/text()", namespaces=ns))
-                if label in run_text:
-                    assert state == "before_label"
-                    state = "after_label"
-                if "end" in fld_types:
-                    assert state == "after_label"
-                    state = "after_field"
-                if page_number in run_text:
-                    return state == "after_field"
-        return False
+def test_set_word_compat_pagination_adds_printer_metrics(tmp_path):
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    template_path = package.resolve_template_file("crc_358_msi_golden_template_v0")
+    docx_path = tmp_path / "compat.docx"
+    shutil.copy2(template_path, docx_path)
 
-    assert toc_field_end_precedes_static_page_number("基因检测列表", "73")
-    assert toc_field_end_precedes_static_page_number("参考文献", "75")
+    TemplateRenderer(log_level="ERROR")._set_word_compat_pagination(str(docx_path))
+
+    settings_xml = _read_docx_part(docx_path, "word/settings.xml")
+    # Word-compat pagination flags make LibreOffice paginate like Word so the
+    # detected/static TOC numbers track what a Word/WPS reader sees.
+    assert "<w:usePrinterMetrics" in settings_xml
+    assert "<w:doNotUseHTMLParagraphAutoSpacing" in settings_xml
+    # Legacy compat flags must precede <w:compatSetting> in the schema.
+    assert settings_xml.index("usePrinterMetrics") < settings_xml.index("compatSetting")
 
 
 def test_biomarker_table_restores_template_typography(tmp_path):

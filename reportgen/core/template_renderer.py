@@ -4469,6 +4469,12 @@ class TemplateRenderer:
             )
             return
 
+        # Make LibreOffice paginate like Word/WPS *before* detecting page
+        # numbers, so the static numbers we write track the pages a Word/WPS
+        # reader actually sees (LibreOffice otherwise packs content into fewer
+        # pages, drifting the later sections up by several pages).
+        self._set_word_compat_pagination(file_path)
+
         page_numbers = self._detect_toc_page_numbers_from_pdf_layout(
             file_path=file_path,
             soffice=soffice,
@@ -4578,14 +4584,15 @@ class TemplateRenderer:
         page_numbers: dict[str, int],
         context: dict | None = None,
     ) -> bool:
-        """Write visible TOC labels/page numbers while keeping Word jump fields.
+        """Rebuild the TOC as pure static text: labels + static page numbers.
 
-        Word/WPS/LibreOffice can disagree on PAGEREF pagination when a document
-        contains floating text boxes and section-level page-number restarts.
-        Keep the row clickable through ``HYPERLINK \\l`` but write the page
-        number as static text derived from the final PDF layout. This prevents
-        opening-time field refresh from changing the visible TOC number away
-        from the page footer users see.
+        The TOC carries NO fields — no ``HYPERLINK`` jump and no ``PAGEREF``
+        page number. Live fields let Word/WPS re-resolve numbers on open, which
+        on this template's malformed bookmark structure collapsed every entry to
+        page 1. A field-free block can only display the static number written
+        here (derived from the final PDF layout, with Word-compat pagination —
+        see ``_set_word_compat_pagination``), so it is identical in every
+        reader. Click-to-jump is intentionally dropped for that guarantee.
         """
         import copy
         import os
@@ -4946,14 +4953,13 @@ class TemplateRenderer:
             ) -> Any:
                 para = etree.Element(qn("p"))
                 para.append(make_toc_ppr(section, before_twips=before_twips))
-                anchor = find_or_create_target_bookmark(label)
-                if anchor:
-                    para.append(make_field_run(field_char_type="begin"))
-                    para.append(make_field_run(instruction=f' HYPERLINK \\l "{anchor}" '))
-                    para.append(make_field_run(field_char_type="separate"))
+                # Pure static-text TOC: no HYPERLINK field (no click-to-jump).
+                # Live fields let Word/WPS re-resolve numbers on open — which on
+                # malformed-bookmark docs collapses every entry to page 1. A
+                # field-free block can only ever display the static number we
+                # write, so it is bulletproof across every reader. Click-to-jump
+                # is intentionally dropped in favour of that guarantee.
                 para.append(make_run(label, section=section))
-                if anchor:
-                    para.append(make_field_run(field_char_type="end"))
                 if number is not None:
                     para.append(make_run(tab=True))
                     para.append(make_run(number))
@@ -5345,6 +5351,38 @@ class TemplateRenderer:
         doc.save(file_path)
         self.logger.debug("已设置 updateFields=true，Word 打开时将刷新目录")
 
+    def _set_word_compat_pagination(self, file_path: str) -> None:
+        """写入 Word 兼容分页标志，使 LibreOffice 的分页贴近 Word/WPS。
+
+        LibreOffice 默认把内容压进比 Word 更少的页里，导致从 LibreOffice PDF
+        版式探测出的静态目录页码，与读者在 Word/WPS 里实际看到的页相差数页
+        （尤以靠后的章节明显）。开启 ``usePrinterMetrics`` 与
+        ``doNotUseHTMLParagraphAutoSpacing`` 这两个 Word 兼容标志后，
+        LibreOffice 的排版（以及据此探测/写入的页码）会大幅贴近 Word，
+        临床关键段基本对齐。这两个标志在 Word 中本就是默认行为（等同空操作），
+        因此保留在交付的 docx 里是安全的。
+        """
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+
+        doc = Document(file_path)
+        settings = doc.settings.element
+        compat = settings.find(qn("w:compat"))
+        if compat is None:
+            compat = OxmlElement("w:compat")
+            settings.append(compat)
+        # 旧式兼容标志在 schema 中必须位于 <w:compatSetting> 之前。
+        first_setting = compat.find(qn("w:compatSetting"))
+        for tag in ("w:usePrinterMetrics", "w:doNotUseHTMLParagraphAutoSpacing"):
+            if compat.find(qn(tag)) is None:
+                element = OxmlElement(tag)
+                if first_setting is not None:
+                    first_setting.addprevious(element)
+                else:
+                    compat.append(element)
+        doc.save(file_path)
+        self.logger.debug("已写入 Word 兼容分页标志(usePrinterMetrics)，目录页码将贴近 Word")
+
     def _refresh_fields_with_native_engine(self, file_path: str) -> None:
         """优先使用可用的原生排版引擎刷新目录/页码域。"""
         import os
@@ -5402,9 +5440,12 @@ class TemplateRenderer:
 
         if "TOC" in document_xml:
             return True
+        # Our static TOC carries no fields (no HYPERLINK/TOC code) — detect it by
+        # the reviewed part-section markers instead, so static page-number
+        # writing still triggers for the pure-static-text layout.
         return (
-            "HYPERLINK" in document_xml
-            and "第一部分" in document_xml
+            "第一部分" in document_xml
+            and "第四部分" in document_xml
             and "参考文献" in document_xml
         )
 
