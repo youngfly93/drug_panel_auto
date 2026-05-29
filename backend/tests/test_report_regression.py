@@ -3010,6 +3010,70 @@ def test_set_word_compat_pagination_adds_printer_metrics(tmp_path):
     assert settings_xml.index("usePrinterMetrics") < settings_xml.index("compatSetting")
 
 
+def test_variant_detail_no_mutation_gene_is_not_link_styled(tmp_path):
+    """In the 9-column 2.1 variant-detail table, a 未见突变 (no-mutation) row
+    must show its gene name as plain black text — NOT a blue underlined link.
+    Only genes with an actual detected variant are link-styled (matches the
+    reviewed final report). Regression guard: this had silently come back.
+    """
+    from docx.oxml.ns import qn
+
+    doc = Document()
+    table = doc.add_table(rows=4, cols=9)
+    hdr0 = [
+        "基因名称", "基因突变信息", "基因突变信息", "基因突变信息", "基因突变信息",
+        "基因突变信息", "基因突变信息", "靶向药物信息", "靶向药物信息",
+    ]
+    hdr1 = [
+        "基因名称", "转录本号", "染色体", "外显子", "位点", "突变类型", "频率",
+        "潜在获益靶向药物", "可能耐药或慎重药物",
+    ]
+    variant_row = ["TP53", "NM_000546", "chr17", "7", "c.844C>T", "missense", "30", "AZD1775（C）", "--"]
+    no_mut_row = ["BRAF", "", "", "", "未见突变", "", "", "--", "--"]
+    for ci, value in enumerate(hdr0):
+        table.rows[0].cells[ci].text = value
+    for ci, value in enumerate(hdr1):
+        table.rows[1].cells[ci].text = value
+    for ci, value in enumerate(variant_row):
+        table.rows[2].cells[ci].text = value
+    for ci, value in enumerate(no_mut_row):
+        table.rows[3].cells[ci].text = value
+    docx_path = tmp_path / "variant_detail.docx"
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._restore_variant_detail_table_style(
+        str(docx_path), {"panel_style": {"variant_detail_table": {}}}
+    )
+
+    out = Document(docx_path)
+    result_table = out.tables[0]
+
+    def gene_color_underline(row_idx):
+        cell = result_table.rows[row_idx].cells[0]
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                if not run.text.strip():
+                    continue
+                rpr = run._element.find(qn("w:rPr"))
+                color = rpr.find(qn("w:color")) if rpr is not None else None
+                underline = rpr.find(qn("w:u")) if rpr is not None else None
+                return (
+                    (color.get(qn("w:val")) if color is not None else None),
+                    (underline.get(qn("w:val")) if underline is not None else None),
+                )
+        return (None, None)
+
+    # Real variant row: gene is a blue underlined link.
+    color, underline = gene_color_underline(2)
+    assert color and color.lower() == "0000ff"
+    assert underline and underline != "none"
+
+    # No-mutation row: gene is plain black, no underline.
+    color, underline = gene_color_underline(3)
+    assert (color or "000000").lower() == "000000"
+    assert (underline or "none") == "none"
+
+
 def test_biomarker_table_restores_template_typography(tmp_path):
     docx_path = tmp_path / "biomarker.docx"
     doc = Document()

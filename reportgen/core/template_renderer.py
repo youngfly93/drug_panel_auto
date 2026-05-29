@@ -1332,7 +1332,14 @@ class TemplateRenderer:
                 continue
             for row_idx, row in enumerate(table.rows):
                 row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
-                for col_idx, cell in enumerate(row.cells):
+                row_cells = row.cells
+                # A "no mutation" baseline row (位点列 == 未见突变/未检出) lists a
+                # gene that was tested but carried no variant. The reviewed report
+                # shows that gene name as plain black text, NOT a blue link —
+                # only genes with an actual detected variant are link-styled.
+                locus_text = row_cells[4].text.strip() if len(row_cells) > 4 else ""
+                row_has_variant = not is_plain_text(locus_text)
+                for col_idx, cell in enumerate(row_cells):
                     header = row_idx in {0, 1}
                     text = (cell.text or "").strip()
                     plain_cell = is_plain_text(text)
@@ -1340,7 +1347,10 @@ class TemplateRenderer:
                     link = (
                         row_idx >= 2
                         and not plain_cell
-                        and (col_idx == 0 or (col_idx in {7, 8} and not dash_only))
+                        and (
+                            (col_idx == 0 and row_has_variant)
+                            or (col_idx in {7, 8} and not dash_only)
+                        )
                     )
                     cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
                     set_cell_borders(cell)
