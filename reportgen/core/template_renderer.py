@@ -1571,6 +1571,166 @@ class TemplateRenderer:
         if changed:
             doc.save(file_path)
 
+    def _apply_immune_table_notes(self, file_path: str, context: dict) -> None:
+        """Standalone processor: apply the immune-table conditional footnotes.
+
+        The golden-template chain skips the heavyweight ``report_content``
+        processor, so this thin processor adds the conditional immune-table notes
+        (TMB-H FDA sentence, TMB/MSI biomarker-conflict note) and renumbers the
+        trailing 药物名称 note, without the other report-content surgery.
+        """
+        doc = Document(file_path)
+        if self._apply_immune_table_notes_to_doc(doc, context):
+            doc.save(file_path)
+
+    def _apply_immune_table_notes_to_doc(self, doc, context: dict) -> bool:
+        """Add/strip the immune-table conditional footnotes and renumber.
+
+        Notes shipped by the template: 1.FoundationOne, 2.#帕博利珠..., and the
+        trailing N.上表涉及的已上市药物名称. The TMB-H FDA sentence and the
+        biomarker-conflict note are conditional (absent from the template) and are
+        inserted here when applicable, then the 药物名称 note is renumbered to
+        "3." (no conflict note) or "4." (conflict note present).
+        """
+        import copy as _copy
+        import re
+
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        def normalized_status(value) -> str:
+            return str(value or "").strip().upper()
+
+        def has_tmb_h() -> bool:
+            status = normalized_status(context.get("tmb_status"))
+            if status in {"H", "HIGH", "TMB-H"} or "TMB-H" in status:
+                return True
+            if status:
+                return False
+            return "TMB-H" in str(context.get("tmb_summary") or "").upper()
+
+        def has_msi_h() -> bool:
+            status = normalized_status(context.get("msi_status"))
+            if status in {"MSI-H", "MSIH", "HIGH"} or "MSI-H" in status:
+                return True
+            if status:
+                return False
+            return "MSI-H" in str(context.get("msi_summary") or "").upper()
+
+        def has_known(field: str) -> bool:
+            status = normalized_status(context.get(field))
+            return bool(
+                status
+                and status not in {"未检测", "NOT DETECTED", "NA", "N/A", "NONE"}
+            )
+
+        def has_conflict() -> bool:
+            tmb_positive = has_tmb_h()
+            msi_positive = has_msi_h()
+            return (
+                (tmb_positive and has_known("msi_status") and not msi_positive)
+                or (msi_positive and has_known("tmb_status") and not tmb_positive)
+            )
+
+        def set_paragraph_text(paragraph, text: str) -> bool:
+            if paragraph.runs:
+                paragraph.runs[0].text = text
+                for run in paragraph.runs[1:]:
+                    run.text = ""
+            else:
+                paragraph.add_run(text)
+            return True
+
+        def remove_paragraph(paragraph) -> bool:
+            parent = paragraph._element.getparent()
+            if parent is None:
+                return False
+            parent.remove(paragraph._element)
+            return True
+
+        tmb_h_sentence = (
+            "并且，FDA 已批准帕博利珠单抗用于治疗 TMB-H 的不可切除或转移性的成人"
+            "和儿童实体瘤。"
+        )
+        conflict_note = (
+            "目前已知的免疫治疗生物标志物包括TMB、MSI、PD-L1表达、免疫疗效正相关/"
+            "负相关/超进展基因等。值得注意的是，TMB、MSI、PD-L1表达预测生物标志物"
+            "是相对独立的预测指标，对免疫治疗临床获益率的评估具有独立性，建议您"
+            "结合临床实际情况选择治疗方案。"
+        )
+        tmb_h_sentence_re = re.compile(
+            r"并且，\s*FDA\s*已批准帕博利珠单抗用于治疗\s*TMB-H\s*的不可切除或转移性的成人和儿童实体瘤。"
+        )
+
+        changed = False
+        immune_note2 = None
+        immune_conflict = None
+        immune_drugnames = None
+        for paragraph in doc.paragraphs:
+            text = paragraph.text or ""
+            if "#帕博利珠单抗" in text and "批准用于治疗" in text:
+                immune_note2 = paragraph
+            elif "免疫治疗生物标志物包括" in text and "相对独立" in text:
+                immune_conflict = paragraph
+            elif (
+                "上表涉及的已上市的药物名称及对应的商品名称" in text
+                and "帕博利珠单抗[可瑞达]" in text
+            ):
+                immune_drugnames = paragraph
+
+        # 1) TMB-H FDA sentence on note 2 (append when TMB-H, strip when not).
+        if immune_note2 is not None:
+            note_text = immune_note2.text or ""
+            has_sentence = bool(tmb_h_sentence_re.search(note_text))
+            if has_tmb_h():
+                if not has_sentence:
+                    base = re.sub(r"\s+。", "。", note_text).rstrip()
+                    if base and not base.endswith("。"):
+                        base += "。"
+                    changed = set_paragraph_text(
+                        immune_note2, base + tmb_h_sentence
+                    ) or changed
+            elif has_sentence:
+                new_text = re.sub(
+                    r"\s+。", "。", tmb_h_sentence_re.sub("", note_text)
+                ).strip()
+                changed = set_paragraph_text(immune_note2, new_text) or changed
+
+        # 2) Biomarker-independence note (insert when conflict, remove when not).
+        if has_conflict():
+            if immune_conflict is None and immune_drugnames is not None:
+                clone = _copy.deepcopy(immune_drugnames._p)
+                runs = clone.findall(qn("w:r"))
+                if runs:
+                    first = runs[0]
+                    for t in first.findall(qn("w:t")):
+                        first.remove(t)
+                    t = OxmlElement("w:t")
+                    t.set(qn("xml:space"), "preserve")
+                    t.text = "3. " + conflict_note
+                    first.append(t)
+                    for extra in runs[1:]:
+                        clone.remove(extra)
+                immune_drugnames._p.addprevious(clone)
+                immune_conflict = clone
+                changed = True
+        elif immune_conflict is not None:
+            changed = remove_paragraph(immune_conflict) or changed
+            immune_conflict = None
+
+        # 3) Renumber the trailing 药物名称 note: 3 (no conflict) or 4 (conflict).
+        if immune_drugnames is not None:
+            target_num = 4 if immune_conflict is not None else 3
+            joined = "".join(run.text or "" for run in immune_drugnames.runs)
+            match = re.match(r"^\s*(\d+)\s*[.\．]", joined)
+            if match and match.group(1) != str(target_num):
+                body = re.sub(r"^\s*\d+\s*[.\．]\s*", "", joined, count=1)
+                changed = set_paragraph_text(
+                    immune_drugnames, f"{target_num}. {body}"
+                ) or changed
+
+        return changed
+
     def _apply_report_content_fixes(
         self,
         file_path: str,
@@ -2006,29 +2166,10 @@ class TemplateRenderer:
                 ) or changed
             break
 
-        if not has_tmb_h():
-            tmb_h_drug_note = re.compile(
-                r"并且，\s*FDA\s*已批准帕博利珠单抗用于治疗\s*TMB-H\s*的不可切除或转移性的成人和儿童实体瘤。"
-            )
-            for paragraph in doc.paragraphs:
-                text = paragraph.text or ""
-                if (
-                    "FDA" not in text
-                    or "TMB-H" not in text
-                    or "帕博利珠单抗" not in text
-                    or "不可切除或转移性的成人和儿童实体瘤" not in text
-                ):
-                    continue
-                new_text = tmb_h_drug_note.sub("", text).strip()
-                new_text = re.sub(r"\s+。", "。", new_text)
-                if new_text != text:
-                    changed = set_paragraph_text(paragraph, new_text) or changed
-
-        if not has_immune_biomarker_conflict():
-            for paragraph in list(doc.paragraphs):
-                text = paragraph.text or ""
-                if "免疫治疗生物标志物包括" in text and "相对独立" in text:
-                    changed = remove_paragraph(paragraph) or changed
+        # Immune-table conditional footnotes (TMB-H sentence / biomarker-conflict
+        # note) + numbering. Extracted so the golden-template chain (which skips
+        # the full report_content processor) can run it as a standalone step.
+        changed = self._apply_immune_table_notes_to_doc(doc, context) or changed
 
         # Patient info table should stop at project code; hospital/pathology/QC rows
         # were requested to be removed from this location.

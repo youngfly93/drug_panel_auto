@@ -929,6 +929,59 @@ def test_flt3_reviewed_override_brings_out_curated_drugs(tmp_path):
     assert flt3["caution_drugs"] == "--"
 
 
+def test_immune_table_conditional_notes_and_numbering():
+    """Immune-table footnotes are conditional and renumber correctly:
+      * TMB-H            → append the FDA TMB-H sentence to note 2.
+      * TMB/MSI 结果不一致 → insert the biomarker-independence note (note 3).
+    The trailing 药物名称 note becomes "4." when the conflict note is present,
+    "3." otherwise. TMB-L or both-high add neither.
+    """
+    from docx import Document
+
+    def build_doc():
+        doc = Document()
+        doc.add_paragraph(
+            "备注：1. FoundationOne CDx (324 个基因) TMB 研究表明，"
+            "对于组织样本，TMB≥10 mut/Mb 为高突变负荷。"
+        )
+        doc.add_paragraph(
+            "#帕博利珠单抗、#纳武利尤单抗均已获FDA和/或NMPA批准用于治疗结直肠癌。"
+        )
+        doc.add_paragraph(
+            "3. 上表涉及的已上市的药物名称及对应的商品名称："
+            "帕博利珠单抗[可瑞达]、纳武利尤单抗[欧狄沃]"
+        )
+        return doc
+
+    renderer = TemplateRenderer(log_level="ERROR")
+
+    def run(ctx):
+        doc = build_doc()
+        renderer._apply_immune_table_notes_to_doc(doc, ctx)
+        texts = [p.text for p in doc.paragraphs]
+        full = "\n".join(texts)
+        drug_note_num = next(t[:2] for t in texts if "上表涉及" in t)
+        return full, drug_note_num
+
+    # TMB-H + MSS (inconsistent): both notes added, drug note renumbered to 4.
+    full, num = run({"tmb_status": "H", "msi_status": "MSS"})
+    assert "帕博利珠单抗用于治疗 TMB-H" in full
+    assert "免疫治疗生物标志物包括" in full
+    assert num == "4."
+
+    # TMB-L + MSS: neither note, drug note stays 3.
+    full, num = run({"tmb_status": "L", "msi_status": "MSS"})
+    assert "帕博利珠单抗用于治疗 TMB-H" not in full
+    assert "免疫治疗生物标志物包括" not in full
+    assert num == "3."
+
+    # TMB-H + MSI-H (both high, consistent): TMB-H sentence only, no conflict note.
+    full, num = run({"tmb_status": "H", "msi_status": "MSI-H"})
+    assert "帕博利珠单抗用于治疗 TMB-H" in full
+    assert "免疫治疗生物标志物包括" not in full
+    assert num == "3."
+
+
 def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
     """Detected-variant rows are ordered by 频率 high→low, grouped by gene.
 

@@ -55,6 +55,13 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
             ),
         ),
         FunctionProcessor(
+            "immune_table_notes",
+            "免疫表条件备注处理失败",
+            lambda c: c.renderer._apply_immune_table_notes(
+                c.output_path, c.template_context
+            ),
+        ),
+        FunctionProcessor(
             "bullet_lists",
             "项目符号清理失败",
             _run_bullet_lists,

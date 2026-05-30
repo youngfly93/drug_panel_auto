@@ -56,6 +56,7 @@ def test_crc358_golden_template_declares_template_level_processors():
     assert template.processors == (
         "part3_formatted_sections",
         "signature_placeholder",
+        "immune_table_notes",
         "bullet_lists",
         "signature_layout",
         "front_matter_spacing",
