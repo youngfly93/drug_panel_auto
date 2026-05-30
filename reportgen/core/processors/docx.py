@@ -199,7 +199,10 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         ctx.logger.warning("最终目录页码刷新失败", error=str(refresh_err))
     ctx.renderer._normalize_toc_decoration_layout(ctx.output_path)
     ctx.renderer._restore_reviewed_body_headers(ctx.output_path)
-    ctx.renderer._populate_static_toc_page_numbers(ctx.output_path, ctx.template_context)
+    # 注：此处不再 _populate_static_toc_page_numbers。该操作要 LibreOffice 把整份
+    # 文档转 PDF 分页（最贵的一步），原先在这里和 underlines_and_styles 末尾各跑一次，
+    # 而本步写的页码会被后者完全覆盖——纯冗余。只保留 underlines 末尾那一次（反映
+    # 最终文档状态、权威），省掉这次冷启动的全文档渲染。
 
 
 def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
