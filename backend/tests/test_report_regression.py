@@ -5923,6 +5923,62 @@ def _sig_label_inline_drawings(doc):
     return None
 
 
+def test_run_processors_records_changed_and_deltas(tmp_path):
+    """后处理器可观测性：每个处理器记录是否真改动文档 + 粗粒度增减，
+    OK 但 changed=False 即静默失效信号。"""
+    from reportgen.core.processors.base import ProcessorContext, run_processors
+
+    docx_path = tmp_path / "obs.docx"
+    doc = Document()
+    doc.add_paragraph("起始段")
+    doc.save(docx_path)
+
+    class _P:
+        def __init__(self, name, fn):
+            self.name = name
+            self.warning_message = f"{name} 失败"
+            self._fn = fn
+
+        def enabled(self, ctx):
+            return True
+
+        def run(self, ctx):
+            self._fn(ctx.output_path)
+
+    def add_para(path):
+        d = Document(path)
+        d.add_paragraph("新增")
+        d.save(path)
+
+    def silent_noop(path):
+        return  # 模拟锚点没匹配上、静默跳过
+
+    class _Logger:
+        def warning(self, *a, **k):
+            pass
+
+    ctx = ProcessorContext(
+        renderer=None,
+        output_path=str(docx_path),
+        template_path="",
+        template_context={},
+        logger=_Logger(),
+    )
+    results = run_processors([_P("changer", add_para), _P("noop", silent_noop)], ctx)
+
+    by_name = {r.name: r for r in results}
+    assert by_name["changer"].status == "OK"
+    assert by_name["changer"].changed is True
+    assert by_name["changer"].deltas.get("paragraphs") == 1
+    # 静默 no-op：OK 但无改动 + 空 deltas（= 静默失效信号）
+    assert by_name["noop"].status == "OK"
+    assert by_name["noop"].changed is False
+    assert by_name["noop"].deltas == {}
+    # changed/deltas 进入 to_dict（落侧车，随时可查）
+    assert "changed" in by_name["changer"].to_dict()
+    assert "deltas" in by_name["changer"].to_dict()
+
+
 def test_gene_list_table_first_column_not_bold(tmp_path):
     """基因检测列表表体统一不加粗（模板把首列基因加粗了，应与其它列一致）。"""
     docx_path = tmp_path / "genelist.docx"
