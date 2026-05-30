@@ -5923,6 +5923,75 @@ def _sig_label_inline_drawings(doc):
     return None
 
 
+def test_rebuild_reference_section_covers_cited_pmids(tmp_path):
+    """末尾 5.参考文献 应按正文实际引用重建：被引 PMID/NCT 全覆盖、示例排除、静态替换。"""
+    docx_path = tmp_path / "refs.docx"
+    doc = Document()
+    doc.add_paragraph(
+        "BRCA1 突变对PARP抑制剂有预测作用[24579064]。又见[20664172，NCT04305496]。"
+    )
+    doc.add_paragraph("说明：如编号[99999999]为参考文献PMID号示例。")  # 应被排除
+    doc.add_paragraph("5. 参考文献")
+    doc.add_paragraph("PMID:0000001 stale ref one")
+    doc.add_paragraph("PMID:0000002 stale ref two")
+    doc.save(docx_path)
+
+    ctx = {
+        "reference_lookup": {
+            "pmid": {
+                "24579064": "PMID: 24579064 BRCA paper",
+                "20664172": "PMID: 20664172 PI3K paper",
+            },
+            "trial": {"NCT04305496": "NCT04305496 https://clinicaltrials.gov."},
+            "other": [],
+        }
+    }
+    TemplateRenderer(log_level="ERROR")._rebuild_reference_section(str(docx_path), ctx)
+
+    rendered = Document(docx_path)
+    start = next(
+        i
+        for i, p in enumerate(rendered.paragraphs)
+        if (p.text or "").strip() == "5. 参考文献"
+    )
+    refs = [
+        (p.text or "").strip()
+        for p in rendered.paragraphs[start + 1:]
+        if (p.text or "").strip()
+    ]
+    blob = "\n".join(refs)
+    assert "PMID: 24579064 BRCA paper" in blob
+    assert "PMID: 20664172 PI3K paper" in blob
+    assert "NCT04305496 https://clinicaltrials.gov." in blob
+    assert "stale ref one" not in blob  # 静态条目被替换
+    assert "99999999" not in blob  # “如编号”示例被排除
+    assert blob.index("20664172") < blob.index("24579064")  # PMID 升序
+
+
+def test_build_reference_lookup_includes_extra_references(tmp_path):
+    overlay = tmp_path / "overlay.yaml"
+    overlay.write_text(
+        yaml.safe_dump(
+            {"extra_references": ["PMID: 28351930 Hyperprogressors after Immunotherapy"]},
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    provider = GeneKnowledgeProvider(
+        {
+            "enabled": True,
+            "gene_knowledge_db": {
+                "enabled": True,
+                "path": "missing.xlsx",
+                "reviewed_part3_overlay_path": str(overlay),
+            },
+        }
+    )
+    provider.load(base_path=str(tmp_path))
+    lookup = provider.build_reference_lookup()
+    assert lookup["pmid"].get("28351930", "").startswith("PMID: 28351930")
+
+
 def test_render_inline_signatures_places_images_on_label_line(tmp_path):
     from PIL import Image
 

@@ -43,6 +43,13 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
             ),
         ),
         FunctionProcessor(
+            "rebuild_references",
+            "参考文献按引用重建失败",
+            lambda c: c.renderer._rebuild_reference_section(
+                c.output_path, c.template_context
+            ),
+        ),
+        FunctionProcessor(
             "signature_placeholder",
             "签名占位处理失败",
             _run_signature_placeholders,

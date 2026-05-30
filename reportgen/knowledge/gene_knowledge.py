@@ -47,6 +47,7 @@ class GeneKnowledgeProvider:
         self._reviewed_gene_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._reviewed_gene_section_overrides: Dict[str, Dict[str, str]] = {}
         self._reviewed_drug_section_overrides: Dict[tuple[str, str], List[Dict[str, str]]] = {}
+        self._extra_references: List[str] = []
         self._drug_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._drug_full_cache: Dict[str, List[Dict[str, str]]] = {}  # 完整药物信息
         self._gene_transcript_cache: Dict[str, Dict[str, str]] = {}
@@ -207,6 +208,13 @@ class GeneKnowledgeProvider:
                 self._reviewed_drug_section_overrides.setdefault(
                     (variant_key, drug_type), []
                 ).append(clean_row)
+
+            # reviewed override 补充的参考文献全文（如 DNMT3A/FLT3 策展引用），
+            # 供 build_reference_lookup 给这些被引 PMID 补上标题。
+            for ref in data.get("extra_references") or []:
+                ref_text = self._norm_text(ref)
+                if ref_text and ref_text not in self._extra_references:
+                    self._extra_references.append(ref_text)
 
     def _hgvs_key(self, value: Any) -> str:
         return re.sub(r"\s+", "", self._norm_text(value)).upper()
@@ -765,6 +773,39 @@ class GeneKnowledgeProvider:
         if not self._loaded:
             self.load()
         return self._references_cache.get(gene.upper(), [])
+
+    def build_reference_lookup(self) -> Dict[str, Any]:
+        """构建全局"引用标识 → 参考文献全文"映射，供按正文引用重建参考文献。
+
+        返回 ``{"pmid": {号: 全文}, "trial": {NCT/CTR/ChiCTR号: 全文},
+        "other": [其它(如会议摘要)全文, ...]}``。号已去前导零并标准化。
+        """
+        if not self._loaded:
+            self.load()
+        pmid: Dict[str, str] = {}
+        trial: Dict[str, str] = {}
+        other: List[str] = []
+        seen_other = set()
+        ref_sources = list(self._references_cache.values())
+        if self._extra_references:
+            ref_sources.append(self._extra_references)
+        for refs in ref_sources:
+            for raw in refs:
+                ref = str(raw or "").strip()
+                if not ref:
+                    continue
+                m = re.match(r"PMID[:\s]*0*(\d+)", ref, re.I)
+                if m:
+                    pmid.setdefault(str(int(m.group(1))), ref)
+                    continue
+                m2 = re.match(r"((?:NCT|CTR|ChiCTR)\d+)", ref, re.I)
+                if m2:
+                    trial.setdefault(m2.group(1).upper(), ref)
+                    continue
+                if ref not in seen_other:
+                    seen_other.add(ref)
+                    other.append(ref)
+        return {"pmid": pmid, "trial": trial, "other": other}
 
     def get_gene_transcript_info(self, gene: str) -> Dict[str, str]:
         """

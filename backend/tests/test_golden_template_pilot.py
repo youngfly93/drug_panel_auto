@@ -55,6 +55,7 @@ def test_crc358_golden_template_declares_template_level_processors():
     assert template.status == "active"
     assert template.processors == (
         "part3_formatted_sections",
+        "rebuild_references",
         "signature_placeholder",
         "immune_table_notes",
         "bullet_lists",
@@ -242,6 +243,7 @@ def test_report_generator_uses_template_level_processors():
 
     assert processors == (
         "part3_formatted_sections",
+        "rebuild_references",
         "signature_placeholder",
         "immune_table_notes",
         "bullet_lists",

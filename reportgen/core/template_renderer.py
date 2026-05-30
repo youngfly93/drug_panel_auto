@@ -3621,6 +3621,121 @@ class TemplateRenderer:
             references=len(references),
         )
 
+    def _rebuild_reference_section(self, file_path: str, context: dict) -> None:
+        """按正文实际引用重建末尾"5. 参考文献"列表。
+
+        金标模板的参考文献区是 reviewed 源报告写死的静态文本，不随病人变，
+        导致本次报告正文引用的 PMID/NCT（如 BRCA1 的 24579064）在参考文献里
+        缺失。此处扫描参考文献区之前的全文（含 Part3 动态解析与诊疗知识/信号
+        通路等静态附录章节）收集所有被引标识，用 ``reference_lookup`` 映射查到
+        全文后按 PMID 升序重排，替换静态列表，保证"引必有据"。
+        """
+        import copy as _copy
+        import re
+
+        from docx.text.paragraph import Paragraph
+
+        lookup = context.get("reference_lookup") or {}
+        pmid_map = dict(lookup.get("pmid") or {})
+        trial_map = dict(lookup.get("trial") or {})
+        other_refs = list(lookup.get("other") or [])
+        if not (pmid_map or trial_map or other_refs):
+            return
+
+        doc = Document(file_path)
+        paragraphs = doc.paragraphs
+
+        ref_idx = None
+        for idx, paragraph in enumerate(paragraphs):
+            text = (paragraph.text or "").strip()
+            if re.fullmatch(r"5\s*[\.\．、]?\s*参考文献", text) or text == "参考文献":
+                ref_idx = idx  # 取最后一个（附录级）
+        if ref_idx is None:
+            return
+
+        # 把原静态参考文献也解析进映射（KB 优先、静态补缺），使静态附录章节
+        # （诊疗知识/信号通路等）引用的 PMID 仍能保留全文，不退化为无标题兜底。
+        existing = [p for p in paragraphs[ref_idx + 1:] if (p.text or "").strip()]
+        for paragraph in existing:
+            entry = (paragraph.text or "").strip()
+            m_static = re.match(r"PMID[:\s]*0*(\d+)", entry, re.I)
+            if m_static:
+                pmid_map.setdefault(str(int(m_static.group(1))), entry)
+                continue
+            m_trial = re.match(r"((?:NCT|CTR|ChiCTR)\d+)", entry, re.I)
+            if m_trial:
+                trial_map.setdefault(m_trial.group(1).upper(), entry)
+
+        cited_pmids: list[str] = []
+        cited_trials: list[str] = []
+        cited_other: list[str] = []
+        seen: set[str] = set()
+        for paragraph in paragraphs[:ref_idx]:
+            ptext_full = paragraph.text or ""
+            # 跳过"阅读说明"里讲解引用格式的示例（如"如编号[17401425]…"）
+            if "如编号" in ptext_full:
+                continue
+            for group in re.findall(r"\[([^\]]+)\]", ptext_full):
+                # 仅按逗号/分号切分；不切空白，避免把"2014 AACR Abstract 915"
+                # 这类会议摘要引用拆成 2014/915 被误判为 PMID。
+                for token in re.split(r"[，,;；、]+", group):
+                    token = token.strip()
+                    if not token:
+                        continue
+                    # PMID 取 5-9 位纯数字（排除 4 位年份等碎片）
+                    if re.fullmatch(r"0*\d{5,9}", token):
+                        key = str(int(token))
+                        if key not in seen:
+                            seen.add(key)
+                            cited_pmids.append(key)
+                    elif re.fullmatch(r"(?:NCT|CTR|ChiCTR)\d+", token, re.I):
+                        key = token.upper()
+                        if key not in seen:
+                            seen.add(key)
+                            cited_trials.append(key)
+            # 会议摘要等无规则标识：按前缀匹配 other_refs
+            ptext = paragraph.text or ""
+            for ref in other_refs:
+                head = ref[:18]
+                if head and head in ptext and ref not in cited_other:
+                    cited_other.append(ref)
+
+        refs: list[str] = []
+        for key in sorted(cited_pmids, key=int):
+            refs.append(pmid_map.get(key) or f"PMID:{key}")
+        for key in sorted(cited_trials):
+            refs.append(trial_map.get(key) or f"{key} https://clinicaltrials.gov.")
+        refs.extend(cited_other)
+        if not refs:
+            return
+
+        def set_para_text(paragraph, text: str) -> None:
+            for run in list(paragraph.runs):
+                run._r.getparent().remove(run._r)
+            paragraph.add_run(text)
+
+        if not existing:
+            return  # 没有可复用的静态条目则不动（保守）
+
+        reuse = min(len(refs), len(existing))
+        for i in range(reuse):
+            set_para_text(existing[i], refs[i])
+
+        # 引用多于静态条目 → 克隆首条样式补足
+        anchor_el = existing[reuse - 1]._p if reuse else existing[0]._p
+        for i in range(reuse, len(refs)):
+            new_el = _copy.deepcopy(existing[0]._p)
+            anchor_el.addnext(new_el)
+            anchor_el = new_el
+            set_para_text(Paragraph(new_el, existing[0]._parent), refs[i])
+
+        # 引用少于静态条目 → 删除多余静态条目
+        for paragraph in existing[len(refs):]:
+            paragraph._p.getparent().remove(paragraph._p)
+
+        doc.save(file_path)
+        self.logger.info("参考文献按引用重建完成", references=len(refs))
+
     def _render_signature_placeholder(self, file_path: str, context: dict) -> None:
         """处理签名占位符。
 

@@ -2368,6 +2368,21 @@ def enhance_report_data(
             report_data.set_table("references", references)
             report_data.set_table("gene_references", references)  # 模板中引用名
 
+            # 全局"引用标识→文献全文"映射：供 rebuild_references 处理器按正文
+            # 实际引用（含静态附录章节）重建 5.参考文献，确保每个被引 PMID/NCT
+            # 都有对应文献条目。
+            try:
+                report_data.set_field(
+                    "reference_lookup",
+                    gene_knowledge_provider.build_reference_lookup(),
+                )
+            except Exception as _ref_err:  # pragma: no cover - defensive
+                import logging
+
+                logging.getLogger("reportgen").warning(
+                    "构建参考文献映射失败（不阻断）: %s", _ref_err
+                )
+
             # Also provide grouped references by gene
             references_by_gene = gene_knowledge_provider.build_references(
                 variants=reference_variants, max_per_gene=5

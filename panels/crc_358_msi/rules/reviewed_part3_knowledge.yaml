@@ -217,3 +217,18 @@ drug_sections:
     该样本检出KRAS基因c.34G>A，p.G12S错义突变，为已知激活突变，对蛋白功能有重要影响。临床前研究表明，含有KRAS突变的结肠癌细胞系对依维莫司不敏感[29285035，28544747]。因此，该患者可能对依维莫司的治疗负相关。依维莫司已获FDA批准，用于治疗乳腺癌、神经内分泌瘤、肾癌等疾病，并已获NMPA批准，用于治疗肾癌、室管膜下巨细胞型星形细胞瘤。
   clinical: |-
     临床前研究表明，含有KRAS突变的结肠癌细胞系对依维莫司不敏感[29285035，28544747]。在转移性癌症患者中，携带KRAS突变的患者接受依维莫司治疗后对依维莫司缺乏疗效，12例具有KRAS突变的肿瘤患者中11例均出现疾病进展，而31例KRAS野生型患者中仅16例患者未从依维莫司治疗中获益[20664172]。
+
+# 补充参考文献：reviewed override（DNMT3A/FLT3 策展 + 个别 KB 缺口）
+# 引用的 PMID 全文，供 build_reference_lookup 给这些被引文献补标题。
+extra_references:
+  - "PMID: 28351930 Hyperprogressors after Immunotherapy: Analysis of Genomic Alterations Associated with Accelerated Growth Rate."
+  - "PMID: 28976787 Negative predictive biomarkers of checkpoint inhibitors in hyper-progressive tumors."
+  - "PMID: 27906677 The implication of FLT3 amplification for FLT targeted therapeutics in solid tumors."
+  - "PMID: 19318574 FMS-like tyrosine kinase 3-internal tandem duplication tyrosine kinase inhibitors display a nonoverlapping profile of resistance mutations in vitro."
+  - "PMID: 12124170 Finding the next Gleevec: FLT3 targeted kinase inhibitor therapy for acute myeloid leukemia."
+  - "PMID: 23550210 Integrative analysis of complex cancer genomics and clinical profiles using the cBioPortal."
+  - "PMID: 19467916 FLT3 Inhibition and Mechanisms of Drug Resistance in Mutant FLT3-positive AML."
+  - "PMID: 30181385 Classes of ITD Predict Outcomes in AML Patients Treated With FLT3 Inhibitors."
+  - "PMID: 32241850 Clinical Practice Recommendation on Hematopoietic Stem Cell Transplantation for Acute Myeloid Leukemia Patients With FLT3-internal Tandem Duplication: A Position Statement From the Acute Leukemia Working Party of the European Society for Blood and Marrow Transplantation."
+  - "PMID: 38049555 Characterisation of FLT3 alterations in childhood acute lymphoblastic leukaemia."
+  - "PMID: 25172762 Taselisib, a selective inhibitor of PIK3CA, is highly effective on PIK3CA-mutated and HER2/neu amplified uterine serous carcinoma in vitro and in vivo."
