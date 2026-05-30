@@ -562,19 +562,31 @@ class ReportGenerator:
         stage.metrics["validation_errors"] = len(state.report_data.validation_errors)
 
     def _resolve_signature_image_fields(self, report_data: ReportData) -> None:
-        """Fill signature image paths from configured signer names when needed."""
+        """Fill signature image paths from configured signer names when needed.
+
+        When a signer name is supplied but neither an uploaded image nor a
+        signature-library match is available, surface a warning so the operator
+        is prompted instead of silently shipping a blank signature slot.
+        """
         bindings = (
-            ("detector", "issuer", "detector_signature_image_path"),
-            ("reviewer", "reviewer", "reviewer_signature_image_path"),
+            ("detector", "issuer", "detector_signature_image_path", "检测者"),
+            ("reviewer", "reviewer", "reviewer_signature_image_path", "审核者"),
         )
-        for role, name_field, path_field in bindings:
+        for role, name_field, path_field, label in bindings:
             current_path = str(report_data.get_field(path_field) or "").strip()
             if current_path:
                 continue
             signer_name = str(report_data.get_field(name_field) or "").strip()
+            if not signer_name:
+                continue
             resolved = resolve_signature_path(self.config_dir, role, signer_name)
             if resolved:
                 report_data.set_field(path_field, resolved)
+            else:
+                report_data.add_validation_error(
+                    f"{label}「{signer_name}」在签名库中无对应签名图，"
+                    f"签名区将留空；请在签名库登记该人员，或上传临时签名图后重新生成。"
+                )
 
     def _stage_panel_rule_execution(
         self,

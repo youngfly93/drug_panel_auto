@@ -3911,6 +3911,86 @@ class TemplateRenderer:
             reviewer=bool(role_paths.get("reviewer")),
         )
 
+    def _render_inline_signatures(self, file_path: str, context: dict) -> None:
+        """Render detector/reviewer signatures as INLINE images on the label line.
+
+        Replaces the legacy floating-anchor signatures (which drift above the
+        baseline and render at inconsistent sizes across Word/WPS/LibreOffice)
+        with inline pictures placed immediately after the "检测者："/"审核者："
+        labels, at a uniform height so both sit cleanly on the same line. Must
+        run at the very end, after the LibreOffice field refreshes.
+        """
+        import copy as _copy
+        from pathlib import Path
+
+        from docx.oxml.ns import qn
+        from docx.shared import Cm
+
+        detector = str(
+            context.get("detector_signature_image_path")
+            or context.get("issuer_signature_image_path")
+            or ""
+        ).strip()
+        reviewer = str(context.get("reviewer_signature_image_path") or "").strip()
+        detector = detector if detector and Path(detector).exists() else ""
+        reviewer = reviewer if reviewer and Path(reviewer).exists() else ""
+
+        doc = Document(file_path)
+        label_idx = None
+        for idx, paragraph in enumerate(doc.paragraphs):
+            text = paragraph.text or ""
+            if "检测者" in text and "审核者" in text and "报告日期" not in text:
+                label_idx = idx
+                break
+        if label_idx is None:
+            return
+        label_para = doc.paragraphs[label_idx]
+
+        def strip_drawing_runs(paragraph) -> None:
+            for run in list(paragraph.runs):
+                if run._r.findall(".//" + qn("w:drawing")) or run._r.findall(
+                    ".//" + qn("w:pict")
+                ):
+                    run._r.getparent().remove(run._r)
+
+        # Drop the legacy floating signature anchors that live on the blank line
+        # directly above the label (and any stray drawings on the label line).
+        if label_idx > 0:
+            strip_drawing_runs(doc.paragraphs[label_idx - 1])
+        strip_drawing_runs(label_para)
+
+        # Capture label font from the first text run before clearing.
+        template_rpr = None
+        for run in label_para.runs:
+            if (run.text or "").strip():
+                rpr = run._r.find(qn("w:rPr"))
+                if rpr is not None:
+                    template_rpr = _copy.deepcopy(rpr)
+                break
+
+        for run in list(label_para.runs):
+            run._r.getparent().remove(run._r)
+
+        def add_text(text: str) -> None:
+            run = label_para.add_run(text)
+            if template_rpr is not None:
+                run._r.insert(0, _copy.deepcopy(template_rpr))
+
+        def add_image(path: str) -> None:
+            if not path:
+                return
+            try:
+                label_para.add_run().add_picture(path, height=Cm(0.7))
+            except Exception as exc:  # pragma: no cover - defensive
+                self.logger.warning("内联签名图插入失败", path=path, error=str(exc))
+
+        add_text("检测者：")
+        add_image(detector)
+        add_text("                审核者：")
+        add_image(reviewer)
+
+        doc.save(file_path)
+
     def _normalize_signature_layout(self, file_path: str, context: dict) -> None:
         """Stabilize the detector/reviewer signature block.
 

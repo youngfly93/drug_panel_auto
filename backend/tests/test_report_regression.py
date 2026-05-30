@@ -2561,31 +2561,35 @@ def test_signature_processors_replace_uploaded_images_after_layout(tmp_path):
     doc.save(docx_path)
 
     renderer = TemplateRenderer(log_level="ERROR")
+    context = {
+        "detector_signature_image_path": str(new_detector),
+        "reviewer_signature_image_path": str(new_reviewer),
+        "report_date": "2026.05.24",
+    }
     renderer._run_post_render_processors(
         str(docx_path),
-        {
-            "detector_signature_image_path": str(new_detector),
-            "reviewer_signature_image_path": str(new_reviewer),
-            "report_date": "2026.05.24",
-        },
+        context,
         str(docx_path),
         processor_names=["signature_placeholder", "signature_layout"],
     )
+    # Inline signatures are rendered as the final step (underlines_and_styles);
+    # invoke directly to mirror that processor.
+    renderer._render_inline_signatures(str(docx_path), context)
+
+    rendered = Document(str(docx_path))
+    label_inline = _sig_label_inline_drawings(rendered)
+    assert label_inline is not None and len(label_inline) == 2
 
     with ZipFile(docx_path) as zf:
-        assert (
-            zf.read("word/media/reportgen_signature_detector.png")
-            == new_detector.read_bytes()
-        )
-        assert (
-            zf.read("word/media/reportgen_signature_reviewer.png")
-            == new_reviewer.read_bytes()
-        )
+        media = {
+            zf.read(name)
+            for name in zf.namelist()
+            if name.startswith("word/media/")
+        }
         document_xml = zf.read("word/document.xml").decode("utf-8")
-        rels_xml = zf.read("word/_rels/document.xml.rels").decode("utf-8")
 
-    assert "reportgen_signature_detector.png" in rels_xml
-    assert "reportgen_signature_reviewer.png" in rels_xml
+    assert new_detector.read_bytes() in media
+    assert new_reviewer.read_bytes() in media
     assert "检测者" in document_xml
     assert "审核者" in document_xml
 
@@ -5907,3 +5911,72 @@ def test_drug_analysis_relation_lead_not_duplicated_when_already_present():
         ]
     )
     assert sections[0]["relation"].count("该样本检出") == 1
+
+
+def _sig_label_inline_drawings(doc):
+    for paragraph in doc.paragraphs:
+        text = paragraph.text or ""
+        if "检测者" in text and "审核者" in text:
+            return paragraph._p.findall(
+                ".//" + qn("w:drawing") + "/" + qn("wp:inline")
+            )
+    return None
+
+
+def test_render_inline_signatures_places_images_on_label_line(tmp_path):
+    from PIL import Image
+
+    img = tmp_path / "sig.png"
+    Image.new("RGB", (80, 30), "white").save(img)
+    docx_path = tmp_path / "sig.docx"
+    doc = Document()
+    doc.add_paragraph("检测者：                审核者：")
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._render_inline_signatures(
+        str(docx_path),
+        {
+            "detector_signature_image_path": str(img),
+            "reviewer_signature_image_path": str(img),
+        },
+    )
+
+    rendered = Document(docx_path)
+    inline = _sig_label_inline_drawings(rendered)
+    assert inline is not None and len(inline) == 2
+    # 不应残留浮动锚点
+    for paragraph in rendered.paragraphs:
+        assert not paragraph._p.findall(".//" + qn("wp:anchor"))
+
+
+def test_render_inline_signatures_no_path_leaves_label_clean(tmp_path):
+    docx_path = tmp_path / "sig_empty.docx"
+    doc = Document()
+    doc.add_paragraph("检测者：                审核者：")
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._render_inline_signatures(str(docx_path), {})
+
+    rendered = Document(docx_path)
+    inline = _sig_label_inline_drawings(rendered)
+    assert inline is not None and len(inline) == 0
+    # 标签文字保留
+    assert any(
+        "检测者" in (p.text or "") and "审核者" in (p.text or "")
+        for p in rendered.paragraphs
+    )
+
+
+def test_signature_resolution_semantics_for_warning(tmp_path):
+    """无对应签名图 → 解析返回空串（驱动“应有提示”分支）；有则返回路径。"""
+    from reportgen.core.signature_library import resolve_signature_path
+
+    (tmp_path / "signatures.yaml").write_text(
+        "detector:\n  张三: sigs/zhangsan.png\n"
+        "reviewer:\n  李四: sigs/lisi.png\n",
+        encoding="utf-8",
+    )
+    assert resolve_signature_path(str(tmp_path), "detector", "张三")
+    # 签名库中没有的人 → 空串（report_generator 据此产生警告而非静默空白）
+    assert resolve_signature_path(str(tmp_path), "detector", "王医生") == ""
+    assert resolve_signature_path(str(tmp_path), "reviewer", "赵主任") == ""

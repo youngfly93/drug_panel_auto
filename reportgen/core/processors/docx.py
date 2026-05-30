@@ -211,10 +211,10 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     ctx.renderer._restore_patient_letter_fill_underlines(ctx.output_path)
     ctx.renderer._restore_msi_result_emphasis(ctx.output_path, ctx.template_context)
     ctx.renderer._restore_part3_dynamic_styles(ctx.output_path, ctx.template_context)
-    # LibreOffice/Word field refresh can rewrite image relationships. Re-apply
-    # dynamic signatures at the very end so source-template signatures never
-    # survive as implicit defaults, and uploaded signatures remain effective.
-    ctx.renderer._replace_signature_anchor_images(ctx.output_path, ctx.template_context)
+    # LibreOffice/Word field refresh can rewrite image relationships. Render the
+    # detector/reviewer signatures as inline images at the very end so they sit
+    # cleanly on the label baseline and uploaded signatures remain effective.
+    ctx.renderer._render_inline_signatures(ctx.output_path, ctx.template_context)
     ctx.renderer._remove_empty_numbered_paragraphs(ctx.output_path)
     try:
         ctx.renderer._populate_static_toc_page_numbers(
@@ -236,5 +236,7 @@ def _run_signature_placeholders(ctx: ProcessorContext) -> None:
 
 
 def _run_signature_layout(ctx: ProcessorContext) -> None:
+    # Normalize the label line + separate the report date. Inline signature
+    # images are rendered at the very end (underlines_and_styles) so they
+    # survive the LibreOffice field refreshes that run in between.
     ctx.renderer._normalize_signature_layout(ctx.output_path, ctx.template_context)
-    ctx.renderer._replace_signature_anchor_images(ctx.output_path, ctx.template_context)
