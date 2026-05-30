@@ -29,7 +29,13 @@ from reportgen.utils.artifacts import write_json
 
 DEFAULT_GATE_PANELS = ("crc_358_msi", "crc_301_msi", "lung_methylation")
 LEGACY_REFERENCE_ROOT_ENV = "REPORTGEN_LEGACY_REPORTS_ROOT"
-DEFAULT_PYTEST_ARGS = ("backend/tests/test_report_regression.py", "-q")
+DEFAULT_PYTEST_ARGS = (
+    "backend/tests/test_report_regression.py",
+    # 金标样式基线回归（慢，端到端生成对比）——后处理改动若弄坏关键表样式/
+    # ❖颜色/签名/参考文献，qa-gate 即红。上生产前必跑。
+    "backend/tests/test_style_baseline.py",
+    "-q",
+)
 DEFAULT_RUFF_PATHS = (
     "reportgen/cli.py",
     "reportgen/core/qa_gate.py",
