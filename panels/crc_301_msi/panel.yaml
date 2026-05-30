@@ -24,13 +24,44 @@ project_detector_rules:
 
 enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
 
-default_template: "crc_301_msi_standard_v1"
+default_template: "crc_301_msi_golden_template_v1"
 templates:
   - id: "crc_301_msi_standard_v1"
     file: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
     version: "1.0.0"
     status: "active"
-    description: "Current aligned CRC template reused for CRC 301 + MSI."
+    description: "Legacy aligned CRC template retained as a rollback option for CRC 301 + MSI."
+  - id: "crc_301_msi_golden_template_v0"
+    file: "templates/crc_301_msi_golden_template_v0.docx"
+    version: "0.1.0"
+    status: "deprecated"
+    description: "Superseded CRC301+MSI golden-template pilot kept for rollback."
+    processors:
+      - "part3_formatted_sections"
+      - "signature_placeholder"
+      - "bullet_lists"
+      - "front_matter_spacing"
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
+      - "underlines_and_styles"
+  - id: "crc_301_msi_golden_template_v1"
+    file: "templates/crc_301_msi_golden_template_v1.docx"
+    version: "0.2.0"
+    status: "active"
+    description: "CRC301+MSI golden template; inherits crc_358 engine fixes (inline signatures + missing-image warning, citation-driven 5.参考文献, conditional immune-table notes, part3 2.1 formatting/variant-lead, gene-list non-bold)."
+    processors:
+      - "part3_formatted_sections"
+      - "rebuild_references"
+      - "signature_placeholder"
+      - "immune_table_notes"
+      - "bullet_lists"
+      - "signature_layout"
+      - "front_matter_spacing"
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
+      - "underlines_and_styles"
 
 mappings:
   default: "config/mapping.yaml"
@@ -60,7 +91,6 @@ input_contract:
     - "patient_name"
     - "sample_id"
     - "project_name"
-    - "report_date"
   required_columns:
     Variations:
       - "Gene_Symbol"
@@ -79,14 +109,12 @@ template_contract:
   required_variables:
     - "patient_name"
     - "sample_id"
-    - "report_date"
     - "total_variants_count"
     - "drug_related_count"
     - "tmb_summary"
     - "msi_summary"
     - "immuno_tips"
     - "msi_tips"
-    - "nccn_KRAS_EX2"
   required_lists:
     - "targeted_drug_tips"
     - "variants_2_1"

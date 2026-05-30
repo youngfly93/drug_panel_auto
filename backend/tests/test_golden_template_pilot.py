@@ -98,7 +98,9 @@ def test_crc301_golden_template_declares_active_default_processors():
     assert package.default_template.template_id == "crc_301_msi_golden_template_v1"
     assert template.processors == (
         "part3_formatted_sections",
+        "rebuild_references",
         "signature_placeholder",
+        "immune_table_notes",
         "bullet_lists",
         "signature_layout",
         "front_matter_spacing",

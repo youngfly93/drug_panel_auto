@@ -98,7 +98,7 @@ CRC_301_MSI_EXPECTATIONS: Dict[str, Any] = {
     },
     "required_qa_checks": list(CRC_358_MSI_EXPECTATIONS["required_qa_checks"]),
     "required_text": [
-        "结直肠癌301基因+MSI",
+        "与肿瘤密切相关的301个基因进行检测",
         "本次共检出体细胞变异：2个",
         "与靶向药物用药相关的变异有：1个",
         "6.5mutations/Mb，TMB-L",
