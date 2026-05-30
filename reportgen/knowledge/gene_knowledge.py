@@ -1117,6 +1117,20 @@ class GeneKnowledgeProvider:
         sections = []
         seen_drugs = set()
 
+        def _lead_relation(relation_text: str, gene: str, c_hgvs: str, p_hgvs: str) -> str:
+            """在“基因变异与药物关联分析”正文前拼接变异描述开头句。
+
+            形如“该样本检出{gene}基因{c}，{p}{类型}突变。”，与终版报告一致；
+            正文为空则不加，已含“该样本检出”开头则跳过以避免重复。
+            """
+            relation_text = relation_text or ""
+            if not relation_text.strip():
+                return relation_text
+            if relation_text.lstrip().startswith("该样本检出"):
+                return relation_text
+            lead = self._mutation_desc_gen.build_variant_lead(gene, c_hgvs, p_hgvs)
+            return f"{lead}{relation_text}" if lead else relation_text
+
         for v in variants:
             gene = v.get("gene", "").upper()
             benefit_drugs = v.get("benefit_drugs", "")
@@ -1155,10 +1169,15 @@ class GeneKnowledgeProvider:
                                         "drug_name": filtered_drug_name,
                                         "drug_type": "benefit",
                                         "drug_type_cn": "潜在获益药物",
-                                        "relation": _filter_analysis_text(
-                                            drug_info.get("relation", ""),
-                                            kb_drug_name=drug_name,
-                                            variant_drugs=benefit_drugs,
+                                        "relation": _lead_relation(
+                                            _filter_analysis_text(
+                                                drug_info.get("relation", ""),
+                                                kb_drug_name=drug_name,
+                                                variant_drugs=benefit_drugs,
+                                            ),
+                                            gene,
+                                            v.get("cHGVS", ""),
+                                            v.get("pHGVS", ""),
                                         ),
                                         "clinical": _filter_analysis_text(
                                             drug_info.get("clinical", ""),
@@ -1192,10 +1211,15 @@ class GeneKnowledgeProvider:
                                         "drug_name": filtered_drug_name,
                                         "drug_type": "caution",
                                         "drug_type_cn": "慎用药物",
-                                        "relation": _filter_analysis_text(
-                                            drug_info.get("relation", ""),
-                                            kb_drug_name=drug_name,
-                                            variant_drugs=caution_drugs,
+                                        "relation": _lead_relation(
+                                            _filter_analysis_text(
+                                                drug_info.get("relation", ""),
+                                                kb_drug_name=drug_name,
+                                                variant_drugs=caution_drugs,
+                                            ),
+                                            gene,
+                                            v.get("cHGVS", ""),
+                                            v.get("pHGVS", ""),
                                         ),
                                         "clinical": _filter_analysis_text(
                                             drug_info.get("clinical", ""),

@@ -3462,6 +3462,7 @@ class TemplateRenderer:
                 ilvl=1,
             )
 
+            prev_header = None
             for ds in benefit_sections:
                 gene = ds.get("gene", "")
                 variant = ds.get("variant", "")
@@ -3471,7 +3472,9 @@ class TemplateRenderer:
                 if header is None:
                     header = f"{gene}：{variant}突变相应靶向药物"
 
-                if header:
+                # 同一位点（相同抬头）只输出一次抬头，后续 drug section 直接接药物
+                # 列表与关联分析，避免重复抬头。
+                if header and header != prev_header:
                     current = add_para_after(
                         current,
                         header,
@@ -3483,6 +3486,7 @@ class TemplateRenderer:
                         num_id=11,
                         keep_next=True,
                     )
+                prev_header = header
                 if drug_name:
                     current = add_text_block(
                         current,
@@ -3491,6 +3495,7 @@ class TemplateRenderer:
                         size=12,
                         color="0000FF",
                         underline=True,
+                        justify=True,
                         spacing_before=200,
                         left_twips=420,
                         hanging_twips=420,
@@ -3524,6 +3529,7 @@ class TemplateRenderer:
                 ilvl=1,
             )
 
+            prev_header = None
             for ds in caution_sections:
                 gene = ds.get("gene", "")
                 variant = ds.get("variant", "")
@@ -3533,7 +3539,8 @@ class TemplateRenderer:
                 if header is None:
                     header = f"{gene}：{variant}突变相应负相关靶向药物"
 
-                if header:
+                # 同一位点（相同抬头）只输出一次抬头。
+                if header and header != prev_header:
                     current = add_para_after(
                         current,
                         header,
@@ -3545,6 +3552,7 @@ class TemplateRenderer:
                         num_id=11,
                         keep_next=True,
                     )
+                prev_header = header
                 if drug_name:
                     current = add_text_block(
                         current,
@@ -3553,6 +3561,7 @@ class TemplateRenderer:
                         size=12,
                         color="0000FF",
                         underline=True,
+                        justify=True,
                         spacing_before=200,
                         left_twips=420,
                         hanging_twips=420,

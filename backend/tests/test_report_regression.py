@@ -5822,3 +5822,88 @@ def test_reviewed_part3_knowledge_ships_dnmt3a_and_flt3_overrides():
     assert flt3 is not None, "FLT3 策展段落缺失"
     assert "酪氨酸激酶" in flt3["intro"]
     assert "p.G846D" in flt3["mutation_analysis"]
+
+
+def test_mutation_description_build_variant_lead_by_type():
+    from reportgen.knowledge.mutation_description import MutationDescriptionGenerator
+
+    gen = MutationDescriptionGenerator()
+    assert (
+        gen.build_variant_lead("PIK3CA", "c.1624G>A", "p.E542K")
+        == "该样本检出PIK3CA基因c.1624G>A，p.E542K错义突变。"
+    )
+    assert (
+        gen.build_variant_lead("TP53", "c.499C>T", "p.Q167*")
+        == "该样本检出TP53基因c.499C>T，p.Q167*无义突变。"
+    )
+    assert (
+        gen.build_variant_lead("PMS2", "c.1273delT", "p.S425Lfs*23")
+        == "该样本检出PMS2基因c.1273delT，p.S425Lfs*23移码突变。"
+    )
+    # 剪接：无 p.HGVS → 省略蛋白部分，不留逗号
+    assert (
+        gen.build_variant_lead("MET", "c.153+2T>C", "")
+        == "该样本检出MET基因c.153+2T>C剪接突变。"
+    )
+    # 缺基因或 c.HGVS → 空串
+    assert gen.build_variant_lead("", "c.1A>T", "p.M1L") == ""
+    assert gen.build_variant_lead("BRAF", "", "p.V600E") == ""
+
+
+def test_drug_analysis_relation_prepends_variant_lead():
+    """2.1 用药提示解析中每条“基因变异与药物关联分析”应以变异描述开头。"""
+    provider = GeneKnowledgeProvider({"enabled": False})
+    provider._loaded = True
+    provider.get_drug_full_info = lambda gene: [
+        {
+            "type": "benefit",
+            "drug": "依维莫司",
+            "c_point": "",
+            "p_point": "",
+            "relation": "PIK3CA基因激活突变，会导致信号通路异常活化。",
+            "clinical": "",
+        }
+    ]
+    sections = provider.build_drug_analysis_sections(
+        [
+            {
+                "gene": "PIK3CA",
+                "cHGVS": "c.1624G>A",
+                "pHGVS": "p.E542K",
+                "benefit_drugs": "依维莫司",
+                "caution_drugs": "--",
+            }
+        ]
+    )
+    assert len(sections) == 1
+    relation = sections[0]["relation"]
+    assert relation.startswith("该样本检出PIK3CA基因c.1624G>A，p.E542K错义突变。")
+    # 原 KB 正文仍保留在开头句之后
+    assert "PIK3CA基因激活突变，会导致信号通路异常活化。" in relation
+
+
+def test_drug_analysis_relation_lead_not_duplicated_when_already_present():
+    provider = GeneKnowledgeProvider({"enabled": False})
+    provider._loaded = True
+    provider.get_drug_full_info = lambda gene: [
+        {
+            "type": "benefit",
+            "drug": "依维莫司",
+            "c_point": "",
+            "p_point": "",
+            "relation": "该样本检出PIK3CA基因c.1624G>A，p.E542K错义突变。已有开头。",
+            "clinical": "",
+        }
+    ]
+    sections = provider.build_drug_analysis_sections(
+        [
+            {
+                "gene": "PIK3CA",
+                "cHGVS": "c.1624G>A",
+                "pHGVS": "p.E542K",
+                "benefit_drugs": "依维莫司",
+                "caution_drugs": "--",
+            }
+        ]
+    )
+    assert sections[0]["relation"].count("该样本检出") == 1

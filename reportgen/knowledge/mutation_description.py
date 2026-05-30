@@ -107,6 +107,43 @@ class MutationDescriptionGenerator:
             # 默认：通用描述
             return self._generate_generic_desc(gene, c_hgvs, p_hgvs, frequency)
 
+    # 突变类型英文 → 中文（短开头句用）
+    _TYPE_CN: Dict[str, str] = {
+        "Missense": "错义",
+        "Nonsense": "无义",
+        "Frameshift": "移码",
+        "Splice": "剪接",
+        "Inframe": "框内",
+    }
+
+    def build_variant_lead(
+        self,
+        gene: str,
+        c_hgvs: str,
+        p_hgvs: str,
+        mutation_type: Optional[str] = None,
+    ) -> str:
+        """生成药物关联分析的变异描述开头句。
+
+        形如 “该样本检出{gene}基因{c_hgvs}，{p_hgvs}{类型}突变。”，与终版
+        报告 2.1 用药提示解析中每条“基因变异与药物关联分析”的开头一致（不含
+        基因特异机制句与 PMID，那部分依赖内部完整知识库）。
+
+        缺少基因或 c.HGVS 时返回空串；无 p.HGVS（如剪接）时省略蛋白部分。
+        """
+        gene = (gene or "").strip()
+        c_hgvs = (c_hgvs or "").strip()
+        p_hgvs = (p_hgvs or "").strip()
+        if not gene or not c_hgvs:
+            return ""
+        if not mutation_type:
+            mutation_type = self._infer_mutation_type(c_hgvs, p_hgvs)
+        type_cn = self._TYPE_CN.get(mutation_type, "")
+        suffix = f"{type_cn}突变" if type_cn else "突变"
+        if p_hgvs:
+            return f"该样本检出{gene}基因{c_hgvs}，{p_hgvs}{suffix}。"
+        return f"该样本检出{gene}基因{c_hgvs}{suffix}。"
+
     def _infer_mutation_type(self, c_hgvs: str, p_hgvs: str) -> str:
         """根据HGVS格式推断突变类型"""
         c = c_hgvs.lower() if c_hgvs else ""
