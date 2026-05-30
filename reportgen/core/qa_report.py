@@ -1138,10 +1138,24 @@ def _check_variant_detail_table_style(
         expected_fill=expected["header_fill"],
         expected_font_color=expected["header_font_color"],
     )
+    # 与 _restore_variant_detail_table_style 渲染逻辑保持一致：基因名(col0)仅在该行
+    # 检出变异时才是蓝色链接；"未见突变"等行的基因名为黑色（用户要求，c5f6e9b）。
+    # 此前 QA 把 col0 无条件当链接，导致每份含未见突变行的报告都报假阳性。
+    plain_texts = {
+        str(t).strip()
+        for t in (
+            style.get("plain_texts")
+            or ["未见突变", "未检出", "未检出有害变异", "-", "--", "—"]
+        )
+    }
     for row_idx, row in enumerate(table.rows[2:], start=2):
+        locus_text = (row.cells[4].text or "").strip() if len(row.cells) > 4 else ""
+        row_has_variant = bool(locus_text) and locus_text not in plain_texts
         for col_idx, cell in enumerate(row.cells):
             dash_only = (cell.text or "").strip() in {"", "-", "--", "—"}
-            link_cell = col_idx == 0 or (col_idx in {7, 8} and not dash_only)
+            link_cell = (col_idx == 0 and row_has_variant) or (
+                col_idx in {7, 8} and not dash_only
+            )
             failures.extend(
                 _check_cell_runs(
                     cell,
