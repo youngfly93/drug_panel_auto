@@ -5717,6 +5717,10 @@ class TemplateRenderer:
                         for run in paragraph.runs:
                             run.font.size = Pt(body_font_size if row_idx else header_font_size)
                             run.font.underline = False
+                            # 表体（基因格）统一不加粗——模板把首列基因加粗了，
+                            # 正确版应与其它列一致（仅标题行 row 0 保持原样）。
+                            if row_idx:
+                                run.font.bold = False
                 changed += 1
 
         if changed:

@@ -5923,6 +5923,30 @@ def _sig_label_inline_drawings(doc):
     return None
 
 
+def test_gene_list_table_first_column_not_bold(tmp_path):
+    """基因检测列表表体统一不加粗（模板把首列基因加粗了，应与其它列一致）。"""
+    docx_path = tmp_path / "genelist.docx"
+    doc = Document()
+    table = doc.add_table(rows=3, cols=3)
+    table.rows[0].cells[0].text = "Gene List for MLseq (n=358)"
+    genes = [["ABL1", "ABL2", "ACVR1B"], ["AMER1", "APC", "AR"]]
+    for ri in (1, 2):
+        for ci in range(3):
+            cell = table.rows[ri].cells[ci]
+            cell.text = genes[ri - 1][ci]
+            if ci == 0:  # 模拟模板里首列加粗
+                cell.paragraphs[0].runs[0].font.bold = True
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._compact_gene_list_tables(str(docx_path))
+
+    rendered = Document(docx_path)
+    rendered_table = rendered.tables[0]
+    for ri in (1, 2):
+        for run in rendered_table.rows[ri].cells[0].paragraphs[0].runs:
+            assert run.font.bold is False
+
+
 def test_rebuild_reference_section_covers_cited_pmids(tmp_path):
     """末尾 5.参考文献 应按正文实际引用重建：被引 PMID/NCT 全覆盖、示例排除、静态替换。"""
     docx_path = tmp_path / "refs.docx"
