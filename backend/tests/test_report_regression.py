@@ -5706,3 +5706,119 @@ def test_quality_gate_fails_when_panel_validation_has_warnings(tmp_path, monkeyp
 
     assert result["status"] == "FAIL"
     assert result["steps"][0]["status"] == "FAIL"
+
+
+def _add_red_bullet_numbering(doc, abstract_id: str, num_id: str) -> None:
+    """Append an abstractNum/num pair whose level-0 ❖ bullet is red (FF0000)."""
+    numbering = doc.part.numbering_part.element
+    abstract = OxmlElement("w:abstractNum")
+    abstract.set(qn("w:abstractNumId"), abstract_id)
+    lvl = OxmlElement("w:lvl")
+    lvl.set(qn("w:ilvl"), "0")
+    num_fmt = OxmlElement("w:numFmt")
+    num_fmt.set(qn("w:val"), "bullet")
+    lvl_text = OxmlElement("w:lvlText")
+    lvl_text.set(qn("w:val"), "")  # Wingdings ❖
+    rpr = OxmlElement("w:rPr")
+    color = OxmlElement("w:color")
+    color.set(qn("w:val"), "FF0000")
+    rpr.append(color)
+    lvl.append(num_fmt)
+    lvl.append(lvl_text)
+    lvl.append(rpr)
+    abstract.append(lvl)
+    num = OxmlElement("w:num")
+    num.set(qn("w:numId"), num_id)
+    abstract_ref = OxmlElement("w:abstractNumId")
+    abstract_ref.set(qn("w:val"), abstract_id)
+    num.append(abstract_ref)
+    numbering.append(abstract)
+    numbering.append(num)
+
+
+def _bullet_color(doc, abstract_id: str):
+    numbering = doc.part.numbering_part.element
+    for abstract in numbering.findall(qn("w:abstractNum")):
+        if abstract.get(qn("w:abstractNumId")) != abstract_id:
+            continue
+        for lvl in abstract.findall(qn("w:lvl")):
+            if lvl.get(qn("w:ilvl")) == "0":
+                rpr = lvl.find(qn("w:rPr"))
+                color = rpr.find(qn("w:color")) if rpr is not None else None
+                return color.get(qn("w:val")) if color is not None else None
+    return None
+
+
+def _add_numbered_paragraph(doc, text: str, num_id: str):
+    paragraph = doc.add_paragraph(text)
+    ppr = paragraph._p.get_or_add_pPr()
+    num_pr = OxmlElement("w:numPr")
+    ilvl = OxmlElement("w:ilvl")
+    ilvl.set(qn("w:val"), "0")
+    nid = OxmlElement("w:numId")
+    nid.set(qn("w:val"), num_id)
+    num_pr.append(ilvl)
+    num_pr.append(nid)
+    ppr.append(num_pr)
+    return paragraph
+
+
+def test_recolor_part3_intro_marker_turns_red_bullet_black(tmp_path):
+    """第三部分 1.基因变异解析 引导段的 ❖ 红色装饰符应回黑（仅该段，作用域受限）。"""
+    docx_path = tmp_path / "part3_marker.docx"
+    doc = Document()
+    _add_red_bullet_numbering(doc, abstract_id="901", num_id="91")
+    _add_red_bullet_numbering(doc, abstract_id="902", num_id="92")
+    _add_numbered_paragraph(
+        doc,
+        "在本次检测范围内，检出体细胞变异：11个，其中与靶向/免疫药物相关的变异：7个。",
+        num_id="91",
+    )
+    _add_numbered_paragraph(doc, "其它无关的项目符号段落", num_id="92")
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._recolor_part3_intro_marker(str(docx_path))
+
+    rendered = Document(docx_path)
+    # 引导段对应的 ❖ 变黑
+    assert _bullet_color(rendered, "901") == "000000"
+    # 无关项目符号保持原红色（作用域不外溢）
+    assert _bullet_color(rendered, "902") == "FF0000"
+
+
+def test_recolor_part3_intro_marker_is_idempotent_and_noop_without_intro(tmp_path):
+    docx_path = tmp_path / "no_intro.docx"
+    doc = Document()
+    _add_red_bullet_numbering(doc, abstract_id="903", num_id="93")
+    _add_numbered_paragraph(doc, "完全无关的段落", num_id="93")
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._recolor_part3_intro_marker(str(docx_path))
+    renderer._recolor_part3_intro_marker(str(docx_path))
+
+    rendered = Document(docx_path)
+    # 没有引导段 → 不应改动任何编号颜色
+    assert _bullet_color(rendered, "903") == "FF0000"
+
+
+def test_reviewed_part3_knowledge_ships_dnmt3a_and_flt3_overrides():
+    """肖振娟(LZ258685) DNMT3A/FLT3 的策展解析必须随包发布，避免回退到兜底文案。"""
+    overlay_path = (
+        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
+    )
+    data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
+    sections = {
+        (s["gene"], s.get("c_hgvs"), s.get("p_hgvs")): s
+        for s in data.get("gene_sections", [])
+    }
+
+    dnmt3a = sections.get(("DNMT3A", "c.1367delA", "p.K456Sfs*195"))
+    assert dnmt3a is not None, "DNMT3A 策展段落缺失"
+    assert "表观遗传学" in dnmt3a["intro"]
+    assert "p.K456Sfs*195" in dnmt3a["mutation_analysis"]
+
+    flt3 = sections.get(("FLT3", "c.2537G>A", "p.G846D"))
+    assert flt3 is not None, "FLT3 策展段落缺失"
+    assert "酪氨酸激酶" in flt3["intro"]
+    assert "p.G846D" in flt3["mutation_analysis"]

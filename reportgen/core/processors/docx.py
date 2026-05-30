@@ -222,6 +222,13 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
         )
     except Exception as refresh_err:
         ctx.logger.warning("样式修复后目录页码回写失败", error=str(refresh_err))
+    # Final step: recolor the Part 3 intro ❖ bullet to black. Must be last —
+    # the field-refresh processors rebuild numbering.xml and re-introduce the
+    # template's red marker, so any earlier recolor is overwritten.
+    try:
+        ctx.renderer._recolor_part3_intro_marker(ctx.output_path)
+    except Exception as recolor_err:
+        ctx.logger.warning("第三部分装饰符回黑失败", error=str(recolor_err))
 
 
 def _run_signature_placeholders(ctx: ProcessorContext) -> None:

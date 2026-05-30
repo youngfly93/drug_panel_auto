@@ -1580,8 +1580,85 @@ class TemplateRenderer:
         trailing 药物名称 note, without the other report-content surgery.
         """
         doc = Document(file_path)
-        if self._apply_immune_table_notes_to_doc(doc, context):
+        changed = self._apply_immune_table_notes_to_doc(doc, context)
+        if changed:
             doc.save(file_path)
+
+    def _recolor_part3_intro_marker(self, file_path: str) -> None:
+        """File-path wrapper that runs the Part 3 ❖ recolor and saves.
+
+        Must run AFTER the LibreOffice/native field refreshes (which rebuild
+        numbering.xml and re-introduce the template's red ❖ color); placing it
+        in the final ``underlines_and_styles`` processor guarantees the black
+        marker survives to the delivered document.
+        """
+        doc = Document(file_path)
+        if self._recolor_part3_intro_marker_to_doc(doc):
+            doc.save(file_path)
+
+    def _recolor_part3_intro_marker_to_doc(self, doc) -> bool:
+        """Make the 第三部分 1.基因变异解析 intro list marker (❖) black.
+
+        The intro paragraph ("在本次检测范围内，检出体细胞变异：N个 …") is a list
+        item whose Wingdings ❖ bullet is defined red (numbering rPr color FF0000)
+        in the golden template. The reviewed report shows this marker in black,
+        so recolor the bullet of that paragraph's numbering level to 000000.
+        """
+        from docx.oxml.ns import qn
+
+        target = None
+        for paragraph in doc.paragraphs:
+            text = paragraph.text or ""
+            if (
+                "在本次检测范围内" in text
+                and "检出体细胞变异" in text
+                and "其中与靶向" in text
+            ):
+                target = paragraph
+                break
+        if target is None:
+            return False
+        p_pr = target._p.find(qn("w:pPr"))
+        num_pr = p_pr.find(qn("w:numPr")) if p_pr is not None else None
+        num_id_el = num_pr.find(qn("w:numId")) if num_pr is not None else None
+        if num_id_el is None:
+            return False
+        num_id = num_id_el.get(qn("w:val"))
+
+        try:
+            numbering = doc.part.numbering_part.element
+        except Exception:
+            return False
+
+        abstract_id = None
+        for num in numbering.findall(qn("w:num")):
+            if num.get(qn("w:numId")) == num_id:
+                abstract_ref = num.find(qn("w:abstractNumId"))
+                abstract_id = (
+                    abstract_ref.get(qn("w:val")) if abstract_ref is not None else None
+                )
+                break
+        if abstract_id is None:
+            return False
+
+        changed = False
+        for abstract in numbering.findall(qn("w:abstractNum")):
+            if abstract.get(qn("w:abstractNumId")) != abstract_id:
+                continue
+            for level in abstract.findall(qn("w:lvl")):
+                if level.get(qn("w:ilvl")) != "0":
+                    continue
+                level_rpr = level.find(qn("w:rPr"))
+                if level_rpr is None:
+                    continue
+                color = level_rpr.find(qn("w:color"))
+                if color is not None and (color.get(qn("w:val")) or "").upper() not in (
+                    "000000",
+                    "AUTO",
+                ):
+                    color.set(qn("w:val"), "000000")
+                    changed = True
+        return changed
 
     def _apply_immune_table_notes_to_doc(self, doc, context: dict) -> bool:
         """Add/strip the immune-table conditional footnotes and renumber.

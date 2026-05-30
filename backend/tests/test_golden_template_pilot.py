@@ -243,6 +243,7 @@ def test_report_generator_uses_template_level_processors():
     assert processors == (
         "part3_formatted_sections",
         "signature_placeholder",
+        "immune_table_notes",
         "bullet_lists",
         "signature_layout",
         "front_matter_spacing",
