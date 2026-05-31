@@ -124,6 +124,16 @@ export interface OpsStatusPayload {
       error_type: string | null
     }>
   }
+  retention: {
+    backup_keep_days: number
+    release_keep_count: number
+    preview_keep_days: number
+    log_keep_days: number
+    upload_keep_days: number
+    report_keep_days: number
+    zip_keep_days: number
+    audit_log_keep_days: number
+  }
   backups: {
     backup_dir_present: boolean
     latest: OpsBackupItem | null

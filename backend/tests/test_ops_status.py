@@ -159,6 +159,9 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     assert data["deployment"]["release"] == "abcdef12"
     assert data["deployment"]["revision_short"] == "abcdef12"
     assert isinstance(data["alerts"], list)
+    assert data["retention"]["upload_keep_days"] == 30
+    assert data["retention"]["report_keep_days"] == 180
+    assert data["retention"]["audit_log_keep_days"] == 365
     assert data["tasks"]["counts"]["total"] == 1
     assert data["tasks"]["recent"][0]["id"] == "task-sensitive"
     assert data["runtime"]["generation_queue"]["max_workers"] >= 1

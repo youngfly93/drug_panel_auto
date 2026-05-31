@@ -47,6 +47,16 @@ DISK_DANGER_PERCENT = 90
 BACKUP_WARNING_HOURS = 30
 BACKUP_DANGER_HOURS = 48
 DOWNLOAD_SLOW_WARNING_MS = 30_000
+RETENTION_DEFAULTS = {
+    "backup_keep_days": 30,
+    "release_keep_count": 8,
+    "preview_keep_days": 7,
+    "log_keep_days": 14,
+    "upload_keep_days": 30,
+    "report_keep_days": 180,
+    "zip_keep_days": 14,
+    "audit_log_keep_days": 365,
+}
 
 
 def _now_iso() -> str:
@@ -98,6 +108,29 @@ def _load_json(path: Path) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _retention_policy() -> dict[str, Any]:
+    return {
+        "backup_keep_days": _env_int("BACKUP_KEEP_DAYS", RETENTION_DEFAULTS["backup_keep_days"]),
+        "release_keep_count": _env_int("RELEASE_KEEP_COUNT", RETENTION_DEFAULTS["release_keep_count"]),
+        "preview_keep_days": _env_int("PREVIEW_KEEP_DAYS", RETENTION_DEFAULTS["preview_keep_days"]),
+        "log_keep_days": _env_int("LOG_KEEP_DAYS", RETENTION_DEFAULTS["log_keep_days"]),
+        "upload_keep_days": _env_int("UPLOAD_KEEP_DAYS", RETENTION_DEFAULTS["upload_keep_days"]),
+        "report_keep_days": _env_int("REPORT_KEEP_DAYS", RETENTION_DEFAULTS["report_keep_days"]),
+        "zip_keep_days": _env_int("ZIP_KEEP_DAYS", RETENTION_DEFAULTS["zip_keep_days"]),
+        "audit_log_keep_days": _env_int(
+            "AUDIT_LOG_KEEP_DAYS",
+            RETENTION_DEFAULTS["audit_log_keep_days"],
+        ),
+    }
 
 
 def _safe_path_name(path_text: str | None) -> str | None:
@@ -693,6 +726,7 @@ def ops_status(
             log_dir / "uvicorn.log",
             event_limit=download_event_limit,
         ),
+        "retention": _retention_policy(),
         "backups": _backup_status(_backup_dir()),
     }
     data["alerts"] = _ops_alerts(data)

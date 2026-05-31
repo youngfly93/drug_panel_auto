@@ -113,7 +113,13 @@ The maintenance job:
 - removes old backup archives after `BACKUP_KEEP_DAYS`, default `30`;
 - removes old clean release directories while keeping the current release and
   the newest `RELEASE_KEEP_COUNT`, default `8`;
-- removes stale previews and rotated logs.
+- removes stale previews after `PREVIEW_KEEP_DAYS`, default `7`;
+- removes uploaded Excel files after `UPLOAD_KEEP_DAYS`, default `30`;
+- removes regenerated ZIP packages after `ZIP_KEEP_DAYS`, default `14`;
+- removes generated report task directories after `REPORT_KEEP_DAYS`, default
+  `180`;
+- removes operation audit rows after `AUDIT_LOG_KEEP_DAYS`, default `365`;
+- removes rotated logs after `LOG_KEEP_DAYS`, default `14`.
 
 Manual commands:
 
@@ -177,6 +183,24 @@ Current thresholds:
   at least `30s`;
 - warning when LibreOffice listener is missing or no cleanup completion is
   recorded.
+
+The same status payload exposes the active retention policy under `retention`,
+so the dashboard shows the actual keep-days currently used by the deployed
+environment.
+
+## Operation Audit
+
+Task-level operation audit events are written to the SQLite `audit_logs` table
+and exposed through:
+
+```bash
+curl https://panel.mailuo-report.com.cn/api/v1/reports/<task_id>/audit-log
+```
+
+Recorded events include report generation requests, batch queue/retry actions,
+download requests, and review/delivery state changes. The API response is
+sanitized: it does not include patient fields, Excel filenames, report
+filenames, full paths, client IPs, or user agents.
 
 ## Known Limitation
 

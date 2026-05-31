@@ -190,6 +190,12 @@
               <strong>{{ formatDate(status?.runtime.maintenance.last_cleanup_at) }}</strong>
             </div>
           </div>
+          <div class="retention-grid">
+            <div v-for="item in retentionRows" :key="item.label">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
           <el-table :data="storageRows" size="small" stripe>
             <el-table-column prop="label" label="存储区" />
             <el-table-column prop="entries" label="一级条目" width="100" align="right" />
@@ -469,6 +475,15 @@ const downloadMetrics = computed(() => [
   { label: '最大文件', value: formatMb(downloadSummary.value?.largest_file_mb) },
 ])
 
+const retentionRows = computed(() => [
+  { label: '上传 Excel', value: formatDays(status.value?.retention.upload_keep_days) },
+  { label: '报告产物', value: formatDays(status.value?.retention.report_keep_days) },
+  { label: 'ZIP 包', value: formatDays(status.value?.retention.zip_keep_days) },
+  { label: '审计日志', value: formatDays(status.value?.retention.audit_log_keep_days) },
+  { label: '预览图', value: formatDays(status.value?.retention.preview_keep_days) },
+  { label: '运行日志', value: formatDays(status.value?.retention.log_keep_days) },
+])
+
 const storageRows = computed(() => {
   const labels: Record<string, string> = {
     uploads: '上传 Excel',
@@ -625,6 +640,12 @@ function formatMb(value: number | null | undefined) {
 function formatSpeed(value: number | null | undefined) {
   if (value == null || Number.isNaN(value)) return '-'
   return `${value.toFixed(1)} Mbps`
+}
+
+function formatDays(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return '-'
+  if (value <= 0) return '不清理'
+  return `${value} 天`
 }
 
 watch(autoRefresh, (enabled) => {
@@ -974,7 +995,8 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
-.maintenance-grid div {
+.maintenance-grid div,
+.retention-grid div {
   min-height: 62px;
   display: flex;
   flex-direction: column;
@@ -985,12 +1007,21 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 
-.maintenance-grid span {
+.retention-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.maintenance-grid span,
+.retention-grid span {
   color: #667085;
   font-size: 12px;
 }
 
-.maintenance-grid strong {
+.maintenance-grid strong,
+.retention-grid strong {
   overflow: hidden;
   font-size: 13px;
   text-overflow: ellipsis;
@@ -1015,7 +1046,8 @@ onUnmounted(() => {
     justify-content: space-between;
   }
 
-  .maintenance-grid {
+  .maintenance-grid,
+  .retention-grid {
     grid-template-columns: 1fr;
   }
 

@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal, get_db
+from app.models.audit import AuditLog
 from app.dependencies import get_bridge
 from app.models.task import Task, TaskResult
 from app.models.upload import Upload
@@ -43,6 +44,7 @@ from app.schemas.report import (
     TaskStatus,
 )
 from app.services import clinical_info_service as clinical_svc
+from app.services.audit_log import audit_event_payload, record_audit_event
 from app.services import reference_report_service as diff_svc
 from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.generation_process import run_generate_report_with_timeout
@@ -154,6 +156,7 @@ def _observed_file_response(
     task: Task,
     request: Request,
     extra_context: Optional[dict] = None,
+    db: Optional[Session] = None,
 ) -> FileResponse:
     started_at = time.perf_counter()
     stat_result = path.stat()
@@ -183,6 +186,26 @@ def _observed_file_response(
     if task.duration_seconds is not None:
         headers["X-ReportGen-Task-Duration-Seconds"] = str(
             _round_seconds(task.duration_seconds)
+        )
+    if db is not None and request.method.upper() != "HEAD":
+        record_audit_event(
+            db,
+            action="report.download_requested",
+            resource_type="task",
+            resource_id=task.id,
+            request=request,
+            details={
+                "download_kind": download_kind,
+                "file_index": context.get("file_index"),
+                "file_size_bytes": stat_result.st_size,
+                "file_size_mb": round(stat_result.st_size / 1024 / 1024, 3),
+                "include_failed": context.get("include_failed"),
+                "item_count": context.get("item_count"),
+                "project_type": task.project_type,
+                "qa_filter": context.get("qa_filter"),
+                "task_status": task.status,
+                "task_type": task.task_type,
+            },
         )
     return ObservedFileResponse(
         path=str(path),
@@ -896,6 +919,7 @@ def _generate_response_from_result(
 @router.post("/generate", response_model=ApiResponse[GenerateResponse])
 def generate_report(
     req: GenerateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
 ):
@@ -937,6 +961,23 @@ def generate_report(
     )
     db.add(task)
     db.commit()
+    record_audit_event(
+        db,
+        action="report.generate_requested",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "generate",
+            "task_type": "single",
+            "project_type": effective_project_type,
+            "template_name": req.template_name,
+            "strict_mode": req.strict_mode,
+            "template_contract_mode": req.template_contract_mode,
+            "qa_visual_render": req.qa_visual_render,
+            "status": "running",
+        },
+    )
 
     try:
         result = run_generate_report_with_timeout(
@@ -1007,6 +1048,7 @@ def generate_report(
 
 @router.post("/generate-file", response_model=ApiResponse[GenerateResponse])
 def generate_report_from_file(
+    request: Request,
     file: UploadFile = File(...),
     clinical_info: str = Form("{}"),
     project_type: Optional[str] = Form(None),
@@ -1074,6 +1116,23 @@ def generate_report_from_file(
     )
     db.add(task)
     db.commit()
+    record_audit_event(
+        db,
+        action="report.generate_file_requested",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "generate-file",
+            "task_type": "single",
+            "project_type": detected_project_type,
+            "template_name": template_name,
+            "strict_mode": strict_mode,
+            "template_contract_mode": template_contract_mode,
+            "qa_visual_render": qa_visual_render,
+            "status": "running",
+        },
+    )
 
     try:
         result = run_generate_report_with_timeout(
@@ -1145,6 +1204,7 @@ def generate_report_from_file(
 
 @router.post("/generate-file-async", response_model=ApiResponse[GenerateResponse])
 def generate_report_from_file_async(
+    request: Request,
     file: UploadFile = File(...),
     clinical_info: str = Form("{}"),
     project_type: Optional[str] = Form(None),
@@ -1231,6 +1291,23 @@ def generate_report_from_file_async(
     task.context_json_path = str(request_path)
     db.add(task)
     db.commit()
+    record_audit_event(
+        db,
+        action="report.generate_async_queued",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "generate-file-async",
+            "task_type": "single",
+            "project_type": detected_project_type,
+            "template_name": template_name,
+            "strict_mode": strict_mode,
+            "template_contract_mode": template_contract_mode,
+            "qa_visual_render": qa_visual_render,
+            "status": "pending",
+        },
+    )
 
     submit_generation_job(
         _complete_file_generation_task,
@@ -1489,10 +1566,35 @@ def get_review_state(task_id: str, db: Session = Depends(get_db)):
     return ApiResponse(data=_load_review_state(task))
 
 
+@router.get("/{task_id}/audit-log", response_model=ApiResponse[dict])
+def get_task_audit_log(
+    task_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.resource_type == "task", AuditLog.resource_id == task_id)
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return ApiResponse(
+        data={
+            "task_id": task_id,
+            "items": [audit_event_payload(row) for row in rows],
+        }
+    )
+
+
 @router.post("/{task_id}/review-state", response_model=ApiResponse[dict])
 def update_review_state(
     task_id: str,
     req: ReviewStateUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -1529,7 +1631,26 @@ def update_review_state(
     state["task_id"] = task.id
     state["schema_version"] = "1.0"
     state["history"] = history
-    return ApiResponse(data=_write_review_state(task, state))
+    updated_state = _write_review_state(task, state)
+    record_audit_event(
+        db,
+        action="review_state.updated",
+        resource_type="task",
+        resource_id=task.id,
+        request=request,
+        details={
+            "gate_blockers": gate["blockers"],
+            "gate_status": gate["status"],
+            "operator": req.operator or "未登录操作员",
+            "override_gate": bool(req.override_gate),
+            "project_type": task.project_type,
+            "review_status": req.status,
+            "review_status_label": REVIEW_STATUSES[req.status],
+            "task_status": task.status,
+            "task_type": task.task_type,
+        },
+    )
+    return ApiResponse(data=updated_state)
 
 
 @router.get("/{task_id}/batch-results/{file_index}/download")
@@ -1562,6 +1683,7 @@ def download_batch_item_report(
         task=task,
         request=request,
         extra_context={"file_index": file_index},
+        db=db,
     )
 
 
@@ -1641,6 +1763,7 @@ def download_batch_reports_zip(
             "item_count": len(rows),
             "prepare_duration_ms": prepare_duration_ms,
         },
+        db=db,
     )
 
 
@@ -1793,6 +1916,7 @@ def download_audit_package(
             "include_failed": include_failed,
             "prepare_duration_ms": prepare_duration_ms,
         },
+        db=db,
     )
 
 
@@ -2001,6 +2125,7 @@ def download_batch_report_diff_artifact(
         download_kind="batch_diff_artifact",
         task=task,
         request=request,
+        db=db,
     )
 
 
@@ -2037,6 +2162,7 @@ def download_batch_report_diff_item_artifact(
         download_kind="batch_diff_item_artifact",
         task=task,
         request=request,
+        db=db,
     )
 
 
@@ -2060,6 +2186,7 @@ def download_report_diff_artifact(
         download_kind="diff_artifact",
         task=task,
         request=request,
+        db=db,
     )
 
 
@@ -2089,6 +2216,7 @@ def _download_report_response(task_id: str, db: Session, request: Request) -> Fi
         download_kind="single_docx",
         task=task,
         request=request,
+        db=db,
     )
 
 

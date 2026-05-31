@@ -586,6 +586,7 @@ def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
             json={"status": "delivered", "operator": "报告组"},
         )
         audit_response = client.get(f"/api/v1/reports/{task_id}/audit-package")
+        audit_log_response = client.get(f"/api/v1/reports/{task_id}/audit-log")
 
     assert gate_response.status_code == 200
     gate = gate_response.json()["data"]
@@ -597,6 +598,15 @@ def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
     assert update_response.json()["data"]["status"] == "delivered"
     assert audit_response.status_code == 200
     assert audit_response.headers["content-type"].startswith("application/zip")
+    assert audit_log_response.status_code == 200
+    audit_log = audit_log_response.json()["data"]["items"]
+    actions = {item["action"] for item in audit_log}
+    assert "report.generate_file_requested" in actions
+    assert "review_state.updated" in actions
+    assert "report.download_requested" in actions
+    audit_log_text = audit_log_response.text
+    assert "测试患者" not in audit_log_text
+    assert "case.xlsx" not in audit_log_text
 
 
 def test_quality_gate_blocks_failed_batch_delivery(tmp_path, monkeypatch):

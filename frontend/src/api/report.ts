@@ -131,6 +131,21 @@ export interface ReviewState {
   history?: Array<Record<string, any>>
 }
 
+export interface OperationAuditItem {
+  id: number
+  action: string
+  resource_type?: string | null
+  resource_id?: string | null
+  created_at?: string | null
+  operator?: string | null
+  details: Record<string, any>
+}
+
+export interface OperationAuditLog {
+  task_id: string
+  items: OperationAuditItem[]
+}
+
 export interface QualityGate {
   schema_version?: string
   task_id: string
@@ -624,6 +639,13 @@ export const reportApi = {
 
   async getReviewState(taskId: string): Promise<ReviewState> {
     const { data } = await client.get(`/reports/${taskId}/review-state`)
+    return data.data
+  },
+
+  async getAuditLog(taskId: string, limit = 50): Promise<OperationAuditLog> {
+    const { data } = await client.get(`/reports/${taskId}/audit-log`, {
+      params: { limit },
+    })
     return data.data
   },
 

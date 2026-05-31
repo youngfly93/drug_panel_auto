@@ -147,6 +147,36 @@
         </div>
       </section>
 
+      <section class="qa-panel audit-panel section-gap">
+        <div class="panel-title">
+          <span>操作审计</span>
+          <div class="stage-title-meta">
+            <el-tag size="small" type="info">{{ auditTrail.length }} 条</el-tag>
+            <el-button text type="primary" :loading="auditLoading" @click="fetchAuditTrail">
+              刷新
+            </el-button>
+          </div>
+        </div>
+        <div v-if="auditTrail.length" class="audit-list">
+          <div
+            v-for="item in auditTrail"
+            :key="item.id"
+            :class="['audit-item', `audit-${auditTone(item.action)}`]"
+          >
+            <div class="audit-marker" />
+            <div class="audit-body">
+              <div>
+                <strong>{{ auditActionLabel(item.action) }}</strong>
+                <span>{{ formatAuditTime(item.created_at) }}</span>
+              </div>
+              <p>{{ formatAuditMeta(item) }}</p>
+            </div>
+            <el-tag size="small" type="info">{{ item.operator || '未登录操作员' }}</el-tag>
+          </div>
+        </div>
+        <el-empty v-else description="暂无操作记录" :image-size="70" />
+      </section>
+
       <section v-if="isBatchTask" class="qa-panel section-gap">
         <div class="panel-title">
           <span>批量生成进度</span>
@@ -701,6 +731,7 @@ import {
   reportApi,
   type BatchResults,
   type DownloadProgress,
+  type OperationAuditItem,
   type QualityGate,
   type ReportDiffResult,
   type ReportSummary,
@@ -725,6 +756,8 @@ const batchDownloading = ref(false)
 const batchPassDownloading = ref(false)
 const batchItemDownloading = ref<Record<number, boolean>>({})
 const downloadStatus = ref('')
+const auditLoading = ref(false)
+const auditTrail = ref<OperationAuditItem[]>([])
 const task = ref<TaskStatus | null>(null)
 const qaReport = ref<Record<string, any> | null>(null)
 const reportSummary = ref<ReportSummary | null>(null)
@@ -1043,6 +1076,47 @@ function formatDurationMs(value?: number | null) {
   return `${Number(value).toFixed(1)}ms`
 }
 
+function auditActionLabel(action: string) {
+  const map: Record<string, string> = {
+    'report.generate_requested': '发起生成',
+    'report.generate_file_requested': '上传并生成',
+    'report.generate_async_queued': '提交后台生成',
+    'report.batch_queued': '提交批量生成',
+    'report.batch_retry_queued': '重试失败文件',
+    'report.download_requested': '下载产物',
+    'review_state.updated': '更新审核状态',
+  }
+  return map[action] || action
+}
+
+function auditTone(action: string) {
+  if (action.includes('download')) return 'download'
+  if (action.includes('review')) return 'review'
+  if (action.includes('retry')) return 'warning'
+  return 'generate'
+}
+
+function formatAuditTime(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function formatAuditMeta(item: OperationAuditItem) {
+  const details = item.details || {}
+  const parts = [
+    details.task_type === 'batch' ? '批量任务' : details.task_type === 'single' ? '单份任务' : '',
+    details.project_type ? `项目 ${details.project_type}` : '',
+    details.review_status_label ? `状态 ${details.review_status_label}` : '',
+    details.download_kind ? `下载 ${details.download_kind}` : '',
+    details.total_files ? `文件 ${details.total_files}` : '',
+    details.retry_files ? `重试 ${details.retry_files}` : '',
+    details.gate_status ? `门禁 ${details.gate_status}` : '',
+  ].filter(Boolean)
+  return parts.join(' · ') || '已记录'
+}
+
 function stageLabel(name?: string) {
   const map: Record<string, string> = {
     PanelResolutionStage: '识别检测项目',
@@ -1132,6 +1206,18 @@ function reviewStatusTagType(status?: string | null) {
   return status ? map[status] || 'info' : 'info'
 }
 
+async function fetchAuditTrail() {
+  auditLoading.value = true
+  try {
+    const payload = await reportApi.getAuditLog(taskId, 50)
+    auditTrail.value = payload.items
+  } catch {
+    auditTrail.value = []
+  } finally {
+    auditLoading.value = false
+  }
+}
+
 async function fetchAll() {
   loading.value = true
   qaLoadError.value = ''
@@ -1161,6 +1247,7 @@ async function fetchAll() {
     } catch {
       reviewState.value = null
     }
+    await fetchAuditTrail()
     if (task.value?.task_type === 'batch') {
       try {
         batchResults.value = await reportApi.getBatchResults(taskId)
@@ -1314,6 +1401,7 @@ async function downloadReport() {
       },
     })
     ElMessage.success('报告下载完成')
+    await fetchAuditTrail()
   } catch (err: any) {
     ElMessage.error(err.message || '报告下载失败')
   } finally {
@@ -1339,6 +1427,7 @@ async function downloadBatchZip() {
     } else {
       ElMessage.success('ZIP 下载完成')
     }
+    await fetchAuditTrail()
   } catch (err: any) {
     ElMessage.error(err.message || 'ZIP 下载失败')
   } finally {
@@ -1364,6 +1453,7 @@ async function downloadBatchPassZip() {
     } else {
       ElMessage.success('QA PASS ZIP 下载完成')
     }
+    await fetchAuditTrail()
   } catch (err: any) {
     ElMessage.error(err.message || 'QA PASS ZIP 下载失败')
   } finally {
@@ -1384,6 +1474,7 @@ async function downloadBatchItem(url: string, index: number) {
       },
     })
     ElMessage.success('报告下载完成')
+    await fetchAuditTrail()
   } catch (err: any) {
     ElMessage.error(err.message || '报告下载失败')
   } finally {
@@ -1405,6 +1496,7 @@ async function downloadAuditPackage(includeFailed: boolean) {
       },
     })
     ElMessage.success('审计包下载完成')
+    await fetchAuditTrail()
   } catch (err: any) {
     ElMessage.error(err.message || '审计包下载失败')
   } finally {
@@ -1431,6 +1523,7 @@ async function markReviewState(status: 'reviewed' | 'delivered') {
       operator: '报告组',
     })
     qualityGate.value = await reportApi.getQualityGate(taskId)
+    await fetchAuditTrail()
     ElMessage.success(status === 'delivered' ? '已标记交付' : '已标记审核')
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || '审核状态更新失败')
@@ -1755,6 +1848,78 @@ onMounted(fetchAll)
   margin-top: 8px;
   color: #667085;
   font-size: 13px;
+}
+
+.audit-panel {
+  border-color: #d7dde6;
+}
+
+.audit-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.audit-item {
+  min-height: 64px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #edf0f3;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.audit-marker {
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #6b7280;
+}
+
+.audit-generate .audit-marker {
+  background: #2f6f9f;
+}
+
+.audit-download .audit-marker {
+  background: #2f8f68;
+}
+
+.audit-review .audit-marker {
+  background: #7c5cbd;
+}
+
+.audit-warning .audit-marker {
+  background: #b86d1c;
+}
+
+.audit-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.audit-body div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.audit-body strong {
+  font-size: 14px;
+}
+
+.audit-body span,
+.audit-body p {
+  color: #667085;
+  font-size: 12px;
+}
+
+.audit-body p {
+  margin: 5px 0 0;
 }
 
 .batch-detail-table {
