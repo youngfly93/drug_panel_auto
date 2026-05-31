@@ -2400,7 +2400,9 @@ def test_drug_analysis_respects_variant_specific_p_point():
     )
 
     assert len(sections) == 1
-    assert sections[0]["relation"] == "general TP53 relation"
+    # relation 现在会被自动前置「该样本检出…突变。」变异描述开头，故用 endswith
+    # 断言匹配到的是 general（非 p.Y220C 特异）relation。
+    assert sections[0]["relation"].endswith("general TP53 relation")
     assert "Y220C" not in sections[0]["clinical"]
 
 
@@ -2440,7 +2442,8 @@ def test_drug_analysis_matches_kras_wildcard_p_point():
 
     assert len(sections) == 1
     assert sections[0]["drug_name"] == "司美替尼"
-    assert sections[0]["relation"] == "G12X wildcard"
+    # relation 被自动前置变异描述开头，用 endswith 断言匹配到通配 p.G12X relation。
+    assert sections[0]["relation"].endswith("G12X wildcard")
 
 
 def test_gene_knowledge_uses_reviewed_columns_without_intro_domain_tail():
