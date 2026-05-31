@@ -2,15 +2,18 @@
 
 import base64
 import json
+import os
 import re
 import shutil
 import threading
+import time
 import uuid
 import zipfile
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Optional
 
+import yaml
 from fastapi import (
     APIRouter,
     Depends,
@@ -18,14 +21,15 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     UploadFile,
 )
 from fastapi.responses import FileResponse
 from reportgen.utils.docx_render import render_docx_to_pngs
 from reportgen.utils.file_utils import safe_filename
+from reportgen.utils.logger import get_logger
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-import yaml
 
 from app.config import settings
 from app.database import SessionLocal, get_db
@@ -45,6 +49,139 @@ from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.reportgen_bridge import ReportGenBridge
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+download_logger = get_logger("reportgen-web.download")
+DOWNLOAD_SLOW_WARN_SECONDS = float(
+    os.environ.get("RG_WEB_DOWNLOAD_SLOW_WARN_SECONDS", "10")
+)
+
+
+class ObservedFileResponse(FileResponse):
+    """FileResponse that logs after Starlette finishes streaming the body."""
+
+    def __init__(
+        self,
+        *args,
+        log_context: dict,
+        started_at: float,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self._reportgen_log_context = log_context
+        self._reportgen_started_at = started_at
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        except Exception as exc:
+            duration_seconds = time.perf_counter() - self._reportgen_started_at
+            download_logger.log_event(
+                "report_download_failed",
+                level="ERROR",
+                **self._reportgen_log_context,
+                duration_ms=round(duration_seconds * 1000, 3),
+                error_type=type(exc).__name__,
+            )
+            raise
+
+        duration_seconds = time.perf_counter() - self._reportgen_started_at
+        size_bytes = int(self._reportgen_log_context.get("file_size_bytes") or 0)
+        throughput_mbps = None
+        if duration_seconds > 0 and size_bytes > 0:
+            throughput_mbps = round(size_bytes * 8 / duration_seconds / 1_000_000, 3)
+        event_type = (
+            "report_download_slow"
+            if duration_seconds >= DOWNLOAD_SLOW_WARN_SECONDS
+            else "report_download_completed"
+        )
+        level = "WARNING" if event_type == "report_download_slow" else "INFO"
+        download_logger.log_event(
+            event_type,
+            level=level,
+            **self._reportgen_log_context,
+            duration_ms=round(duration_seconds * 1000, 3),
+            throughput_mbps=throughput_mbps,
+            slow_threshold_seconds=DOWNLOAD_SLOW_WARN_SECONDS,
+        )
+
+
+def _round_seconds(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return round(float(value), 3)
+    except Exception:
+        return None
+
+
+def _download_request_context(request: Request) -> dict:
+    headers = request.headers
+    return {
+        "method": request.method,
+        "client_host": request.client.host if request.client else None,
+        "range_header": headers.get("range"),
+        "cf_ray": headers.get("cf-ray"),
+        "user_agent": (headers.get("user-agent") or "")[:160] or None,
+    }
+
+
+def _task_download_context(task: Task) -> dict:
+    seconds_since_completed = None
+    if task.completed_at:
+        completed_at = task.completed_at
+        if completed_at.tzinfo is None:
+            completed_at = completed_at.replace(tzinfo=UTC)
+        seconds_since_completed = (datetime.now(UTC) - completed_at).total_seconds()
+    return {
+        "task_id": task.id,
+        "task_type": task.task_type,
+        "task_status": task.status,
+        "project_type": task.project_type,
+        "task_duration_seconds": _round_seconds(task.duration_seconds),
+        "seconds_since_completed": _round_seconds(seconds_since_completed),
+    }
+
+
+def _observed_file_response(
+    *,
+    path: Path,
+    download_filename: str,
+    media_type: str,
+    download_kind: str,
+    task: Task,
+    request: Request,
+    extra_context: Optional[dict] = None,
+) -> FileResponse:
+    started_at = time.perf_counter()
+    stat_result = path.stat()
+    context = {
+        **_task_download_context(task),
+        **_download_request_context(request),
+        "download_kind": download_kind,
+        "file_size_bytes": stat_result.st_size,
+        "file_size_mb": round(stat_result.st_size / 1024 / 1024, 3),
+    }
+    if extra_context:
+        context.update(extra_context)
+
+    download_logger.log_event("report_download_started", **context)
+    headers = {
+        "X-ReportGen-Task-Id": task.id,
+        "X-ReportGen-Download-Kind": download_kind,
+        "X-ReportGen-Download-Bytes": str(stat_result.st_size),
+    }
+    if task.duration_seconds is not None:
+        headers["X-ReportGen-Task-Duration-Seconds"] = str(
+            _round_seconds(task.duration_seconds)
+        )
+    return ObservedFileResponse(
+        path=str(path),
+        filename=download_filename,
+        media_type=media_type,
+        stat_result=stat_result,
+        headers=headers,
+        log_context=context,
+        started_at=started_at,
+    )
 
 
 def _complete_file_generation_task(
@@ -1363,6 +1500,7 @@ def update_review_state(
 def download_batch_item_report(
     task_id: str,
     file_index: int,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -1380,16 +1518,21 @@ def download_batch_item_report(
     path = Path(row.output_path)
     if not path.exists():
         raise HTTPException(status_code=404, detail="报告文件已被删除")
-    return FileResponse(
-        path=str(path),
-        filename=path.name,
+    return _observed_file_response(
+        path=path,
+        download_filename=path.name,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        download_kind="batch_item_docx",
+        task=task,
+        request=request,
+        extra_context={"file_index": file_index},
     )
 
 
 @router.get("/{task_id}/batch/download")
 def download_batch_reports_zip(
     task_id: str,
+    request: Request,
     qa: Optional[str] = Query(None, pattern="^(pass|all)$"),
     db: Session = Depends(get_db),
 ):
@@ -1419,6 +1562,7 @@ def download_batch_reports_zip(
     if not rows:
         detail = "没有 QA PASS 的成功报告" if qa_pass_only else "没有可打包的成功报告"
         raise HTTPException(status_code=404, detail=detail)
+    prepare_started = time.perf_counter()
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         batch_report = _batch_report_path(task.output_path)
         if batch_report and batch_report.exists():
@@ -1435,16 +1579,26 @@ def download_batch_reports_zip(
                     summary_path,
                     f"summaries/{row.file_index:03d}_{summary_path.name}",
                 )
-    return FileResponse(
-        path=str(zip_path),
-        filename=zip_path.name,
+    prepare_duration_ms = round((time.perf_counter() - prepare_started) * 1000, 3)
+    return _observed_file_response(
+        path=zip_path,
+        download_filename=zip_path.name,
         media_type="application/zip",
+        download_kind="batch_zip",
+        task=task,
+        request=request,
+        extra_context={
+            "qa_filter": "pass" if qa_pass_only else "all",
+            "item_count": len(rows),
+            "prepare_duration_ms": prepare_duration_ms,
+        },
     )
 
 
 @router.get("/{task_id}/audit-package")
 def download_audit_package(
     task_id: str,
+    request: Request,
     include_failed: bool = Query(True),
     db: Session = Depends(get_db),
 ):
@@ -1461,6 +1615,7 @@ def download_audit_package(
         if include_failed
         else f"{task_id}_passed_audit_package.zip"
     )
+    prepare_started = time.perf_counter()
     manifest = {
         "schema_version": "1.0",
         "generated_at": datetime.utcnow().isoformat(),
@@ -1577,10 +1732,18 @@ def download_audit_package(
                     "diff/report_diff.md",
                 )
 
-    return FileResponse(
-        path=str(zip_path),
-        filename=zip_path.name,
+    prepare_duration_ms = round((time.perf_counter() - prepare_started) * 1000, 3)
+    return _observed_file_response(
+        path=zip_path,
+        download_filename=zip_path.name,
         media_type="application/zip",
+        download_kind="audit_package_zip",
+        task=task,
+        request=request,
+        extra_context={
+            "include_failed": include_failed,
+            "prepare_duration_ms": prepare_duration_ms,
+        },
     )
 
 
@@ -1771,6 +1934,7 @@ def get_report_diff(task_id: str, db: Session = Depends(get_db)):
 def download_batch_report_diff_artifact(
     task_id: str,
     filename: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Download batch report diff JSON or Markdown for a task."""
@@ -1781,8 +1945,13 @@ def download_batch_report_diff_artifact(
     if not artifact_path or not artifact_path.exists():
         raise HTTPException(status_code=404, detail="批量报告对比产物不存在")
     media_type = "application/json" if filename.endswith(".json") else "text/markdown"
-    return FileResponse(
-        path=str(artifact_path), filename=filename, media_type=media_type
+    return _observed_file_response(
+        path=artifact_path,
+        download_filename=filename,
+        media_type=media_type,
+        download_kind="batch_diff_artifact",
+        task=task,
+        request=request,
     )
 
 
@@ -1791,6 +1960,7 @@ def download_batch_report_diff_item_artifact(
     task_id: str,
     item_key: str,
     filename: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Download one sample's batch report diff JSON or Markdown."""
@@ -1811,8 +1981,13 @@ def download_batch_report_diff_item_artifact(
     if not artifact_path.exists():
         raise HTTPException(status_code=404, detail="报告对比产物不存在")
     media_type = "application/json" if filename.endswith(".json") else "text/markdown"
-    return FileResponse(
-        path=str(artifact_path), filename=filename, media_type=media_type
+    return _observed_file_response(
+        path=artifact_path,
+        download_filename=filename,
+        media_type=media_type,
+        download_kind="batch_diff_item_artifact",
+        task=task,
+        request=request,
     )
 
 
@@ -1820,6 +1995,7 @@ def download_batch_report_diff_item_artifact(
 def download_report_diff_artifact(
     task_id: str,
     filename: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Download report diff JSON or Markdown for a task."""
@@ -1828,14 +2004,17 @@ def download_report_diff_artifact(
     if not artifact_path or not artifact_path.exists():
         raise HTTPException(status_code=404, detail="报告对比产物不存在")
     media_type = "application/json" if filename.endswith(".json") else "text/markdown"
-    return FileResponse(
-        path=str(artifact_path),
-        filename=filename,
+    return _observed_file_response(
+        path=artifact_path,
+        download_filename=filename,
         media_type=media_type,
+        download_kind="diff_artifact",
+        task=task,
+        request=request,
     )
 
 
-def _download_report_response(task_id: str, db: Session) -> FileResponse:
+def _download_report_response(task_id: str, db: Session, request: Request) -> FileResponse:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -1854,18 +2033,29 @@ def _download_report_response(task_id: str, db: Session) -> FileResponse:
         output_path=task.output_path,
     )
 
-    return FileResponse(
-        path=str(file_path),
-        filename=download_filename,
+    return _observed_file_response(
+        path=file_path,
+        download_filename=download_filename,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        download_kind="single_docx",
+        task=task,
+        request=request,
     )
 
 
 @router.head("/{task_id}/download", include_in_schema=False)
-def head_download_report(task_id: str, db: Session = Depends(get_db)):
-    return _download_report_response(task_id, db)
+def head_download_report(
+    task_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return _download_report_response(task_id, db, request)
 
 
 @router.get("/{task_id}/download")
-def download_report(task_id: str, db: Session = Depends(get_db)):
-    return _download_report_response(task_id, db)
+def download_report(
+    task_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return _download_report_response(task_id, db, request)

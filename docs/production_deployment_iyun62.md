@@ -89,6 +89,33 @@ Logs are written to:
 /media/desk16/iyun6208/apps/reportgen-web-runtime/logs/watchdog.log
 ```
 
+## Download Performance Triage
+
+Report download responses include diagnostic headers:
+
+- `X-ReportGen-Task-Id`
+- `X-ReportGen-Download-Kind`
+- `X-ReportGen-Download-Bytes`
+- `X-ReportGen-Task-Duration-Seconds`
+
+The API also writes structured download events to uvicorn logs without patient
+names, report filenames, Excel filenames, or full report paths:
+
+```bash
+ssh iyun-server '
+grep "report_download_" /media/desk16/iyun6208/apps/reportgen-web-runtime/logs/uvicorn.log | tail -n 40
+'
+```
+
+Use these fields to separate causes:
+
+- `report_download_started` appears immediately when the endpoint starts sending.
+- `report_download_completed` records server-side send duration and throughput.
+- `report_download_slow` means the server-side send took at least
+  `RG_WEB_DOWNLOAD_SLOW_WARN_SECONDS` seconds, default `10`.
+- `prepare_duration_ms` on ZIP downloads measures server-side ZIP packaging time
+  before the file transfer starts.
+
 ## Known Limitation
 
 The current SSH user does not have passwordless sudo, and `loginctl` linger is

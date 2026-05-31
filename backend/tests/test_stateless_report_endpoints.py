@@ -19,9 +19,9 @@ from app.api import batch as batch_api  # noqa: E402
 from app.api import excel as excel_api  # noqa: E402
 from app.api import report as report_api  # noqa: E402
 from app.api import task as task_api  # noqa: E402
+from app.config import settings  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.dependencies import get_bridge  # noqa: E402
-from app.config import settings  # noqa: E402
 from app.services import clinical_info_service as clinical_svc  # noqa: E402
 from app.services.reportgen_bridge import ReportGenBridge  # noqa: E402
 
@@ -381,12 +381,19 @@ def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
             if status_response.json()["data"]["status"] != "running":
                 break
             time.sleep(0.05)
+        download_response = client.get(f"/api/v1/reports/{data['task_id']}/download")
 
     assert status_response.status_code == 200
     status = status_response.json()["data"]
     assert status["status"] == "completed"
     assert status["output_path"].endswith("case.docx")
     assert status["report_summary_file"].endswith("case.summary.json")
+    assert download_response.status_code == 200
+    assert download_response.headers["x-reportgen-download-kind"] == "single_docx"
+    assert download_response.headers["x-reportgen-task-id"] == data["task_id"]
+    assert int(download_response.headers["x-reportgen-download-bytes"]) == len(
+        download_response.content
+    )
 
 
 def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
@@ -419,6 +426,8 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
             time.sleep(0.05)
 
         results_response = client.get(f"/api/v1/reports/{task_id}/batch-results")
+        result_rows = results_response.json()["data"]["items"]
+        item_response = client.get(result_rows[0]["download_url"])
         zip_response = client.get(f"/api/v1/reports/{task_id}/batch/download")
 
     assert status_response.status_code == 200
@@ -428,11 +437,16 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert status["completed_files"] == 2
     assert status["failed_files"] == 0
     assert results_response.status_code == 200
-    rows = results_response.json()["data"]["items"]
+    rows = result_rows
     assert [row["status"] for row in rows] == ["completed", "completed"]
     assert rows[0]["download_url"].endswith("/batch-results/1/download")
+    assert item_response.status_code == 200
+    assert item_response.headers["x-reportgen-download-kind"] == "batch_item_docx"
+    assert item_response.headers["x-reportgen-task-id"] == task_id
     assert zip_response.status_code == 200
     assert zip_response.headers["content-type"].startswith("application/zip")
+    assert zip_response.headers["x-reportgen-download-kind"] == "batch_zip"
+    assert zip_response.headers["x-reportgen-task-id"] == task_id
 
 
 def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
