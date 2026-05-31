@@ -48,6 +48,8 @@ python -m py_compile \
 rm -rf "$tmp_dir/backend/static"
 mkdir -p "$tmp_dir/backend/static"
 cp -R "$tmp_dir/frontend/dist/." "$tmp_dir/backend/static/"
+rm -rf "$tmp_dir/frontend/node_modules"
+find "$tmp_dir" -name ".DS_Store" -delete
 
 # Keep a quick compile check for the currently checked-out scripts too.
 python -m py_compile \
@@ -64,7 +66,7 @@ test -x '$VENV_DIR/bin/python'
 test -x '$VENV_DIR/bin/uvicorn'
 "
 
-tar -C "$tmp_dir" -cf - . | ssh "$SSH_HOST" "set -euo pipefail
+COPYFILE_DISABLE=1 tar -C "$tmp_dir" -cf - . | ssh "$SSH_HOST" "set -euo pipefail
 tar -xf - -C '$release_dir.tmp'
 printf '%s\n' '$DEPLOY_REF' > '$release_dir.tmp/REVISION'
 rm -rf '$release_dir'
