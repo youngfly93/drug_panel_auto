@@ -76,7 +76,10 @@ mv '$release_dir.tmp' '$release_dir'
 
 echo "== Upload runtime start script =="
 rsync -az scripts/iyun62_start_reportgen.sh "$SSH_HOST:$RUNTIME_DIR/start_reportgen.sh"
-ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/start_reportgen.sh'"
+if [ -f scripts/iyun62_watchdog.sh ]; then
+    rsync -az scripts/iyun62_watchdog.sh "$SSH_HOST:$RUNTIME_DIR/watchdog.sh"
+fi
+ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/start_reportgen.sh' '$RUNTIME_DIR/watchdog.sh' 2>/dev/null || chmod +x '$RUNTIME_DIR/start_reportgen.sh'"
 
 echo "== Start remote service =="
 ssh "$SSH_HOST" "RELEASE_DIR='$release_dir' STORAGE_DIR='$STORAGE_DIR' VENV_DIR='$VENV_DIR' RUNTIME_DIR='$RUNTIME_DIR' PORT='$PORT' bash '$RUNTIME_DIR/start_reportgen.sh'"

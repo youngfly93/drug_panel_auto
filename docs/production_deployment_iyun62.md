@@ -59,6 +59,36 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8000/api/v1/tasks
 curl -s -o /dev/null -w "HTTP %{http_code}\n" https://panel.mailuo-report.com.cn/api/v1/tasks/stats
 ```
 
+## Watchdog
+
+The current production user has crontab access. Install or refresh the user-level
+watchdog with:
+
+```bash
+bash scripts/iyun62_install_watchdog.sh
+```
+
+This installs:
+
+- `/media/desk16/iyun6208/apps/reportgen-web-runtime/watchdog.sh`
+- `/media/desk16/iyun6208/apps/reportgen-web-runtime/start_reportgen.sh`
+- one `crontab` block that runs every minute and once at reboot
+
+The watchdog checks:
+
+- local API health;
+- public Cloudflare URL health;
+- uvicorn process recovery from the current clean release;
+- Cloudflare tunnel recovery;
+- storage disk usage warning;
+- LibreOffice listener presence.
+
+Logs are written to:
+
+```text
+/media/desk16/iyun6208/apps/reportgen-web-runtime/logs/watchdog.log
+```
+
 ## Known Limitation
 
 The current SSH user does not have passwordless sudo, and `loginctl` linger is
