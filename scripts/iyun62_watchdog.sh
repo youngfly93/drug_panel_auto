@@ -54,28 +54,85 @@ current_release() {
         fi
     fi
     find "$APP_ROOT/reportgen-web-releases" -mindepth 1 -maxdepth 1 -type d \
-        2>/dev/null | sort | tail -n 1
+        -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -n 1 | cut -d' ' -f2-
+}
+
+web_process_state() {
+    local release
+    release="$1"
+    REPORTGEN_PORT="$PORT" EXPECTED_RELEASE="$release" "$VENV_DIR/bin/python" - <<'PY'
+import os
+
+port = os.environ.get("REPORTGEN_PORT", "8000")
+expected = os.path.realpath(os.environ["EXPECTED_RELEASE"])
+records = []
+
+for name in os.listdir("/proc"):
+    if not name.isdigit():
+        continue
+    pid = int(name)
+    try:
+        raw = open(f"/proc/{pid}/cmdline", "rb").read()
+    except OSError:
+        continue
+    text = raw.replace(b"\x00", b" ").decode("utf-8", "ignore")
+    if "uvicorn" not in text or "app.main:app" not in text or f"--port {port}" not in text:
+        continue
+
+    root = ""
+    try:
+        env_raw = open(f"/proc/{pid}/environ", "rb").read()
+        for item in env_raw.split(b"\x00"):
+            if item.startswith(b"RG_WEB_UPSTREAM_ROOT="):
+                root = item.split(b"=", 1)[1].decode("utf-8", "ignore")
+                break
+    except OSError:
+        pass
+    if not root:
+        try:
+            root = os.readlink(f"/proc/{pid}/cwd")
+        except OSError:
+            root = ""
+
+    root_real = os.path.realpath(root) if root else ""
+    records.append((pid, root_real))
+
+if any(root == expected for _, root in records):
+    pid, root = next((pid, root) for pid, root in records if root == expected)
+    print(f"ok pid={pid} release={root}")
+elif records:
+    details = ",".join(f"{pid}:{root or 'unknown'}" for pid, root in records)
+    print(f"mismatch expected={expected} running={details}")
+else:
+    print(f"missing expected={expected}")
+PY
 }
 
 ensure_web() {
-    local code release
+    local code release state
+    release="$(current_release)"
     code="$(http_code "$LOCAL_HEALTH_URL")"
-    if [ "$code" = "200" ]; then
-        log "web ok local_http=$code"
+    if [ -z "${release:-}" ] || [ ! -d "$release" ]; then
+        if [ "$code" = "200" ]; then
+            log "web fail local_http=$code; no usable release found"
+        else
+            log "web fail local_http=${code:-none}; no usable release found"
+        fi
+        return 1
+    fi
+
+    state="$(web_process_state "$release" 2>/dev/null || echo unknown)"
+    if [ "$code" = "200" ] && [[ "$state" == ok\ * ]]; then
+        log "web ok local_http=$code $state"
         return 0
     fi
 
-    release="$(current_release)"
-    if [ -z "${release:-}" ] || [ ! -d "$release" ]; then
-        log "web fail local_http=${code:-none}; no usable release found"
-        return 1
-    fi
     if [ ! -x "$START_SCRIPT" ]; then
-        log "web fail local_http=${code:-none}; missing start script $START_SCRIPT"
+        log "web fail local_http=${code:-none} state=$state; missing start script $START_SCRIPT"
         return 1
     fi
 
-    log "web restart local_http=${code:-none} release=$release"
+    log "web restart local_http=${code:-none} state=$state release=$release"
     RELEASE_DIR="$release" \
         STORAGE_DIR="$STORAGE_DIR" \
         VENV_DIR="$VENV_DIR" \
