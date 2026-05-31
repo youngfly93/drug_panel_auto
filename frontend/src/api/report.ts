@@ -257,13 +257,23 @@ export interface DownloadResult {
   attempts: number
 }
 
-interface DownloadOptions {
+export interface DownloadProgress {
+  receivedBytes: number
+  expectedBytes: number | null
+  percent: number | null
+  attempt: number
+  maxAttempts: number
+  resumed: boolean
+}
+
+export interface DownloadOptions {
   fallbackFilename?: string
   timeoutMs?: number
   stallTimeoutMs?: number
   retries?: number
   retryDelayMs?: number
   onRetry?: (nextAttempt: number, maxAttempts: number, error: any) => void
+  onProgress?: (progress: DownloadProgress) => void
 }
 
 function buildReportFileForm(file: File, req: Omit<GenerateRequest, 'upload_id'>): FormData {
@@ -428,6 +438,7 @@ async function downloadBlobWithResume(
   apiPath: string,
   options: Required<Pick<DownloadOptions, 'fallbackFilename' | 'timeoutMs' | 'stallTimeoutMs' | 'retries' | 'retryDelayMs'>>,
   onRetry?: DownloadOptions['onRetry'],
+  onProgress?: DownloadOptions['onProgress'],
 ): Promise<DownloadResult & { blob: Blob }> {
   const chunks: Uint8Array[] = []
   const basePath = String(client.defaults.baseURL || '/api/v1').replace(/\/$/, '')
@@ -437,6 +448,16 @@ async function downloadBlobWithResume(
   let filename = options.fallbackFilename
   let contentType = 'application/octet-stream'
   let lastError: any = null
+  const emitProgress = (attempt: number) => {
+    onProgress?.({
+      receivedBytes,
+      expectedBytes,
+      percent: expectedBytes ? Math.min(100, Math.round((receivedBytes / expectedBytes) * 100)) : null,
+      attempt,
+      maxAttempts: options.retries,
+      resumed: receivedBytes > 0,
+    })
+  }
 
   for (let attempt = 1; attempt <= options.retries; attempt += 1) {
     const controller = new AbortController()
@@ -490,6 +511,7 @@ async function downloadBlobWithResume(
         chunks.push(part)
         receivedBytes += part.byteLength
         refreshStallTimer()
+        emitProgress(attempt)
       } else {
         const reader = response.body.getReader()
         while (true) {
@@ -499,6 +521,7 @@ async function downloadBlobWithResume(
             chunks.push(value)
             receivedBytes += value.byteLength
             refreshStallTimer()
+            emitProgress(attempt)
           }
         }
       }
@@ -725,6 +748,7 @@ export const reportApi = {
         apiPath,
         { fallbackFilename, timeoutMs, stallTimeoutMs, retries, retryDelayMs },
         options.onRetry,
+        options.onProgress,
       )
       saveBlob(result.blob, result.filename)
       return {
@@ -739,27 +763,38 @@ export const reportApi = {
     }
   },
 
-  async download(taskId: string): Promise<DownloadResult> {
+  async download(taskId: string, options: DownloadOptions = {}): Promise<DownloadResult> {
     return this.downloadUrl(`/reports/${taskId}/download`, {
       fallbackFilename: `${taskId}.docx`,
+      ...options,
     })
   },
 
-  async downloadBatchZip(taskId: string, qaPassOnly = false): Promise<DownloadResult> {
+  async downloadBatchZip(
+    taskId: string,
+    qaPassOnly = false,
+    options: DownloadOptions = {},
+  ): Promise<DownloadResult> {
     return this.downloadUrl(this.getBatchDownloadUrl(taskId, qaPassOnly), {
       fallbackFilename: `${taskId}${qaPassOnly ? '_qa_pass' : ''}_reports.zip`,
       timeoutMs: 180000,
       stallTimeoutMs: 45000,
       retries: 5,
+      ...options,
     })
   },
 
-  async downloadAuditPackage(taskId: string, includeFailed = true): Promise<DownloadResult> {
+  async downloadAuditPackage(
+    taskId: string,
+    includeFailed = true,
+    options: DownloadOptions = {},
+  ): Promise<DownloadResult> {
     return this.downloadUrl(this.getAuditPackageUrl(taskId, includeFailed), {
       fallbackFilename: `${taskId}_audit_package.zip`,
       timeoutMs: 180000,
       stallTimeoutMs: 45000,
       retries: 5,
+      ...options,
     })
   },
 

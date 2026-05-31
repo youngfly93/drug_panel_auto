@@ -90,10 +90,14 @@
           <el-button
             v-if="isBatchTerminal && batchTask.completed_files > 0"
             type="primary"
+            :loading="batchDownloading"
             @click="downloadBatchZip"
           >
-            下载成功报告 ZIP
+            {{ batchDownloading ? '正在下载 ZIP' : '下载成功报告 ZIP' }}
           </el-button>
+        </div>
+        <div v-if="batchDownloadStatus" class="download-status">
+          {{ batchDownloadStatus }}
         </div>
         <el-table
           v-if="batchResultRows.length"
@@ -377,9 +381,10 @@
             <el-button
               v-if="result.success && result.task_id"
               type="primary"
+              :loading="singleDownloading"
               @click="downloadGenerated(result)"
             >
-              下载报告
+              {{ singleDownloading ? '正在下载' : '下载报告' }}
             </el-button>
             <el-button
               v-if="result.task_id"
@@ -389,6 +394,9 @@
             </el-button>
           </template>
         </el-result>
+        <div v-if="singleDownloadStatus" class="download-status">
+          {{ singleDownloadStatus }}
+        </div>
         <el-alert
           v-if="result.qa_status"
           :title="`QA 状态：${result.qa_status}`"
@@ -437,6 +445,7 @@ import { useDynamicForm } from '@/composables/useDynamicForm'
 import {
   reportApi,
   type BatchResultItem,
+  type DownloadProgress,
   type GenerateResult,
   type TaskStatus,
 } from '@/api/report'
@@ -461,6 +470,10 @@ const batchTemplateName = ref<string | null>(null)
 const batchGenerating = ref(false)
 const batchRetrying = ref(false)
 const batchCancelling = ref(false)
+const batchDownloading = ref(false)
+const batchDownloadStatus = ref('')
+const singleDownloading = ref(false)
+const singleDownloadStatus = ref('')
 const batchTask = ref<TaskStatus | null>(null)
 const batchResultRows = ref<BatchResultItem[]>([])
 let batchPollTimer: number | null = null
@@ -814,15 +827,39 @@ function stopBatchPolling() {
   }
 }
 
+function formatDownloadProgress(progress: DownloadProgress) {
+  const percent = progress.percent == null ? '计算中' : `${progress.percent}%`
+  const received = `${(progress.receivedBytes / 1024 / 1024).toFixed(1)} MB`
+  const total = progress.expectedBytes
+    ? `${(progress.expectedBytes / 1024 / 1024).toFixed(1)} MB`
+    : '-'
+  const resume = progress.attempt > 1 ? `，第 ${progress.attempt} 次续传` : ''
+  return `${percent} · ${received}/${total}${resume}`
+}
+
 async function downloadBatchZip() {
   if (!batchTask.value?.id) return
+  batchDownloading.value = true
+  batchDownloadStatus.value = '正在准备 ZIP 下载'
   try {
-    const result = await reportApi.downloadBatchZip(batchTask.value.id)
+    const result = await reportApi.downloadBatchZip(batchTask.value.id, false, {
+      onProgress: (progress) => {
+        batchDownloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        batchDownloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
     if (result.attempts > 1) {
       ElMessage.success(`ZIP 下载成功，已重试 ${result.attempts - 1} 次`)
+    } else {
+      ElMessage.success('ZIP 下载完成')
     }
   } catch (err: any) {
     ElMessage.error(err.message || 'ZIP 下载失败')
+  } finally {
+    batchDownloading.value = false
+    window.setTimeout(() => { batchDownloadStatus.value = '' }, 3000)
   }
 }
 
@@ -1005,6 +1042,8 @@ function shortTaskId(value: string) {
 }
 
 async function downloadReport(taskId: string) {
+  singleDownloading.value = true
+  singleDownloadStatus.value = '正在准备报告下载'
   try {
     const task = await reportApi.getTaskStatus(taskId)
     if (task.status !== 'completed') {
@@ -1015,9 +1054,20 @@ async function downloadReport(taskId: string) {
       ElMessage.error('报告文件不存在，请重新生成后下载')
       return
     }
-    await reportApi.download(taskId)
+    await reportApi.download(taskId, {
+      onProgress: (progress) => {
+        singleDownloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        singleDownloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
+    ElMessage.success('报告下载完成')
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || err.message || '报告下载失败')
+  } finally {
+    singleDownloading.value = false
+    window.setTimeout(() => { singleDownloadStatus.value = '' }, 3000)
   }
 }
 
@@ -1134,6 +1184,12 @@ function statusLabel(status: string) {
 .batch-actions {
   gap: 8px;
   margin-top: 12px;
+}
+
+.download-status {
+  margin-top: 8px;
+  color: #667085;
+  font-size: 13px;
 }
 
 .batch-table {

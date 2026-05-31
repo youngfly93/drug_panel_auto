@@ -42,6 +42,11 @@ TERMINAL_DOWNLOAD_EVENT_TYPES = {
     "report_download_slow",
     "report_download_failed",
 }
+DISK_WARNING_PERCENT = 80
+DISK_DANGER_PERCENT = 90
+BACKUP_WARNING_HOURS = 30
+BACKUP_DANGER_HOURS = 48
+DOWNLOAD_SLOW_WARNING_MS = 30_000
 
 
 def _now_iso() -> str:
@@ -402,6 +407,248 @@ def _backup_status(backup_dir: Path, *, limit: int = 5) -> dict[str, Any]:
     }
 
 
+def _parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        try:
+            parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _hours_since(value: str | None) -> float | None:
+    parsed = _parse_datetime(value)
+    if not parsed:
+        return None
+    return (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds() / 3600
+
+
+def _alert(
+    alert_id: str,
+    severity: str,
+    label: str,
+    title: str,
+    message: str,
+    *,
+    threshold: str | None = None,
+) -> dict[str, str | None]:
+    return {
+        "id": alert_id,
+        "severity": severity,
+        "label": label,
+        "title": title,
+        "message": message,
+        "threshold": threshold,
+    }
+
+
+def _ops_alerts(snapshot: dict[str, Any]) -> list[dict[str, str | None]]:
+    alerts: list[dict[str, str | None]] = []
+    runtime = snapshot["runtime"]
+    watchdog = runtime["watchdog"]
+    queue = runtime["generation_queue"]
+    disk = snapshot["storage"]["disk"]
+    downloads = snapshot["downloads"]["summary"]
+    task_counts = snapshot["tasks"]["counts"]
+    latest_backup = snapshot["backups"]["latest"]
+
+    for key, label in (("web", "Web 服务"), ("tunnel", "公网隧道")):
+        current = watchdog[key]["status"]
+        if current == "fail":
+            alerts.append(
+                _alert(
+                    f"watchdog.{key}.fail",
+                    "danger",
+                    label,
+                    f"{label}异常",
+                    "Watchdog 最近一次检查失败，需要确认服务或隧道是否可访问。",
+                    threshold="status=fail",
+                )
+            )
+        elif current == "warn":
+            alerts.append(
+                _alert(
+                    f"watchdog.{key}.warn",
+                    "warning",
+                    label,
+                    f"{label}需要关注",
+                    "Watchdog 最近一次检查返回警告，建议观察下一轮检查结果。",
+                    threshold="status=warn",
+                )
+            )
+
+    libreoffice_running = runtime["libreoffice_listener"]["running"]
+    libreoffice_status = watchdog["libreoffice"]["status"]
+    if libreoffice_running is False or libreoffice_status in {"fail", "missing"}:
+        alerts.append(
+            _alert(
+                "libreoffice.listener.missing",
+                "warning",
+                "LibreOffice",
+                "LibreOffice listener 未就绪",
+                "报告刷新目录、页码和域时可能变慢；可由 watchdog 或重启应用恢复。",
+                threshold="listener running",
+            )
+        )
+
+    used_percent = disk.get("used_percent")
+    if isinstance(used_percent, (int, float)):
+        if used_percent >= DISK_DANGER_PERCENT:
+            alerts.append(
+                _alert(
+                    "disk.critical",
+                    "danger",
+                    "磁盘",
+                    "磁盘空间紧张",
+                    f"当前使用率 {used_percent:.1f}%，报告生成和 ZIP 打包可能失败。",
+                    threshold=f">= {DISK_DANGER_PERCENT}%",
+                )
+            )
+        elif used_percent >= DISK_WARNING_PERCENT:
+            alerts.append(
+                _alert(
+                    "disk.warning",
+                    "warning",
+                    "磁盘",
+                    "磁盘空间偏高",
+                    f"当前使用率 {used_percent:.1f}%，建议尽快检查保留和清理策略。",
+                    threshold=f">= {DISK_WARNING_PERCENT}%",
+                )
+            )
+
+    queued = int(queue.get("queued") or 0)
+    max_workers = max(1, int(queue.get("max_workers") or 1))
+    if queued >= max_workers:
+        alerts.append(
+            _alert(
+                "queue.backlog.high",
+                "danger",
+                "队列",
+                "生成队列堆积",
+                f"当前排队 {queued} 个，已达到执行槽数量 {max_workers}，报告组会感知等待。",
+                threshold="queued >= max_workers",
+            )
+        )
+    elif queued > 0:
+        alerts.append(
+            _alert(
+                "queue.backlog",
+                "warning",
+                "队列",
+                "有任务正在排队",
+                f"当前排队 {queued} 个，继续观察是否持续堆积。",
+                threshold="queued > 0",
+            )
+        )
+
+    failed_total = int(task_counts.get("failed_total") or 0)
+    if failed_total > 0:
+        alerts.append(
+            _alert(
+                "tasks.failed",
+                "warning",
+                "任务",
+                "存在失败或部分失败任务",
+                f"累计失败/部分失败 {failed_total} 个，请在任务队列中复核。",
+                threshold="failed_total > 0",
+            )
+        )
+
+    failed_downloads = int(downloads.get("failed") or 0)
+    slow_downloads = int(downloads.get("slow") or 0)
+    max_duration_ms = downloads.get("max_duration_ms")
+    if failed_downloads > 0:
+        alerts.append(
+            _alert(
+                "downloads.failed",
+                "danger",
+                "下载",
+                "存在失败下载",
+                f"最近终态下载中失败 {failed_downloads} 次，需要优先确认网络或文件发送链路。",
+                threshold="failed > 0",
+            )
+        )
+    if slow_downloads > 0:
+        alerts.append(
+            _alert(
+                "downloads.slow",
+                "warning",
+                "下载",
+                "存在慢下载",
+                f"最近终态下载中慢下载 {slow_downloads} 次，建议结合任务详情确认 ZIP 大小和耗时。",
+                threshold="slow > 0",
+            )
+        )
+    if isinstance(max_duration_ms, (int, float)) and max_duration_ms >= DOWNLOAD_SLOW_WARNING_MS:
+        alerts.append(
+            _alert(
+                "downloads.duration.high",
+                "warning",
+                "下载",
+                "最大下载耗时偏高",
+                f"最近最大下载耗时 {max_duration_ms / 1000:.1f} 秒。",
+                threshold=f">= {DOWNLOAD_SLOW_WARNING_MS / 1000:.0f}s",
+            )
+        )
+
+    if not latest_backup:
+        alerts.append(
+            _alert(
+                "backup.missing",
+                "danger",
+                "备份",
+                "没有可用备份",
+                "生产数据没有最近备份记录，请立即运行维护脚本。",
+                threshold="latest backup exists",
+            )
+        )
+    else:
+        backup_age = _hours_since(latest_backup.get("modified_at"))
+        if backup_age is None or backup_age > BACKUP_DANGER_HOURS:
+            alerts.append(
+                _alert(
+                    "backup.stale",
+                    "danger",
+                    "备份",
+                    "最近备份过期",
+                    "最近备份超过 48 小时或时间无法解析，请检查维护任务。",
+                    threshold=f"> {BACKUP_DANGER_HOURS}h",
+                )
+            )
+        elif backup_age > BACKUP_WARNING_HOURS:
+            alerts.append(
+                _alert(
+                    "backup.warning",
+                    "warning",
+                    "备份",
+                    "最近备份偏旧",
+                    f"最近备份约 {backup_age:.1f} 小时前完成。",
+                    threshold=f"> {BACKUP_WARNING_HOURS}h",
+                )
+            )
+
+    if not runtime["maintenance"]["last_cleanup_at"]:
+        alerts.append(
+            _alert(
+                "maintenance.cleanup.missing",
+                "warning",
+                "维护",
+                "未记录清理完成时间",
+                "无法确认旧预览、日志和 release 是否已定期清理。",
+                threshold="cleanup complete",
+            )
+        )
+
+    return alerts
+
+
 @router.get("/status", response_model=ApiResponse[dict])
 def ops_status(
     recent_task_limit: int = Query(10, ge=0, le=50),
@@ -413,7 +660,7 @@ def ops_status(
     log_dir = runtime_dir / "logs"
     storage_root = settings.storage_root
     data = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "generated_at": _now_iso(),
         "deployment": _read_current_release(runtime_dir),
         "runtime": {
@@ -448,4 +695,5 @@ def ops_status(
         ),
         "backups": _backup_status(_backup_dir()),
     }
+    data["alerts"] = _ops_alerts(data)
     return ApiResponse(data=data)

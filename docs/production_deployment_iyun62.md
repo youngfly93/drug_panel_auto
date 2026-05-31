@@ -156,6 +156,28 @@ Use these fields to separate causes:
 - `prepare_duration_ms` on ZIP downloads measures server-side ZIP packaging time
   before the file transfer starts.
 
+The frontend download buttons show an in-progress state and byte progress. If a
+large DOCX or ZIP stalls, the browser aborts the idle transfer and retries with
+HTTP Range resume when the server supports it.
+
+## Ops Alerts
+
+`/api/v1/admin/ops/status` returns sanitized red/yellow alerts for the
+production dashboard. These alerts contain no patient names, Excel filenames,
+report filenames, client IPs, user agents, or full server paths.
+
+Current thresholds:
+
+- disk warning at `>=80%`, danger at `>=90%`;
+- backup warning after `30h`, danger after `48h` or no backup;
+- generation queue warning when queued jobs exist, danger when
+  `queued >= max_workers`;
+- download danger when any recent terminal download failed;
+- download warning when any recent terminal download was slow or max duration is
+  at least `30s`;
+- warning when LibreOffice listener is missing or no cleanup completion is
+  recorded.
+
 ## Known Limitation
 
 The current SSH user does not have passwordless sudo, and `loginctl` linger is

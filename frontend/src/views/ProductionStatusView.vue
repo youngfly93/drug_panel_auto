@@ -38,6 +38,31 @@
       </el-col>
     </el-row>
 
+    <section v-if="healthAlerts.length" class="ops-section alert-section">
+      <div class="section-head">
+        <div>
+          <h3>当前告警</h3>
+          <span>按后端阈值实时计算，优先处理红色项</span>
+        </div>
+      </div>
+      <div class="alert-grid">
+        <div
+          v-for="alert in healthAlerts"
+          :key="alert.id"
+          :class="['alert-item', `alert-${alertTone(alert.severity)}`]"
+        >
+          <el-tag size="small" :type="alertTagType(alert.severity)">
+            {{ alert.label }}
+          </el-tag>
+          <div>
+            <strong>{{ alert.title }}</strong>
+            <span>{{ alert.message }}</span>
+            <small v-if="alert.threshold">阈值 {{ alert.threshold }}</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <el-row :gutter="16">
       <el-col :xs="24" :xl="12">
         <section class="ops-section">
@@ -244,7 +269,7 @@ import {
   TrendCharts,
   WarningFilled,
 } from '@element-plus/icons-vue'
-import { opsApi, type OpsStatusPayload } from '@/api/ops'
+import { opsApi, type OpsAlert, type OpsStatusPayload } from '@/api/ops'
 
 type Tone = 'success' | 'warning' | 'danger' | 'info'
 
@@ -258,6 +283,7 @@ let refreshTimer: number | undefined
 const taskCounts = computed(() => status.value?.tasks.counts.by_status || {})
 const downloadSummary = computed(() => status.value?.downloads.summary)
 const diskUsed = computed(() => status.value?.storage.disk.used_percent ?? null)
+const healthAlerts = computed<OpsAlert[]>(() => status.value?.alerts || [])
 
 const backupAgeHours = computed(() => {
   const lastBackup = parseDate(status.value?.runtime.maintenance.last_backup_at)
@@ -495,6 +521,17 @@ function statusTagType(value?: string | null) {
     unknown: 'info',
   }
   return map[value || 'unknown'] || 'info'
+}
+
+function alertTone(value?: string | null): Tone {
+  if (value === 'danger') return 'danger'
+  if (value === 'warning') return 'warning'
+  if (value === 'success') return 'success'
+  return 'info'
+}
+
+function alertTagType(value?: string | null) {
+  return alertTone(value)
 }
 
 function taskStatusText(value: string) {
@@ -738,6 +775,60 @@ onUnmounted(() => {
   background: #fff;
 }
 
+.alert-section {
+  border-color: #d7dde6;
+}
+
+.alert-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.alert-item {
+  min-height: 82px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.alert-item div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.alert-item strong {
+  font-size: 14px;
+}
+
+.alert-item span,
+.alert-item small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.alert-danger {
+  border-color: #efc4c1;
+  background: #fff5f4;
+}
+
+.alert-warning {
+  border-color: #f1d4a8;
+  background: #fff8ed;
+}
+
+.alert-info {
+  border-color: #cfddea;
+  background: #f5f9fd;
+}
+
 .section-head {
   display: flex;
   align-items: flex-start;
@@ -907,6 +998,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1100px) {
+  .alert-grid,
   .metric-grid,
   .metric-grid.compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -924,6 +1016,10 @@ onUnmounted(() => {
   }
 
   .maintenance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .alert-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -12,9 +12,10 @@
           v-if="task?.status === 'completed' && task.task_type === 'single'"
           type="primary"
           :icon="Download"
+          :loading="reportDownloading"
           @click="downloadReport"
         >
-          下载报告
+          {{ reportDownloading ? '正在下载' : '下载报告' }}
         </el-button>
       </div>
     </div>
@@ -108,8 +109,12 @@
             >
               标记已交付
             </el-button>
-            <el-button :icon="Download" @click="downloadAuditPackage(true)">
-              下载审计包
+            <el-button
+              :icon="Download"
+              :loading="auditDownloading"
+              @click="downloadAuditPackage(true)"
+            >
+              {{ auditDownloading ? '正在下载审计包' : '下载审计包' }}
             </el-button>
           </div>
           <el-alert
@@ -170,17 +175,19 @@
               v-if="task?.completed_files"
               type="primary"
               :icon="Download"
+              :loading="batchDownloading"
               @click="downloadBatchZip"
             >
-              下载成功报告 ZIP
+              {{ batchDownloading ? '正在下载 ZIP' : '下载成功报告 ZIP' }}
             </el-button>
             <el-button
               v-if="task?.completed_files"
               plain
               :icon="Download"
+              :loading="batchPassDownloading"
               @click="downloadBatchPassZip"
             >
-              下载 QA PASS ZIP
+              {{ batchPassDownloading ? '正在下载 QA PASS ZIP' : '下载 QA PASS ZIP' }}
             </el-button>
             <el-popconfirm
               v-if="task?.status === 'running' || task?.status === 'pending'"
@@ -201,6 +208,9 @@
               重试失败文件
             </el-button>
             <el-button :icon="Refresh" @click="fetchAll">刷新</el-button>
+          </div>
+          <div v-if="downloadStatus" class="download-status">
+            {{ downloadStatus }}
           </div>
         </div>
         <el-table
@@ -250,9 +260,10 @@
                 text
                 type="primary"
                 size="small"
-                @click="downloadBatchItem(row.download_url)"
+                :loading="Boolean(batchItemDownloading[row.index])"
+                @click="downloadBatchItem(row.download_url, row.index)"
               >
-                下载
+                {{ batchItemDownloading[row.index] ? '下载中' : '下载' }}
               </el-button>
             </template>
           </el-table-column>
@@ -689,6 +700,7 @@ import { ElMessage } from 'element-plus'
 import {
   reportApi,
   type BatchResults,
+  type DownloadProgress,
   type QualityGate,
   type ReportDiffResult,
   type ReportSummary,
@@ -707,6 +719,12 @@ const autoDiffing = ref(false)
 const batchRetrying = ref(false)
 const batchCancelling = ref(false)
 const reviewUpdating = ref(false)
+const reportDownloading = ref(false)
+const auditDownloading = ref(false)
+const batchDownloading = ref(false)
+const batchPassDownloading = ref(false)
+const batchItemDownloading = ref<Record<number, boolean>>({})
+const downloadStatus = ref('')
 const task = ref<TaskStatus | null>(null)
 const qaReport = ref<Record<string, any> | null>(null)
 const reportSummary = ref<ReportSummary | null>(null)
@@ -1273,53 +1291,125 @@ function downloadBatchItemDiff(itemKey: string, artifact: 'report_diff.json' | '
   window.open(reportApi.getBatchDiffItemDownloadUrl(taskId, itemKey, artifact), '_blank')
 }
 
+function formatDownloadProgress(progress: DownloadProgress) {
+  const percent = progress.percent == null ? '计算中' : `${progress.percent}%`
+  const received = `${(progress.receivedBytes / 1024 / 1024).toFixed(1)} MB`
+  const total = progress.expectedBytes
+    ? `${(progress.expectedBytes / 1024 / 1024).toFixed(1)} MB`
+    : '-'
+  const retry = progress.attempt > 1 ? `，第 ${progress.attempt}/${progress.maxAttempts} 次续传` : ''
+  return `${percent} · ${received}/${total}${retry}`
+}
+
 async function downloadReport() {
+  reportDownloading.value = true
+  downloadStatus.value = '正在准备报告下载'
   try {
-    await reportApi.download(taskId)
+    await reportApi.download(taskId, {
+      onProgress: (progress) => {
+        downloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
+    ElMessage.success('报告下载完成')
   } catch (err: any) {
     ElMessage.error(err.message || '报告下载失败')
+  } finally {
+    reportDownloading.value = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
   }
 }
 
 async function downloadBatchZip() {
+  batchDownloading.value = true
+  downloadStatus.value = '正在准备 ZIP 下载'
   try {
-    const result = await reportApi.downloadBatchZip(taskId)
+    const result = await reportApi.downloadBatchZip(taskId, false, {
+      onProgress: (progress) => {
+        downloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
     if (result.attempts > 1) {
       ElMessage.success(`ZIP 下载成功，已重试 ${result.attempts - 1} 次`)
+    } else {
+      ElMessage.success('ZIP 下载完成')
     }
   } catch (err: any) {
     ElMessage.error(err.message || 'ZIP 下载失败')
+  } finally {
+    batchDownloading.value = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
   }
 }
 
 async function downloadBatchPassZip() {
+  batchPassDownloading.value = true
+  downloadStatus.value = '正在准备 QA PASS ZIP 下载'
   try {
-    const result = await reportApi.downloadBatchZip(taskId, true)
+    const result = await reportApi.downloadBatchZip(taskId, true, {
+      onProgress: (progress) => {
+        downloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
     if (result.attempts > 1) {
       ElMessage.success(`QA PASS ZIP 下载成功，已重试 ${result.attempts - 1} 次`)
+    } else {
+      ElMessage.success('QA PASS ZIP 下载完成')
     }
   } catch (err: any) {
     ElMessage.error(err.message || 'QA PASS ZIP 下载失败')
+  } finally {
+    batchPassDownloading.value = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
   }
 }
 
-async function downloadBatchItem(url: string) {
+async function downloadBatchItem(url: string, index: number) {
+  batchItemDownloading.value[index] = true
   try {
     await reportApi.downloadUrl(url, {
       fallbackFilename: `${taskId}.docx`,
       retries: 3,
       timeoutMs: 300000,
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `单份报告连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
     })
+    ElMessage.success('报告下载完成')
   } catch (err: any) {
     ElMessage.error(err.message || '报告下载失败')
+  } finally {
+    batchItemDownloading.value[index] = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
   }
 }
 
 async function downloadAuditPackage(includeFailed: boolean) {
+  auditDownloading.value = true
+  downloadStatus.value = '正在准备审计包下载'
   try {
-    await reportApi.downloadAuditPackage(taskId, includeFailed)
+    await reportApi.downloadAuditPackage(taskId, includeFailed, {
+      onProgress: (progress) => {
+        downloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
+    ElMessage.success('审计包下载完成')
   } catch (err: any) {
     ElMessage.error(err.message || '审计包下载失败')
+  } finally {
+    auditDownloading.value = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
   }
 }
 
@@ -1656,8 +1746,15 @@ onMounted(fetchAll)
 
 .batch-detail-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.download-status {
+  margin-top: 8px;
+  color: #667085;
+  font-size: 13px;
 }
 
 .batch-detail-table {

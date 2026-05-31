@@ -8,6 +8,7 @@ export interface OpsStatusBlock {
 export interface OpsStatusPayload {
   schema_version: string
   generated_at: string
+  alerts: OpsAlert[]
   deployment: {
     release: string | null
     revision_short: string | null
@@ -128,6 +129,15 @@ export interface OpsStatusPayload {
     latest: OpsBackupItem | null
     items: OpsBackupItem[]
   }
+}
+
+export interface OpsAlert {
+  id: string
+  severity: 'success' | 'warning' | 'danger' | 'info' | string
+  label: string
+  title: string
+  message: string
+  threshold?: string | null
 }
 
 export interface OpsBackupItem {
