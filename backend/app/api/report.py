@@ -47,6 +47,7 @@ from app.services import reference_report_service as diff_svc
 from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.generation_queue import submit_generation_job
 from app.services.reportgen_bridge import ReportGenBridge
+from app.services.task_recovery import write_single_generation_request
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 download_logger = get_logger("reportgen-web.download")
@@ -1023,7 +1024,7 @@ def generate_report_from_file(
     if not isinstance(clinical_payload, dict):
         raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
 
-    _, stored_path, _file_size = save_upload(file)
+    _upload_id, stored_path, _file_size = save_upload(file)
     detected_project_type = project_type
     detected_project_name = project_name
     if not detected_project_type:
@@ -1160,7 +1161,7 @@ def generate_report_from_file_async(
     if not isinstance(clinical_payload, dict):
         raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
 
-    _, stored_path, _file_size = save_upload(file)
+    upload_id, stored_path, _file_size = save_upload(file)
     detected_project_type = project_type
     detected_project_name = project_name
     if not detected_project_type:
@@ -1188,6 +1189,7 @@ def generate_report_from_file_async(
     output_dir = ensure_report_dir(task_id)
     task = Task(
         id=task_id,
+        upload_id=upload_id,
         task_type="single",
         status="pending",
         project_type=detected_project_type,
@@ -1197,6 +1199,25 @@ def generate_report_from_file_async(
             else None
         ),
     )
+    request_path = write_single_generation_request(
+        task_id=task_id,
+        payload={
+            "task_id": task_id,
+            "stored_path": str(stored_path),
+            "output_dir": str(output_dir),
+            "clinical_payload": clinical_payload,
+            "project_type": detected_project_type,
+            "project_name": detected_project_name,
+            "template_name": template_name,
+            "strict_mode": strict_mode,
+            "template_contract_mode": template_contract_mode,
+            "qa_visual_render": qa_visual_render,
+            "qa_visual_render_required": qa_visual_render_required,
+            "qa_visual_render_dpi": qa_visual_render_dpi,
+            "qa_visual_render_timeout_seconds": qa_visual_render_timeout_seconds,
+        },
+    )
+    task.context_json_path = str(request_path)
     db.add(task)
     db.commit()
 

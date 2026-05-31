@@ -26,6 +26,19 @@ export interface OpsStatusPayload {
       submitted_total: number
       finished_total: number
     }
+    task_recovery: {
+      ran: boolean
+      checked_at: string | null
+      scanned: number
+      requeued: number
+      failed: number
+      skipped: number
+      errors: Array<{
+        task_id?: string
+        error_type?: string
+        message?: string
+      }>
+    }
     watchdog: {
       log_present: boolean
       last_event_at: string | null

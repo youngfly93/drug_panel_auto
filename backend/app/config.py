@@ -60,6 +60,7 @@ class Settings(BaseSettings):
 
     # --- Worker ---
     max_workers: int = 2
+    recover_interrupted_tasks_on_startup: bool = True
 
     # --- Patient enrichment ---
     # Optional external patient registry / operation-system lookup.

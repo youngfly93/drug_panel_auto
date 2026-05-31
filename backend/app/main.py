@@ -84,6 +84,17 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         _log.warning("LibreOffice listener startup skipped (non-fatal): %s", exc)
 
+    if settings.recover_interrupted_tasks_on_startup:
+        try:
+            from app.dependencies import get_bridge
+            from app.services.task_recovery import recover_interrupted_tasks
+
+            recovery = recover_interrupted_tasks(bridge=get_bridge())
+            if recovery.get("scanned"):
+                _log.warning("Recovered interrupted report tasks: %s", recovery)
+        except Exception as exc:
+            _log.warning("Task recovery skipped (non-fatal): %s", exc)
+
     yield
 
     try:

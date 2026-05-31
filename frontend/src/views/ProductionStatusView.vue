@@ -357,6 +357,13 @@ const runtimeRows = computed(() => {
       meta: `运行 ${queueStats.value.active}/${queueStats.value.max_workers}，排队 ${queueStats.value.queued}`,
     },
     {
+      label: '任务恢复',
+      status: recoveryStats.value.errors.length || recoveryStats.value.failed ? 'warn' : recoveryStats.value.ran ? 'ok' : 'unknown',
+      meta: recoveryStats.value.ran
+        ? `扫描 ${recoveryStats.value.scanned}，恢复 ${recoveryStats.value.requeued}，失败 ${recoveryStats.value.failed}`
+        : '启动后尚未执行',
+    },
+    {
       label: 'Web 服务',
       status: runtime?.watchdog.web.status || 'unknown',
       meta: `最近 ${formatDate(runtime?.watchdog.web.last_at)}`,
@@ -397,6 +404,16 @@ const queueStats = computed(() => status.value?.runtime.generation_queue || {
   active: 0,
   submitted_total: 0,
   finished_total: 0,
+})
+
+const recoveryStats = computed(() => status.value?.runtime.task_recovery || {
+  ran: false,
+  checked_at: null,
+  scanned: 0,
+  requeued: 0,
+  failed: 0,
+  skipped: 0,
+  errors: [],
 })
 
 const taskBars = computed(() => {
