@@ -109,6 +109,14 @@ class FakeBridge:
             ),
             encoding="utf-8",
         )
+        qa_file = output_file.with_suffix(".qa.json")
+        qa_file.write_text(
+            json.dumps(
+                {"status": "PASS", "issues": [], "checks": {}},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
         return {
             "success": True,
             "output_file": str(output_file),
@@ -117,6 +125,7 @@ class FakeBridge:
             "warnings": [],
             "qa_status": "PASS",
             "qa_report": {"issues": [], "checks": {}},
+            "qa_report_file": str(qa_file),
             "report_summary_file": str(summary_file),
         }
 
@@ -523,6 +532,70 @@ def test_report_summary_endpoint_reads_sidecar(tmp_path, monkeypatch):
     assert summary["schema_version"] == "1.0"
     assert summary["patient"]["sample_id"] == "CASE001"
     assert summary["variants"]["total"] == 1
+
+
+def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": '{"patient_name":"测试患者","sample_id":"CASE001"}',
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+            },
+        )
+        task_id = response.json()["data"]["task_id"]
+
+        gate_response = client.get(f"/api/v1/reports/{task_id}/quality-gate")
+        review_response = client.get(f"/api/v1/reports/{task_id}/review-state")
+        update_response = client.post(
+            f"/api/v1/reports/{task_id}/review-state",
+            json={"status": "delivered", "operator": "报告组"},
+        )
+        audit_response = client.get(f"/api/v1/reports/{task_id}/audit-package")
+
+    assert gate_response.status_code == 200
+    gate = gate_response.json()["data"]
+    assert gate["passed"] is True
+    assert gate["blockers"] == 0
+    assert any(item["code"] == "DIFF_NOT_RUN" for item in gate["issues"])
+    assert review_response.json()["data"]["status"] == "draft"
+    assert update_response.status_code == 200
+    assert update_response.json()["data"]["status"] == "delivered"
+    assert audit_response.status_code == 200
+    assert audit_response.headers["content-type"].startswith("application/zip")
+
+
+def test_quality_gate_blocks_failed_batch_delivery(tmp_path, monkeypatch):
+    bridge = FailOnceBridge()
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"placeholder1", "application/vnd.ms-excel")),
+                ("files", ("case2.xlsx", b"placeholder2", "application/vnd.ms-excel")),
+            ],
+            data={"project_type": "crc_358_msi"},
+        )
+        task_id = response.json()["data"]["task_id"]
+
+        for _ in range(30):
+            status = client.get(f"/api/v1/reports/{task_id}").json()["data"]
+            if status["status"] != "running":
+                break
+            time.sleep(0.05)
+
+        gate_response = client.get(f"/api/v1/reports/{task_id}/quality-gate")
+        delivery_response = client.post(
+            f"/api/v1/reports/{task_id}/review-state",
+            json={"status": "delivered", "operator": "报告组"},
+        )
+
+    gate = gate_response.json()["data"]
+    assert gate["passed"] is False
+    assert any(item["code"] == "BATCH_HAS_FAILURES" for item in gate["issues"])
+    assert delivery_response.status_code == 409
 
 
 def test_bridge_infers_crc358_from_project_name_text():

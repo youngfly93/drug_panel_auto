@@ -46,6 +46,13 @@ class GenerateResponse(BaseModel):
     warnings: list[str] = []
 
 
+class ReviewStateUpdate(BaseModel):
+    status: str
+    operator: Optional[str] = None
+    note: Optional[str] = None
+    override_gate: bool = False
+
+
 class TaskStatus(BaseModel):
     id: str
     task_type: str

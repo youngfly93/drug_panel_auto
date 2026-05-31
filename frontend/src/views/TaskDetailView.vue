@@ -55,6 +55,93 @@
         </div>
       </section>
 
+      <section class="qa-panel production-gate section-gap">
+        <div class="panel-title">
+          <span>生产门禁与审核</span>
+          <div class="stage-title-meta">
+            <el-tag size="small" :type="qualityGate?.passed ? 'success' : 'danger'">
+              {{ qualityGate?.status || '未检查' }}
+            </el-tag>
+            <el-tag size="small" :type="reviewStatusTagType(reviewState?.status)">
+              {{ reviewState?.status_label || '待审核' }}
+            </el-tag>
+          </div>
+        </div>
+        <div class="gate-content">
+          <div class="gate-metrics">
+            <div>
+              <span>阻断项</span>
+              <strong :class="qualityGate?.blockers ? 'bad-text' : 'ok-text'">
+                {{ qualityGate?.blockers ?? '-' }}
+              </strong>
+            </div>
+            <div>
+              <span>警告项</span>
+              <strong :class="qualityGate?.warnings ? 'warn-text' : ''">
+                {{ qualityGate?.warnings ?? '-' }}
+              </strong>
+            </div>
+            <div>
+              <span>审核人</span>
+              <strong>{{ reviewState?.updated_by || '-' }}</strong>
+            </div>
+            <div>
+              <span>更新时间</span>
+              <strong>{{ reviewState?.updated_at ? new Date(reviewState.updated_at).toLocaleString('zh-CN') : '-' }}</strong>
+            </div>
+          </div>
+          <div class="gate-actions">
+            <el-button :icon="Refresh" @click="refreshGate">刷新门禁</el-button>
+            <el-button
+              type="success"
+              plain
+              :loading="reviewUpdating"
+              @click="markReviewState('reviewed')"
+            >
+              标记已审核
+            </el-button>
+            <el-button
+              type="primary"
+              :disabled="!qualityGate?.passed"
+              :loading="reviewUpdating"
+              @click="markReviewState('delivered')"
+            >
+              标记已交付
+            </el-button>
+            <el-button :icon="Download" @click="downloadAuditPackage(true)">
+              下载审计包
+            </el-button>
+          </div>
+          <el-alert
+            v-if="qualityGate && !qualityGate.passed"
+            title="质控门禁存在阻断项，建议不要进入交付。"
+            type="error"
+            show-icon
+            :closable="false"
+            class="stage-alert"
+          />
+          <el-table
+            v-if="qualityGateIssueRows.length"
+            :data="qualityGateIssueRows"
+            size="small"
+            border
+            class="gate-table"
+          >
+            <el-table-column label="级别" width="90">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.level === 'blocker' ? 'danger' : 'warning'">
+                  {{ row.level === 'blocker' ? '阻断' : '警告' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="scope" label="范围" width="110" show-overflow-tooltip />
+            <el-table-column prop="code" label="代码" width="190" show-overflow-tooltip />
+            <el-table-column prop="message" label="说明" min-width="320" show-overflow-tooltip />
+          </el-table>
+          <el-empty v-else description="暂无门禁问题" :image-size="70" />
+        </div>
+      </section>
+
       <section v-if="isBatchTask" class="qa-panel section-gap">
         <div class="panel-title">
           <span>批量生成进度</span>
@@ -86,6 +173,14 @@
               @click="downloadBatchZip"
             >
               下载成功报告 ZIP
+            </el-button>
+            <el-button
+              v-if="task?.completed_files"
+              plain
+              :icon="Download"
+              @click="downloadBatchPassZip"
+            >
+              下载 QA PASS ZIP
             </el-button>
             <el-popconfirm
               v-if="task?.status === 'running' || task?.status === 'pending'"
@@ -594,8 +689,10 @@ import { ElMessage } from 'element-plus'
 import {
   reportApi,
   type BatchResults,
+  type QualityGate,
   type ReportDiffResult,
   type ReportSummary,
+  type ReviewState,
   type TaskStatus,
   type VisualRenderResult,
 } from '@/api/report'
@@ -609,9 +706,12 @@ const diffing = ref(false)
 const autoDiffing = ref(false)
 const batchRetrying = ref(false)
 const batchCancelling = ref(false)
+const reviewUpdating = ref(false)
 const task = ref<TaskStatus | null>(null)
 const qaReport = ref<Record<string, any> | null>(null)
 const reportSummary = ref<ReportSummary | null>(null)
+const qualityGate = ref<QualityGate | null>(null)
+const reviewState = ref<ReviewState | null>(null)
 const provenance = ref<Record<string, any> | null>(null)
 const stageReport = ref<Record<string, any> | null>(null)
 const batchResults = ref<BatchResults | null>(null)
@@ -690,6 +790,7 @@ const provenanceRows = computed(() => {
 
 const firstRenderedPage = computed(() => visualRender.value?.rendered_pages?.[0] || null)
 const diffIssueRows = computed(() => reportDiff.value?.issues || [])
+const qualityGateIssueRows = computed(() => qualityGate.value?.issues || [])
 const batchDiffRows = computed(() => reportDiff.value?.items || [])
 const isBatchTask = computed(() => task.value?.task_type === 'batch')
 const isBatchDiff = computed(() => Boolean(reportDiff.value?.items?.length))
@@ -1003,6 +1104,16 @@ function qaTagType(status?: string | null) {
   return status ? map[status] || 'info' : 'info'
 }
 
+function reviewStatusTagType(status?: string | null) {
+  const map: Record<string, string> = {
+    draft: 'info',
+    reviewed: 'success',
+    delivered: 'primary',
+    rejected: 'danger',
+  }
+  return status ? map[status] || 'info' : 'info'
+}
+
 async function fetchAll() {
   loading.value = true
   qaLoadError.value = ''
@@ -1021,6 +1132,16 @@ async function fetchAll() {
       reportDiff.value = await reportApi.getReportDiff(taskId)
     } catch {
       reportDiff.value = null
+    }
+    try {
+      qualityGate.value = await reportApi.getQualityGate(taskId)
+    } catch {
+      qualityGate.value = null
+    }
+    try {
+      reviewState.value = await reportApi.getReviewState(taskId)
+    } catch {
+      reviewState.value = null
     }
     if (task.value?.task_type === 'batch') {
       try {
@@ -1160,8 +1281,42 @@ function downloadBatchZip() {
   window.open(reportApi.getBatchDownloadUrl(taskId), '_blank')
 }
 
+function downloadBatchPassZip() {
+  window.open(reportApi.getBatchDownloadUrl(taskId, true), '_blank')
+}
+
 function downloadBatchItem(url: string) {
   window.open(url, '_blank')
+}
+
+function downloadAuditPackage(includeFailed: boolean) {
+  window.open(reportApi.getAuditPackageUrl(taskId, includeFailed), '_blank')
+}
+
+async function refreshGate() {
+  try {
+    qualityGate.value = await reportApi.getQualityGate(taskId)
+    reviewState.value = await reportApi.getReviewState(taskId)
+    ElMessage.success('生产门禁已刷新')
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '生产门禁读取失败')
+  }
+}
+
+async function markReviewState(status: 'reviewed' | 'delivered') {
+  reviewUpdating.value = true
+  try {
+    reviewState.value = await reportApi.updateReviewState(taskId, {
+      status,
+      operator: '报告组',
+    })
+    qualityGate.value = await reportApi.getQualityGate(taskId)
+    ElMessage.success(status === 'delivered' ? '已标记交付' : '已标记审核')
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '审核状态更新失败')
+  } finally {
+    reviewUpdating.value = false
+  }
 }
 
 async function cancelBatchTask() {
@@ -1479,6 +1634,53 @@ onMounted(fetchAll)
   margin-top: 0;
 }
 
+.gate-content {
+  padding: 14px;
+}
+
+.gate-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  border: 1px solid #e6edf3;
+}
+
+.gate-metrics div {
+  min-height: 62px;
+  padding: 10px 12px;
+  border-right: 1px solid #e6edf3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.gate-metrics div:last-child {
+  border-right: 0;
+}
+
+.gate-metrics span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.gate-metrics strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.gate-table {
+  margin-top: 12px;
+}
+
 .qa-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
@@ -1606,6 +1808,7 @@ pre {
   .summary-tables,
   .qa-grid,
   .diff-metrics,
+  .gate-metrics,
   .batch-summary-grid {
     grid-template-columns: 1fr;
   }

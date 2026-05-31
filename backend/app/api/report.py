@@ -33,7 +33,12 @@ from app.dependencies import get_bridge
 from app.models.task import Task, TaskResult
 from app.models.upload import Upload
 from app.schemas.common import ApiResponse
-from app.schemas.report import GenerateRequest, GenerateResponse, TaskStatus
+from app.schemas.report import (
+    GenerateRequest,
+    GenerateResponse,
+    ReviewStateUpdate,
+    TaskStatus,
+)
 from app.services import clinical_info_service as clinical_svc
 from app.services import reference_report_service as diff_svc
 from app.services.file_manager import ensure_report_dir, save_upload
@@ -217,6 +222,266 @@ def _batch_status_counts(db: Session, task_id: str) -> dict[str, int]:
     for status, count in rows:
         counts[status or "pending"] = count
     return counts
+
+
+REVIEW_STATUSES = {
+    "draft": "待审核",
+    "reviewed": "已审核",
+    "delivered": "已交付",
+    "rejected": "退回修改",
+}
+
+
+def _task_artifact_dir(task: Task) -> Path:
+    if task.task_type == "batch":
+        return Path(task.output_path) if task.output_path else settings.report_dir / task.id
+    if task.output_path:
+        return Path(task.output_path).parent
+    return settings.report_dir / task.id
+
+
+def _review_state_path(task: Task) -> Path:
+    return _task_artifact_dir(task) / "review_state.json"
+
+
+def _default_review_state(task: Task) -> dict:
+    return {
+        "schema_version": "1.0",
+        "task_id": task.id,
+        "status": "draft",
+        "status_label": REVIEW_STATUSES["draft"],
+        "updated_at": None,
+        "updated_by": None,
+        "note": "",
+        "history": [],
+    }
+
+
+def _load_review_state(task: Task) -> dict:
+    path = _review_state_path(task)
+    if not path.exists():
+        return _default_review_state(task)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return _default_review_state(task)
+    if not isinstance(payload, dict):
+        return _default_review_state(task)
+    status = payload.get("status") or "draft"
+    payload["status_label"] = REVIEW_STATUSES.get(status, status)
+    payload.setdefault("history", [])
+    return payload
+
+
+def _write_review_state(task: Task, payload: dict) -> dict:
+    path = _review_state_path(task)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload["status_label"] = REVIEW_STATUSES.get(payload.get("status"), payload.get("status"))
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return payload
+
+
+def _gate_issue(level: str, code: str, message: str, scope: str = "task") -> dict:
+    return {
+        "level": level,
+        "code": code,
+        "message": message,
+        "scope": scope,
+    }
+
+
+def _is_required_field_warning(message: object) -> bool:
+    text = str(message or "")
+    return "缺失必填字段" in text or "missing required" in text.lower()
+
+
+def _quality_gate_payload(task: Task, db: Session) -> dict:
+    issues: list[dict] = []
+    diff_summary = diff_svc.report_diff_summary(task.output_path)
+    task_errors = _load_json_list(task.errors)
+    task_warnings = _load_json_list(task.warnings)
+
+    if task.status in {"pending", "running"}:
+        issues.append(
+            _gate_issue("blocker", "TASK_NOT_FINISHED", "任务仍在生成中，不能进入交付。")
+        )
+    if task.status == "cancelled":
+        issues.append(_gate_issue("blocker", "TASK_CANCELLED", "任务已取消。"))
+    if task_errors:
+        issues.append(
+            _gate_issue(
+                "blocker",
+                "TASK_ERRORS",
+                "任务存在错误: " + "；".join(str(item) for item in task_errors[:3]),
+            )
+        )
+
+    if task.task_type == "batch":
+        rows = (
+            db.query(TaskResult)
+            .filter(TaskResult.task_id == task.id)
+            .order_by(TaskResult.file_index.asc())
+            .all()
+        )
+        counts = {
+            "pending": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0,
+            "cancelled": 0,
+        }
+        for row in rows:
+            counts[row.status or "pending"] = counts.get(row.status or "pending", 0) + 1
+
+        if not rows:
+            issues.append(_gate_issue("blocker", "BATCH_EMPTY", "批量任务没有逐文件结果。"))
+        if counts.get("running") or counts.get("pending"):
+            issues.append(
+                _gate_issue(
+                    "blocker",
+                    "BATCH_NOT_FINISHED",
+                    f"批量任务仍有 {counts.get('running', 0)} 个运行中、{counts.get('pending', 0)} 个待执行。",
+                )
+            )
+        if counts.get("failed"):
+            issues.append(
+                _gate_issue("blocker", "BATCH_HAS_FAILURES", f"批量任务有 {counts['failed']} 个失败文件。")
+            )
+        if counts.get("cancelled"):
+            issues.append(
+                _gate_issue("blocker", "BATCH_HAS_CANCELLED", f"批量任务有 {counts['cancelled']} 个已取消文件。")
+            )
+
+        for row in rows:
+            scope = f"file:{row.file_index}"
+            row_warnings = _load_json_list(row.warnings)
+            validation = _load_json_dict(row.validation_summary)
+            if row.status != "completed":
+                issues.append(
+                    _gate_issue(
+                        "blocker",
+                        "BATCH_ROW_NOT_COMPLETED",
+                        f"{row.excel_filename} 状态为 {row.status}。",
+                        scope,
+                    )
+                )
+                continue
+            if not row.output_path or not Path(row.output_path).exists():
+                issues.append(
+                    _gate_issue("blocker", "OUTPUT_MISSING", f"{row.excel_filename} 报告文件不存在。", scope)
+                )
+            qa_status = validation.get("qa_status")
+            if qa_status == "FAIL":
+                issues.append(
+                    _gate_issue("blocker", "QA_FAIL", f"{row.excel_filename} QA 状态为 FAIL。", scope)
+                )
+            elif qa_status == "WARN":
+                issues.append(
+                    _gate_issue("warning", "QA_WARN", f"{row.excel_filename} QA 状态为 WARN。", scope)
+                )
+            elif not qa_status:
+                issues.append(
+                    _gate_issue("warning", "QA_MISSING", f"{row.excel_filename} 未记录 QA 状态。", scope)
+                )
+            for warning in row_warnings:
+                if _is_required_field_warning(warning):
+                    issues.append(
+                        _gate_issue("blocker", "REQUIRED_FIELD_MISSING", str(warning), scope)
+                    )
+                else:
+                    issues.append(_gate_issue("warning", "ROW_WARNING", str(warning), scope))
+        metrics = {
+            "total_files": task.total_files,
+            "completed_files": task.completed_files,
+            "failed_files": task.failed_files,
+            "status_counts": counts,
+        }
+    else:
+        if task.status != "completed":
+            issues.append(
+                _gate_issue("blocker", "TASK_NOT_COMPLETED", f"单份报告任务状态为 {task.status}。")
+            )
+        if not task.output_path or not Path(task.output_path).exists():
+            issues.append(_gate_issue("blocker", "OUTPUT_MISSING", "报告文件不存在。"))
+        qa_file, qa_status, qa_issues = _load_qa_summary(task.output_path)
+        if qa_status == "FAIL":
+            issues.append(_gate_issue("blocker", "QA_FAIL", "QA 状态为 FAIL。"))
+        elif qa_status == "WARN":
+            issues.append(_gate_issue("warning", "QA_WARN", "QA 状态为 WARN。"))
+        elif not qa_status:
+            issues.append(_gate_issue("warning", "QA_MISSING", "未找到 QA 状态。"))
+        for issue in qa_issues[:20]:
+            level = "blocker" if issue.get("level") == "error" else "warning"
+            issues.append(
+                _gate_issue(
+                    level,
+                    issue.get("code") or "QA_ISSUE",
+                    issue.get("message") or str(issue),
+                )
+            )
+        metrics = {
+            "qa_status": qa_status,
+            "qa_report_file": qa_file,
+        }
+
+    if diff_summary.get("diff_gate_passed") is False:
+        issues.append(_gate_issue("blocker", "DIFF_GATE_FAILED", "基准报告 Diff 门禁未通过。"))
+    elif diff_summary.get("diff_status") == "FAIL":
+        issues.append(_gate_issue("blocker", "DIFF_FAIL", "基准报告 Diff 状态为 FAIL。"))
+    elif diff_summary.get("diff_status") == "WARN":
+        issues.append(_gate_issue("warning", "DIFF_WARN", "基准报告 Diff 状态为 WARN。"))
+    elif not diff_summary.get("diff_status"):
+        issues.append(_gate_issue("warning", "DIFF_NOT_RUN", "未找到基准报告 Diff 结果。"))
+
+    for warning in task_warnings:
+        if _is_required_field_warning(warning):
+            issues.append(_gate_issue("blocker", "REQUIRED_FIELD_MISSING", str(warning)))
+        else:
+            issues.append(_gate_issue("warning", "TASK_WARNING", str(warning)))
+
+    blocker_count = sum(1 for issue in issues if issue["level"] == "blocker")
+    warning_count = sum(1 for issue in issues if issue["level"] == "warning")
+    return {
+        "schema_version": "1.0",
+        "task_id": task.id,
+        "task_type": task.task_type,
+        "status": "PASS" if blocker_count == 0 else "BLOCKED",
+        "passed": blocker_count == 0,
+        "generated_at": datetime.utcnow().isoformat(),
+        "blockers": blocker_count,
+        "warnings": warning_count,
+        "issues": issues,
+        "metrics": metrics,
+        "diff": {
+            key: diff_summary.get(key)
+            for key in (
+                "diff_status",
+                "diff_gate_passed",
+                "diff_reference_id",
+                "diff_reference_name",
+                "diff_report_file",
+                "diff_markdown_file",
+            )
+        },
+        "review": _load_review_state(task),
+    }
+
+
+def _add_zip_file(zf: zipfile.ZipFile, path: Optional[Path], arcname: str) -> None:
+    if path and path.exists() and path.is_file():
+        zf.write(path, arcname)
+
+
+def _artifact_sidecars(output_path: Optional[str]) -> list[tuple[Optional[Path], str]]:
+    if not output_path:
+        return []
+    path = Path(output_path)
+    return [
+        (_report_summary_sidecar_path(output_path), f"summaries/{path.stem}.summary.json"),
+        (_qa_sidecar_path(output_path), f"qa/{path.stem}.qa.json"),
+        (_field_provenance_sidecar_path(output_path), f"field_provenance/{path.stem}.field_provenance.json"),
+        (_stage_results_sidecar_path(output_path), f"stage_results/{path.stem}.stage_results.json"),
+    ]
 
 
 def _visual_render_dir(output_path: Optional[str]) -> Optional[Path]:
@@ -1035,6 +1300,65 @@ def get_batch_results(task_id: str, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/{task_id}/quality-gate", response_model=ApiResponse[dict])
+def get_quality_gate(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return ApiResponse(data=_quality_gate_payload(task, db))
+
+
+@router.get("/{task_id}/review-state", response_model=ApiResponse[dict])
+def get_review_state(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return ApiResponse(data=_load_review_state(task))
+
+
+@router.post("/{task_id}/review-state", response_model=ApiResponse[dict])
+def update_review_state(
+    task_id: str,
+    req: ReviewStateUpdate,
+    db: Session = Depends(get_db),
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if req.status not in REVIEW_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"审核状态仅支持: {', '.join(REVIEW_STATUSES)}",
+        )
+
+    gate = _quality_gate_payload(task, db)
+    if req.status == "delivered" and not gate["passed"] and not req.override_gate:
+        raise HTTPException(
+            status_code=409,
+            detail="质控门禁未通过，不能标记已交付；请先处理阻断项。",
+        )
+
+    state = _load_review_state(task)
+    now = datetime.utcnow().isoformat()
+    event = {
+        "status": req.status,
+        "status_label": REVIEW_STATUSES[req.status],
+        "updated_at": now,
+        "updated_by": req.operator or "未登录操作员",
+        "note": req.note or "",
+        "override_gate": bool(req.override_gate),
+        "gate_status": gate["status"],
+        "gate_blockers": gate["blockers"],
+    }
+    history = state.get("history") or []
+    history.append(event)
+    state.update(event)
+    state["task_id"] = task.id
+    state["schema_version"] = "1.0"
+    state["history"] = history
+    return ApiResponse(data=_write_review_state(task, state))
+
+
 @router.get("/{task_id}/batch-results/{file_index}/download")
 def download_batch_item_report(
     task_id: str,
@@ -1064,7 +1388,11 @@ def download_batch_item_report(
 
 
 @router.get("/{task_id}/batch/download")
-def download_batch_reports_zip(task_id: str, db: Session = Depends(get_db)):
+def download_batch_reports_zip(
+    task_id: str,
+    qa: Optional[str] = Query(None, pattern="^(pass|all)$"),
+    db: Session = Depends(get_db),
+):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -1072,15 +1400,25 @@ def download_batch_reports_zip(task_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="仅批量任务支持打包下载")
     output_root = Path(task.output_path) if task.output_path else settings.report_dir / task_id
     output_root.mkdir(parents=True, exist_ok=True)
-    zip_path = output_root / f"{task_id}_reports.zip"
+    qa_pass_only = qa == "pass"
+    zip_path = output_root / (
+        f"{task_id}_qa_pass_reports.zip" if qa_pass_only else f"{task_id}_reports.zip"
+    )
     rows = (
         db.query(TaskResult)
         .filter(TaskResult.task_id == task_id, TaskResult.status == "completed")
         .order_by(TaskResult.file_index.asc())
         .all()
     )
+    if qa_pass_only:
+        rows = [
+            row
+            for row in rows
+            if _load_json_dict(row.validation_summary).get("qa_status") == "PASS"
+        ]
     if not rows:
-        raise HTTPException(status_code=404, detail="没有可打包的成功报告")
+        detail = "没有 QA PASS 的成功报告" if qa_pass_only else "没有可打包的成功报告"
+        raise HTTPException(status_code=404, detail=detail)
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         batch_report = _batch_report_path(task.output_path)
         if batch_report and batch_report.exists():
@@ -1097,6 +1435,148 @@ def download_batch_reports_zip(task_id: str, db: Session = Depends(get_db)):
                     summary_path,
                     f"summaries/{row.file_index:03d}_{summary_path.name}",
                 )
+    return FileResponse(
+        path=str(zip_path),
+        filename=zip_path.name,
+        media_type="application/zip",
+    )
+
+
+@router.get("/{task_id}/audit-package")
+def download_audit_package(
+    task_id: str,
+    include_failed: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    output_root = _task_artifact_dir(task)
+    output_root.mkdir(parents=True, exist_ok=True)
+    gate = _quality_gate_payload(task, db)
+    review_state = _load_review_state(task)
+    zip_path = output_root / (
+        f"{task_id}_audit_package.zip"
+        if include_failed
+        else f"{task_id}_passed_audit_package.zip"
+    )
+    manifest = {
+        "schema_version": "1.0",
+        "generated_at": datetime.utcnow().isoformat(),
+        "task": {
+            "id": task.id,
+            "task_type": task.task_type,
+            "status": task.status,
+            "project_type": task.project_type,
+            "total_files": task.total_files,
+            "completed_files": task.completed_files,
+            "failed_files": task.failed_files,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "started_at": task.started_at.isoformat() if task.started_at else None,
+            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+            "duration_seconds": task.duration_seconds,
+        },
+        "quality_gate": {
+            "status": gate["status"],
+            "passed": gate["passed"],
+            "blockers": gate["blockers"],
+            "warnings": gate["warnings"],
+        },
+        "review": {
+            "status": review_state.get("status"),
+            "status_label": review_state.get("status_label"),
+            "updated_at": review_state.get("updated_at"),
+            "updated_by": review_state.get("updated_by"),
+        },
+        "include_failed": include_failed,
+    }
+
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "audit_manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+        )
+        zf.writestr(
+            "quality_gate.json",
+            json.dumps(gate, ensure_ascii=False, indent=2),
+        )
+        zf.writestr(
+            "review_state.json",
+            json.dumps(review_state, ensure_ascii=False, indent=2),
+        )
+
+        if task.task_type == "batch":
+            batch_report = _batch_report_path(task.output_path)
+            _add_zip_file(zf, batch_report, "batch/batch_report.json")
+            diff_summary = diff_svc.report_diff_summary(task.output_path)
+            _add_zip_file(
+                zf,
+                Path(diff_summary["diff_report_file"])
+                if diff_summary.get("diff_report_file")
+                else None,
+                "diff/batch_report_diff.json",
+            )
+            _add_zip_file(
+                zf,
+                Path(diff_summary["diff_markdown_file"])
+                if diff_summary.get("diff_markdown_file")
+                else None,
+                "diff/batch_report_diff.md",
+            )
+            rows = (
+                db.query(TaskResult)
+                .filter(TaskResult.task_id == task_id)
+                .order_by(TaskResult.file_index.asc())
+                .all()
+            )
+            for row in rows:
+                if row.status != "completed" and not include_failed:
+                    continue
+                prefix = f"items/{row.file_index:03d}_{safe_filename(row.excel_filename)}"
+                if row.output_path:
+                    docx_path = Path(row.output_path)
+                    _add_zip_file(zf, docx_path, f"{prefix}/report/{docx_path.name}")
+                    for sidecar, arcname in _artifact_sidecars(row.output_path):
+                        _add_zip_file(zf, sidecar, f"{prefix}/{arcname}")
+                zf.writestr(
+                    f"{prefix}/result.json",
+                    json.dumps(
+                        {
+                            "index": row.file_index,
+                            "excel_filename": row.excel_filename,
+                            "status": row.status,
+                            "duration_seconds": row.duration_seconds,
+                            "errors": _load_json_list(row.errors),
+                            "warnings": _load_json_list(row.warnings),
+                            "validation": _load_json_dict(row.validation_summary),
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                )
+        else:
+            if task.output_path:
+                docx_path = Path(task.output_path)
+                _add_zip_file(zf, docx_path, f"report/{docx_path.name}")
+                for sidecar, arcname in _artifact_sidecars(task.output_path):
+                    _add_zip_file(zf, sidecar, arcname)
+                diff_summary = diff_svc.report_diff_summary(task.output_path)
+                _add_zip_file(
+                    zf,
+                    Path(diff_summary["diff_report_file"])
+                    if diff_summary.get("diff_report_file")
+                    else None,
+                    "diff/report_diff.json",
+                )
+                _add_zip_file(
+                    zf,
+                    Path(diff_summary["diff_markdown_file"])
+                    if diff_summary.get("diff_markdown_file")
+                    else None,
+                    "diff/report_diff.md",
+                )
+
     return FileResponse(
         path=str(zip_path),
         filename=zip_path.name,

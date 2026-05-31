@@ -113,6 +113,39 @@ export interface BatchResults {
   batch_report?: Record<string, any> | null
 }
 
+export interface QualityGateIssue {
+  level: 'blocker' | 'warning' | 'info' | string
+  code: string
+  message: string
+  scope?: string
+}
+
+export interface ReviewState {
+  schema_version?: string
+  task_id: string
+  status: 'draft' | 'reviewed' | 'delivered' | 'rejected' | string
+  status_label?: string
+  updated_at?: string | null
+  updated_by?: string | null
+  note?: string | null
+  history?: Array<Record<string, any>>
+}
+
+export interface QualityGate {
+  schema_version?: string
+  task_id: string
+  task_type: string
+  status: 'PASS' | 'BLOCKED' | string
+  passed: boolean
+  generated_at?: string
+  blockers: number
+  warnings: number
+  issues: QualityGateIssue[]
+  metrics?: Record<string, any>
+  diff?: Record<string, any>
+  review?: ReviewState
+}
+
 export interface RenderedPage {
   filename: string
   url: string
@@ -364,6 +397,29 @@ export const reportApi = {
     await client.delete(`/tasks/${taskId}`)
   },
 
+  async getQualityGate(taskId: string): Promise<QualityGate> {
+    const { data } = await client.get(`/reports/${taskId}/quality-gate`)
+    return data.data
+  },
+
+  async getReviewState(taskId: string): Promise<ReviewState> {
+    const { data } = await client.get(`/reports/${taskId}/review-state`)
+    return data.data
+  },
+
+  async updateReviewState(
+    taskId: string,
+    req: {
+      status: 'draft' | 'reviewed' | 'delivered' | 'rejected' | string
+      operator?: string | null
+      note?: string | null
+      override_gate?: boolean
+    },
+  ): Promise<ReviewState> {
+    const { data } = await client.post(`/reports/${taskId}/review-state`, req)
+    return data.data
+  },
+
   async getQaReport(taskId: string): Promise<Record<string, any>> {
     const { data } = await client.get(`/reports/${taskId}/qa`)
     return data.data
@@ -447,8 +503,16 @@ export const reportApi = {
     return `/api/v1/reports/${taskId}/download`
   },
 
-  getBatchDownloadUrl(taskId: string): string {
-    return `/api/v1/reports/${taskId}/batch/download`
+  getBatchDownloadUrl(taskId: string, qaPassOnly = false): string {
+    return qaPassOnly
+      ? `/api/v1/reports/${taskId}/batch/download?qa=pass`
+      : `/api/v1/reports/${taskId}/batch/download`
+  },
+
+  getAuditPackageUrl(taskId: string, includeFailed = true): string {
+    return includeFailed
+      ? `/api/v1/reports/${taskId}/audit-package`
+      : `/api/v1/reports/${taskId}/audit-package?include_failed=false`
   },
 
   async download(taskId: string): Promise<void> {
