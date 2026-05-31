@@ -51,6 +51,7 @@ from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.processors import ProcessorContext, run_processors
 from reportgen.core.processors.docx import _run_final_refresh_cleanup
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
+from reportgen.core.report_summary import build_report_summary, write_report_summary
 from reportgen.core.report_generator import ReportGenerator
 from reportgen.core.signature_library import resolve_signature_path, signature_options
 from reportgen.core.report_diff import ReportDiffOptions, compare_reports
@@ -606,6 +607,80 @@ def test_field_mapper_valid_tmb_overrides_default_status(tmp_path):
     assert "TMB水平较低" in report_data.get_field("tmb_detail_sentence")
     assert "MSI-H" in report_data.get_field("msi_detail_sentence")
     assert "MSI-H" in report_data.get_field("msi_tips")
+
+
+def test_report_summary_extracts_biomarkers_variants_and_drugs():
+    report_data = ReportData(
+        context={
+            "patient_name": "测试患者",
+            "sample_id": "CASE001",
+            "clinical_diagnosis": "结直肠癌",
+            "project_name": "结直肠癌358基因+MSI",
+            "tmb_summary": "12.9 mutations/Mb，TMB-H",
+            "tmb_value": "12.9",
+            "tmb_status": "H",
+            "msi_summary": "微卫星稳定型，MSS",
+            "msi_status": "MSS",
+            "total_variants_count": 2,
+            "drug_related_count": 1,
+            "variants_2_1": [
+                {
+                    "gene": "KRAS",
+                    "locus": "c.34G>A，p.G12S",
+                    "gene_class": "Ⅱ类",
+                    "af_pct": "18.2%",
+                    "benefit_drugs": "--",
+                    "caution_drugs": "西妥昔单抗（A）",
+                },
+                {
+                    "gene": "APC",
+                    "locus": "c.3927del",
+                    "gene_class": "Ⅲ类",
+                    "af_pct": "10.0%",
+                    "benefit_drugs": "--",
+                    "caution_drugs": "--",
+                },
+            ],
+            "targeted_drug_tips": [
+                {
+                    "gene": "KRAS",
+                    "variant_site": "c.34G>A，p.G12S",
+                    "benefit_drugs": "--",
+                    "caution_drugs": "西妥昔单抗（A）",
+                }
+            ],
+            "chemotherapy": [{"Drug": "瑞戈非尼", "Gene": "VEGFR"}],
+        }
+    )
+
+    summary = build_report_summary(
+        report_data=report_data,
+        project_type="crc_358_msi",
+        project_name="结直肠癌358基因+MSI",
+        generation_id="CASE001",
+        output_file="/tmp/fake.docx",
+        qa_report={"status": "PASS", "issues": []},
+    )
+
+    assert summary["patient"]["sample_id"] == "CASE001"
+    assert summary["biomarkers"]["tmb"]["status"] == "H"
+    assert summary["biomarkers"]["msi"]["status"] == "MSS"
+    assert summary["variants"]["total"] == 2
+    assert summary["variants"]["drug_related"] == 1
+    assert summary["variants"]["by_class"] == {"Ⅱ类": 1, "Ⅲ类": 1}
+    assert summary["variants"]["key_rows"][0]["gene"] == "KRAS"
+    assert summary["drugs"]["targeted_count"] == 1
+    assert summary["qa"]["status"] == "PASS"
+
+
+def test_write_report_summary_uses_docx_sidecar(tmp_path):
+    output_file = tmp_path / "case.docx"
+    output_file.write_bytes(b"PK\x03\x04")
+
+    sidecar = write_report_summary({"schema_version": "1.0"}, str(output_file))
+
+    assert Path(sidecar) == tmp_path / "case.summary.json"
+    assert json.loads(Path(sidecar).read_text(encoding="utf-8"))["schema_version"] == "1.0"
 
 
 def test_field_mapper_dynamic_tmb_msi_narratives_match_mss_low_tmb(tmp_path):

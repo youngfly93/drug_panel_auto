@@ -28,6 +28,7 @@ class GenerateResponse(BaseModel):
     output_file_base64: Optional[str] = None
     field_provenance_file: Optional[str] = None
     qa_report_file: Optional[str] = None
+    report_summary_file: Optional[str] = None
     qa_status: Optional[str] = None
     qa_issues: list[dict[str, Any]] = []
     visual_render: Optional[dict[str, Any]] = None
@@ -53,9 +54,14 @@ class TaskStatus(BaseModel):
     total_files: int = 1
     completed_files: int = 0
     failed_files: int = 0
+    cancelled_files: int = 0
+    pending_files: int = 0
+    running_files: int = 0
+    status_counts: dict[str, int] = {}
     output_path: Optional[str] = None
     field_provenance_file: Optional[str] = None
     qa_report_file: Optional[str] = None
+    report_summary_file: Optional[str] = None
     qa_status: Optional[str] = None
     generation_id: Optional[str] = None
     stage_results_file: Optional[str] = None

@@ -16,6 +16,10 @@ export interface TaskItem {
   total_files: number
   completed_files: number
   failed_files: number
+  cancelled_files?: number
+  pending_files?: number
+  running_files?: number
+  status_counts?: Record<string, number>
   created_at: string | null
   started_at: string | null
   completed_at: string | null
@@ -38,6 +42,8 @@ export interface TaskStats {
   failed: number
   running: number
   pending: number
+  partial_failed?: number
+  cancelled?: number
 }
 
 export const taskApi = {

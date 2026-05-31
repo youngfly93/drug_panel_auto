@@ -2,6 +2,138 @@
   <div>
     <h2>生成报告</h2>
 
+    <el-card shadow="hover" style="margin-bottom: 20px">
+      <template #header>
+        <div class="batch-head">
+          <strong>生产批量生成</strong>
+          <el-tag size="small" type="warning">多 Excel</el-tag>
+        </div>
+      </template>
+      <div class="batch-controls">
+        <el-upload
+          drag
+          multiple
+          accept=".xlsx"
+          :auto-upload="false"
+          :file-list="batchFileList"
+          :on-change="handleBatchFileChange"
+          :on-remove="handleBatchFileRemove"
+        >
+          <el-icon class="el-icon--upload" :size="34"><UploadFilled /></el-icon>
+          <div class="el-upload__text">拖拽多个 Excel 到此处，或<em>点击选择</em></div>
+          <template #tip>
+            <div class="el-upload__tip">适合生产批量出报告；临时文件 ._* / ~$ 会被拒绝。</div>
+          </template>
+        </el-upload>
+        <div class="batch-options">
+          <el-select v-model="batchProjectType" placeholder="项目类型（可自动识别）" clearable>
+            <el-option label="结直肠癌301基因+MSI" value="crc_301_msi" />
+            <el-option label="结直肠癌358基因+MSI" value="crc_358_msi" />
+            <el-option label="MLF基因检测" value="mlf_result" />
+            <el-option label="肺癌甲基化" value="lung_methylation" />
+          </el-select>
+          <el-select
+            v-if="batchTemplateOptions.length"
+            v-model="batchTemplateName"
+            placeholder="报告模板"
+            clearable
+          >
+            <el-option
+              v-for="option in batchTemplateOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-button
+            type="primary"
+            :loading="batchGenerating"
+            :disabled="!batchFiles.length"
+            @click="startBatchGenerate"
+          >
+            批量生成
+          </el-button>
+        </div>
+      </div>
+      <div v-if="batchTask" class="batch-progress">
+        <div class="batch-progress-title">
+          <strong>{{ statusLabel(batchTask.status) }}</strong>
+          <span>
+            {{ batchTask.completed_files }}/{{ batchTask.total_files }} 完成，{{ batchTask.failed_files }} 失败
+            <template v-if="batchTask.cancelled_files">，{{ batchTask.cancelled_files }} 取消</template>
+          </span>
+        </div>
+        <el-progress
+          :percentage="batchProgressPercent"
+          :status="batchTask.status === 'failed' || batchTask.status === 'partial_failed' ? 'exception' : batchTask.status === 'completed' ? 'success' : undefined"
+        />
+        <div class="batch-actions">
+          <el-button @click="$router.push(`/tasks/${batchTask.id}`)">查看批量详情</el-button>
+          <el-popconfirm
+            v-if="batchTask.status === 'running' || batchTask.status === 'pending'"
+            title="确认取消当前批量任务？正在生成的文件会完成本轮后停止。"
+            @confirm="cancelCurrentBatch"
+          >
+            <template #reference>
+              <el-button type="danger" plain :loading="batchCancelling">取消任务</el-button>
+            </template>
+          </el-popconfirm>
+          <el-button
+            v-if="canRetryBatch"
+            type="warning"
+            plain
+            :loading="batchRetrying"
+            @click="retryFailedBatch"
+          >
+            重试失败文件
+          </el-button>
+          <el-button
+            v-if="isBatchTerminal && batchTask.completed_files > 0"
+            type="primary"
+            @click="downloadBatchZip"
+          >
+            下载成功报告 ZIP
+          </el-button>
+        </div>
+        <el-table
+          v-if="batchResultRows.length"
+          :data="batchResultRows"
+          size="small"
+          border
+          class="batch-table"
+        >
+          <el-table-column prop="index" label="#" width="70" />
+          <el-table-column prop="excel_filename" label="Excel" min-width="220" show-overflow-tooltip />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" :type="statusTagType(row.status)">
+                {{ statusLabel(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="project_name" label="项目" min-width="180" show-overflow-tooltip />
+          <el-table-column label="QA" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="row.qa_status" size="small" :type="row.qa_status === 'FAIL' ? 'danger' : row.qa_status === 'WARN' ? 'warning' : 'success'">
+                {{ row.qa_status }}
+              </el-tag>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="duration_seconds" label="耗时" width="100">
+            <template #default="{ row }">
+              {{ row.duration_seconds ? `${row.duration_seconds.toFixed(1)}s` : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="说明" min-width="260" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.errors?.[0] || row.warnings?.[0] || '-' }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-card>
+
     <!-- Step 1: Upload Excel -->
     <el-card shadow="hover" style="margin-bottom: 20px">
       <template #header><strong>1. 上传 Excel 文件</strong></template>
@@ -62,6 +194,56 @@
             :closable="false"
             style="margin-bottom: 4px"
           />
+        </div>
+
+        <div v-if="excelStore.previewSummary" class="upload-preview">
+          <div class="preview-title">
+            <strong>上传后结果预览</strong>
+            <el-tag size="small" type="info">生成前</el-tag>
+          </div>
+          <div class="preview-metrics">
+            <div v-for="metric in previewMetricCards" :key="metric.label" class="preview-metric">
+              <span>{{ metric.label }}</span>
+              <strong>{{ metric.value }}</strong>
+            </div>
+          </div>
+          <div class="preview-biomarkers">
+            <div v-for="item in previewBiomarkerCards" :key="item.label">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <em>{{ item.detail }}</em>
+            </div>
+          </div>
+          <el-alert
+            v-if="previewManualReviewItems.length"
+            :title="previewManualReviewItems.join('；')"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="preview-alert"
+          />
+          <div class="preview-tables">
+            <div>
+              <div class="preview-table-title">关键变异</div>
+              <el-table :data="previewVariantRows" size="small" border>
+                <el-table-column prop="gene" label="基因" width="100" show-overflow-tooltip />
+                <el-table-column prop="variant_site" label="变异" min-width="190" show-overflow-tooltip />
+                <el-table-column prop="classification" label="等级" width="90" show-overflow-tooltip />
+                <el-table-column prop="frequency" label="丰度" width="90" show-overflow-tooltip />
+                <el-table-column prop="benefit_drugs" label="获益药物" min-width="150" show-overflow-tooltip />
+                <el-table-column prop="caution_drugs" label="耐药/慎用" min-width="150" show-overflow-tooltip />
+              </el-table>
+            </div>
+            <div>
+              <div class="preview-table-title">用药提示</div>
+              <el-table :data="previewDrugRows" size="small" border>
+                <el-table-column prop="gene" label="基因" width="100" show-overflow-tooltip />
+                <el-table-column prop="variant_site" label="变异" min-width="180" show-overflow-tooltip />
+                <el-table-column prop="benefit_drugs" label="潜在获益" min-width="160" show-overflow-tooltip />
+                <el-table-column prop="caution_drugs" label="耐药/慎用" min-width="160" show-overflow-tooltip />
+              </el-table>
+            </div>
+          </div>
         </div>
 
         <!-- Sheet tabs preview -->
@@ -219,12 +401,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useExcelStore } from '@/stores/excel'
 import { useDynamicForm } from '@/composables/useDynamicForm'
-import { reportApi, type GenerateResult } from '@/api/report'
+import {
+  reportApi,
+  type BatchResultItem,
+  type GenerateResult,
+  type TaskStatus,
+} from '@/api/report'
 import DynamicClinicalForm from '@/components/clinical/DynamicClinicalForm.vue'
 import SheetPreview from '@/components/excel/SheetPreview.vue'
 
@@ -237,9 +424,19 @@ const result = ref<GenerateResult | null>(null)
 const uploadError = ref('')
 const selectedFileName = ref('')
 const generationMode = import.meta.env.VITE_REPORT_GENERATION_MODE || 'async'
+const batchFiles = ref<File[]>([])
+const batchFileList = ref<any[]>([])
+const batchProjectType = ref<string | null>(null)
+const batchTemplateName = ref<string | null>(null)
+const batchGenerating = ref(false)
+const batchRetrying = ref(false)
+const batchCancelling = ref(false)
+const batchTask = ref<TaskStatus | null>(null)
+const batchResultRows = ref<BatchResultItem[]>([])
+let batchPollTimer: number | null = null
 
-const templateOptions = computed(() => {
-  if (projectType.value === 'crc_358_msi') {
+function panelTemplateOptions(type?: string | null) {
+  if (type === 'crc_358_msi') {
     return [
       {
         label: '结直肠癌358+MSI Golden 模板（内测）',
@@ -252,7 +449,10 @@ const templateOptions = computed(() => {
     ]
   }
   return []
-})
+}
+
+const templateOptions = computed(() => panelTemplateOptions(projectType.value))
+const batchTemplateOptions = computed(() => panelTemplateOptions(batchProjectType.value))
 
 const enrichmentMessage = computed(() => {
   const enrichment = excelStore.patientEnrichment
@@ -288,6 +488,101 @@ const uploadStatusType = computed(() => {
   return 'info'
 })
 
+const batchProgressPercent = computed(() => {
+  const task = batchTask.value
+  if (!task?.total_files) return 0
+  const done = (task.completed_files || 0) + (task.failed_files || 0) + (task.cancelled_files || 0)
+  return Math.min(100, Math.round((done / task.total_files) * 100))
+})
+
+const isBatchTerminal = computed(() => {
+  const status = batchTask.value?.status
+  return Boolean(status && ['completed', 'failed', 'partial_failed', 'cancelled'].includes(status))
+})
+
+const canRetryBatch = computed(() => {
+  const task = batchTask.value
+  return Boolean(task?.id && isBatchTerminal.value && (task.failed_files || 0) > 0)
+})
+
+const previewMetricCards = computed(() => {
+  const summary = excelStore.previewSummary
+  const variants = summary?.variants || {}
+  const drugs = summary?.drugs || {}
+  return [
+    { label: '检出变异', value: stringifyValue(variants.total) },
+    { label: '药物相关', value: stringifyValue(variants.drug_related) },
+    { label: '小结变异', value: stringifyValue(variants.summary_count) },
+    { label: '靶向提示', value: stringifyValue(drugs.targeted_count) },
+    { label: '化疗提示', value: stringifyValue(drugs.chemotherapy_count) },
+  ]
+})
+
+const previewBiomarkerCards = computed(() => {
+  const biomarkers = excelStore.previewSummary?.biomarkers || {}
+  const tmb = biomarkers.tmb || {}
+  const msi = biomarkers.msi || {}
+  const immune = biomarkers.immune || {}
+  return [
+    {
+      label: 'TMB',
+      value: stringifyValue(tmb.status || tmb.value),
+      detail: stringifyValue(tmb.summary),
+    },
+    {
+      label: 'MSI',
+      value: stringifyValue(msi.status),
+      detail: stringifyValue(msi.summary),
+    },
+    {
+      label: '免疫正相关',
+      value: stringifyValue(immune.positive),
+      detail: '正相关基因检测结果',
+    },
+    {
+      label: '免疫负相关',
+      value: stringifyValue(immune.negative),
+      detail: '负相关基因检测结果',
+    },
+    {
+      label: '超进展相关',
+      value: stringifyValue(immune.hyperprogression),
+      detail: '超进展相关基因检测结果',
+    },
+  ]
+})
+
+const previewVariantRows = computed(() => {
+  const rows = excelStore.previewSummary?.variants?.key_rows
+    || excelStore.previewSummary?.variants?.summary_rows
+    || []
+  return rows.map((row) => normalizeSummaryRow(row))
+})
+
+const previewDrugRows = computed(() => {
+  const rows = excelStore.previewSummary?.drugs?.targeted_rows || []
+  return rows.map((row) => normalizeSummaryRow(row))
+})
+
+const previewManualReviewItems = computed(() => excelStore.previewSummary?.manual_review || [])
+
+function stringifyValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'string') return value || '-'
+  return JSON.stringify(value)
+}
+
+function normalizeSummaryRow(row: Record<string, any>) {
+  return {
+    gene: stringifyValue(row.gene),
+    variant_site: stringifyValue(row.variant_site),
+    classification: stringifyValue(row.classification),
+    frequency: stringifyValue(row.frequency),
+    benefit_drugs: stringifyValue(row.benefit_drugs),
+    caution_drugs: stringifyValue(row.caution_drugs),
+  }
+}
+
 // Initialize projectType from detection
 watch(
   () => excelStore.upload?.detected_project_type,
@@ -306,6 +601,21 @@ watch(
     const current = templateName.value
     if (!current || !options.some((option) => option.value === current)) {
       templateName.value = options[0].value
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  batchTemplateOptions,
+  (options) => {
+    if (!options.length) {
+      batchTemplateName.value = null
+      return
+    }
+    const current = batchTemplateName.value
+    if (!current || !options.some((option) => option.value === current)) {
+      batchTemplateName.value = options[0].value
     }
   },
   { immediate: true },
@@ -333,6 +643,8 @@ watch(
   },
 )
 
+onUnmounted(stopBatchPolling)
+
 async function handleFileChange(uploadFile: any) {
   const file = uploadFile.raw || uploadFile
   if (!file) return
@@ -345,6 +657,158 @@ async function handleFileChange(uploadFile: any) {
   } catch (err: any) {
     uploadError.value = err.response?.data?.detail || err.message || 'Excel 上传失败'
     ElMessage.error(uploadError.value)
+  }
+}
+
+function handleBatchFileChange(_uploadFile: any, uploadFiles: any[]) {
+  batchFileList.value = uploadFiles
+  batchFiles.value = uploadFiles
+    .map((item) => item.raw)
+    .filter((file): file is File => Boolean(file))
+  batchTask.value = null
+  batchResultRows.value = []
+}
+
+function handleBatchFileRemove(_uploadFile: any, uploadFiles: any[]) {
+  handleBatchFileChange(null, uploadFiles)
+}
+
+async function startBatchGenerate() {
+  if (!batchFiles.value.length) {
+    ElMessage.warning('请先选择 Excel 文件')
+    return
+  }
+  const bad = batchFiles.value.find(
+    (file) => file.name.startsWith('._') || file.name.startsWith('~$') || !file.name.endsWith('.xlsx'),
+  )
+  if (bad) {
+    ElMessage.warning(`请移除临时或非 xlsx 文件：${bad.name}`)
+    return
+  }
+
+  batchGenerating.value = true
+  batchTask.value = null
+  batchResultRows.value = []
+  stopBatchPolling()
+  try {
+    const accepted = await reportApi.generateBatchFromFiles(batchFiles.value, {
+      clinical_info: {},
+      project_type: batchProjectType.value,
+      project_name: null,
+      template_name: batchTemplateName.value,
+      template_contract_mode: 'warn',
+    })
+    ElMessage.info('批量任务已进入后台生成')
+    batchTask.value = {
+      id: accepted.task_id,
+      task_type: 'batch',
+      status: accepted.status,
+      project_type: batchProjectType.value,
+      total_files: accepted.total_files,
+      completed_files: 0,
+      failed_files: 0,
+      cancelled_files: 0,
+      pending_files: accepted.total_files,
+      running_files: 0,
+      status_counts: {},
+      output_path: null,
+      created_at: null,
+      started_at: null,
+      completed_at: null,
+      duration_seconds: null,
+      errors: [],
+      warnings: [],
+    }
+    startBatchPolling(accepted.task_id)
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || err.message || '批量任务提交失败')
+    batchGenerating.value = false
+  }
+}
+
+function startBatchPolling(taskId: string) {
+  const poll = async () => {
+    try {
+      batchTask.value = await reportApi.getTaskStatus(taskId)
+      try {
+        const detail = await reportApi.getBatchResults(taskId)
+        batchResultRows.value = detail.items
+      } catch {
+        batchResultRows.value = []
+      }
+      if (
+        batchTask.value.status === 'completed'
+        || batchTask.value.status === 'failed'
+        || batchTask.value.status === 'partial_failed'
+        || batchTask.value.status === 'cancelled'
+      ) {
+        batchGenerating.value = false
+        stopBatchPolling()
+        if (batchTask.value.status === 'completed') {
+          ElMessage.success('批量生成完成')
+        } else if (batchTask.value.status === 'partial_failed') {
+          ElMessage.warning('批量生成完成，但有文件失败')
+        } else if (batchTask.value.status === 'failed') {
+          ElMessage.error('批量生成失败')
+        }
+      }
+    } catch (err: any) {
+      batchGenerating.value = false
+      stopBatchPolling()
+      ElMessage.error(err.response?.data?.detail || '批量进度读取失败')
+    }
+  }
+  poll()
+  batchPollTimer = window.setInterval(poll, 2000)
+}
+
+function stopBatchPolling() {
+  if (batchPollTimer !== null) {
+    window.clearInterval(batchPollTimer)
+    batchPollTimer = null
+  }
+}
+
+function downloadBatchZip() {
+  if (!batchTask.value?.id) return
+  window.open(reportApi.getBatchDownloadUrl(batchTask.value.id), '_blank')
+}
+
+async function cancelCurrentBatch() {
+  if (!batchTask.value?.id) return
+  batchCancelling.value = true
+  try {
+    await reportApi.cancelTask(batchTask.value.id)
+    ElMessage.success('批量任务已取消')
+    batchTask.value = await reportApi.getTaskStatus(batchTask.value.id)
+    try {
+      const detail = await reportApi.getBatchResults(batchTask.value.id)
+      batchResultRows.value = detail.items
+    } catch {
+      batchResultRows.value = []
+    }
+    batchGenerating.value = false
+    stopBatchPolling()
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '取消失败')
+  } finally {
+    batchCancelling.value = false
+  }
+}
+
+async function retryFailedBatch() {
+  if (!batchTask.value?.id) return
+  batchRetrying.value = true
+  try {
+    const accepted = await reportApi.retryBatchFailed(batchTask.value.id)
+    ElMessage.info(`已重试 ${accepted.retry_files || 0} 个失败文件`)
+    batchGenerating.value = true
+    batchTask.value = await reportApi.getTaskStatus(batchTask.value.id)
+    startBatchPolling(batchTask.value.id)
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '重试失败')
+  } finally {
+    batchRetrying.value = false
   }
 }
 
@@ -399,6 +863,7 @@ function taskStatusToResult(task: Awaited<ReturnType<typeof reportApi.getTaskSta
     output_file: task.output_path,
     field_provenance_file: task.field_provenance_file,
     qa_report_file: task.qa_report_file,
+    report_summary_file: task.report_summary_file,
     qa_status: task.qa_status,
     generation_id: task.generation_id,
     stage_results: task.stage_results,
@@ -465,4 +930,191 @@ async function downloadGenerated(generated: GenerateResult) {
     ElMessage.error(err.message || '下载失败')
   }
 }
+
+function statusTagType(status: string) {
+  const map: Record<string, string> = {
+    completed: 'success',
+    partial_failed: 'danger',
+    failed: 'danger',
+    running: 'warning',
+    pending: 'info',
+    cancelled: 'info',
+  }
+  return map[status] || 'info'
+}
+
+function statusLabel(status: string) {
+  const map: Record<string, string> = {
+    completed: '已完成',
+    partial_failed: '部分失败',
+    failed: '失败',
+    running: '运行中',
+    pending: '待执行',
+    cancelled: '已取消',
+  }
+  return map[status] || status
+}
 </script>
+
+<style scoped>
+.batch-head,
+.batch-progress-title,
+.batch-actions {
+  display: flex;
+  align-items: center;
+}
+
+.batch-head {
+  justify-content: space-between;
+}
+
+.batch-controls {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) 320px;
+  gap: 16px;
+}
+
+.batch-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.batch-progress {
+  margin-top: 14px;
+  border: 1px solid #d9e2ec;
+  padding: 14px;
+}
+
+.batch-progress-title {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.batch-progress-title span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.batch-actions {
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.batch-table {
+  margin-top: 12px;
+}
+
+.upload-preview {
+  margin-top: 14px;
+  border: 1px solid #d9e2ec;
+  background: #fff;
+}
+
+.preview-title {
+  min-height: 44px;
+  padding: 0 14px;
+  border-bottom: 1px solid #e6edf3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preview-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  border-bottom: 1px solid #e6edf3;
+}
+
+.preview-metric {
+  min-height: 64px;
+  padding: 10px 12px;
+  border-right: 1px solid #e6edf3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.preview-metric:last-child {
+  border-right: 0;
+}
+
+.preview-metric span,
+.preview-biomarkers span,
+.preview-table-title {
+  color: #667085;
+  font-size: 12px;
+}
+
+.preview-metric strong {
+  font-size: 17px;
+}
+
+.preview-biomarkers {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-bottom: 1px solid #e6edf3;
+}
+
+.preview-biomarkers div {
+  min-height: 88px;
+  padding: 12px 14px;
+  border-right: 1px solid #e6edf3;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.preview-biomarkers div:last-child {
+  border-right: 0;
+}
+
+.preview-biomarkers strong {
+  font-size: 18px;
+}
+
+.preview-biomarkers em {
+  color: #475467;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.preview-alert {
+  margin: 14px 14px 0;
+}
+
+.preview-tables {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.preview-table-title {
+  margin-bottom: 8px;
+  font-weight: 650;
+}
+
+@media (max-width: 980px) {
+  .batch-controls,
+  .preview-metrics,
+  .preview-biomarkers,
+  .preview-tables {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-metric,
+  .preview-biomarkers div {
+    border-right: 0;
+    border-bottom: 1px solid #e6edf3;
+  }
+
+  .preview-metric:last-child,
+  .preview-biomarkers div:last-child {
+    border-bottom: 0;
+  }
+}
+</style>

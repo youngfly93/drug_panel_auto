@@ -22,6 +22,7 @@ export interface GenerateResult {
   output_file_base64?: string | null
   field_provenance_file?: string | null
   qa_report_file?: string | null
+  report_summary_file?: string | null
   qa_status?: string | null
   qa_issues?: Array<Record<string, any>>
   visual_render?: Record<string, any> | null
@@ -38,6 +39,13 @@ export interface GenerateResult {
   warnings: string[]
 }
 
+export interface BatchGenerateResult {
+  task_id: string
+  status: string
+  total_files: number
+  retry_files?: number
+}
+
 export interface TaskStatus {
   id: string
   task_type: string
@@ -46,9 +54,14 @@ export interface TaskStatus {
   total_files: number
   completed_files: number
   failed_files: number
+  cancelled_files?: number
+  pending_files?: number
+  running_files?: number
+  status_counts?: Record<string, number>
   output_path: string | null
   field_provenance_file?: string | null
   qa_report_file?: string | null
+  report_summary_file?: string | null
   qa_status?: string | null
   generation_id?: string | null
   stage_results_file?: string | null
@@ -60,9 +73,44 @@ export interface TaskStatus {
   diff_reference_id?: string | null
   diff_reference_name?: string | null
   created_at: string | null
+  started_at?: string | null
+  completed_at?: string | null
   duration_seconds: number | null
   errors: string[]
   warnings: string[]
+}
+
+export interface BatchResultItem {
+  index: number
+  excel_filename: string
+  status: string
+  output_path?: string | null
+  output_filename?: string | null
+  download_url?: string | null
+  report_summary_file?: string | null
+  qa_status?: string | null
+  project_type?: string | null
+  project_name?: string | null
+  clinical_info?: Record<string, any>
+  duration_seconds?: number | null
+  errors: string[]
+  warnings: string[]
+  validation?: Record<string, any>
+}
+
+export interface BatchResults {
+  task_id: string
+  status: string
+  total_files: number
+  completed_files: number
+  failed_files: number
+  cancelled_files?: number
+  pending_files?: number
+  running_files?: number
+  status_counts?: Record<string, number>
+  output_root?: string | null
+  items: BatchResultItem[]
+  batch_report?: Record<string, any> | null
 }
 
 export interface RenderedPage {
@@ -81,6 +129,42 @@ export interface VisualRenderResult {
   command?: string[]
   stdout_tail?: string
   stderr_tail?: string
+}
+
+export interface ReportSummary {
+  schema_version?: string
+  generation_id?: string | null
+  project_type?: string | null
+  project_name?: string | null
+  output_file?: string | null
+  generated_at?: string
+  patient?: Record<string, any>
+  biomarkers?: {
+    tmb?: Record<string, any>
+    msi?: Record<string, any>
+    immune?: Record<string, any>
+  }
+  variants?: {
+    total?: number | null
+    drug_related?: number | null
+    summary_count?: number | null
+    by_class?: Record<string, number>
+    key_rows?: Array<Record<string, any>>
+    summary_rows?: Array<Record<string, any>>
+  }
+  drugs?: {
+    targeted_count?: number | null
+    chemotherapy_count?: number | null
+    targeted_rows?: Array<Record<string, any>>
+    chemotherapy_rows?: Array<Record<string, any>>
+  }
+  qa?: {
+    status?: string | null
+    issue_count?: number
+    errors?: number
+    warnings?: number
+  }
+  manual_review?: string[]
 }
 
 export interface ReportDiffIssue {
@@ -245,13 +329,48 @@ export const reportApi = {
     return data.data
   },
 
+  async generateBatchFromFiles(files: File[], req: Omit<GenerateRequest, 'upload_id'>): Promise<BatchGenerateResult> {
+    const form = new FormData()
+    files.forEach((file) => form.append('files', file))
+    form.append('clinical_info', JSON.stringify(req.clinical_info || {}))
+    if (req.project_type) form.append('project_type', req.project_type)
+    if (req.project_name) form.append('project_name', req.project_name)
+    if (req.template_name) form.append('template_name', req.template_name)
+    if (req.template_contract_mode) {
+      form.append('template_contract_mode', req.template_contract_mode)
+    }
+    const { data } = await client.post('/reports/batch-files', form)
+    return data.data
+  },
+
   async getTaskStatus(taskId: string): Promise<TaskStatus> {
     const { data } = await client.get(`/reports/${taskId}`)
     return data.data
   },
 
+  async getBatchResults(taskId: string): Promise<BatchResults> {
+    const { data } = await client.get(`/reports/${taskId}/batch-results`)
+    return data.data
+  },
+
+  async retryBatchFailed(taskId: string, includeCancelled = false): Promise<BatchGenerateResult> {
+    const { data } = await client.post(`/reports/${taskId}/batch/retry-failed`, null, {
+      params: { include_cancelled: includeCancelled },
+    })
+    return data.data
+  },
+
+  async cancelTask(taskId: string): Promise<void> {
+    await client.delete(`/tasks/${taskId}`)
+  },
+
   async getQaReport(taskId: string): Promise<Record<string, any>> {
     const { data } = await client.get(`/reports/${taskId}/qa`)
+    return data.data
+  },
+
+  async getReportSummary(taskId: string): Promise<ReportSummary> {
+    const { data } = await client.get(`/reports/${taskId}/summary`)
     return data.data
   },
 
@@ -326,6 +445,10 @@ export const reportApi = {
 
   getDownloadUrl(taskId: string): string {
     return `/api/v1/reports/${taskId}/download`
+  },
+
+  getBatchDownloadUrl(taskId: string): string {
+    return `/api/v1/reports/${taskId}/batch/download`
   },
 
   async download(taskId: string): Promise<void> {

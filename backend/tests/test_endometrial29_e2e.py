@@ -85,6 +85,8 @@ def test_endometrial29_end_to_end_generation(tmp_path):
 
     out_file = result.get("output_file")
     assert out_file and Path(out_file).exists(), f"未产出 docx: {result.get('errors')}"
+    summary_file = result.get("report_summary_file")
+    assert summary_file and Path(summary_file).exists(), "未产出报告结果摘要 sidecar"
 
     with zipfile.ZipFile(out_file) as z:
         blob = "\n".join(

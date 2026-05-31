@@ -6,6 +6,7 @@ import re
 import shutil
 import threading
 import uuid
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -22,13 +23,14 @@ from fastapi import (
 from fastapi.responses import FileResponse
 from reportgen.utils.docx_render import render_docx_to_pngs
 from reportgen.utils.file_utils import safe_filename
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 import yaml
 
 from app.config import settings
 from app.database import SessionLocal, get_db
 from app.dependencies import get_bridge
-from app.models.task import Task
+from app.models.task import Task, TaskResult
 from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.schemas.report import GenerateRequest, GenerateResponse, TaskStatus
@@ -129,6 +131,18 @@ def _stage_results_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
     return Path(output_path).with_suffix(".stage_results.json")
 
 
+def _report_summary_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    return Path(output_path).with_suffix(".summary.json")
+
+
+def _batch_report_path(output_path: Optional[str]) -> Optional[Path]:
+    if not output_path:
+        return None
+    return Path(output_path) / "batch_report.json"
+
+
 def _fallback_stage_results_sidecar_path(task_id: str) -> Path:
     return settings.report_dir / task_id / "generation.stage_results.json"
 
@@ -164,6 +178,45 @@ def _load_stage_results(
         payload.get("generation_id"),
         payload.get("stage_results") or [],
     )
+
+
+def _load_json_list(value: Optional[str]) -> list:
+    if not value:
+        return []
+    try:
+        payload = json.loads(value)
+    except Exception:
+        return [str(value)]
+    return payload if isinstance(payload, list) else [payload]
+
+
+def _load_json_dict(value: Optional[str]) -> dict:
+    if not value:
+        return {}
+    try:
+        payload = json.loads(value)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _batch_status_counts(db: Session, task_id: str) -> dict[str, int]:
+    counts = {
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0,
+        "cancelled": 0,
+    }
+    rows = (
+        db.query(TaskResult.status, func.count(TaskResult.id))
+        .filter(TaskResult.task_id == task_id)
+        .group_by(TaskResult.status)
+        .all()
+    )
+    for status, count in rows:
+        counts[status or "pending"] = count
+    return counts
 
 
 def _visual_render_dir(output_path: Optional[str]) -> Optional[Path]:
@@ -398,6 +451,7 @@ def _generate_response_from_result(
         output_file_base64=output_file_base64,
         field_provenance_file=result.get("field_provenance_file"),
         qa_report_file=result.get("qa_report_file"),
+        report_summary_file=result.get("report_summary_file"),
         qa_status=result.get("qa_status"),
         qa_issues=(result.get("qa_report") or {}).get("issues") or [],
         visual_render=((result.get("qa_report") or {}).get("checks") or {}).get(
@@ -775,12 +829,14 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     field_provenance_path = _field_provenance_sidecar_path(task.output_path)
+    report_summary_path = _report_summary_sidecar_path(task.output_path)
     qa_report_file, qa_status, _qa_issues = _load_qa_summary(task.output_path)
     stage_results_file, generation_id, stage_results = _load_stage_results(
         task.output_path,
         task_id=task.id,
     )
     diff_summary = diff_svc.report_diff_summary(task.output_path)
+    batch_counts = _batch_status_counts(db, task.id) if task.task_type == "batch" else {}
 
     return ApiResponse(
         data=TaskStatus(
@@ -791,6 +847,10 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             total_files=task.total_files,
             completed_files=task.completed_files,
             failed_files=task.failed_files,
+            cancelled_files=batch_counts.get("cancelled", 0),
+            pending_files=batch_counts.get("pending", 0),
+            running_files=batch_counts.get("running", 0),
+            status_counts=batch_counts,
             output_path=task.output_path,
             field_provenance_file=(
                 str(field_provenance_path)
@@ -798,6 +858,11 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
                 else None
             ),
             qa_report_file=qa_report_file,
+            report_summary_file=(
+                str(report_summary_path)
+                if report_summary_path and report_summary_path.exists()
+                else None
+            ),
             qa_status=qa_status,
             generation_id=generation_id,
             stage_results_file=stage_results_file,
@@ -830,6 +895,24 @@ def get_qa_report(task_id: str, db: Session = Depends(get_db)):
         payload = json.loads(qa_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"QA报告读取失败: {exc}") from exc
+    return ApiResponse(data=payload)
+
+
+@router.get("/{task_id}/summary", response_model=ApiResponse[dict])
+def get_report_summary(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    summary_path = _report_summary_sidecar_path(task.output_path)
+    if not summary_path or not summary_path.exists():
+        raise HTTPException(status_code=404, detail="报告结果摘要不存在")
+    try:
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"报告结果摘要读取失败: {exc}",
+        ) from exc
     return ApiResponse(data=payload)
 
 
@@ -868,6 +951,157 @@ def get_stage_results(task_id: str, db: Session = Depends(get_db)):
             detail=f"生成阶段报告读取失败: {exc}",
         ) from exc
     return ApiResponse(data=payload)
+
+
+@router.get("/{task_id}/batch-results", response_model=ApiResponse[dict])
+def get_batch_results(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.task_type != "batch":
+        raise HTTPException(status_code=400, detail="仅批量任务支持逐文件结果")
+
+    rows = (
+        db.query(TaskResult)
+        .filter(TaskResult.task_id == task_id)
+        .order_by(TaskResult.file_index.asc())
+        .all()
+    )
+    counts = {
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0,
+        "cancelled": 0,
+    }
+    for row in rows:
+        counts[row.status or "pending"] = counts.get(row.status or "pending", 0) + 1
+    output_root = Path(task.output_path) if task.output_path else None
+    items = []
+    for row in rows:
+        output_path = row.output_path
+        output_filename = Path(output_path).name if output_path else None
+        summary_path = _report_summary_sidecar_path(output_path)
+        validation = _load_json_dict(row.validation_summary)
+        items.append(
+            {
+                "index": row.file_index,
+                "excel_filename": row.excel_filename,
+                "status": row.status,
+                "output_path": output_path,
+                "output_filename": output_filename,
+                "download_url": (
+                    f"/api/v1/reports/{task_id}/batch-results/{row.file_index}/download"
+                    if output_path and Path(output_path).exists()
+                    else None
+                ),
+                "report_summary_file": (
+                    str(summary_path)
+                    if summary_path and summary_path.exists()
+                    else validation.get("report_summary_file")
+                ),
+                "qa_status": validation.get("qa_status"),
+                "project_type": validation.get("project_type"),
+                "project_name": validation.get("project_name"),
+                "clinical_info": validation.get("clinical_info") or {},
+                "duration_seconds": row.duration_seconds,
+                "errors": _load_json_list(row.errors),
+                "warnings": _load_json_list(row.warnings),
+                "validation": validation,
+            }
+        )
+    batch_report = None
+    batch_report_path = _batch_report_path(task.output_path)
+    if batch_report_path and batch_report_path.exists():
+        try:
+            batch_report = json.loads(batch_report_path.read_text(encoding="utf-8"))
+        except Exception:
+            batch_report = None
+    return ApiResponse(
+        data={
+            "task_id": task.id,
+            "status": task.status,
+            "total_files": task.total_files,
+            "completed_files": task.completed_files,
+            "failed_files": task.failed_files,
+            "cancelled_files": counts.get("cancelled", 0),
+            "pending_files": counts.get("pending", 0),
+            "running_files": counts.get("running", 0),
+            "status_counts": counts,
+            "output_root": str(output_root) if output_root else None,
+            "items": items,
+            "batch_report": batch_report,
+        }
+    )
+
+
+@router.get("/{task_id}/batch-results/{file_index}/download")
+def download_batch_item_report(
+    task_id: str,
+    file_index: int,
+    db: Session = Depends(get_db),
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.task_type != "batch":
+        raise HTTPException(status_code=400, detail="仅批量任务支持逐文件下载")
+    row = (
+        db.query(TaskResult)
+        .filter(TaskResult.task_id == task_id, TaskResult.file_index == file_index)
+        .first()
+    )
+    if not row or not row.output_path:
+        raise HTTPException(status_code=404, detail="报告文件不存在")
+    path = Path(row.output_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="报告文件已被删除")
+    return FileResponse(
+        path=str(path),
+        filename=path.name,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@router.get("/{task_id}/batch/download")
+def download_batch_reports_zip(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.task_type != "batch":
+        raise HTTPException(status_code=400, detail="仅批量任务支持打包下载")
+    output_root = Path(task.output_path) if task.output_path else settings.report_dir / task_id
+    output_root.mkdir(parents=True, exist_ok=True)
+    zip_path = output_root / f"{task_id}_reports.zip"
+    rows = (
+        db.query(TaskResult)
+        .filter(TaskResult.task_id == task_id, TaskResult.status == "completed")
+        .order_by(TaskResult.file_index.asc())
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="没有可打包的成功报告")
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        batch_report = _batch_report_path(task.output_path)
+        if batch_report and batch_report.exists():
+            zf.write(batch_report, "batch_report.json")
+        for row in rows:
+            if not row.output_path:
+                continue
+            docx_path = Path(row.output_path)
+            if docx_path.exists():
+                zf.write(docx_path, f"reports/{row.file_index:03d}_{docx_path.name}")
+            summary_path = _report_summary_sidecar_path(row.output_path)
+            if summary_path and summary_path.exists():
+                zf.write(
+                    summary_path,
+                    f"summaries/{row.file_index:03d}_{summary_path.name}",
+                )
+    return FileResponse(
+        path=str(zip_path),
+        filename=zip_path.name,
+        media_type="application/zip",
+    )
 
 
 @router.post("/{task_id}/visual-render", response_model=ApiResponse[dict])

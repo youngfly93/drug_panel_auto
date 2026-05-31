@@ -1,4 +1,5 @@
 import client from './client'
+import type { ReportSummary } from './report'
 
 export interface ValidationWarning {
   level: 'warning' | 'error' | 'info'
@@ -46,6 +47,7 @@ export interface InspectResult {
   sheets: SheetInfo[]
   single_values: Record<string, any>
   patient_enrichment?: PatientEnrichment | null
+  preview_summary?: ReportSummary | null
 }
 
 export const excelApi = {

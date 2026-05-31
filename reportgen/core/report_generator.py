@@ -36,6 +36,7 @@ from reportgen.core.qa_report import (
     build_docx_qa_report,
     write_docx_qa_report,
 )
+from reportgen.core.report_summary import build_report_summary, write_report_summary
 from reportgen.core.signature_library import resolve_signature_path
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.models.excel_data import ExcelDataSource
@@ -84,6 +85,8 @@ class _GenerationState:
     report_text_rules: dict[str, str] = dc_field(default_factory=dict)
     qa_report: Optional[dict[str, Any]] = None
     qa_report_file: Optional[str] = None
+    report_summary: Optional[dict[str, Any]] = None
+    report_summary_file: Optional[str] = None
     stage_results_file: Optional[str] = None
     qa_visual_render: Optional[str] = None
     qa_visual_render_required: Optional[bool] = None
@@ -264,6 +267,7 @@ class ReportGenerator:
                 "FieldProvenanceStage", self._stage_field_provenance, state
             )
             pipeline.run_step("QAStage", self._stage_qa, state)
+            pipeline.run_step("ReportSummaryStage", self._stage_report_summary, state)
 
             duration = time.time() - start_time
             self.logger.info(
@@ -977,6 +981,49 @@ class ReportGenerator:
             self.logger.warning("生成QA报告失败", error=str(qa_err))
             stage.warn("QA_REPORT_GENERATION_FAILED", str(qa_err))
 
+    def _stage_report_summary(
+        self,
+        stage: StageHandle,
+        state: _GenerationState,
+    ) -> None:
+        if state.final_output is None or state.report_data is None:
+            raise RuntimeError("Rendered report is unavailable before summary.")
+
+        try:
+            state.report_summary = build_report_summary(
+                report_data=state.report_data,
+                project_type=state.canonical_project_type,
+                project_name=state.project_name,
+                generation_id=state.generation_id or Path(state.final_output).stem,
+                output_file=state.final_output,
+                qa_report=state.qa_report,
+                warnings=state.report_data.validation_errors,
+            )
+            state.report_summary_file = write_report_summary(
+                state.report_summary,
+                state.final_output,
+            )
+            self.logger.log_event(
+                "report_summary_generated",
+                output=state.report_summary_file,
+                variant_count=state.report_summary.get("variants", {}).get("total"),
+            )
+            stage.artifacts["report_summary_file"] = state.report_summary_file
+            stage.metrics.update(
+                {
+                    "variant_count": state.report_summary.get("variants", {}).get(
+                        "total"
+                    ),
+                    "drug_related_count": state.report_summary.get(
+                        "variants", {}
+                    ).get("drug_related"),
+                    "qa_status": state.report_summary.get("qa", {}).get("status"),
+                }
+            )
+        except Exception as summary_err:
+            self.logger.warning("生成报告结果摘要失败", error=str(summary_err))
+            stage.warn("REPORT_SUMMARY_FAILED", str(summary_err))
+
     def _build_success_payload(
         self,
         state: _GenerationState,
@@ -999,6 +1046,8 @@ class ReportGenerator:
             "qa_report": state.qa_report,
             "qa_report_file": state.qa_report_file,
             "qa_status": state.qa_report.get("status") if state.qa_report else None,
+            "report_summary": state.report_summary,
+            "report_summary_file": state.report_summary_file,
             "generation_id": state.generation_id,
             **({"context": state.template_context} if state.return_context else {}),
         }

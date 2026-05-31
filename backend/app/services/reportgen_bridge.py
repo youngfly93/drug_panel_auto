@@ -6,6 +6,7 @@ ExcelReader, ProjectDetector, and FieldMapper without knowing internals.
 """
 
 import json
+import copy
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -22,12 +23,15 @@ if str(_upstream) not in sys.path:
 
 from reportgen.core.excel_reader import ExcelReader  # noqa: E402
 from reportgen.core.field_mapper import FieldMapper  # noqa: E402
+from reportgen.core.data_cleaner import DataCleaner  # noqa: E402
 from reportgen.core.enhancer_registry import (  # noqa: E402
+    get_enhancer,
     get_panel_registry,
     normalize_project_type,
 )
 from reportgen.core.project_detector import ProjectDetector  # noqa: E402
 from reportgen.core.report_generator import ReportGenerator  # noqa: E402
+from reportgen.core.report_summary import build_report_summary  # noqa: E402
 from reportgen.core.validation import validate_excel_data_common  # noqa: E402
 from reportgen.models.excel_data import ExcelDataSource  # noqa: E402
 
@@ -65,6 +69,7 @@ class ReportGenBridge:
         self._excel_reader: Optional[ExcelReader] = None
         self._detector: Optional[ProjectDetector] = None
         self._field_mapper: Optional[FieldMapper] = None
+        self._data_cleaner: Optional[DataCleaner] = None
 
     @property
     def generator(self) -> ReportGenerator:
@@ -99,6 +104,12 @@ class ReportGenBridge:
                 config_dir=self.config_dir, log_level="WARNING"
             )
         return self._field_mapper
+
+    @property
+    def data_cleaner(self) -> DataCleaner:
+        if self._data_cleaner is None:
+            self._data_cleaner = DataCleaner(log_level="WARNING")
+        return self._data_cleaner
 
     def read_excel(self, excel_path: str) -> ExcelDataSource:
         """Read an Excel file and return structured data."""
@@ -154,6 +165,91 @@ class ReportGenBridge:
         Returns list of {level: "warning"|"error", message: str}
         """
         return validate_excel_data_common(excel_data)
+
+    def build_preview_summary(
+        self,
+        *,
+        excel_data: ExcelDataSource,
+        clinical_info: Optional[dict[str, Any]] = None,
+        project_type: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Build a pre-generation result summary from the uploaded Excel.
+
+        This runs the same mapping/enhancement path used before rendering, but
+        deliberately skips DOCX rendering, QA, diff, and LibreOffice work.
+        """
+
+        working = ExcelDataSource(
+            file_path=excel_data.file_path,
+            single_values=copy.deepcopy(excel_data.single_values or {}),
+            table_data=copy.deepcopy(excel_data.table_data or {}),
+            sheet_names=list(excel_data.sheet_names or []),
+            metadata=copy.deepcopy(excel_data.metadata or {}),
+        )
+        if clinical_info:
+            self._inject_clinical_info_into_excel(working, clinical_info)
+
+        if not project_type and project_name:
+            inferred = self.infer_project_type_from_text(project_name)
+            if inferred.get("detected"):
+                project_type = inferred.get("project_type")
+                project_name = project_name or inferred.get("project_name")
+
+        canonical_project_type = None
+        panel_package = None
+        if project_type:
+            try:
+                canonical_project_type = normalize_project_type(project_type)
+                registration = get_panel_registry().get(canonical_project_type)
+                panel_package = registration.package if registration else None
+            except Exception:
+                canonical_project_type = project_type
+
+        if canonical_project_type and not project_name:
+            project_name = self._project_name_for_type(canonical_project_type)
+
+        report_data = self.field_mapper.map(working)
+        report_data = self.data_cleaner.validate_and_clean(report_data)
+        if project_name and canonical_project_type:
+            current = report_data.get_field("project_name")
+            if current != project_name:
+                report_data.set_field("project_name", project_name)
+
+        report_content = self.generator.config_loader.get_setting("report_content", {}) or {}
+        if isinstance(report_content, dict) and report_content:
+            report_data.set_field("report_content", report_content)
+        panel_style = self.generator._load_panel_style_config(panel_package)
+        if panel_style:
+            report_data.set_field("panel_style", panel_style)
+
+        enhancer = get_enhancer(canonical_project_type)
+        report_data = enhancer.enhance(
+            report_data,
+            working,
+            field_mapper=self.field_mapper,
+            gene_knowledge_provider=self._build_gene_knowledge_provider(),
+            base_path=str(Path(self.config_dir).parent),
+            project_type=canonical_project_type,
+            panel_package=panel_package,
+        )
+        self.generator._apply_clinical_diagnosis_for_display(report_data)
+        self.generator._set_patient_salutation(report_data)
+        if not str(report_data.get_field("report_date") or "").strip():
+            self.generator._mark_missing_report_date(report_data)
+
+        summary = build_report_summary(
+            report_data=report_data,
+            project_type=canonical_project_type,
+            project_name=project_name,
+            generation_id=Path(working.file_path).stem,
+            output_file=None,
+            qa_report=None,
+            warnings=report_data.validation_errors,
+        )
+        summary["preview"] = True
+        summary["source"] = "excel_inspect"
+        return summary
 
     def get_table_data(
         self,
@@ -426,54 +522,7 @@ class ReportGenBridge:
         # excel_data.single_values for matching SYNONYMS (not var_names).
         # So we must inject values using the FIRST SYNONYM as key.
         if clinical_info:
-            # Load mapping.yaml to get synonyms
-            import yaml
-            mapping_path = Path(self.config_dir) / "mapping.yaml"
-            with open(mapping_path, "r", encoding="utf-8") as f:
-                mapping_cfg = yaml.safe_load(f) or {}
-            single_values_cfg = mapping_cfg.get("single_values", {})
-            source_overrides = excel_data.metadata.setdefault(
-                "field_source_overrides", {}
-            )
-
-            for var_name, value in clinical_info.items():
-                if value is None or value == "":
-                    continue
-                if var_name in DERIVED_REPORT_FIELDS:
-                    continue
-                excel_owned_synonyms = EXCEL_OWNED_BIOMARKER_FIELDS.get(var_name)
-                if excel_owned_synonyms and any(
-                    key in excel_data.single_values for key in excel_owned_synonyms
-                ):
-                    # Prefer parsed Excel biomarkers over stale/hidden form data.
-                    continue
-
-                field_def = single_values_cfg.get(var_name)
-                injected_key = var_name
-                if field_def and isinstance(field_def, dict):
-                    synonyms = field_def.get("synonyms", [])
-                    if synonyms:
-                        # Use first synonym as the key so FieldMapper's
-                        # matches_column_name() will match it
-                        injected_key = synonyms[0]
-                        excel_data.single_values[injected_key] = value
-                    else:
-                        # Computed field (empty synonyms) — write to var_name directly
-                        # These get picked up as fallback via report_data.get_field
-                        excel_data.single_values[var_name] = value
-                else:
-                    # Unknown field — still inject under var_name for flexibility
-                    excel_data.single_values[var_name] = value
-                source_overrides[var_name] = {
-                    "source": "form",
-                    "source_key": injected_key,
-                    "source_detail": "web_clinical_form",
-                }
-
-            # Override filename-derived sample_id (the one used by patient_info.yaml lookup)
-            # This prevents patient_info.yaml fallback from overwriting user form input
-            if "sample_id" in clinical_info and clinical_info["sample_id"]:
-                excel_data.metadata["sample_id_from_filename"] = clinical_info["sample_id"]
+            self._inject_clinical_info_into_excel(excel_data, clinical_info)
 
         # Resolve project_name from project_type if not provided. This must not
         # depend on fuzzy detection because operators can manually select a type
@@ -516,6 +565,86 @@ class ReportGenBridge:
                     result["warnings"].append(f"签名图片插入失败: {e}")
 
         return result
+
+    def _inject_clinical_info_into_excel(
+        self,
+        excel_data: ExcelDataSource,
+        clinical_info: dict[str, Any],
+    ) -> None:
+        """Inject web clinical form fields so FieldMapper resolves them as input."""
+        import yaml
+
+        mapping_path = Path(self.config_dir) / "mapping.yaml"
+        with open(mapping_path, "r", encoding="utf-8") as f:
+            mapping_cfg = yaml.safe_load(f) or {}
+        single_values_cfg = mapping_cfg.get("single_values", {})
+        source_overrides = excel_data.metadata.setdefault("field_source_overrides", {})
+
+        for var_name, value in clinical_info.items():
+            if value is None or value == "":
+                continue
+            if var_name in DERIVED_REPORT_FIELDS:
+                continue
+            excel_owned_synonyms = EXCEL_OWNED_BIOMARKER_FIELDS.get(var_name)
+            if excel_owned_synonyms and any(
+                key in excel_data.single_values for key in excel_owned_synonyms
+            ):
+                # Prefer parsed Excel biomarkers over stale/hidden form data.
+                continue
+
+            field_def = single_values_cfg.get(var_name)
+            injected_key = var_name
+            if field_def and isinstance(field_def, dict):
+                synonyms = field_def.get("synonyms", [])
+                if synonyms:
+                    injected_key = synonyms[0]
+                    excel_data.single_values[injected_key] = value
+                else:
+                    excel_data.single_values[var_name] = value
+            else:
+                excel_data.single_values[var_name] = value
+            source_overrides[var_name] = {
+                "source": "form",
+                "source_key": injected_key,
+                "source_detail": "web_clinical_form",
+            }
+
+        if "sample_id" in clinical_info and clinical_info["sample_id"]:
+            excel_data.metadata["sample_id_from_filename"] = clinical_info["sample_id"]
+
+    def _build_gene_knowledge_provider(self):
+        try:
+            kb_enabled = bool(
+                self.generator.config_loader.get_setting(
+                    "knowledge_bases.gene_knowledge_db.enabled", False
+                )
+            ) or bool(
+                self.generator.config_loader.get_setting(
+                    "knowledge_bases.gene_transcript_db.enabled", False
+                )
+            )
+            if not kb_enabled:
+                return None
+            from reportgen.knowledge import GeneKnowledgeProvider
+
+            kb_cfg = self.generator.config_loader.get_setting("knowledge_bases", {}) or {}
+            return GeneKnowledgeProvider(
+                {
+                    "enabled": True,
+                    "gene_knowledge_db": kb_cfg.get("gene_knowledge_db", {}),
+                    "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
+                }
+            )
+        except Exception:
+            return None
+
+    def _project_name_for_type(self, project_type: Optional[str]) -> Optional[str]:
+        if not project_type:
+            return None
+        for entry in self.detector.project_types:
+            if entry.get("id") == project_type:
+                return entry.get("name")
+        return None
 
     def _resolve_template_path(
         self,

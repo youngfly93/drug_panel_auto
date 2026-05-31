@@ -7,8 +7,10 @@
           <el-option label="全部" value="" />
           <el-option label="运行中" value="running" />
           <el-option label="已完成" value="completed" />
+          <el-option label="部分失败" value="partial_failed" />
           <el-option label="失败" value="failed" />
           <el-option label="待执行" value="pending" />
+          <el-option label="已取消" value="cancelled" />
         </el-select>
         <el-button @click="fetchTasks">刷新</el-button>
       </div>
@@ -59,10 +61,18 @@
       </el-table-column>
       <el-table-column label="进度" width="120">
         <template #default="{ row }">
-          <span v-if="row.task_type === 'batch'">
-            {{ row.completed_files }}/{{ row.total_files }}
-            <span v-if="row.failed_files > 0" style="color: #f56c6c"> ({{ row.failed_files }}失败)</span>
-          </span>
+          <div v-if="row.task_type === 'batch'" class="batch-progress-cell">
+            <el-progress
+              :percentage="batchProgress(row)"
+              :status="row.status === 'failed' || row.status === 'partial_failed' ? 'exception' : row.status === 'completed' ? 'success' : undefined"
+              :show-text="false"
+            />
+            <span>
+              {{ row.completed_files }}/{{ row.total_files }}
+              <em v-if="row.failed_files > 0">{{ row.failed_files }}失败</em>
+              <em v-if="(row.cancelled_files || 0) > 0">{{ row.cancelled_files }}取消</em>
+            </span>
+          </div>
           <span v-else>-</span>
         </template>
       </el-table-column>
@@ -137,7 +147,7 @@ const statCards = computed(() => ({
 
 function statusTagType(status: string) {
   const map: Record<string, string> = {
-    completed: 'success', failed: 'danger', running: 'warning',
+    completed: 'success', partial_failed: 'danger', failed: 'danger', running: 'warning',
     pending: 'info', cancelled: 'info',
   }
   return map[status] || 'info'
@@ -145,7 +155,7 @@ function statusTagType(status: string) {
 
 function statusLabel(status: string) {
   const map: Record<string, string> = {
-    completed: '已完成', failed: '失败', running: '运行中',
+    completed: '已完成', partial_failed: '部分失败', failed: '失败', running: '运行中',
     pending: '待执行', cancelled: '已取消',
   }
   return map[status] || status
@@ -161,6 +171,12 @@ function qaTagType(status: string) {
 function diffTagType(row: TaskItem) {
   if (row.diff_gate_passed === false) return 'danger'
   return qaTagType(row.diff_status || '')
+}
+
+function batchProgress(row: TaskItem) {
+  if (!row.total_files) return 0
+  const done = (row.completed_files || 0) + (row.failed_files || 0) + (row.cancelled_files || 0)
+  return Math.min(100, Math.round((done / row.total_files) * 100))
 }
 
 async function fetchTasks() {
@@ -204,3 +220,22 @@ function openDetail(taskId: string) {
 watch(statusFilter, () => { page.value = 1; fetchTasks() })
 onMounted(fetchTasks)
 </script>
+
+<style scoped>
+.batch-progress-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.batch-progress-cell span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.batch-progress-cell em {
+  color: #f56c6c;
+  font-style: normal;
+  margin-left: 4px;
+}
+</style>

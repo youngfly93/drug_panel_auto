@@ -55,8 +55,192 @@
         </div>
       </section>
 
+      <section v-if="isBatchTask" class="qa-panel section-gap">
+        <div class="panel-title">
+          <span>批量生成进度</span>
+          <div class="stage-title-meta">
+            <el-tag size="small" :type="statusTagType(task?.status || '')">
+              {{ statusLabel(task?.status || '-') }}
+            </el-tag>
+            <el-tag size="small" type="info">
+              {{ task?.completed_files || 0 }}/{{ task?.total_files || 0 }}
+            </el-tag>
+          </div>
+        </div>
+        <div class="batch-detail-progress">
+          <el-progress
+            :percentage="batchProgressPercent"
+            :status="task?.status === 'failed' || task?.status === 'partial_failed' ? 'exception' : task?.status === 'completed' ? 'success' : undefined"
+          />
+          <div class="batch-summary-grid">
+            <div v-for="item in batchSummaryCards" :key="item.label">
+              <span>{{ item.label }}</span>
+              <strong :class="item.className">{{ item.value }}</strong>
+            </div>
+          </div>
+          <div class="batch-detail-actions">
+            <el-button
+              v-if="task?.completed_files"
+              type="primary"
+              :icon="Download"
+              @click="downloadBatchZip"
+            >
+              下载成功报告 ZIP
+            </el-button>
+            <el-popconfirm
+              v-if="task?.status === 'running' || task?.status === 'pending'"
+              title="确认取消当前批量任务？正在生成的文件会完成本轮后停止。"
+              @confirm="cancelBatchTask"
+            >
+              <template #reference>
+                <el-button type="danger" plain :loading="batchCancelling">取消任务</el-button>
+              </template>
+            </el-popconfirm>
+            <el-button
+              v-if="canRetryBatch"
+              type="warning"
+              plain
+              :loading="batchRetrying"
+              @click="retryFailedBatch"
+            >
+              重试失败文件
+            </el-button>
+            <el-button :icon="Refresh" @click="fetchAll">刷新</el-button>
+          </div>
+        </div>
+        <el-table
+          v-if="batchResultDetailRows.length"
+          :data="batchResultDetailRows"
+          size="small"
+          border
+          class="batch-detail-table"
+        >
+          <el-table-column prop="index" label="#" width="70" />
+          <el-table-column prop="excel_filename" label="Excel" min-width="220" show-overflow-tooltip />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" :type="statusTagType(row.status)">
+                {{ statusLabel(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="project_name" label="项目" min-width="170" show-overflow-tooltip />
+          <el-table-column label="患者/样本" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.patient_label }}
+            </template>
+          </el-table-column>
+          <el-table-column label="QA" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="row.qa_status" size="small" :type="qaTagType(row.qa_status)">
+                {{ row.qa_status }}
+              </el-tag>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="duration_seconds" label="耗时" width="100">
+            <template #default="{ row }">
+              {{ row.duration_seconds ? `${row.duration_seconds.toFixed(1)}s` : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="说明" min-width="260" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.errors?.[0] || row.warnings?.[0] || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.download_url"
+                text
+                type="primary"
+                size="small"
+                @click="downloadBatchItem(row.download_url)"
+              >
+                下载
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-else description="暂无逐文件结果" :image-size="70" />
+      </section>
+
+      <section v-if="!isBatchTask" class="qa-panel report-summary section-gap">
+        <div class="panel-title">
+          <span>报告结果概览</span>
+          <div class="stage-title-meta">
+            <el-tag size="small" :type="qaTagType(reportSummary?.qa?.status || task?.qa_status)">
+              {{ reportSummary?.qa?.status || task?.qa_status || '未生成' }}
+            </el-tag>
+            <el-tag v-if="reportSummary?.project_name" size="small" type="info">
+              {{ reportSummary.project_name }}
+            </el-tag>
+          </div>
+        </div>
+        <el-alert
+          v-if="summaryLoadError"
+          :title="summaryLoadError"
+          type="info"
+          show-icon
+          :closable="false"
+          class="stage-alert"
+        />
+        <template v-else-if="reportSummary">
+          <div class="patient-strip">
+            <div v-for="item in summaryPatientItems" :key="item.label">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
+          <div class="summary-metrics">
+            <div v-for="metric in summaryMetricCards" :key="metric.label" class="metric-box">
+              <span>{{ metric.label }}</span>
+              <strong :class="metric.className">{{ metric.value }}</strong>
+            </div>
+          </div>
+          <div class="biomarker-grid">
+            <div v-for="item in biomarkerCards" :key="item.label" class="biomarker-card">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <em>{{ item.detail }}</em>
+            </div>
+          </div>
+          <el-alert
+            v-if="manualReviewItems.length"
+            :title="manualReviewItems.join('；')"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="summary-alert"
+          />
+          <div class="summary-tables">
+            <div>
+              <div class="table-subtitle">关键变异</div>
+              <el-table :data="summaryVariantRows" size="small" border>
+                <el-table-column prop="gene" label="基因" width="100" show-overflow-tooltip />
+                <el-table-column prop="variant_site" label="变异" min-width="190" show-overflow-tooltip />
+                <el-table-column prop="classification" label="等级" width="90" show-overflow-tooltip />
+                <el-table-column prop="frequency" label="丰度" width="90" show-overflow-tooltip />
+                <el-table-column prop="benefit_drugs" label="获益药物" min-width="150" show-overflow-tooltip />
+                <el-table-column prop="caution_drugs" label="耐药/慎用" min-width="150" show-overflow-tooltip />
+              </el-table>
+            </div>
+            <div>
+              <div class="table-subtitle">用药提示</div>
+              <el-table :data="summaryDrugRows" size="small" border>
+                <el-table-column prop="gene" label="基因" width="100" show-overflow-tooltip />
+                <el-table-column prop="variant_site" label="变异" min-width="180" show-overflow-tooltip />
+                <el-table-column prop="benefit_drugs" label="潜在获益" min-width="160" show-overflow-tooltip />
+                <el-table-column prop="caution_drugs" label="耐药/慎用" min-width="160" show-overflow-tooltip />
+              </el-table>
+            </div>
+          </div>
+        </template>
+        <el-empty v-else description="未找到报告结果摘要" :image-size="70" />
+      </section>
+
       <el-alert
-        v-if="qaLoadError"
+        v-if="qaLoadError && !isBatchTask"
         :title="qaLoadError"
         type="warning"
         show-icon
@@ -64,7 +248,7 @@
         class="section-gap"
       />
 
-      <section class="qa-grid section-gap">
+      <section v-if="!isBatchTask" class="qa-grid section-gap">
         <div class="qa-panel issues-panel">
           <div class="panel-title">
             <span>问题列表</span>
@@ -409,7 +593,9 @@ import { ArrowLeft, Download, Refresh, UploadFilled } from '@element-plus/icons-
 import { ElMessage } from 'element-plus'
 import {
   reportApi,
+  type BatchResults,
   type ReportDiffResult,
+  type ReportSummary,
   type TaskStatus,
   type VisualRenderResult,
 } from '@/api/report'
@@ -421,16 +607,21 @@ const loading = ref(false)
 const rendering = ref(false)
 const diffing = ref(false)
 const autoDiffing = ref(false)
+const batchRetrying = ref(false)
+const batchCancelling = ref(false)
 const task = ref<TaskStatus | null>(null)
 const qaReport = ref<Record<string, any> | null>(null)
+const reportSummary = ref<ReportSummary | null>(null)
 const provenance = ref<Record<string, any> | null>(null)
 const stageReport = ref<Record<string, any> | null>(null)
+const batchResults = ref<BatchResults | null>(null)
 const visualRender = ref<VisualRenderResult | null>(null)
 const reportDiff = ref<ReportDiffResult | null>(null)
 const referenceFile = ref<File | null>(null)
 const referenceFileList = ref<any[]>([])
 const diffFailOn = ref<'fail' | 'warn'>('fail')
 const qaLoadError = ref('')
+const summaryLoadError = ref('')
 const provenanceLoadError = ref('')
 const stageLoadError = ref('')
 
@@ -502,6 +693,114 @@ const diffIssueRows = computed(() => reportDiff.value?.issues || [])
 const batchDiffRows = computed(() => reportDiff.value?.items || [])
 const isBatchTask = computed(() => task.value?.task_type === 'batch')
 const isBatchDiff = computed(() => Boolean(reportDiff.value?.items?.length))
+const batchProgressPercent = computed(() => {
+  if (!task.value?.total_files) return 0
+  const done = (
+    (task.value.completed_files || 0)
+    + (task.value.failed_files || 0)
+    + (task.value.cancelled_files || 0)
+  )
+  return Math.min(100, Math.round((done / task.value.total_files) * 100))
+})
+const canRetryBatch = computed(() => {
+  const status = task.value?.status
+  return Boolean(
+    task.value?.task_type === 'batch'
+    && status
+    && ['completed', 'failed', 'partial_failed', 'cancelled'].includes(status)
+    && (task.value.failed_files || 0) > 0,
+  )
+})
+const batchSummaryCards = computed(() => {
+  const t = task.value
+  const counts = batchResults.value?.status_counts || t?.status_counts || {}
+  return [
+    { label: '总文件', value: String(t?.total_files || 0) },
+    { label: '运行中', value: String(counts.running || t?.running_files || 0) },
+    { label: '已完成', value: String(t?.completed_files || 0), className: 'ok-text' },
+    { label: '失败', value: String(t?.failed_files || 0), className: t?.failed_files ? 'bad-text' : '' },
+    { label: '已取消', value: String(counts.cancelled || t?.cancelled_files || 0) },
+  ]
+})
+const batchResultDetailRows = computed(() => {
+  return (batchResults.value?.items || []).map((row) => {
+    const clinical = row.clinical_info || {}
+    return {
+      ...row,
+      patient_label: [
+        clinical.patient_name,
+        clinical.sample_id,
+      ].filter(Boolean).join(' / ') || '-',
+    }
+  })
+})
+const summaryPatientItems = computed(() => {
+  const patient = reportSummary.value?.patient || {}
+  return [
+    { label: '姓名', value: stringifyValue(patient.patient_name) },
+    { label: '报告编号', value: stringifyValue(patient.report_number || patient.sample_id) },
+    { label: '诊断', value: stringifyValue(patient.clinical_diagnosis) },
+    { label: '样本类型', value: stringifyValue(patient.sample_type) },
+    { label: '报告日期', value: stringifyValue(patient.report_date) },
+  ]
+})
+const summaryMetricCards = computed(() => {
+  const variants = reportSummary.value?.variants || {}
+  const drugs = reportSummary.value?.drugs || {}
+  const qa = reportSummary.value?.qa || {}
+  const qaStatus = qa.status || task.value?.qa_status || '未生成'
+  return [
+    { label: '检出变异', value: stringifyValue(variants.total) },
+    { label: '药物相关', value: stringifyValue(variants.drug_related) },
+    { label: '小结变异', value: stringifyValue(variants.summary_count) },
+    { label: '靶向提示', value: stringifyValue(drugs.targeted_count) },
+    { label: 'QA', value: qaStatus, className: qaStatus === 'FAIL' ? 'bad-text' : qaStatus === 'WARN' ? 'warn-text' : 'ok-text' },
+  ]
+})
+const biomarkerCards = computed(() => {
+  const biomarkers = reportSummary.value?.biomarkers || {}
+  const tmb = biomarkers.tmb || {}
+  const msi = biomarkers.msi || {}
+  const immune = biomarkers.immune || {}
+  return [
+    {
+      label: 'TMB',
+      value: stringifyValue(tmb.status || tmb.value),
+      detail: stringifyValue(tmb.summary),
+    },
+    {
+      label: 'MSI',
+      value: stringifyValue(msi.status),
+      detail: stringifyValue(msi.summary),
+    },
+    {
+      label: '免疫正相关',
+      value: stringifyValue(immune.positive),
+      detail: '正相关基因检测结果',
+    },
+    {
+      label: '免疫负相关',
+      value: stringifyValue(immune.negative),
+      detail: '负相关基因检测结果',
+    },
+    {
+      label: '超进展相关',
+      value: stringifyValue(immune.hyperprogression),
+      detail: '超进展相关基因检测结果',
+    },
+  ]
+})
+const summaryVariantRows = computed(() => {
+  const rows = reportSummary.value?.variants?.key_rows
+    || reportSummary.value?.variants?.summary_rows
+    || []
+  return rows.map((row) => normalizeSummaryRow(row))
+})
+const summaryDrugRows = computed(() => {
+  const rows = reportSummary.value?.drugs?.targeted_rows || []
+  return rows.map((row) => normalizeSummaryRow(row))
+})
+const manualReviewItems = computed(() => reportSummary.value?.manual_review || [])
 
 const diffGateTagType = computed(() => {
   if (task.value?.diff_gate_passed === false || reportDiff.value?.gate?.passed === false) return 'danger'
@@ -603,6 +902,17 @@ function stringifyValue(value: unknown) {
   return JSON.stringify(value)
 }
 
+function normalizeSummaryRow(row: Record<string, any>) {
+  return {
+    gene: stringifyValue(row.gene),
+    variant_site: stringifyValue(row.variant_site),
+    classification: stringifyValue(row.classification),
+    frequency: stringifyValue(row.frequency),
+    benefit_drugs: stringifyValue(row.benefit_drugs),
+    caution_drugs: stringifyValue(row.caution_drugs),
+  }
+}
+
 function formatSimilarity(value?: number | null) {
   if (value === null || value === undefined) return '-'
   return `${(value * 100).toFixed(2)}%`
@@ -627,6 +937,7 @@ function stageLabel(name?: string) {
     TemplateRenderStage: '渲染 Word 报告',
     FieldProvenanceStage: '生成字段来源',
     QAStage: '报告质量检查',
+    ReportSummaryStage: '生成结果摘要',
   }
   return map[name || ''] || name || '-'
 }
@@ -641,9 +952,11 @@ function stageSummary(row: Record<string, any>) {
   if (metrics.variants !== undefined) parts.push(`变异 ${metrics.variants}`)
   if (metrics.qa_status) parts.push(`QA ${metrics.qa_status}`)
   if (metrics.issue_count !== undefined) parts.push(`问题 ${metrics.issue_count}`)
+  if (metrics.variant_count !== undefined) parts.push(`摘要变异 ${metrics.variant_count}`)
   if (artifacts.output_file) parts.push('已生成报告')
   if (artifacts.qa_report_file) parts.push('已生成 QA')
   if (artifacts.field_provenance_file) parts.push('已生成字段来源')
+  if (artifacts.report_summary_file) parts.push('已生成结果摘要')
   return parts.join('；') || '-'
 }
 
@@ -658,6 +971,7 @@ function stageIssueSummary(row: Record<string, any>) {
 function statusTagType(status: string) {
   const map: Record<string, string> = {
     completed: 'success',
+    partial_failed: 'danger',
     failed: 'danger',
     running: 'warning',
     pending: 'info',
@@ -669,6 +983,7 @@ function statusTagType(status: string) {
 function statusLabel(status: string) {
   const map: Record<string, string> = {
     completed: '已完成',
+    partial_failed: '部分失败',
     failed: '失败',
     running: '运行中',
     pending: '待执行',
@@ -691,6 +1006,7 @@ function qaTagType(status?: string | null) {
 async function fetchAll() {
   loading.value = true
   qaLoadError.value = ''
+  summaryLoadError.value = ''
   provenanceLoadError.value = ''
   stageLoadError.value = ''
   try {
@@ -706,11 +1022,26 @@ async function fetchAll() {
     } catch {
       reportDiff.value = null
     }
+    if (task.value?.task_type === 'batch') {
+      try {
+        batchResults.value = await reportApi.getBatchResults(taskId)
+      } catch {
+        batchResults.value = null
+      }
+    } else {
+      batchResults.value = null
+    }
     try {
       qaReport.value = await reportApi.getQaReport(taskId)
     } catch (err: any) {
       qaReport.value = null
       qaLoadError.value = err.response?.data?.detail || 'QA 报告尚未生成'
+    }
+    try {
+      reportSummary.value = await reportApi.getReportSummary(taskId)
+    } catch (err: any) {
+      reportSummary.value = null
+      summaryLoadError.value = err.response?.data?.detail || '报告结果摘要尚未生成'
     }
     try {
       provenance.value = await reportApi.getFieldProvenance(taskId)
@@ -823,6 +1154,40 @@ function downloadBatchItemDiff(itemKey: string, artifact: 'report_diff.json' | '
 
 function downloadReport() {
   window.open(reportApi.getDownloadUrl(taskId), '_blank')
+}
+
+function downloadBatchZip() {
+  window.open(reportApi.getBatchDownloadUrl(taskId), '_blank')
+}
+
+function downloadBatchItem(url: string) {
+  window.open(url, '_blank')
+}
+
+async function cancelBatchTask() {
+  batchCancelling.value = true
+  try {
+    await reportApi.cancelTask(taskId)
+    ElMessage.success('批量任务已取消')
+    await fetchAll()
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '取消失败')
+  } finally {
+    batchCancelling.value = false
+  }
+}
+
+async function retryFailedBatch() {
+  batchRetrying.value = true
+  try {
+    const accepted = await reportApi.retryBatchFailed(taskId)
+    ElMessage.info(`已重试 ${accepted.retry_files || 0} 个失败文件`)
+    await fetchAll()
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '重试失败')
+  } finally {
+    batchRetrying.value = false
+  }
 }
 
 onMounted(fetchAll)
@@ -971,8 +1336,147 @@ onMounted(fetchAll)
   font-size: 16px;
 }
 
+.report-summary {
+  overflow: hidden;
+}
+
+.patient-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-bottom: 1px solid #e6edf3;
+}
+
+.patient-strip div {
+  min-height: 58px;
+  padding: 10px 14px;
+  border-right: 1px solid #e6edf3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.patient-strip div:last-child {
+  border-right: 0;
+}
+
+.patient-strip span,
+.biomarker-card span,
+.table-subtitle {
+  color: #667085;
+  font-size: 12px;
+}
+
+.patient-strip strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  border-bottom: 1px solid #e6edf3;
+}
+
+.summary-metrics .metric-box {
+  border-bottom: 0;
+}
+
+.biomarker-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-bottom: 1px solid #e6edf3;
+}
+
+.biomarker-card {
+  min-height: 92px;
+  padding: 12px 14px;
+  border-right: 1px solid #e6edf3;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.biomarker-card:last-child {
+  border-right: 0;
+}
+
+.biomarker-card strong {
+  font-size: 18px;
+}
+
+.biomarker-card em {
+  color: #475467;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.summary-alert {
+  margin: 14px 14px 0;
+}
+
+.summary-tables {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.table-subtitle {
+  margin-bottom: 8px;
+  font-weight: 650;
+}
+
 .section-gap {
   margin-top: 18px;
+}
+
+.batch-detail-progress {
+  padding: 14px;
+  border-bottom: 1px solid #e6edf3;
+}
+
+.batch-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  border: 1px solid #e6edf3;
+  margin-top: 12px;
+}
+
+.batch-summary-grid div {
+  min-height: 58px;
+  padding: 9px 12px;
+  border-right: 1px solid #e6edf3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.batch-summary-grid div:last-child {
+  border-right: 0;
+}
+
+.batch-summary-grid span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.batch-summary-grid strong {
+  font-size: 17px;
+}
+
+.batch-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.batch-detail-table {
+  margin-top: 0;
 }
 
 .qa-grid {
@@ -1096,8 +1600,13 @@ pre {
 
 @media (max-width: 980px) {
   .summary-band,
+  .patient-strip,
+  .summary-metrics,
+  .biomarker-grid,
+  .summary-tables,
   .qa-grid,
-  .diff-metrics {
+  .diff-metrics,
+  .batch-summary-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1120,6 +1629,17 @@ pre {
   }
 
   .metric-box:last-child {
+    border-bottom: 0;
+  }
+
+  .patient-strip div,
+  .biomarker-card {
+    border-right: 0;
+    border-bottom: 1px solid #e6edf3;
+  }
+
+  .patient-strip div:last-child,
+  .biomarker-card:last-child {
     border-bottom: 0;
   }
 

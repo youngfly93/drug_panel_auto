@@ -1,15 +1,17 @@
 """Task queue management endpoints."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.task import Task
+from app.models.task import Task, TaskResult
 from app.schemas.common import ApiResponse
 from app.services import reference_report_service as diff_svc
 
@@ -59,6 +61,30 @@ def _load_stage_results_summary(
     return str(stage_path), payload.get("generation_id")
 
 
+def _batch_status_counts(db: Session, task_id: str) -> dict[str, int]:
+    counts = {
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0,
+        "cancelled": 0,
+    }
+    rows = (
+        db.query(TaskResult.status, func.count(TaskResult.id))
+        .filter(TaskResult.task_id == task_id)
+        .group_by(TaskResult.status)
+        .all()
+    )
+    for status, count in rows:
+        counts[status or "pending"] = count
+    return counts
+
+
+def _apply_batch_counts(task: Task, counts: dict[str, int]) -> None:
+    task.completed_files = counts.get("completed", 0)
+    task.failed_files = counts.get("failed", 0)
+
+
 @router.get("", response_model=ApiResponse)
 def list_tasks(
     status: str = Query(None, description="Filter by status"),
@@ -78,6 +104,7 @@ def list_tasks(
 
     items = []
     for t in tasks:
+        batch_counts = _batch_status_counts(db, t.id) if t.task_type == "batch" else {}
         qa_report_file, qa_status = _load_qa_summary(t.output_path)
         stage_results_file, generation_id = _load_stage_results_summary(
             t.output_path,
@@ -100,6 +127,10 @@ def list_tasks(
             "total_files": t.total_files,
             "completed_files": t.completed_files,
             "failed_files": t.failed_files,
+            "cancelled_files": batch_counts.get("cancelled", 0),
+            "pending_files": batch_counts.get("pending", 0),
+            "running_files": batch_counts.get("running", 0),
+            "status_counts": batch_counts,
             "created_at": t.created_at.isoformat() if t.created_at else None,
             "started_at": t.started_at.isoformat() if t.started_at else None,
             "completed_at": t.completed_at.isoformat() if t.completed_at else None,
@@ -114,9 +145,11 @@ def list_tasks(
 def task_stats(db: Session = Depends(get_db)):
     total = db.query(Task).count()
     completed = db.query(Task).filter(Task.status == "completed").count()
-    failed = db.query(Task).filter(Task.status == "failed").count()
+    failed = db.query(Task).filter(Task.status.in_(["failed", "partial_failed"])).count()
     running = db.query(Task).filter(Task.status == "running").count()
     pending = db.query(Task).filter(Task.status == "pending").count()
+    partial_failed = db.query(Task).filter(Task.status == "partial_failed").count()
+    cancelled = db.query(Task).filter(Task.status == "cancelled").count()
 
     return ApiResponse(data={
         "total": total,
@@ -124,6 +157,8 @@ def task_stats(db: Session = Depends(get_db)):
         "failed": failed,
         "running": running,
         "pending": pending,
+        "partial_failed": partial_failed,
+        "cancelled": cancelled,
     })
 
 
@@ -138,6 +173,7 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
         task_id=task.id,
     )
     diff_summary = diff_svc.report_diff_summary(task.output_path)
+    batch_counts = _batch_status_counts(db, task.id) if task.task_type == "batch" else {}
 
     return ApiResponse(data={
         "id": task.id,
@@ -147,6 +183,10 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
         "total_files": task.total_files,
         "completed_files": task.completed_files,
         "failed_files": task.failed_files,
+        "cancelled_files": batch_counts.get("cancelled", 0),
+        "pending_files": batch_counts.get("pending", 0),
+        "running_files": batch_counts.get("running", 0),
+        "status_counts": batch_counts,
         "output_path": task.output_path,
         "qa_status": qa_status,
         "qa_report_file": qa_report_file,
@@ -175,6 +215,20 @@ def cancel_task(task_id: str, db: Session = Depends(get_db)):
     if task.status not in ("pending", "running"):
         raise HTTPException(status_code=400, detail="只能取消待执行或执行中的任务")
 
+    if task.task_type == "batch":
+        (
+            db.query(TaskResult)
+            .filter(TaskResult.task_id == task_id, TaskResult.status == "pending")
+            .update({TaskResult.status: "cancelled"}, synchronize_session=False)
+        )
+        counts = _batch_status_counts(db, task_id)
+        _apply_batch_counts(task, counts)
+        warnings = json.loads(task.warnings) if task.warnings else []
+        warnings.append("用户已取消批量任务；当前正在生成的文件会完成本轮后停止后续文件。")
+        task.warnings = json.dumps(warnings, ensure_ascii=False)
     task.status = "cancelled"
+    task.completed_at = task.completed_at or datetime.utcnow()
+    if task.started_at and task.completed_at:
+        task.duration_seconds = (task.completed_at - task.started_at).total_seconds()
     db.commit()
     return ApiResponse(data={"id": task_id, "status": "cancelled"})

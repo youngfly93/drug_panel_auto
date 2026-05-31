@@ -47,6 +47,7 @@ class InspectResponse(BaseModel):
     sheets: list[SheetInfo]
     single_values: dict[str, Any]
     patient_enrichment: Optional[dict[str, Any]] = None
+    preview_summary: Optional[dict[str, Any]] = None
 
 
 class DetectResult(BaseModel):

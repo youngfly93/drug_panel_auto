@@ -123,16 +123,7 @@ def inspect_excel(
         str(Path(stored_path).parent / (file.filename or "upload.xlsx")),
         excel_data=excel_data,
     )
-    upload = UploadResponse(
-        upload_id=upload_id,
-        original_filename=file.filename,
-        file_size_bytes=file_size,
-        sheet_names=sheet_names,
-        detected_project_type=detect.get("project_type"),
-        detected_project_name=detect.get("project_name"),
-        detection_confidence=detect.get("confidence"),
-        validation_warnings=bridge.validate_excel_data(excel_data),
-    )
+    validation_warnings = bridge.validate_excel_data(excel_data)
 
     single_values = bridge.get_mapped_clinical_fields(excel_data)
     sample_id = single_values.get("sample_id")
@@ -147,6 +138,34 @@ def inspect_excel(
             enrichment,
         )
 
+    preview_summary = None
+    try:
+        preview_summary = bridge.build_preview_summary(
+            excel_data=excel_data,
+            clinical_info=single_values,
+            project_type=detect.get("project_type"),
+            project_name=detect.get("project_name"),
+        )
+    except Exception as exc:
+        validation_warnings.append(
+            {
+                "level": "warning",
+                "field": "preview_summary",
+                "message": f"上传后结果预览生成失败: {exc}",
+            }
+        )
+
+    upload = UploadResponse(
+        upload_id=upload_id,
+        original_filename=file.filename,
+        file_size_bytes=file_size,
+        sheet_names=sheet_names,
+        detected_project_type=detect.get("project_type"),
+        detected_project_name=detect.get("project_name"),
+        detection_confidence=detect.get("confidence"),
+        validation_warnings=validation_warnings,
+    )
+
     return ApiResponse(
         data=InspectResponse(
             upload=upload,
@@ -155,6 +174,7 @@ def inspect_excel(
             patient_enrichment=(
                 enrichment.model_dump() if enrichment is not None else None
             ),
+            preview_summary=preview_summary,
         )
     )
 
