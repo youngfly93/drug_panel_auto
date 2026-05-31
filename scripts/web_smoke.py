@@ -34,6 +34,10 @@ ADMIN_USERNAME = os.environ.get("WEB_SMOKE_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("WEB_SMOKE_ADMIN_PASSWORD", "admin123")
 TIMEOUT_SECONDS = int(os.environ.get("WEB_SMOKE_TIMEOUT_SECONDS", "240"))
 MIN_DOCX_BYTES = int(os.environ.get("WEB_SMOKE_MIN_DOCX_BYTES", "1000000"))
+USER_AGENT = os.environ.get(
+    "WEB_SMOKE_USER_AGENT",
+    "Mozilla/5.0 ReportGenSmoke/1.0",
+)
 
 
 class SmokeFailure(RuntimeError):
@@ -52,10 +56,11 @@ def _request(
     headers: dict[str, str] | None = None,
     timeout: int = 120,
 ) -> tuple[int, bytes, dict[str, str]]:
+    request_headers = {"User-Agent": USER_AGENT, **(headers or {})}
     req = urllib.request.Request(
         _url(path),
         data=body,
-        headers=headers or {},
+        headers=request_headers,
         method=method,
     )
     try:
