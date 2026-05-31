@@ -89,6 +89,46 @@ Logs are written to:
 /media/desk16/iyun6208/apps/reportgen-web-runtime/logs/watchdog.log
 ```
 
+## Backup And Cleanup
+
+Install or refresh the user-level daily maintenance cron with:
+
+```bash
+bash scripts/iyun62_install_maintenance.sh
+```
+
+This installs `/media/desk16/iyun6208/apps/reportgen-web-runtime/backup.sh`
+and a daily `crontab` block. The default schedule is `02:17` server time.
+
+The maintenance job:
+
+- creates a server-local archive under
+  `/media/desk16/iyun6208/apps/reportgen-web-backups`;
+- backs up SQLite using the SQLite online backup API, then runs
+  `PRAGMA integrity_check` on the backup copy;
+- includes uploads, generated reports, signatures, and reference reports;
+- writes a redacted manifest with storage counts/sizes, current release, and
+  archive SHA-256;
+- verifies the `.tar.gz` archive and extracted SQLite copy;
+- removes old backup archives after `BACKUP_KEEP_DAYS`, default `30`;
+- removes old clean release directories while keeping the current release and
+  the newest `RELEASE_KEEP_COUNT`, default `8`;
+- removes stale previews and rotated logs.
+
+Manual commands:
+
+```bash
+ssh iyun-server '/media/desk16/iyun6208/apps/reportgen-web-runtime/backup.sh backup'
+ssh iyun-server 'DRY_RUN=1 /media/desk16/iyun6208/apps/reportgen-web-runtime/backup.sh cleanup'
+ssh iyun-server '/media/desk16/iyun6208/apps/reportgen-web-runtime/backup.sh verify --archive /media/desk16/iyun6208/apps/reportgen-web-backups/reportgen-web-backup-YYYYmmdd_HHMMSS.tar.gz'
+```
+
+Maintenance logs are written to:
+
+```text
+/media/desk16/iyun6208/apps/reportgen-web-runtime/logs/maintenance.log
+```
+
 ## Download Performance Triage
 
 Report download responses include diagnostic headers:
