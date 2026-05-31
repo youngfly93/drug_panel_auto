@@ -188,6 +188,53 @@ The same status payload exposes the active retention policy under `retention`,
 so the dashboard shows the actual keep-days currently used by the deployed
 environment.
 
+## Active Alerts
+
+Install or refresh the user-level alert cron with:
+
+```bash
+ALERT_WEBHOOK_URL='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...' \
+  bash scripts/iyun62_install_alerts.sh
+```
+
+This installs:
+
+- `/media/desk16/iyun6208/apps/reportgen-web-runtime/alerts.sh`
+- optional secret env file
+  `/media/desk16/iyun6208/apps/reportgen-web-runtime/alerts.env`
+- one `crontab` block that runs every 5 minutes by default
+
+The alert job reads the sanitized local ops endpoint:
+
+```text
+http://127.0.0.1:8000/api/v1/admin/ops/status?recent_task_limit=5&download_event_limit=50
+```
+
+It sends only alert IDs, severity, labels, titles, messages, thresholds, release
+metadata, and retention settings. It does not read or send patient fields, Excel
+filenames, report filenames, full paths, IP addresses, or user agents.
+
+Supported webhook formats:
+
+- `ALERT_FORMAT=auto` detects enterprise WeChat, DingTalk, Feishu, or generic
+  JSON from the webhook URL;
+- `ALERT_FORMAT=wecom|dingtalk|feishu|generic` forces one format.
+
+Noise controls:
+
+- `ALERT_MIN_SEVERITY=warning` sends warning and danger alerts;
+- `ALERT_MIN_SEVERITY=danger` sends danger alerts only;
+- `ALERT_REPEAT_MINUTES=60` resends unchanged active alerts at most once per
+  hour;
+- `ALERT_SEND_RECOVERY=1` sends one recovery message after all alerts clear.
+
+Manual checks:
+
+```bash
+ssh iyun-server 'DRY_RUN=1 /media/desk16/iyun6208/apps/reportgen-web-runtime/alerts.sh check'
+ssh iyun-server 'tail -n 80 /media/desk16/iyun6208/apps/reportgen-web-runtime/logs/alerts.log'
+```
+
 ## Operation Audit
 
 Task-level operation audit events are written to the SQLite `audit_logs` table
