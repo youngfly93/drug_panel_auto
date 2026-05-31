@@ -102,9 +102,9 @@ The API also writes structured download events to uvicorn logs without patient
 names, report filenames, Excel filenames, or full report paths:
 
 ```bash
-ssh iyun-server '
-grep "report_download_" /media/desk16/iyun6208/apps/reportgen-web-runtime/logs/uvicorn.log | tail -n 40
-'
+scripts/iyun62_download_diagnostics.sh
+scripts/iyun62_download_diagnostics.sh --task-id <task_id>
+scripts/iyun62_download_diagnostics.sh --since-minutes 60 --limit 50
 ```
 
 Use these fields to separate causes:
