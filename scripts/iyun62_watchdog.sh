@@ -19,12 +19,14 @@ CLOUDFLARED="${CLOUDFLARED:-/media/desk16/iyun6208/bin/cloudflared}"
 CLOUDFLARED_TOKEN_FILE="${CLOUDFLARED_TOKEN_FILE:-/media/desk16/iyun6208/.config/reportgen-web/cloudflared-token}"
 DISK_WARN_PERCENT="${DISK_WARN_PERCENT:-85}"
 LOG_MAX_BYTES="${LOG_MAX_BYTES:-5242880}"
+TUNNEL_RESTART_THRESHOLD="${TUNNEL_RESTART_THRESHOLD:-3}"
 
 LOG_DIR="$RUNTIME_DIR/logs"
 LOG_FILE="$LOG_DIR/watchdog.log"
 START_SCRIPT="$RUNTIME_DIR/start_reportgen.sh"
 CURRENT_RELEASE_FILE="$RUNTIME_DIR/current_release"
 CLOUDFLARED_PID_FILE="$RUNTIME_DIR/cloudflared.pid"
+TUNNEL_FAIL_COUNT_FILE="$RUNTIME_DIR/tunnel_fail_count"
 
 mkdir -p "$LOG_DIR"
 
@@ -152,19 +154,35 @@ start_tunnel() {
         --token-file "$CLOUDFLARED_TOKEN_FILE" \
         >> "$LOG_DIR/cloudflared.log" 2>&1 &
     echo "$!" > "$CLOUDFLARED_PID_FILE"
+    rm -f "$TUNNEL_FAIL_COUNT_FILE"
     log "tunnel started pid=$!"
 }
 
 ensure_tunnel() {
-    local public_code oldpid
+    local public_code oldpid failures
     public_code="$(http_code "$PUBLIC_HEALTH_URL")"
     if [ "$public_code" = "200" ]; then
+        rm -f "$TUNNEL_FAIL_COUNT_FILE"
         if ! pgrep -f "[c]loudflared tunnel --no-autoupdate --protocol http2 run --token-file" >/dev/null 2>&1; then
             log "tunnel public ok but process missing; starting anyway"
             start_tunnel
         else
             log "tunnel ok public_http=$public_code"
         fi
+        return 0
+    fi
+
+    if ! pgrep -f "[c]loudflared tunnel --no-autoupdate --protocol http2 run --token-file" >/dev/null 2>&1; then
+        log "tunnel restart process_missing public_http=${public_code:-none}"
+        start_tunnel
+        return 0
+    fi
+
+    failures="$(cat "$TUNNEL_FAIL_COUNT_FILE" 2>/dev/null || echo 0)"
+    failures=$((failures + 1))
+    printf '%s\n' "$failures" > "$TUNNEL_FAIL_COUNT_FILE"
+    if [ "$failures" -lt "$TUNNEL_RESTART_THRESHOLD" ]; then
+        log "tunnel warn public_http=${public_code:-none} consecutive_failures=$failures threshold=$TUNNEL_RESTART_THRESHOLD"
         return 0
     fi
 
@@ -176,7 +194,7 @@ ensure_tunnel() {
         pkill -f "[c]loudflared tunnel --no-autoupdate --protocol http2 run --token-file" >/dev/null 2>&1 || true
         sleep 2
     fi
-    log "tunnel restart public_http=${public_code:-none}"
+    log "tunnel restart public_http=${public_code:-none} consecutive_failures=$failures"
     start_tunnel
 }
 
