@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +26,7 @@ from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.services import clinical_info_service as clinical_svc
 from app.services.file_manager import ensure_report_dir, save_upload
+from app.services.generation_queue import submit_generation_job
 from app.services import reference_report_service as diff_svc
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_manager import submit_batch_task
@@ -292,6 +292,8 @@ def _complete_batch_files_task(
     try:
         task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
+            return
+        if task.status == "cancelled":
             return
         task.status = "running"
         task.started_at = task.started_at or start_time
@@ -577,7 +579,7 @@ def batch_generate_from_files(
     task = Task(
         id=task_id,
         task_type="batch",
-        status="running",
+        status="pending",
         project_type=project_type,
         output_path=str(output_dir),
         total_files=len(items),
@@ -588,7 +590,6 @@ def batch_generate_from_files(
             if shared_clinical_info
             else None
         ),
-        started_at=datetime.utcnow(),
     )
     db.add(task)
     for item in items:
@@ -613,27 +614,23 @@ def batch_generate_from_files(
     )
     _write_batch_report(db, task)
 
-    worker = threading.Thread(
-        target=_complete_batch_files_task,
-        kwargs={
-            "task_id": task_id,
-            "items": items,
-            "output_dir": str(output_dir),
-            "shared_clinical_info": shared_clinical_info,
-            "project_type": project_type,
-            "project_name": project_name,
-            "template_name": template_name,
-            "template_contract_mode": template_contract_mode,
-            "bridge": bridge,
-        },
-        daemon=True,
+    submit_generation_job(
+        _complete_batch_files_task,
+        task_id=task_id,
+        items=items,
+        output_dir=str(output_dir),
+        shared_clinical_info=shared_clinical_info,
+        project_type=project_type,
+        project_name=project_name,
+        template_name=template_name,
+        template_contract_mode=template_contract_mode,
+        bridge=bridge,
     )
-    worker.start()
 
     return ApiResponse(
         data={
             "task_id": task_id,
-            "status": "running",
+            "status": "pending",
             "total_files": len(items),
         }
     )
@@ -699,7 +696,7 @@ def retry_failed_batch_files(
     if not retry_items:
         raise HTTPException(status_code=400, detail="没有可重试的失败文件")
 
-    task.status = "running"
+    task.status = "pending"
     task.failed_files = (
         db.query(TaskResult)
         .filter(TaskResult.task_id == task_id, TaskResult.status == "failed")
@@ -717,27 +714,23 @@ def retry_failed_batch_files(
     db.commit()
     _write_batch_report(db, task)
 
-    worker = threading.Thread(
-        target=_complete_batch_files_task,
-        kwargs={
-            "task_id": task_id,
-            "items": retry_items,
-            "output_dir": str(task.output_path),
-            "shared_clinical_info": inputs.get("shared_clinical_info") or {},
-            "project_type": inputs.get("project_type"),
-            "project_name": inputs.get("project_name"),
-            "template_name": inputs.get("template_name"),
-            "template_contract_mode": inputs.get("template_contract_mode") or "warn",
-            "bridge": bridge,
-        },
-        daemon=True,
+    submit_generation_job(
+        _complete_batch_files_task,
+        task_id=task_id,
+        items=retry_items,
+        output_dir=str(task.output_path),
+        shared_clinical_info=inputs.get("shared_clinical_info") or {},
+        project_type=inputs.get("project_type"),
+        project_name=inputs.get("project_name"),
+        template_name=inputs.get("template_name"),
+        template_contract_mode=inputs.get("template_contract_mode") or "warn",
+        bridge=bridge,
     )
-    worker.start()
 
     return ApiResponse(
         data={
             "task_id": task_id,
-            "status": "running",
+            "status": "pending",
             "retry_files": len(retry_items),
             "total_files": task.total_files,
         }

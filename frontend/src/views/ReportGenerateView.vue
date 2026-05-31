@@ -335,8 +335,36 @@
     <el-card v-if="excelStore.upload" shadow="hover">
       <template #header><strong>3. 生成报告</strong></template>
       <el-button type="primary" size="large" :loading="generating" @click="handleGenerate">
-        生成报告
+        {{ generating ? '提交中' : '生成报告' }}
       </el-button>
+
+      <div v-if="singleTask && !result" class="single-progress">
+        <div class="single-progress-title">
+          <strong>{{ statusLabel(singleTask.status) }}</strong>
+          <span>
+            任务 {{ shortTaskId(singleTask.id) }}
+            <template v-if="singleTask.duration_seconds">
+              · {{ singleTask.duration_seconds.toFixed(1) }}s
+            </template>
+          </span>
+        </div>
+        <el-progress
+          :percentage="singleProgressPercent"
+          :status="singleTask.status === 'failed' ? 'exception' : singleTask.status === 'completed' ? 'success' : undefined"
+        />
+        <div class="single-actions">
+          <el-button @click="$router.push(`/tasks/${singleTask.id}`)">查看任务详情</el-button>
+          <el-popconfirm
+            v-if="singleTask.status === 'running' || singleTask.status === 'pending'"
+            title="确认取消当前报告生成任务？"
+            @confirm="cancelCurrentSingle"
+          >
+            <template #reference>
+              <el-button type="danger" plain :loading="singleCancelling">取消任务</el-button>
+            </template>
+          </el-popconfirm>
+        </div>
+      </div>
 
       <!-- Result -->
       <div v-if="result" style="margin-top: 16px">
@@ -421,6 +449,8 @@ const projectType = ref<string | null>(null)
 const templateName = ref<string | null>(null)
 const generating = ref(false)
 const result = ref<GenerateResult | null>(null)
+const singleTask = ref<TaskStatus | null>(null)
+const singleCancelling = ref(false)
 const uploadError = ref('')
 const selectedFileName = ref('')
 const generationMode = import.meta.env.VITE_REPORT_GENERATION_MODE || 'async'
@@ -434,6 +464,7 @@ const batchCancelling = ref(false)
 const batchTask = ref<TaskStatus | null>(null)
 const batchResultRows = ref<BatchResultItem[]>([])
 let batchPollTimer: number | null = null
+let singlePollTimer: number | null = null
 
 function panelTemplateOptions(type?: string | null) {
   if (type === 'crc_358_msi') {
@@ -503,6 +534,15 @@ const isBatchTerminal = computed(() => {
 const canRetryBatch = computed(() => {
   const task = batchTask.value
   return Boolean(task?.id && isBatchTerminal.value && (task.failed_files || 0) > 0)
+})
+
+const singleProgressPercent = computed(() => {
+  const status = singleTask.value?.status
+  if (status === 'completed') return 100
+  if (status === 'failed' || status === 'cancelled') return 100
+  if (status === 'running') return 55
+  if (status === 'pending') return 12
+  return 0
 })
 
 const previewMetricCards = computed(() => {
@@ -643,12 +683,17 @@ watch(
   },
 )
 
-onUnmounted(stopBatchPolling)
+onUnmounted(() => {
+  stopBatchPolling()
+  stopSinglePolling()
+})
 
 async function handleFileChange(uploadFile: any) {
   const file = uploadFile.raw || uploadFile
   if (!file) return
   result.value = null
+  singleTask.value = null
+  stopSinglePolling()
   uploadError.value = ''
   selectedFileName.value = file.name || ''
   try {
@@ -821,6 +866,8 @@ async function handleGenerate() {
 
   generating.value = true
   result.value = null
+  singleTask.value = null
+  stopSinglePolling()
   try {
     const payload = {
       clinical_info: form.getCleanValues(),
@@ -830,8 +877,30 @@ async function handleGenerate() {
     }
     if (excelStore.sourceFile && generationMode === 'async') {
       const accepted = await reportApi.generateFromFileAsync(excelStore.sourceFile, payload)
-      ElMessage.info('报告已进入后台生成，请稍候')
-      result.value = await waitForReportTask(accepted.task_id)
+      ElMessage.info('报告已进入后台队列，可在任务详情中查看进度')
+      singleTask.value = {
+        id: accepted.task_id,
+        task_type: 'single',
+        status: 'pending',
+        project_type: projectType.value,
+        total_files: 1,
+        completed_files: 0,
+        failed_files: 0,
+        cancelled_files: 0,
+        pending_files: 1,
+        running_files: 0,
+        status_counts: {},
+        output_path: null,
+        created_at: null,
+        started_at: null,
+        completed_at: null,
+        duration_seconds: null,
+        errors: [],
+        warnings: accepted.warnings || [],
+      }
+      generating.value = false
+      startSinglePolling(accepted.task_id)
+      return
     } else {
       result.value = excelStore.sourceFile
         ? await reportApi.generateFromFile(excelStore.sourceFile, payload)
@@ -850,10 +919,6 @@ async function handleGenerate() {
   } finally {
     generating.value = false
   }
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 function taskStatusToResult(task: Awaited<ReturnType<typeof reportApi.getTaskStatus>>): GenerateResult {
@@ -879,15 +944,57 @@ function taskStatusToResult(task: Awaited<ReturnType<typeof reportApi.getTaskSta
   }
 }
 
-async function waitForReportTask(taskId: string): Promise<GenerateResult> {
-  for (let i = 0; i < 180; i += 1) {
-    const task = await reportApi.getTaskStatus(taskId)
-    if (task.status === 'completed' || task.status === 'failed') {
-      return taskStatusToResult(task)
+function startSinglePolling(taskId: string) {
+  const poll = async () => {
+    try {
+      const task = await reportApi.getTaskStatus(taskId)
+      singleTask.value = task
+      if (['completed', 'failed', 'cancelled'].includes(task.status)) {
+        stopSinglePolling()
+        result.value = taskStatusToResult(task)
+        if (task.status === 'completed') {
+          ElMessage.success('报告生成成功')
+        } else if (task.status === 'cancelled') {
+          ElMessage.info('报告生成已取消')
+        } else {
+          ElMessage.error('报告生成失败')
+        }
+      }
+    } catch (err: any) {
+      stopSinglePolling()
+      ElMessage.error(err.response?.data?.detail || '任务进度读取失败')
     }
-    await sleep(2000)
   }
-  throw new Error('报告生成超时，请稍后到任务详情页查看')
+  poll()
+  singlePollTimer = window.setInterval(poll, 2000)
+}
+
+function stopSinglePolling() {
+  if (singlePollTimer !== null) {
+    window.clearInterval(singlePollTimer)
+    singlePollTimer = null
+  }
+}
+
+async function cancelCurrentSingle() {
+  if (!singleTask.value?.id) return
+  singleCancelling.value = true
+  try {
+    await reportApi.cancelTask(singleTask.value.id)
+    singleTask.value = await reportApi.getTaskStatus(singleTask.value.id)
+    result.value = taskStatusToResult(singleTask.value)
+    generating.value = false
+    stopSinglePolling()
+    ElMessage.success('报告生成任务已取消')
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || '取消失败')
+  } finally {
+    singleCancelling.value = false
+  }
+}
+
+function shortTaskId(value: string) {
+  return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value
 }
 
 async function downloadReport(taskId: string) {
@@ -959,7 +1066,9 @@ function statusLabel(status: string) {
 <style scoped>
 .batch-head,
 .batch-progress-title,
-.batch-actions {
+.batch-actions,
+.single-progress-title,
+.single-actions {
   display: flex;
   align-items: center;
 }
@@ -984,6 +1093,30 @@ function statusLabel(status: string) {
   margin-top: 14px;
   border: 1px solid #d9e2ec;
   padding: 14px;
+}
+
+.single-progress {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.single-progress-title {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.single-progress-title span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.single-actions {
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .batch-progress-title {

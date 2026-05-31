@@ -321,8 +321,8 @@ const topSignals = computed<Array<{ label: string; value: string; meta: string; 
   {
     label: '任务',
     value: `${status.value?.tasks.counts.total ?? 0}`,
-    meta: `运行 ${taskCounts.value.running || 0} · 待执行 ${taskCounts.value.pending || 0} · 失败 ${status.value?.tasks.counts.failed_total ?? 0}`,
-    tone: (status.value?.tasks.counts.failed_total || 0) > 0 ? 'warning' : 'success',
+    meta: `执行槽 ${queueStats.value.active}/${queueStats.value.max_workers} · 排队 ${queueStats.value.queued}`,
+    tone: (queueStats.value.queued || 0) > 0 ? 'warning' : (status.value?.tasks.counts.failed_total || 0) > 0 ? 'warning' : 'success',
     icon: DataLine,
   },
   {
@@ -351,6 +351,11 @@ const topSignals = computed<Array<{ label: string; value: string; meta: string; 
 const runtimeRows = computed(() => {
   const runtime = status.value?.runtime
   return [
+    {
+      label: '生成队列',
+      status: queueStats.value.queued > 0 ? 'warn' : 'ok',
+      meta: `运行 ${queueStats.value.active}/${queueStats.value.max_workers}，排队 ${queueStats.value.queued}`,
+    },
     {
       label: 'Web 服务',
       status: runtime?.watchdog.web.status || 'unknown',
@@ -381,10 +386,18 @@ const runtimeRows = computed(() => {
 
 const taskMetrics = computed(() => [
   { label: '总任务', value: status.value?.tasks.counts.total ?? 0 },
-  { label: '运行中', value: taskCounts.value.running || 0 },
-  { label: '待执行', value: taskCounts.value.pending || 0 },
+  { label: '执行中', value: queueStats.value.active },
+  { label: '队列中', value: queueStats.value.queued },
   { label: '失败', value: status.value?.tasks.counts.failed_total ?? 0 },
 ])
+
+const queueStats = computed(() => status.value?.runtime.generation_queue || {
+  max_workers: 0,
+  queued: 0,
+  active: 0,
+  submitted_total: 0,
+  finished_total: 0,
+})
 
 const taskBars = computed(() => {
   const total = Math.max(status.value?.tasks.counts.total || 0, 1)

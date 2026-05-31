@@ -159,6 +159,9 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     assert data["deployment"]["revision_short"] == "abcdef12"
     assert data["tasks"]["counts"]["total"] == 1
     assert data["tasks"]["recent"][0]["id"] == "task-sensitive"
+    assert data["runtime"]["generation_queue"]["max_workers"] >= 1
+    assert data["runtime"]["generation_queue"]["queued"] >= 0
+    assert data["runtime"]["generation_queue"]["active"] >= 0
     assert data["downloads"]["summary"]["completed"] == 1
     assert data["downloads"]["recent_terminal_events"][0]["task_id"] == "task-sensitive"
     assert data["downloads"]["recent_terminal_events"][0]["cf_ray_present"] is True

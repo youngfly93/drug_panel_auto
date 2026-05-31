@@ -23,6 +23,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.task import Task
 from app.schemas.common import ApiResponse
+from app.services.generation_queue import queue_stats
 
 router = APIRouter(prefix="/admin/ops", tags=["ops"])
 
@@ -417,6 +418,7 @@ def ops_status(
         "runtime": {
             "runtime_dir_present": runtime_dir.exists(),
             "libreoffice_listener": _libreoffice_listener_status(),
+            "generation_queue": queue_stats(),
             "watchdog": _watchdog_status(log_dir / "watchdog.log"),
             "maintenance": _maintenance_status(log_dir / "maintenance.log"),
         },

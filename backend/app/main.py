@@ -91,6 +91,11 @@ async def lifespan(app: FastAPI):
         stop_listener()
     except Exception:
         pass
+    try:
+        from app.services.generation_queue import shutdown_generation_queue
+        shutdown_generation_queue()
+    except Exception:
+        pass
 
 
 def create_app() -> FastAPI:

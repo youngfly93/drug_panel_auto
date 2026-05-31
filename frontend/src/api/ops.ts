@@ -19,6 +19,13 @@ export interface OpsStatusPayload {
       checked: boolean
       running: boolean | null
     }
+    generation_queue: {
+      max_workers: number
+      queued: number
+      active: number
+      submitted_total: number
+      finished_total: number
+    }
     watchdog: {
       log_present: boolean
       last_event_at: string | null

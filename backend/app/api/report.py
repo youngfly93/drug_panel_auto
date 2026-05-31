@@ -5,7 +5,6 @@ import json
 import os
 import re
 import shutil
-import threading
 import time
 import uuid
 import zipfile
@@ -46,6 +45,7 @@ from app.schemas.report import (
 from app.services import clinical_info_service as clinical_svc
 from app.services import reference_report_service as diff_svc
 from app.services.file_manager import ensure_report_dir, save_upload
+from app.services.generation_queue import submit_generation_job
 from app.services.reportgen_bridge import ReportGenBridge
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -209,6 +209,13 @@ def _complete_file_generation_task(
     if not task:
         db.close()
         return
+    if task.status == "cancelled":
+        db.close()
+        return
+
+    task.status = "running"
+    task.started_at = task.started_at or datetime.utcnow()
+    db.commit()
 
     try:
         result = bridge.generate_report(
@@ -1182,39 +1189,34 @@ def generate_report_from_file_async(
     task = Task(
         id=task_id,
         task_type="single",
-        status="running",
+        status="pending",
         project_type=detected_project_type,
         clinical_info_snapshot=(
             json.dumps(clinical_payload, ensure_ascii=False)
             if clinical_payload
             else None
         ),
-        started_at=datetime.utcnow(),
     )
     db.add(task)
     db.commit()
 
-    worker = threading.Thread(
-        target=_complete_file_generation_task,
-        kwargs={
-            "task_id": task_id,
-            "stored_path": str(stored_path),
-            "output_dir": str(output_dir),
-            "clinical_payload": clinical_payload,
-            "project_type": detected_project_type,
-            "project_name": detected_project_name,
-            "template_name": template_name,
-            "strict_mode": strict_mode,
-            "template_contract_mode": template_contract_mode,
-            "qa_visual_render": qa_visual_render,
-            "qa_visual_render_required": qa_visual_render_required,
-            "qa_visual_render_dpi": qa_visual_render_dpi,
-            "qa_visual_render_timeout_seconds": qa_visual_render_timeout_seconds,
-            "bridge": bridge,
-        },
-        daemon=True,
+    submit_generation_job(
+        _complete_file_generation_task,
+        task_id=task_id,
+        stored_path=str(stored_path),
+        output_dir=str(output_dir),
+        clinical_payload=clinical_payload,
+        project_type=detected_project_type,
+        project_name=detected_project_name,
+        template_name=template_name,
+        strict_mode=strict_mode,
+        template_contract_mode=template_contract_mode,
+        qa_visual_render=qa_visual_render,
+        qa_visual_render_required=qa_visual_render_required,
+        qa_visual_render_dpi=qa_visual_render_dpi,
+        qa_visual_render_timeout_seconds=qa_visual_render_timeout_seconds,
+        bridge=bridge,
     )
-    worker.start()
 
     return ApiResponse(
         data=GenerateResponse(
@@ -1222,7 +1224,7 @@ def generate_report_from_file_async(
             success=True,
             output_file=None,
             duration_seconds=None,
-            warnings=["报告生成已进入后台任务，请稍后刷新任务状态。"],
+            warnings=["报告生成已进入后台队列，请稍后刷新任务状态。"],
         )
     )
 
