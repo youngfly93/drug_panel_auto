@@ -105,6 +105,21 @@ def _json_request(
 
 
 def _upload_excel(path: Path) -> dict[str, Any]:
+    return _multipart_file_request(
+        "/api/v1/excel/upload",
+        path,
+        fields={},
+        timeout=120,
+    )
+
+
+def _multipart_file_request(
+    endpoint: str,
+    path: Path,
+    *,
+    fields: dict[str, str],
+    timeout: int,
+) -> dict[str, Any]:
     boundary = f"----reportgen-smoke-{int(time.time() * 1000)}"
     file_bytes = path.read_bytes()
     parts = [
@@ -116,24 +131,65 @@ def _upload_excel(path: Path) -> dict[str, Any]:
         b"Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n",
         file_bytes,
         b"\r\n",
-        f"--{boundary}--\r\n".encode("utf-8"),
     ]
+    for name, value in fields.items():
+        parts.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"),
+                value.encode("utf-8"),
+                b"\r\n",
+            ]
+        )
+    parts.append(f"--{boundary}--\r\n".encode("utf-8"))
     status, raw, _headers = _request(
         "POST",
-        "/api/v1/excel/upload",
+        endpoint,
         body=b"".join(parts),
         headers={
             "Accept": "application/json",
             "Content-Type": f"multipart/form-data; boundary={boundary}",
         },
-        timeout=120,
+        timeout=timeout,
     )
     if status < 200 or status >= 300:
-        raise SmokeFailure(f"upload returned HTTP {status}: {raw[:500]!r}")
+        raise SmokeFailure(f"{endpoint} returned HTTP {status}: {raw[:500]!r}")
     data = json.loads(raw.decode("utf-8"))
     if not data.get("success"):
-        raise SmokeFailure(f"upload failed: {data}")
+        raise SmokeFailure(f"{endpoint} failed: {data}")
     return data
+
+
+def _generate_file_async(path: Path, clinical_info: dict[str, Any]) -> str:
+    payload = _multipart_file_request(
+        "/api/v1/reports/generate-file-async",
+        path,
+        fields={
+            "clinical_info": json.dumps(clinical_info, ensure_ascii=False),
+            "project_type": "crc_358_msi",
+            "project_name": "结直肠癌358基因+MSI",
+            "strict_mode": "false",
+            "template_contract_mode": "warn",
+        },
+        timeout=120,
+    )
+    task_id = (payload.get("data") or {}).get("task_id")
+    if not task_id:
+        raise SmokeFailure(f"async generation did not return task_id: {payload}")
+    return str(task_id)
+
+
+def _wait_for_task(task_id: str) -> dict[str, Any]:
+    deadline = time.monotonic() + TIMEOUT_SECONDS
+    last_status = "-"
+    while time.monotonic() < deadline:
+        payload = _json_request("GET", f"/api/v1/reports/{task_id}", timeout=30)
+        data = payload["data"]
+        last_status = str(data.get("status") or "-")
+        if last_status in {"completed", "failed", "partial_failed", "cancelled"}:
+            return data
+        time.sleep(3)
+    raise SmokeFailure(f"task {task_id} did not finish before timeout; last_status={last_status}")
 
 
 def _assert(condition: bool, message: str) -> None:
@@ -263,22 +319,9 @@ def main() -> int:
     _assert(clinical_info.get("patient_name") == "黄金测试患者", "patient extraction failed")
     print("  ✅ schema + single values")
 
-    generate = _json_request(
-        "POST",
-        "/api/v1/reports/generate",
-        payload={
-            "upload_id": upload_id,
-            "clinical_info": clinical_info,
-            "project_type": "crc_358_msi",
-            "project_name": "结直肠癌358基因+MSI",
-            "strict_mode": False,
-            "template_contract_mode": "warn",
-        },
-        timeout=TIMEOUT_SECONDS,
-    )
-    report_data = generate["data"]
-    task_id = report_data["task_id"]
-    _assert(report_data["success"] is True, "report generation success flag is false")
+    task_id = _generate_file_async(excel_path, clinical_info)
+    report_data = _wait_for_task(task_id)
+    _assert(report_data["status"] == "completed", f"task status is {report_data['status']!r}")
     _assert(report_data["qa_status"] == "PASS", f"QA status is {report_data['qa_status']!r}")
     _assert(len(report_data.get("stage_results") or []) > 0, "stage results are missing")
     print(f"  ✅ report generation ({task_id})")
