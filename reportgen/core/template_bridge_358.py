@@ -1443,8 +1443,7 @@ def format_immune_result(
     if not variants:
         return "未检出"
 
-    # Format as list of gene:mutation pairs
-    lines = []
+    lines = [f"检出（{len(variants)}个）"]
     for v in variants:
         gene = v.get("gene", "")
         c_hgvs = v.get("cHGVS", "")
@@ -1456,7 +1455,7 @@ def format_immune_result(
             line = f"{gene}：{c_hgvs}"
         lines.append(line)
 
-    return "检出：" + "；".join(lines)
+    return "\n".join(lines)
 
 
 def count_drug_related_variants(

@@ -756,6 +756,10 @@ class TemplateRenderer:
             "基因变异与药物关联分析：",
             "药物疗效临床解析：",
         }
+        drug_analysis_labels = {
+            "基因变异与药物关联分析：",
+            "药物疗效临床解析：",
+        }
         main_headings = {
             "基因变异解析",
             "靶向药物/免疫用药提示解析",
@@ -1060,11 +1064,11 @@ class TemplateRenderer:
                 awaiting_drug_names = False
                 paragraph.alignment = (
                     WD_ALIGN_PARAGRAPH.JUSTIFY
-                    if in_drug_section and text in {"基因变异与药物关联分析：", "药物疗效临床解析："}
+                    if in_drug_section and text in drug_analysis_labels
                     else None
                 )
                 set_spacing(paragraph, after=0)
-                set_keep_next(paragraph, True)
+                set_keep_next(paragraph, text not in drug_analysis_labels)
                 style_runs(paragraph, bold=True, underline=False, size=10.5)
                 changed = True
                 continue
@@ -4883,7 +4887,30 @@ class TemplateRenderer:
         Rendering the final docx to PDF gives us the authoritative pagination
         without requiring Microsoft Word UI permissions.
         """
+        import os
         import shutil
+
+        fast_toc = str(os.environ.get("REPORTGEN_FAST_TOC") or "").strip().lower()
+        skip_static = str(
+            os.environ.get("REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS") or ""
+        ).strip().lower()
+        if fast_toc in {"1", "true", "yes", "y", "on"} or skip_static in {
+            "1",
+            "true",
+            "yes",
+            "y",
+            "on",
+        }:
+            try:
+                self._set_update_fields(file_path)
+            except Exception:
+                pass
+            self.logger.info(
+                "已跳过静态目录页码写回",
+                output=file_path,
+                reason="REPORTGEN_FAST_TOC",
+            )
+            return
 
         if not self._document_contains_toc_or_static_toc(file_path):
             self.logger.debug("文档不包含目录域/静态目录，跳过静态目录页码写回", output=file_path)

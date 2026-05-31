@@ -13,6 +13,18 @@ from typing import Callable
 from reportgen.core.processors.base import ProcessorContext
 
 
+def _env_truthy(name: str) -> bool:
+    import os
+
+    return str(os.environ.get(name) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+
+
 @dataclass(frozen=True)
 class FunctionProcessor:
     name: str
@@ -192,11 +204,27 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
             "5. 参考文献",
         ),
     )
-    try:
-        ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
-        ctx.renderer._set_update_fields(ctx.output_path)
-    except Exception as refresh_err:
-        ctx.logger.warning("最终目录页码刷新失败", error=str(refresh_err))
+    if _env_truthy("REPORTGEN_FAST_TOC") or _env_truthy(
+        "REPORTGEN_SKIP_FINAL_LO_REFRESH"
+    ):
+        try:
+            ctx.renderer._set_update_fields(ctx.output_path)
+        except Exception:
+            pass
+        try:
+            ctx.logger.info(
+                "已跳过最终 LibreOffice 目录刷新",
+                output=ctx.output_path,
+                reason="REPORTGEN_FAST_TOC",
+            )
+        except Exception:
+            pass
+    else:
+        try:
+            ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
+            ctx.renderer._set_update_fields(ctx.output_path)
+        except Exception as refresh_err:
+            ctx.logger.warning("最终目录页码刷新失败", error=str(refresh_err))
     ctx.renderer._normalize_toc_decoration_layout(ctx.output_path)
     ctx.renderer._restore_reviewed_body_headers(ctx.output_path)
     # 注：此处不再 _populate_static_toc_page_numbers。该操作要 LibreOffice 把整份

@@ -49,6 +49,7 @@ from reportgen.core.golden_case import (
 )
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.processors import ProcessorContext, run_processors
+from reportgen.core.processors.docx import _run_final_refresh_cleanup
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.report_generator import ReportGenerator
 from reportgen.core.signature_library import resolve_signature_path, signature_options
@@ -1091,6 +1092,23 @@ def test_immune_positive_summary_includes_class_i_ii_without_clnsig(tmp_path):
     positive_genes = {v["gene"].upper() for v in result["positive"]}
     # Blank-CLNSIG Ⅰ/Ⅱ class variants are included alongside the pathogenic one.
     assert {"PMS2", "ATR", "KRAS"} <= positive_genes
+
+
+def test_immune_negative_and_hyperprogression_summary_use_count_header():
+    from reportgen.core.template_bridge_358 import format_immune_result
+
+    variants = [
+        {
+            "gene": "DNMT3A",
+            "cHGVS": "c.1367delA",
+            "pHGVS": "p.K456Sfs*195",
+        }
+    ]
+
+    text = format_immune_result(variants, "hyperprogression")
+
+    assert text == "检出（1个）\nDNMT3A：c.1367delA，p.K456Sfs*195"
+    assert "检出：" not in text
 
 
 def test_reviewed_variant_override_replaces_existing_targeted_tip():
@@ -4617,6 +4635,49 @@ def test_blank_heading_cleanup_does_not_cross_tables(tmp_path):
     assert "w:keepNext" in paragraphs[-2]._p.xml
 
 
+def test_part3_drug_analysis_labels_do_not_emit_keepnext_marker(tmp_path):
+    docx_path = tmp_path / "part3_labels.docx"
+    doc = Document()
+    for text in [
+        "第三部分：基因变异及相应靶向/免疫药物解析",
+        "靶向药物/免疫用药提示解析",
+        "潜在获益靶向/免疫药物解析",
+        "KRAS：c.34G>A，p.G12S突变相应靶向药物",
+        "西妥昔单抗",
+        "基因变异与药物关联分析：",
+        "关联分析正文",
+        "药物疗效临床解析：",
+        "临床解析正文",
+        "3. 阅读说明",
+    ]:
+        doc.add_paragraph(text)
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._restore_part3_dynamic_styles(
+        str(docx_path), {}
+    )
+
+    rendered = Document(docx_path)
+    labels = [
+        paragraph
+        for paragraph in rendered.paragraphs
+        if paragraph.text.strip()
+        in {"基因变异与药物关联分析：", "药物疗效临床解析："}
+    ]
+    assert [paragraph.text.strip() for paragraph in labels] == [
+        "基因变异与药物关联分析：",
+        "药物疗效临床解析：",
+    ]
+    assert all("w:keepNext" not in paragraph._p.xml for paragraph in labels)
+
+    subheading = next(
+        paragraph
+        for paragraph in rendered.paragraphs
+        if paragraph.text.strip() == "潜在获益靶向/免疫药物解析"
+    )
+    assert "w:keepNext" in subheading._p.xml
+
+
 def test_pdf_footer_page_number_scans_bottom_lines():
     text = "表格内容\n--\n9\n--\n"
 
@@ -4648,6 +4709,89 @@ def test_underlines_and_styles_processor_is_idempotent(tmp_path):
         _write_crc_style_docx,
         context={"panel_style": _crc_panel_style()},
     )
+
+
+def test_fast_toc_skips_final_libreoffice_refresh(monkeypatch):
+    calls = {"set_update_fields": 0, "refresh": 0}
+
+    class FakeRenderer:
+        def _normalize_final_section_layout(self, *_args):
+            pass
+
+        def _compact_gene_list_tables(self, *_args):
+            pass
+
+        def _normalize_quality_control_tables(self, *_args):
+            pass
+
+        def _optimize_variant_table_layout(self, *_args):
+            pass
+
+        def _cleanup_trailing_blank_page(self, *_args):
+            pass
+
+        def _remove_blank_page_breaks_before_headings(self, *_args):
+            pass
+
+        def _refresh_fields_with_native_engine(self, *_args):
+            calls["refresh"] += 1
+
+        def _set_update_fields(self, *_args):
+            calls["set_update_fields"] += 1
+
+        def _normalize_toc_decoration_layout(self, *_args):
+            pass
+
+        def _restore_reviewed_body_headers(self, *_args):
+            pass
+
+    class FakeLogger:
+        def info(self, *_args, **_kwargs):
+            pass
+
+        def warning(self, *_args, **_kwargs):
+            pass
+
+    monkeypatch.setenv("REPORTGEN_FAST_TOC", "1")
+    ctx = SimpleNamespace(
+        renderer=FakeRenderer(),
+        output_path="report.docx",
+        template_context={},
+        logger=FakeLogger(),
+    )
+
+    _run_final_refresh_cleanup(ctx)
+
+    assert calls["refresh"] == 0
+    assert calls["set_update_fields"] == 1
+
+
+def test_fast_toc_skips_static_toc_pdf_detection(tmp_path, monkeypatch):
+    docx_path = tmp_path / "report.docx"
+    doc = Document()
+    doc.add_paragraph("目    录")
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    calls = {"set_update_fields": 0}
+
+    monkeypatch.setenv("REPORTGEN_FAST_TOC", "1")
+    monkeypatch.setattr(
+        renderer,
+        "_set_update_fields",
+        lambda *_args: calls.__setitem__(
+            "set_update_fields", calls["set_update_fields"] + 1
+        ),
+    )
+    monkeypatch.setattr(
+        renderer,
+        "_document_contains_toc_or_static_toc",
+        lambda *_args: pytest.fail("fast TOC mode should skip PDF TOC detection"),
+    )
+
+    renderer._populate_static_toc_page_numbers(str(docx_path), {})
+
+    assert calls["set_update_fields"] == 1
 
 
 def test_qa_report_records_post_processor_errors(tmp_path):
