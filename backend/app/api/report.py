@@ -9,7 +9,7 @@ import threading
 import time
 import uuid
 import zipfile
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -129,8 +129,10 @@ def _task_download_context(task: Task) -> dict:
     if task.completed_at:
         completed_at = task.completed_at
         if completed_at.tzinfo is None:
-            completed_at = completed_at.replace(tzinfo=UTC)
-        seconds_since_completed = (datetime.now(UTC) - completed_at).total_seconds()
+            completed_at = completed_at.replace(tzinfo=timezone.utc)
+        seconds_since_completed = (
+            datetime.now(timezone.utc) - completed_at
+        ).total_seconds()
     return {
         "task_id": task.id,
         "task_type": task.task_type,
