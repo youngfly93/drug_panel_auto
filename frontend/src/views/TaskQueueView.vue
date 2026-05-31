@@ -209,8 +209,12 @@ async function cancelTask(taskId: string) {
   }
 }
 
-function downloadReport(taskId: string) {
-  window.open(reportApi.getDownloadUrl(taskId), '_blank')
+async function downloadReport(taskId: string) {
+  try {
+    await reportApi.download(taskId)
+  } catch (err: any) {
+    ElMessage.error(err.message || '报告下载失败')
+  }
 }
 
 function openDetail(taskId: string) {

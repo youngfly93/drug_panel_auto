@@ -814,9 +814,16 @@ function stopBatchPolling() {
   }
 }
 
-function downloadBatchZip() {
+async function downloadBatchZip() {
   if (!batchTask.value?.id) return
-  window.open(reportApi.getBatchDownloadUrl(batchTask.value.id), '_blank')
+  try {
+    const result = await reportApi.downloadBatchZip(batchTask.value.id)
+    if (result.attempts > 1) {
+      ElMessage.success(`ZIP 下载成功，已重试 ${result.attempts - 1} 次`)
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || 'ZIP 下载失败')
+  }
 }
 
 async function cancelCurrentBatch() {
@@ -1008,13 +1015,7 @@ async function downloadReport(taskId: string) {
       ElMessage.error('报告文件不存在，请重新生成后下载')
       return
     }
-    const link = document.createElement('a')
-    link.href = reportApi.getDownloadUrl(taskId)
-    link.target = '_blank'
-    link.rel = 'noopener'
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
+    await reportApi.download(taskId)
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || err.message || '报告下载失败')
   }

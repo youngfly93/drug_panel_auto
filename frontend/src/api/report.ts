@@ -251,6 +251,20 @@ export interface ReportDiffResult {
   }
 }
 
+export interface DownloadResult {
+  filename: string
+  bytes: number
+  attempts: number
+}
+
+interface DownloadOptions {
+  fallbackFilename?: string
+  timeoutMs?: number
+  retries?: number
+  retryDelayMs?: number
+  onRetry?: (nextAttempt: number, maxAttempts: number, error: any) => void
+}
+
 function buildReportFileForm(file: File, req: Omit<GenerateRequest, 'upload_id'>): FormData {
   const form = new FormData()
   form.append('file', file)
@@ -340,6 +354,42 @@ async function buildApiErrorMessage(error: any, fallback: string): Promise<strin
   if (error?.code === 'ECONNABORTED') return '请求超时，请稍后重试'
   if (error?.message === 'Network Error') return '网络连接失败，请检查服务是否在线'
   return error?.message || fallback
+}
+
+function normalizeApiDownloadPath(path: string): string {
+  const trimmed = path.trim()
+  if (trimmed.startsWith('/api/v1/')) return trimmed.slice('/api/v1'.length)
+  if (trimmed.startsWith('/')) return trimmed
+  return `/${trimmed}`
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function expectedDownloadBytes(headers: Record<string, any>): number | null {
+  const raw = headers['x-reportgen-download-bytes'] || headers['content-length']
+  if (!raw) return null
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function isRetryableDownloadError(error: any): boolean {
+  if (error?.retryable) return true
+  const status = error?.response?.status
+  if (!status) return true
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+function saveBlob(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
 }
 
 export const reportApi = {
@@ -519,25 +569,70 @@ export const reportApi = {
       : `/api/v1/reports/${taskId}/audit-package?include_failed=false`
   },
 
-  async download(taskId: string): Promise<void> {
-    try {
-      const response = await client.get(`/reports/${taskId}/download`, {
-        responseType: 'blob',
-        timeout: 120000,
-      })
-      const disposition = String(response.headers['content-disposition'] || '')
-      const filename = parseContentDispositionFilename(disposition, `${taskId}.docx`)
-      const url = window.URL.createObjectURL(response.data)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-    } catch (error: any) {
-      throw new Error(await buildApiErrorMessage(error, '报告下载失败'))
+  async downloadUrl(path: string, options: DownloadOptions = {}): Promise<DownloadResult> {
+    const fallbackFilename = options.fallbackFilename || 'report.docx'
+    const maxAttempts = Math.max(1, options.retries ?? 3)
+    const timeoutMs = options.timeoutMs ?? 300000
+    const retryDelayMs = options.retryDelayMs ?? 1200
+    const apiPath = normalizeApiDownloadPath(path)
+    let lastError: any = null
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const response = await client.get(apiPath, {
+          responseType: 'blob',
+          timeout: timeoutMs,
+        })
+        const blob = response.data as Blob
+        const expectedBytes = expectedDownloadBytes(response.headers)
+        if (expectedBytes !== null && blob.size !== expectedBytes) {
+          const error = new Error(
+            `下载文件不完整：已收到 ${blob.size} 字节，应为 ${expectedBytes} 字节`,
+          )
+          ;(error as any).retryable = true
+          throw error
+        }
+        const disposition = String(response.headers['content-disposition'] || '')
+        const filename = parseContentDispositionFilename(disposition, fallbackFilename)
+        saveBlob(blob, filename)
+        return {
+          filename,
+          bytes: blob.size,
+          attempts: attempt,
+        }
+      } catch (error: any) {
+        lastError = error
+        if (attempt >= maxAttempts || !isRetryableDownloadError(error)) break
+        options.onRetry?.(attempt + 1, maxAttempts, error)
+        await sleep(retryDelayMs * attempt)
+      }
     }
+
+    const message = await buildApiErrorMessage(lastError, '报告下载失败')
+    const suffix = maxAttempts > 1 ? `（已重试 ${maxAttempts} 次）` : ''
+    throw new Error(`${message}${suffix}`)
+  },
+
+  async download(taskId: string): Promise<DownloadResult> {
+    return this.downloadUrl(`/reports/${taskId}/download`, {
+      fallbackFilename: `${taskId}.docx`,
+    })
+  },
+
+  async downloadBatchZip(taskId: string, qaPassOnly = false): Promise<DownloadResult> {
+    return this.downloadUrl(this.getBatchDownloadUrl(taskId, qaPassOnly), {
+      fallbackFilename: `${taskId}${qaPassOnly ? '_qa_pass' : ''}_reports.zip`,
+      timeoutMs: 300000,
+      retries: 3,
+    })
+  },
+
+  async downloadAuditPackage(taskId: string, includeFailed = true): Promise<DownloadResult> {
+    return this.downloadUrl(this.getAuditPackageUrl(taskId, includeFailed), {
+      fallbackFilename: `${taskId}_audit_package.zip`,
+      timeoutMs: 300000,
+      retries: 3,
+    })
   },
 
   downloadInline(result: GenerateResult): void {
@@ -552,13 +647,6 @@ export const reportApi = {
     const blob = new Blob([bytes], {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = result.output_filename || `${result.task_id}.docx`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    saveBlob(blob, result.output_filename || `${result.task_id}.docx`)
   },
 }

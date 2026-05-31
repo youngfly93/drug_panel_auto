@@ -1273,24 +1273,54 @@ function downloadBatchItemDiff(itemKey: string, artifact: 'report_diff.json' | '
   window.open(reportApi.getBatchDiffItemDownloadUrl(taskId, itemKey, artifact), '_blank')
 }
 
-function downloadReport() {
-  window.open(reportApi.getDownloadUrl(taskId), '_blank')
+async function downloadReport() {
+  try {
+    await reportApi.download(taskId)
+  } catch (err: any) {
+    ElMessage.error(err.message || '报告下载失败')
+  }
 }
 
-function downloadBatchZip() {
-  window.open(reportApi.getBatchDownloadUrl(taskId), '_blank')
+async function downloadBatchZip() {
+  try {
+    const result = await reportApi.downloadBatchZip(taskId)
+    if (result.attempts > 1) {
+      ElMessage.success(`ZIP 下载成功，已重试 ${result.attempts - 1} 次`)
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || 'ZIP 下载失败')
+  }
 }
 
-function downloadBatchPassZip() {
-  window.open(reportApi.getBatchDownloadUrl(taskId, true), '_blank')
+async function downloadBatchPassZip() {
+  try {
+    const result = await reportApi.downloadBatchZip(taskId, true)
+    if (result.attempts > 1) {
+      ElMessage.success(`QA PASS ZIP 下载成功，已重试 ${result.attempts - 1} 次`)
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || 'QA PASS ZIP 下载失败')
+  }
 }
 
-function downloadBatchItem(url: string) {
-  window.open(url, '_blank')
+async function downloadBatchItem(url: string) {
+  try {
+    await reportApi.downloadUrl(url, {
+      fallbackFilename: `${taskId}.docx`,
+      retries: 3,
+      timeoutMs: 300000,
+    })
+  } catch (err: any) {
+    ElMessage.error(err.message || '报告下载失败')
+  }
 }
 
-function downloadAuditPackage(includeFailed: boolean) {
-  window.open(reportApi.getAuditPackageUrl(taskId, includeFailed), '_blank')
+async function downloadAuditPackage(includeFailed: boolean) {
+  try {
+    await reportApi.downloadAuditPackage(taskId, includeFailed)
+  } catch (err: any) {
+    ElMessage.error(err.message || '审计包下载失败')
+  }
 }
 
 async function refreshGate() {

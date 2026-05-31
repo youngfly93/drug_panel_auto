@@ -1,6 +1,8 @@
+import io
 import json
 import sys
 import time
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -391,6 +393,7 @@ def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
     assert download_response.status_code == 200
     assert download_response.headers["x-reportgen-download-kind"] == "single_docx"
     assert download_response.headers["x-reportgen-task-id"] == data["task_id"]
+    assert download_response.headers["x-reportgen-download-retryable"] == "true"
     assert int(download_response.headers["x-reportgen-download-bytes"]) == len(
         download_response.content
     )
@@ -443,10 +446,25 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert item_response.status_code == 200
     assert item_response.headers["x-reportgen-download-kind"] == "batch_item_docx"
     assert item_response.headers["x-reportgen-task-id"] == task_id
+    assert item_response.headers["x-reportgen-download-retryable"] == "true"
+    assert int(item_response.headers["x-reportgen-download-bytes"]) == len(
+        item_response.content
+    )
     assert zip_response.status_code == 200
     assert zip_response.headers["content-type"].startswith("application/zip")
     assert zip_response.headers["x-reportgen-download-kind"] == "batch_zip"
     assert zip_response.headers["x-reportgen-task-id"] == task_id
+    assert zip_response.headers["x-reportgen-download-retryable"] == "true"
+    assert int(zip_response.headers["x-reportgen-download-bytes"]) == len(
+        zip_response.content
+    )
+    assert zip_response.headers["cache-control"] == "private, no-store"
+    assert "x-reportgen-prepare-duration-ms" in zip_response.headers
+    with zipfile.ZipFile(io.BytesIO(zip_response.content)) as zf:
+        names = zf.namelist()
+    assert "batch_report.json" in names
+    assert sum(name.startswith("reports/") for name in names) == 2
+    assert sum(name.startswith("summaries/") for name in names) == 2
 
 
 def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
