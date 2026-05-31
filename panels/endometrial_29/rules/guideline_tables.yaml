@@ -1,0 +1,127 @@
+schema_version: "1.0"
+panel_id: "endometrial_29"
+rule_id: "guideline_tables"
+version: "0.2.0"
+updated: "2026-05-21"
+status: "active"
+description: "CRC guideline table row definitions used by the generator."
+
+guideline_tables:
+  nccn_results:
+    output_table: "nccn_results"
+    output_field_prefix: "nccn_"
+    required_columns:
+      - "检测基因"
+      - "检测内容"
+      - "检测结果"
+    rows:
+      - key: "EGFR_EX18"
+        genes: ["EGFR"]
+        match: "外显子18"
+      - key: "EGFR_EX19"
+        genes: ["EGFR"]
+        match: "外显子19"
+      - key: "EGFR_EX20"
+        genes: ["EGFR"]
+        match: "外显子20"
+      - key: "EGFR_EX21"
+        genes: ["EGFR"]
+        match: "外显子21"
+      - key: "KRAS_EX2"
+        genes: ["KRAS"]
+        match: "外显子2"
+      - key: "KRAS_EX3"
+        genes: ["KRAS"]
+        match: "外显子3"
+      - key: "KRAS_EX4"
+        genes: ["KRAS"]
+        match: "外显子4"
+      - key: "ALK_FUSION"
+        genes: ["ALK"]
+        match: "融合"
+      - key: "ROS1_FUSION"
+        genes: ["ROS1"]
+        match: "融合"
+      - key: "RET_FUSION"
+        genes: ["RET"]
+        match: "融合"
+      - key: "ERBB2_MUT"
+        genes: ["ERBB2"]
+        display: "ERBB2\n（HER2）"
+        match: "突变"
+      - key: "ERBB2_AMP"
+        genes: ["ERBB2"]
+        display: "ERBB2\n（HER2）"
+        match: "扩增"
+      - key: "PIK3CA_EX10"
+        genes: ["PIK3CA"]
+        match: "外显子10"
+      - key: "PIK3CA_EX21"
+        genes: ["PIK3CA"]
+        match: "外显子21"
+      - key: "MET_EX14SKIP"
+        genes: ["MET"]
+        match: "外显子14跳跃"
+      - key: "MET_AMP"
+        genes: ["MET"]
+        match: "扩增"
+      - key: "NRAS_EX2"
+        genes: ["NRAS"]
+        match: "外显子2"
+      - key: "NRAS_EX3"
+        genes: ["NRAS"]
+        match: "外显子3"
+      - key: "NRAS_EX4"
+        genes: ["NRAS"]
+        match: "外显子4"
+      - key: "BRAF_V600"
+        genes: ["BRAF"]
+        match: "密码子600"
+      - key: "FGFR123_MUT"
+        genes: ["FGFR1", "FGFR2", "FGFR3"]
+        display: "FGFR1/2/3"
+        match: "突变"
+      - key: "FGFR123_FUSION"
+        genes: ["FGFR1", "FGFR2", "FGFR3"]
+        display: "FGFR1/2/3"
+        match: "融合"
+      - key: "NTRK123_FUSION"
+        genes: ["NTRK1", "NTRK2", "NTRK3"]
+        display: "NTRK1/2/3"
+        match: "融合"
+      - key: "KIT_EX9"
+        genes: ["KIT"]
+        match: "外显子9"
+      - key: "KIT_EX11"
+        genes: ["KIT"]
+        match: "外显子11"
+      - key: "KIT_EX13"
+        genes: ["KIT"]
+        match: "外显子13"
+      - key: "KIT_EX17"
+        genes: ["KIT"]
+        match: "外显子17"
+      - key: "PDGFRA_EX12"
+        genes: ["PDGFRA"]
+        match: "外显子12"
+      - key: "PDGFRA_EX14"
+        genes: ["PDGFRA"]
+        match: "外显子14"
+      - key: "PDGFRA_EX18"
+        genes: ["PDGFRA"]
+        match: "外显子18"
+      - key: "BRCA12_MUT"
+        genes: ["BRCA1", "BRCA2"]
+        display: "BRCA1/2"
+        match: "突变"
+      - key: "IDH12_MUT"
+        genes: ["IDH1", "IDH2"]
+        display: "IDH1/2"
+        match: "突变"
+  chemotherapy:
+    output_table: "chemotherapy"
+    row_source: "drugs.yaml:approved_drug_rows"
+    required_columns:
+      - "药物名称"
+      - "相关基因"
+      - "药物适应情况"

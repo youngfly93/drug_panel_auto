@@ -1,0 +1,43 @@
+schema_version: "1.0"
+template_id: "endometrial_29_golden_template_v0"
+description: >
+  First-pass variable map for the endometrial (子宫内膜癌分子分型29基因) golden-template
+  B-track pilot, derived from a reviewed final report. Patient identity tokens
+  (name / report number / dates) are scrubbed + variableized in the seed step
+  (build_golden_template_seed.py); this map only covers the remaining scalar
+  fields that are NOT global-token-safe (generic strings that recur in
+  boilerplate), so they must be targeted by table cell / paragraph.
+
+  MVP scope (B-track): scalar fields only. Per-variant analysis tables, drug
+  tables, germline (遗传性肿瘤) sections and the per-variant Part-3 narrative
+  remain as the reviewed report's static content (editable boilerplate). Full
+  automation of those dynamic sections is A-track follow-up.
+
+# Targeted cell replacements (generic values that recur elsewhere → cannot be
+# global-replaced; located by physical table cell). Patient-info table = table 0.
+#   r1c1 = 年龄 / r1c3 = 样本类型 / r2c1 = 临床诊断(merged across c1..c3)
+#   gender (r0c3 = 女) is intentionally left static: endometrial patients are
+#   always female, so 女 / 女士 are constant for this panel.
+cell_variables:
+  - id: "patient_info_age"
+    table: 0
+    row: 1
+    col: 1
+    variable: "age"
+  - id: "patient_info_sample_type"
+    table: 0
+    row: 1
+    col: 3
+    variable: "sample_type"
+  - id: "patient_info_diagnosis"
+    table: 0
+    row: 2
+    col: 1
+    variable: "clinical_diagnosis"
+
+# MSI result sentence (第二部分): the only dynamic biomarker on this panel.
+# Original: "依据本次检测结果，该肿瘤样本为  微卫星稳定（MSS）型。"
+paragraph_templates:
+  - id: "msi_result_sentence"
+    contains: "依据本次检测结果，该肿瘤样本为"
+    text: "依据本次检测结果，该肿瘤样本为  {{ msi_result }}。"

@@ -1585,6 +1585,7 @@ def test_panel_package_registry_validator_accepts_builtin_packages():
     assert report.panels_checked == [
         "crc_301_msi",
         "crc_358_msi",
+        "endometrial_29",
         "lung_329_pdl1",
         "lung_methylation",
     ]

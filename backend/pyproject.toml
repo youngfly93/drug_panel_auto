@@ -44,3 +44,6 @@ select = ["E", "F", "I", "W"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: end-to-end / generation tests that need LibreOffice and run for tens of seconds",
+]

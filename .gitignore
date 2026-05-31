@@ -49,6 +49,11 @@ tmp/
 # But DO commit templates and knowledge bases needed for deployment
 各癌种基因报告近年汇总/
 *.pdf
+# Real patient uploads / final reports dropped at repo root (e.g.
+# "上传使用Excel表：….xlsx", "正确报告：…终版.docx") — root-anchored so panel /
+# template assets in subdirs stay committable.
+/*.xlsx
+/*.docx
 !templates/**/*.docx
 !panels/**/*.docx
 !data/knowledge_bases/processed/*.xlsx

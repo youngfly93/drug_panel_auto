@@ -1,0 +1,120 @@
+schema_version: "1.0"
+panel_id: "endometrial_29"
+display_name: "子宫内膜癌分子分型29基因"
+version: "0.0.1"
+status: "draft"
+description: >
+  Endometrial cancer 子宫内膜癌分子分型29基因 panel package. B-track pilot:
+  the golden template is variableized from a reviewed final report (PII scrubbed)
+  with high-confidence scalar fields only (patient identity, age, sample type,
+  diagnosis, MSI result). Per-variant analysis tables, drug tables, the germline
+  (遗传性肿瘤) sections and the per-variant narrative remain as the reviewed
+  report's static content (editable boilerplate). Reuses the CRC report pipeline
+  to prove end-to-end plumbing + PII safety. Endometrial-specific dynamic wiring
+  (MSI-only biomarker, somatic/germline variant split, Lynch sections, 29-gene
+  list) is A-track follow-up. NOT production-ready.
+
+aliases:
+  - "endometrial_29"
+  - "endometrial29"
+  - "子宫内膜癌29"
+  - "子宫内膜癌分子分型29基因"
+
+project_detector_rules:
+  keywords:
+    - "子宫内膜癌分子分型29基因"
+    - "子宫内膜癌29基因"
+    - "妇科肿瘤相关29基因"
+  keyword_groups:
+    - any:
+        - "子宫内膜癌分子分型29基因"
+        - "子宫内膜癌29基因"
+        - "妇科肿瘤相关29基因"
+        - "子宫内膜癌分子分型29基因检测"
+      weight: 1
+
+# Reuse the CRC enhancer (panel-parameterized) for the MVP, as lung_329 does.
+enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
+
+default_template: "endometrial_29_golden_template_v0"
+templates:
+  - id: "endometrial_29_golden_template_v0"
+    file: "templates/endometrial_29_golden_template_v0.docx"
+    version: "0.0.1"
+    status: "draft"
+    description: "Endometrial 29-gene golden template (variableized from a reviewed final report, scalars only)."
+    processors:
+      - "part3_formatted_sections"
+      - "signature_placeholder"
+      - "bullet_lists"
+      - "signature_layout"
+      - "front_matter_spacing"
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
+      - "underlines_and_styles"
+
+mappings:
+  default: "config/mapping.yaml"
+
+rules:
+  panel_rules: "rules/crc.yaml"
+  report_text: "rules/report_text.yaml"
+  biomarkers: "rules/biomarkers.yaml"
+  guideline_tables: "rules/guideline_tables.yaml"
+  drugs: "rules/drugs.yaml"
+  style: "rules/style.yaml"
+  filtering: "config/filtering.yaml"
+  drug_brands: "config/drug_brands.yaml"
+
+input_contract:
+  required_tables:
+    - "Variations"
+  optional_tables:
+    - "Msisensor"
+    - "QC"
+    - "Cnv"
+    - "Fusion"
+  required_single_fields:
+    - "patient_name"
+    - "report_number"
+    - "project_name"
+    - "report_date"
+  required_columns:
+    Variations:
+      - "Gene_Symbol"
+      - "cHGVS"
+  biomarkers:
+    msi_status:
+      required: false
+      allowed_values: ["MSS", "MSI-L", "MSI-H", "未检测"]
+
+template_contract:
+  required_variables:
+    - "patient_name"
+    - "report_number"
+    - "msi_result"
+
+processors:
+  - "empty_table_rows"
+  - "part3_formatted_sections"
+  - "signature_placeholder"
+  - "report_content"
+  - "bullet_lists"
+  - "signature_layout"
+  - "cover_artifacts"
+  - "section_spacing"
+  - "page_layout"
+  - "gene_list_and_qc"
+  - "variant_tables"
+  - "hla_tail"
+  - "blank_page_cleanup"
+  - "toc_refresh"
+  - "final_refresh_cleanup"
+  - "underlines_and_styles"
+
+golden_cases:
+  - id: "endometrial_29_smoke_generation"
+    command: "pytest backend/tests/test_endometrial29_smoke.py -q"
+    synthetic: true
+    expected_qa_status: "PASS"
