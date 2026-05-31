@@ -45,6 +45,10 @@
           <el-icon><List /></el-icon>
           <span>任务队列</span>
         </el-menu-item>
+        <el-menu-item index="/ops">
+          <el-icon><Odometer /></el-icon>
+          <span>生产状态</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -89,7 +93,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { Monitor, Document, User, Reading, Setting, List, Fold, Expand } from '@element-plus/icons-vue'
+import { Monitor, Document, User, Reading, Setting, List, Fold, Expand, Odometer } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -115,6 +119,7 @@ const titleMap: Record<string, string> = {
   '/config': '配置管理',
   '/references': '基准报告',
   '/tasks': '任务队列',
+  '/ops': '生产状态',
 }
 const currentTitle = computed(() => {
   if (route.path.startsWith('/tasks/')) return '任务质控详情'

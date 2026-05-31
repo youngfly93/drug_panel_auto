@@ -52,6 +52,11 @@ const router = createRouter({
           component: () => import('@/views/TaskQueueView.vue'),
         },
         {
+          path: 'ops',
+          name: 'ops',
+          component: () => import('@/views/ProductionStatusView.vue'),
+        },
+        {
           path: 'tasks/:id',
           name: 'task-detail',
           component: () => import('@/views/TaskDetailView.vue'),

@@ -190,6 +190,17 @@ def main() -> int:
     _assert(isinstance(stats.get("data"), dict), "task stats payload is invalid")
     print("  ✅ task stats")
 
+    ops = _json_request(
+        "GET",
+        "/api/v1/admin/ops/status?recent_task_limit=1&download_event_limit=1",
+        timeout=30,
+    )
+    ops_raw = json.dumps(ops, ensure_ascii=False)
+    _assert(bool((ops.get("data") or {}).get("deployment")), "ops status is missing deployment")
+    for forbidden in ["/media/desk16", "/Volumes/KINGSTON", "user_agent", "client_host"]:
+        _assert(forbidden not in ops_raw, f"ops status leaked {forbidden!r}")
+    print("  ✅ ops status")
+
     excel_path = build_crc_358_msi_golden_excel(
         OUTPUT_ROOT / "LZ999001_crc_358_msi_golden.xlsx"
     )
