@@ -308,7 +308,7 @@ def main() -> int:
         return 0
 
     signature = alert_signature(alerts)
-    changed = signature != state.get("signature")
+    changed = signature != state.get("signature") or bool(webhook_url and state.get("webhook_missing"))
     should_send = changed or repeat_due
     if not should_send:
         print(f"alerts suppressed count={len(alerts)} signature={signature[:12]}")
@@ -320,6 +320,7 @@ def main() -> int:
                 "signature": signature,
                 "last_checked_at": now_iso(),
                 "last_alert_count": len(alerts),
+                "webhook_missing": not bool(webhook_url),
             },
         )
         return 0
@@ -341,8 +342,9 @@ def main() -> int:
             "active": True,
             "signature": signature,
             "last_checked_at": now_iso(),
-            "last_sent_at": now_iso() if webhook_url or dry_run else state.get("last_sent_at"),
+            "last_sent_at": now_iso(),
             "last_alert_count": len(alerts),
+            "webhook_missing": not bool(webhook_url),
         },
     )
     return 0
