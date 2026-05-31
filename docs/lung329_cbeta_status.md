@@ -55,3 +55,35 @@ commits：a70fce9（marker+变异/药物循环）、ea5acca（免疫循环+panel
 - **但 lung 不能直接交付**：内容 CRC 味是 deliverability 闸，且是内容/架构任务，需你/报告组
   决定（curate lung 内容 vs 接受手工改 CRC 串味 vs 先 panel 级化 overlay 让叙述变通用）。
 - 未做任何内容策展（不擅自代报告组写肺癌医学内容）。
+
+## 五、代码/架构修复进展（item 1 + item 3，2026-05-31）
+
+按"先做纯代码/架构、不碰医学内容"做了两项，并深挖出更精确的根因：
+
+### item 1：panel 级化 reviewed_part3_overlay —— ✅ 已做、✅ 安全、⚠️ 对输出 no-op
+- 改 `ReportGenerator` 在建 GeneKnowledgeProvider 时，按当前 panel 的
+  `panel.yaml: reviewed_part3_overlay`（顶层字段）解析 overlay：声明则用、未声明则置空。
+  crc_358 声明自己的、crc_301 复用 crc_358 的；lung/endometrial 不声明 → 无 overlay。
+  `settings.yaml` 全局 `reviewed_part3_overlay_path` 改空（被 panel 覆盖）。
+- 金标基线 crc_358+crc_301 **PASS**（CRC 不回归）。
+- **但实测 lung 输出 CRC 串 44→44 零变化**：因为 CRC 味的真源是**基础
+  `gene_knowledge_db.xlsx` 本身**——「基因变异解析」sheet 44 处结直肠癌/14 肺癌，
+  「用药提示解析」200/101，是**多癌种混合、偏结直肠**的逐基因文本。overlay 只是同款内容的
+  另一副本。**所以 item 1 是对的架构地基（将来 lung 有自己的策展 overlay 时即生效），但
+  单独不改变当前输出。**
+
+### item 3：CIViC 证据标签外漏 —— ✅ 已修（显示归一化）
+- 根因：`targeted_drug_db_public.xlsx` 把原始证据标签写死进药名（如
+  `Erlotinib（CIViC:Tier I - Level A）`，库内 28 处）。
+- 修法：`_field_mapper_targeted_drugs` 加载库后对 benefit/caution 列做**显示归一化**
+  （`_normalize_drug_evidence_label`：`（CIViC/CGI…Level X…）` → `（X）`）。纯显示层、保留
+  药名与等级、不改医学内容、各 panel 格式一致、幂等。
+- 验证：lung 表1 EGFR → `Erlotinib（A）`；产物 `CIViC:Tier` 残留 0；金标基线 PASS
+  （CRC 不回归）；完整回归 215 passed。
+
+### 净结论（重要）
+**CRC 串的真源是知识库 DATA（基础 gene KB 的逐基因解析文本，多癌种偏结直肠），不是代码
+逻辑、也不只是 overlay。** 纯代码能做的：item 1（架构地基，no-op）+ item 3（标签归一化，
+已修）。**要让 lung 叙述真正不串结直肠癌，只能逐基因策展基础 KB 的肺癌文本（内容任务，
+需报告组）。** lung 可现在用 item 1 的机制挂自己的 `reviewed_part3_overlay`（一旦有 lung
+策展内容），即覆盖基础 KB。
