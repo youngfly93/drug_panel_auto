@@ -6,10 +6,12 @@
 
 set -euo pipefail
 
+APP_ROOT="${APP_ROOT:-/media/desk16/iyun6208/apps}"
 RELEASE_DIR="${RELEASE_DIR:?RELEASE_DIR is required}"
 STORAGE_DIR="${STORAGE_DIR:?STORAGE_DIR is required}"
 VENV_DIR="${VENV_DIR:?VENV_DIR is required}"
 RUNTIME_DIR="${RUNTIME_DIR:?RUNTIME_DIR is required}"
+BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 PORT="${PORT:-8000}"
 HOST="${HOST:-0.0.0.0}"
 APP_MODULE="${APP_MODULE:-app.main:app}"
@@ -97,6 +99,8 @@ set +a
 
 export RG_WEB_UPSTREAM_ROOT="$RELEASE_DIR"
 export RG_WEB_STORAGE_ROOT="$STORAGE_DIR"
+export RG_WEB_RUNTIME_DIR="$RUNTIME_DIR"
+export RG_WEB_BACKUP_DIR="$BACKUP_DIR"
 
 cd "$RELEASE_DIR"
 nohup "$VENV_DIR/bin/python" "$VENV_DIR/bin/uvicorn" "$APP_MODULE" \

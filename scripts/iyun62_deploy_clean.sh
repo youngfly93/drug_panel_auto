@@ -41,6 +41,7 @@ fi
 
 git archive "$DEPLOY_REF" | tar -x -C "$tmp_dir"
 python -m py_compile \
+    "$tmp_dir/backend/app/api/ops.py" \
     "$tmp_dir/reportgen/core/report_summary.py" \
     "$tmp_dir/reportgen/core/report_generator.py" \
     "$tmp_dir/backend/app/services/reportgen_bridge.py"
@@ -54,6 +55,7 @@ xattr -cr "$tmp_dir" 2>/dev/null || true
 
 # Keep a quick compile check for the currently checked-out scripts too.
 python -m py_compile \
+    backend/app/api/ops.py \
     reportgen/core/report_summary.py \
     reportgen/core/report_generator.py \
     backend/app/services/reportgen_bridge.py
