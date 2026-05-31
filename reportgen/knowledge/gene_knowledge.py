@@ -46,6 +46,9 @@ class GeneKnowledgeProvider:
         self._gene_analysis_cache: Dict[str, str] = {}
         self._reviewed_gene_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._reviewed_gene_section_overrides: Dict[str, Dict[str, str]] = {}
+        # gene-level (variant-agnostic) Part-3 overrides; lower precedence than
+        # variant-level, higher than the base KB. Keyed by normalized gene.
+        self._gene_level_section_overrides: Dict[str, Dict[str, str]] = {}
         self._reviewed_drug_section_overrides: Dict[tuple[str, str], List[Dict[str, str]]] = {}
         self._extra_references: List[str] = []
         self._drug_analysis_cache: Dict[str, Dict[str, str]] = {}
@@ -174,16 +177,28 @@ class GeneKnowledgeProvider:
             for row in data.get("gene_sections") or []:
                 if not isinstance(row, dict):
                     continue
+                section = {
+                    k: self._norm_text(v)
+                    for k, v in row.items()
+                    if k in {"intro", "mutation_analysis"} and self._norm_text(v)
+                }
+                if not section:
+                    continue
                 key = self._variant_key(
                     row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs")
                 )
                 if key:
-                    self._reviewed_gene_section_overrides[key] = {
-                        k: self._norm_text(v)
-                        for k, v in row.items()
-                        if k in {"intro", "mutation_analysis"}
-                        and self._norm_text(v)
-                    }
+                    # variant-level override (gene + c_hgvs[+ p_hgvs])
+                    self._reviewed_gene_section_overrides[key] = section
+                else:
+                    # gene-level override (gene only, no c_hgvs): applies to ANY
+                    # variant of this gene. Lets a panel curate cancer-specific
+                    # wording (e.g. lung) without listing every variant.
+                    gene_key = self._hgvs_key(row.get("gene"))
+                    if gene_key:
+                        self._gene_level_section_overrides.setdefault(
+                            gene_key, section
+                        )
 
             for row in data.get("drug_sections") or []:
                 if not isinstance(row, dict):
@@ -910,6 +925,15 @@ class GeneKnowledgeProvider:
             mutation_type=mutation_type,
             has_drug=has_drug,
         )
+        # gene-level overlay (panel-scoped, variant-agnostic): overrides the
+        # base KB for ANY variant of this gene. Lets e.g. lung supply lung
+        # wording without enumerating every variant.
+        gene_override = self._gene_level_section_overrides.get(
+            self._hgvs_key(gene), {}
+        )
+        intro = gene_override.get("intro") or intro
+        mutation_analysis = gene_override.get("mutation_analysis") or mutation_analysis
+        # variant-level overlay has the highest precedence.
         reviewed_override = self._reviewed_gene_section_overrides.get(
             self._variant_key(gene, c_hgvs, p_hgvs),
             {},

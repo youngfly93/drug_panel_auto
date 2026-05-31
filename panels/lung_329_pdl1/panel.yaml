@@ -83,6 +83,11 @@ rules:
   filtering: "config/filtering.yaml"
   drug_brands: "config/drug_brands.yaml"
 
+# Reviewed Part-3 wording overlay (panel-scoped, lung-curated FIRST PASS, harvested
+# from reviewed lung reports, de-identified). Gene-level entries override the base
+# (CRC-emphasized) KB wording for any variant. NEEDS report-team review/extension.
+reviewed_part3_overlay: "rules/reviewed_part3_knowledge.yaml"
+
 input_contract:
   required_tables:
     - "Variations"
