@@ -354,7 +354,7 @@ const runtimeRows = computed(() => {
     {
       label: '生成队列',
       status: queueStats.value.queued > 0 ? 'warn' : 'ok',
-      meta: `运行 ${queueStats.value.active}/${queueStats.value.max_workers}，排队 ${queueStats.value.queued}`,
+      meta: `运行 ${queueStats.value.active}/${queueStats.value.max_workers}，排队 ${queueStats.value.queued}，超时 ${formatSeconds(generationLimits.value.timeout_seconds)}`,
     },
     {
       label: '任务恢复',
@@ -414,6 +414,11 @@ const recoveryStats = computed(() => status.value?.runtime.task_recovery || {
   failed: 0,
   skipped: 0,
   errors: [],
+})
+
+const generationLimits = computed(() => status.value?.runtime.generation_limits || {
+  process_isolation: false,
+  timeout_seconds: 0,
 })
 
 const taskBars = computed(() => {

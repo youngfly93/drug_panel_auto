@@ -162,6 +162,8 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     assert data["runtime"]["generation_queue"]["max_workers"] >= 1
     assert data["runtime"]["generation_queue"]["queued"] >= 0
     assert data["runtime"]["generation_queue"]["active"] >= 0
+    assert isinstance(data["runtime"]["generation_limits"]["process_isolation"], bool)
+    assert data["runtime"]["generation_limits"]["timeout_seconds"] >= 1
     assert data["runtime"]["task_recovery"]["ran"] in {True, False}
     assert data["downloads"]["summary"]["completed"] == 1
     assert data["downloads"]["recent_terminal_events"][0]["task_id"] == "task-sensitive"

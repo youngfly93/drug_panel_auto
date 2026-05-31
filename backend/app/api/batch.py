@@ -26,6 +26,7 @@ from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.services import clinical_info_service as clinical_svc
 from app.services.file_manager import ensure_report_dir, save_upload
+from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
 from app.services import reference_report_service as diff_svc
 from app.services.reportgen_bridge import ReportGenBridge
@@ -242,7 +243,8 @@ def _build_item_payload(
         detected_project_type,
     )
 
-    result = bridge.generate_report(
+    result = run_generate_report_with_timeout(
+        bridge,
         excel_path=stored_path,
         output_dir=output_dir,
         template_name=template_name,

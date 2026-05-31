@@ -26,6 +26,10 @@ export interface OpsStatusPayload {
       submitted_total: number
       finished_total: number
     }
+    generation_limits: {
+      process_isolation: boolean
+      timeout_seconds: number
+    }
     task_recovery: {
       ran: boolean
       checked_at: string | null

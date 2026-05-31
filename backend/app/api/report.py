@@ -45,6 +45,7 @@ from app.schemas.report import (
 from app.services import clinical_info_service as clinical_svc
 from app.services import reference_report_service as diff_svc
 from app.services.file_manager import ensure_report_dir, save_upload
+from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_recovery import write_single_generation_request
@@ -219,7 +220,8 @@ def _complete_file_generation_task(
     db.commit()
 
     try:
-        result = bridge.generate_report(
+        result = run_generate_report_with_timeout(
+            bridge,
             excel_path=stored_path,
             output_dir=output_dir,
             template_name=template_name,
@@ -930,7 +932,8 @@ def generate_report(
     db.commit()
 
     try:
-        result = bridge.generate_report(
+        result = run_generate_report_with_timeout(
+            bridge,
             excel_path=upload.stored_path,
             output_dir=str(output_dir),
             template_name=req.template_name,
@@ -1066,7 +1069,8 @@ def generate_report_from_file(
     db.commit()
 
     try:
-        result = bridge.generate_report(
+        result = run_generate_report_with_timeout(
+            bridge,
             excel_path=str(stored_path),
             output_dir=str(output_dir),
             template_name=template_name,

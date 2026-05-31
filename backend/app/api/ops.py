@@ -420,6 +420,10 @@ def ops_status(
             "runtime_dir_present": runtime_dir.exists(),
             "libreoffice_listener": _libreoffice_listener_status(),
             "generation_queue": queue_stats(),
+            "generation_limits": {
+                "process_isolation": bool(settings.generation_process_isolation),
+                "timeout_seconds": int(settings.generation_process_timeout_seconds),
+            },
             "task_recovery": last_recovery_summary(),
             "watchdog": _watchdog_status(log_dir / "watchdog.log"),
             "maintenance": _maintenance_status(log_dir / "maintenance.log"),
