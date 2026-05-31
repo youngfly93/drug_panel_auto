@@ -242,6 +242,8 @@ class ReportGenBridge:
             report_data=report_data,
             project_type=canonical_project_type,
             project_name=project_name,
+            panel_status=self.generator._panel_status(panel_package),
+            template_status=self.generator._template_status(panel_package, None),
             generation_id=Path(working.file_path).stem,
             output_file=None,
             qa_report=None,

@@ -15,6 +15,8 @@ def build_report_summary(
     report_data: ReportData,
     project_type: Optional[str] = None,
     project_name: Optional[str] = None,
+    panel_status: Optional[str] = None,
+    template_status: Optional[str] = None,
     generation_id: Optional[str] = None,
     output_file: Optional[str] = None,
     qa_report: Optional[dict[str, Any]] = None,
@@ -55,7 +57,8 @@ def build_report_summary(
         qa_status=qa_status,
         qa_issues=qa_issues,
         warnings=warning_items,
-        project_type=project_type,
+        panel_status=panel_status,
+        template_status=template_status,
     )
 
     return {
@@ -66,6 +69,10 @@ def build_report_summary(
         or _safe_text(_first_nonempty(context, ("project_name", "检测项目", "项目名称"))),
         "output_file": output_file,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "panel": {
+            "status": _nullable_text(panel_status),
+            "template_status": _nullable_text(template_status),
+        },
         "patient": {
             "patient_name": _safe_text(
                 _first_nonempty(context, ("patient_name", "姓名", "患者姓名"))
@@ -247,6 +254,11 @@ def _safe_text(value: Any) -> str:
     return "" if text.lower() in EMPTY_VALUES else text
 
 
+def _nullable_text(value: Any) -> Optional[str]:
+    text = _safe_text(value)
+    return text or None
+
+
 def _is_empty(value: Any) -> bool:
     if value is None:
         return True
@@ -305,7 +317,8 @@ def _manual_review_items(
     qa_status: Optional[str],
     qa_issues: list[dict[str, Any]],
     warnings: list[str],
-    project_type: Optional[str],
+    panel_status: Optional[str],
+    template_status: Optional[str],
 ) -> list[str]:
     items: list[str] = []
     if qa_status == "FAIL":
@@ -316,6 +329,33 @@ def _manual_review_items(
         items.append(f"生成过程记录 {len(warnings)} 条 warning，需要确认是否影响交付。")
     if qa_issues and qa_status not in {"FAIL", "WARN"}:
         items.append(f"QA 记录 {len(qa_issues)} 条问题，请抽查。")
-    if project_type and "endometrial" in project_type:
-        items.append("子宫内膜癌 pilot 模板仍需人工核对胚系/林奇综合征和逐变异解析段。")
+    items.extend(_status_review_items(panel_status, template_status))
     return items
+
+
+def _status_review_items(
+    panel_status: Optional[str],
+    template_status: Optional[str],
+) -> list[str]:
+    grouped: dict[str, list[str]] = {}
+    for source, status in (
+        ("Panel", panel_status),
+        ("模板", template_status),
+    ):
+        normalized = _normalize_status(status)
+        if normalized not in {"draft", "pilot"}:
+            continue
+        grouped.setdefault(normalized, []).append(source)
+
+    items: list[str] = []
+    for status, sources in grouped.items():
+        source_label = "、".join(sources)
+        if status == "draft":
+            items.append(f"{source_label}状态为 draft（草稿）：需人工复核，勿直接交付。")
+        elif status == "pilot":
+            items.append(f"{source_label}状态为 pilot（试运行）：需人工复核后再交付。")
+    return items
+
+
+def _normalize_status(status: Optional[str]) -> str:
+    return _safe_text(status).strip().lower()

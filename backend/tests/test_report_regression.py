@@ -673,6 +673,61 @@ def test_report_summary_extracts_biomarkers_variants_and_drugs():
     assert summary["qa"]["status"] == "PASS"
 
 
+def test_report_summary_flags_draft_panel_status_without_cancer_name():
+    summary = build_report_summary(
+        report_data=ReportData(),
+        project_type="lung_329_pdl1",
+        project_name="肺癌329基因+PD-L1",
+        panel_status="draft",
+        template_status="draft",
+        qa_report={"status": "PASS", "issues": []},
+    )
+
+    assert summary["panel"] == {"status": "draft", "template_status": "draft"}
+    assert any(
+        "draft" in item and "勿直接交付" in item
+        for item in summary["manual_review"]
+    )
+
+
+def test_report_summary_flags_pilot_panel_status():
+    summary = build_report_summary(
+        report_data=ReportData(),
+        project_type="lung_methylation",
+        project_name="肺癌甲基化",
+        panel_status="pilot",
+        template_status="pilot",
+        qa_report={"status": "PASS", "issues": []},
+    )
+
+    assert any(
+        "pilot" in item and "试运行" in item
+        for item in summary["manual_review"]
+    )
+
+
+def test_report_summary_active_panel_status_has_no_draft_guard():
+    summary = build_report_summary(
+        report_data=ReportData(),
+        project_type="crc_358_msi",
+        project_name="结直肠癌358基因+MSI",
+        panel_status="active",
+        template_status="active",
+        qa_report={"status": "PASS", "issues": []},
+    )
+
+    assert summary["panel"] == {"status": "active", "template_status": "active"}
+    assert summary["manual_review"] == []
+
+
+def test_report_generator_reads_status_from_panel_package():
+    package = load_panel_package(ROOT / "panels" / "lung_329_pdl1")
+    template_file = package.resolve_template_file()
+
+    assert ReportGenerator._panel_status(package) == "draft"
+    assert ReportGenerator._template_status(package, str(template_file)) == "draft"
+
+
 def test_write_report_summary_uses_docx_sidecar(tmp_path):
     output_file = tmp_path / "case.docx"
     output_file.write_bytes(b"PK\x03\x04")

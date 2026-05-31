@@ -994,6 +994,11 @@ class ReportGenerator:
                 report_data=state.report_data,
                 project_type=state.canonical_project_type,
                 project_name=state.project_name,
+                panel_status=self._panel_status(state.panel_package),
+                template_status=self._template_status(
+                    state.panel_package,
+                    state.template_file,
+                ),
                 generation_id=state.generation_id or Path(state.final_output).stem,
                 output_file=state.final_output,
                 qa_report=state.qa_report,
@@ -1023,6 +1028,53 @@ class ReportGenerator:
         except Exception as summary_err:
             self.logger.warning("生成报告结果摘要失败", error=str(summary_err))
             stage.warn("REPORT_SUMMARY_FAILED", str(summary_err))
+
+    @staticmethod
+    def _panel_status(panel_package: Any) -> Optional[str]:
+        if panel_package is None:
+            return None
+        raw = getattr(panel_package, "raw", None)
+        if isinstance(raw, dict):
+            status = ReportGenerator._clean_status(raw.get("status"))
+            if status:
+                return status
+        return ReportGenerator._clean_status(getattr(panel_package, "status", None))
+
+    @staticmethod
+    def _template_status(
+        panel_package: Any,
+        template_file: Optional[str],
+    ) -> Optional[str]:
+        if panel_package is None:
+            return None
+
+        if template_file:
+            requested = Path(template_file).resolve()
+            for template_id, template in (
+                getattr(panel_package, "templates", None) or {}
+            ).items():
+                try:
+                    resolved = panel_package.resolve_template_file(template_id).resolve()
+                except Exception:
+                    continue
+                if resolved == requested:
+                    return ReportGenerator._clean_status(
+                        getattr(template, "status", None)
+                    )
+
+        try:
+            return ReportGenerator._clean_status(
+                getattr(panel_package.default_template, "status", None)
+            )
+        except Exception:
+            return None
+
+    @staticmethod
+    def _clean_status(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
     def _build_success_payload(
         self,

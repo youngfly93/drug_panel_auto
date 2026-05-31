@@ -171,6 +171,10 @@ export interface ReportSummary {
   project_name?: string | null
   output_file?: string | null
   generated_at?: string
+  panel?: {
+    status?: string | null
+    template_status?: string | null
+  }
   patient?: Record<string, any>
   biomarkers?: {
     tmb?: Record<string, any>
