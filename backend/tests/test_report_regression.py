@@ -58,6 +58,7 @@ from reportgen.core.report_diff import ReportDiffOptions, compare_reports
 from reportgen.core.template_bridge_358 import (
     PanelConfig,
     _build_nccn_and_immune_fields,
+    _compact_drug_display_tables,
     _patch_reviewed_variant_override_rows,
     build_targeted_drug_brand_summary,
     build_tmb_summary,
@@ -1285,6 +1286,54 @@ def test_reviewed_variant_override_replaces_existing_targeted_tip():
     assert "Avutometinib+Defactinib" not in tip_row["benefit_drugs"]
     assert "Defactinib+Avutometinib（C）" in tip_row["benefit_drugs"]
     assert "帕尼单抗（A）" in tip_row["caution_drugs"]
+
+
+def test_long_drug_lists_are_compacted_for_word_tables_but_kept_full_in_summary():
+    long_list = "\n".join(f"药物{i}（C）" for i in range(1, 8))
+    report_data = ReportData(
+        context={
+            "variants_2_1": [
+                {
+                    "gene": "ERBB2",
+                    "locus": "c.1979G>A,\np.G660D",
+                    "benefit_drugs": long_list,
+                    "caution_drugs": "--",
+                }
+            ],
+            "targeted_drug_tips": [
+                {
+                    "gene": "ERBB2",
+                    "variant_site": "c.1979G>A,\np.G660D",
+                    "benefit_drugs": long_list,
+                    "caution_drugs": "--",
+                }
+            ],
+        }
+    )
+
+    _compact_drug_display_tables(report_data)
+
+    variant_row = report_data.get_table("variants_2_1")[0]
+    tip_row = report_data.get_table("targeted_drug_tips")[0]
+    assert variant_row["benefit_drugs"].splitlines() == [
+        "药物1（C）",
+        "药物2（C）",
+        "药物3（C）",
+        "药物4（C）",
+        "药物5（C）",
+        "另2项详见第三部分",
+    ]
+    assert variant_row["benefit_drugs_full"] == long_list
+    assert tip_row["benefit_drugs_full"] == long_list
+
+    summary = build_report_summary(
+        report_data=report_data,
+        project_type="crc_358_msi",
+        qa_report={"status": "PASS", "issues": []},
+    )
+
+    assert summary["variants"]["key_rows"][0]["benefit_drugs"] == long_list
+    assert summary["drugs"]["targeted_rows"][0]["benefit_drugs"] == long_list
 
 
 def test_part3_variant_scope_can_follow_summary_variants(tmp_path):

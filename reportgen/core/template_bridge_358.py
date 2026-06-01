@@ -1052,6 +1052,55 @@ def _drugs_from_override(override: Optional[Dict[str, Any]]) -> Tuple[str, str]:
     )
 
 
+DRUG_DISPLAY_MAX_ITEMS = 5
+
+
+def _compact_drug_display_value(value: Any, *, max_items: int = DRUG_DISPLAY_MAX_ITEMS) -> str:
+    """Return a report-table friendly drug list while preserving full data elsewhere."""
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        items = [_norm_text(item) for item in value if _norm_text(item)]
+    else:
+        text = _norm_text(value)
+        if not text or text in {"-", "--"}:
+            return text
+        items = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(items) <= max_items:
+        return "\n".join(items)
+    omitted = len(items) - max_items
+    return "\n".join([*items[:max_items], f"另{omitted}项详见第三部分"])
+
+
+def _compact_drug_display_tables(report_data: ReportData) -> None:
+    """Compact long drug lists in Word summary tables without losing full values.
+
+    The generated Word tables in Part 2 have narrow drug columns. Very long
+    reviewed lists, such as ERBB2, make the row visually unreadable. Keep the
+    complete list in *_full fields for structured summaries/audit, and render a
+    concise display value in the Word-facing columns.
+    """
+    for table_name in ("variants_2_1", "targeted_drug_tips"):
+        rows = list(report_data.get_table(table_name) or [])
+        if not rows:
+            continue
+        changed = False
+        for row in rows:
+            for field in ("benefit_drugs", "caution_drugs"):
+                value = row.get(field)
+                if value is None:
+                    continue
+                full_field = f"{field}_full"
+                if full_field not in row:
+                    row[full_field] = value
+                compacted = _compact_drug_display_value(value)
+                if compacted != value:
+                    row[field] = compacted
+                    changed = True
+        if changed:
+            report_data.set_table(table_name, rows)
+
+
 def build_variants_for_template(
     excel_data: ExcelDataSource,
     filter_column: str = "ExistInsmall358",
@@ -2305,6 +2354,8 @@ def enhance_report_data(
         logging.getLogger("reportgen").warning(
             "靶向药物提示回填失败: %s", e
         )
+
+    _compact_drug_display_tables(report_data)
 
     report_content_cfg = report_data.get_field("report_content")
     report_content_cfg = report_content_cfg if isinstance(report_content_cfg, dict) else {}
