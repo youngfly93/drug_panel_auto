@@ -9,6 +9,19 @@
 - 当前在飞的大件:**lung_329 C-beta**,在 **PR #14**(branch `feat/lung-329-cbeta`,OPEN/MERGEABLE/BEHIND)。
 - **建议接手后:别急着再建。** 瓶颈是审核不是建设;再堆未审核的代码=制造债。
 
+## 0.6 增量(2026-06-01):迁移安全网 + skill + lung 模板修复
+- **补齐 3 个验收脚本**(`onboarding_new_panel.md` 早先引用但缺失的安全网):
+  `scripts/scan_hardcoded_literals.py`(模板硬编码扫描:HARD=变异记法/`333…`调试标记/`--token`;SOFT=丰度%/日期)、
+  `scripts/two_case_leak_test.py`(双病例零泄漏)、`scripts/render_blank_page_check.py`(LO 渲染近空白页)。
+  全部跑过现有模板验证:lung_329 v1 + endometrial_29 v0 + crc_358/301 模板 **0 HARD**(变异级 PII 干净)。
+- **安全网首跑即抓到真 bug**:lung_329 v1 金标模板首段残留 `33333…` 调试标记 → LO 下单独占一页近空白 page2。
+  已修(只清该 run 文本、保留封面 drawing 段)→ page2 恢复正常、封面完好、页数 80→75。
+  lung smoke(7 passed)+ 金标基线(crc 2 passed)零回归。**改的是 docx 二进制,需 commit。**
+- **做了项目级 skill** `.claude/skills/migrate-panel/SKILL.md`(触发:"迁移 panel/接入新 panel")。
+  ⚠️ **`.claude/skills` 被 gitignore → skill 本地可用但不入库**;持久知识在 `docs/onboarding_new_panel.md`(已更新:
+  脚本现已存在、加了 `333…` 调试标记踩坑条)。
+- 这批改动**尚未 commit**(等用户发话)。
+
 ## 1. 项目与环境(先懂这个)
 - FastAPI + Vue3 web 平台,包着 `reportgen` Python 包(golden-template + docxtpl + **后处理器链**架构)。
 - **运行时用仓库内的 `reportgen/`**,不是 sibling upstream — 改这份(见记忆 runtime-reportgen-copy)。
