@@ -1,6 +1,6 @@
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
 from app.api import ops as ops_api
 from app.config import settings
 from app.database import Base, get_db
-from app.models.task import Task
+from app.models.task import Task, TaskResult
 
 
 def _client(tmp_path, monkeypatch):
@@ -246,3 +246,126 @@ def test_ops_status_returns_threshold_alerts(tmp_path, monkeypatch):
     assert "downloads.duration.high" in alert_ids
     assert "backup.missing" in alert_ids
     assert "maintenance.cleanup.missing" in alert_ids
+
+
+def test_load_test_summary_returns_sanitized_release_gate_payload(tmp_path, monkeypatch):
+    client, SessionLocal, runtime_dir, _backup_dir = _client(tmp_path, monkeypatch)
+    (runtime_dir / "logs").mkdir(parents=True)
+    now = datetime.now(timezone.utc)
+    (runtime_dir / "logs" / "uvicorn.log").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "timestamp": now.isoformat(),
+                        "event_type": "report_download_completed",
+                        "task_id": "batch-sensitive",
+                        "duration_ms": 800,
+                        "file_size_bytes": 1024,
+                        "file_size_mb": 0.001,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "timestamp": (now - timedelta(days=3)).isoformat(),
+                        "event_type": "report_download_failed",
+                        "task_id": "old-sensitive",
+                        "duration_ms": 5000,
+                    }
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report_dir = tmp_path / "reports"
+    report_dir.mkdir()
+    completed_docx = report_dir / "SensitivePatient.docx"
+    completed_docx.write_bytes(b"docx")
+    completed_docx.with_suffix(".qa.json").write_text(
+        json.dumps({"status": "WARN"}),
+        encoding="utf-8",
+    )
+
+    db = SessionLocal()
+    db.add(
+        Task(
+            id="batch-sensitive",
+            task_type="batch",
+            status="partial_failed",
+            project_type="crc_358_msi",
+            total_files=2,
+            completed_files=1,
+            failed_files=1,
+            errors=json.dumps(["Alice secret.xlsx Excel sheet missing"], ensure_ascii=False),
+            warnings=json.dumps(["Sensitive Patient QA warning"], ensure_ascii=False),
+            created_at=(now - timedelta(hours=1)).replace(tzinfo=None),
+            completed_at=(now - timedelta(minutes=30)).replace(tzinfo=None),
+            duration_seconds=120.0,
+        )
+    )
+    db.add_all(
+        [
+            TaskResult(
+                task_id="batch-sensitive",
+                file_index=1,
+                excel_filename="Alice-secret.xlsx",
+                status="completed",
+                output_path=str(completed_docx),
+                duration_seconds=50.0,
+                warnings=json.dumps(["Sensitive Patient QA warning"], ensure_ascii=False),
+            ),
+            TaskResult(
+                task_id="batch-sensitive",
+                file_index=2,
+                excel_filename="Bob-secret.xlsx",
+                status="failed",
+                duration_seconds=20.0,
+                errors=json.dumps(["Bob secret.xlsx template rendering failed"], ensure_ascii=False),
+            ),
+        ]
+    )
+    db.add(
+        Task(
+            id="old-task",
+            task_type="single",
+            status="failed",
+            project_type="crc_358_msi",
+            total_files=1,
+            completed_files=0,
+            failed_files=1,
+            errors=json.dumps(["old sensitive failure"], ensure_ascii=False),
+            created_at=(now - timedelta(days=3)).replace(tzinfo=None),
+            duration_seconds=10.0,
+        )
+    )
+    db.commit()
+    db.close()
+
+    with client:
+        response = client.get("/api/v1/admin/ops/load-test-summary?window_hours=24")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    data = payload["data"]
+    assert data["schema_version"] == "1.0"
+    assert data["totals"]["tasks_total"] == 1
+    assert data["totals"]["batch_tasks"] == 1
+    assert data["totals"]["units_total"] == 2
+    assert data["totals"]["units_completed"] == 1
+    assert data["totals"]["units_failed"] == 1
+    assert data["qa"]["warn"] == 1
+    assert data["downloads"]["summary"]["completed"] == 1
+    assert data["downloads"]["summary"]["failed"] == 0
+    assert data["gate"]["status"] == "block"
+    assert any(item["reason"] == "Excel 数据问题" for item in data["failure_reasons"])
+    assert any(item["reason"] == "模板渲染错误" for item in data["failure_reasons"])
+
+    response_text = response.text
+    assert "SensitivePatient" not in response_text
+    assert "Sensitive Patient" not in response_text
+    assert "Alice" not in response_text
+    assert "Bob" not in response_text
+    assert "secret.xlsx" not in response_text
+    assert str(tmp_path) not in response_text
