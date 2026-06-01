@@ -243,12 +243,62 @@
             {{ downloadStatus }}
           </div>
         </div>
+        <div v-if="batchResultDetailRows.length" class="batch-result-tools">
+          <div class="batch-filter-cards">
+            <button
+              v-for="card in batchResultFilterCards"
+              :key="card.key"
+              :class="['batch-filter-card', card.tone, { active: batchQuickFilter === card.key }]"
+              type="button"
+              @click="batchQuickFilter = card.key"
+            >
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+              <em>{{ card.detail }}</em>
+            </button>
+          </div>
+          <div class="batch-filter-row">
+            <el-input
+              v-model="batchSearchQuery"
+              clearable
+              :prefix-icon="Search"
+              placeholder="搜索 Excel、患者/样本、项目、错误说明"
+            />
+            <el-select v-model="batchStatusFilter" placeholder="文件状态" clearable>
+              <el-option label="已完成" value="completed" />
+              <el-option label="失败" value="failed" />
+              <el-option label="待执行" value="pending" />
+              <el-option label="运行中" value="running" />
+              <el-option label="已取消" value="cancelled" />
+            </el-select>
+            <el-select v-model="batchQaFilter" placeholder="QA 状态" clearable>
+              <el-option label="PASS" value="PASS" />
+              <el-option label="WARN" value="WARN" />
+              <el-option label="FAIL" value="FAIL" />
+              <el-option label="SKIP" value="SKIP" />
+            </el-select>
+            <el-select v-model="batchProjectFilter" placeholder="项目" clearable filterable>
+              <el-option
+                v-for="option in batchProjectOptions"
+                :key="option"
+                :label="option"
+                :value="option"
+              />
+            </el-select>
+            <el-button :icon="Close" @click="resetBatchFilters">清空</el-button>
+          </div>
+          <div class="batch-filter-meta">
+            <span>显示 {{ filteredBatchResultRows.length }}/{{ batchResultDetailRows.length }} 个文件</span>
+            <span v-if="batchSearchQuery">搜索：{{ batchSearchQuery }}</span>
+          </div>
+        </div>
         <el-table
           v-if="batchResultDetailRows.length"
-          :data="batchResultDetailRows"
+          :data="filteredBatchResultRows"
           size="small"
           border
           class="batch-detail-table"
+          empty-text="当前筛选无逐文件结果"
         >
           <el-table-column prop="index" label="#" width="70" />
           <el-table-column prop="excel_filename" label="Excel" min-width="220" show-overflow-tooltip />
@@ -298,7 +348,11 @@
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-else description="暂无逐文件结果" :image-size="70" />
+        <el-empty
+          v-if="!batchResultDetailRows.length"
+          description="暂无逐文件结果"
+          :image-size="70"
+        />
       </section>
 
       <section v-if="!isBatchTask" class="qa-panel report-summary section-gap">
@@ -725,7 +779,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, Download, Refresh, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, Close, Download, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   reportApi,
@@ -771,6 +825,11 @@ const reportDiff = ref<ReportDiffResult | null>(null)
 const referenceFile = ref<File | null>(null)
 const referenceFileList = ref<any[]>([])
 const diffFailOn = ref<'fail' | 'warn'>('fail')
+const batchQuickFilter = ref('all')
+const batchSearchQuery = ref('')
+const batchStatusFilter = ref('')
+const batchQaFilter = ref('')
+const batchProjectFilter = ref('')
 const qaLoadError = ref('')
 const summaryLoadError = ref('')
 const provenanceLoadError = ref('')
@@ -883,7 +942,82 @@ const batchResultDetailRows = computed(() => {
         clinical.patient_name,
         clinical.sample_id,
       ].filter(Boolean).join(' / ') || '-',
+      search_text: [
+        row.index,
+        row.excel_filename,
+        row.status,
+        row.project_type,
+        row.project_name,
+        row.qa_status,
+        clinical.patient_name,
+        clinical.sample_id,
+        ...(row.errors || []),
+        ...(row.warnings || []),
+      ].filter(Boolean).join(' ').toLowerCase(),
     }
+  })
+})
+const batchProjectOptions = computed(() => {
+  const values = new Set<string>()
+  for (const row of batchResultDetailRows.value) {
+    const value = row.project_name || row.project_type
+    if (value) values.add(String(value))
+  }
+  return Array.from(values).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+})
+const batchResultFilterCards = computed(() => {
+  const rows = batchResultDetailRows.value
+  const count = (predicate: (row: any) => boolean) => rows.filter(predicate).length
+  return [
+    {
+      key: 'all',
+      label: '全部文件',
+      value: rows.length,
+      detail: '批量输入',
+      tone: 'neutral',
+    },
+    {
+      key: 'attention',
+      label: '需处理',
+      value: count(batchRowNeedsAttention),
+      detail: '失败/QA/警告',
+      tone: 'danger',
+    },
+    {
+      key: 'failed',
+      label: '生成失败',
+      value: count((row) => row.status === 'failed'),
+      detail: '可重试优先',
+      tone: 'danger',
+    },
+    {
+      key: 'qa_issues',
+      label: 'QA 风险',
+      value: count((row) => ['FAIL', 'WARN'].includes(row.qa_status || '')),
+      detail: '需人工核对',
+      tone: 'warning',
+    },
+    {
+      key: 'downloadable',
+      label: '可下载',
+      value: count((row) => Boolean(row.download_url)),
+      detail: '已生成 DOCX',
+      tone: 'success',
+    },
+  ]
+})
+const filteredBatchResultRows = computed(() => {
+  const query = batchSearchQuery.value.trim().toLowerCase()
+  return batchResultDetailRows.value.filter((row) => {
+    if (!matchesBatchQuickFilter(row)) return false
+    if (batchStatusFilter.value && row.status !== batchStatusFilter.value) return false
+    if (batchQaFilter.value && row.qa_status !== batchQaFilter.value) return false
+    if (batchProjectFilter.value) {
+      const project = row.project_name || row.project_type || ''
+      if (project !== batchProjectFilter.value) return false
+    }
+    if (query && !row.search_text.includes(query)) return false
+    return true
   })
 })
 const summaryPatientItems = computed(() => {
@@ -1063,6 +1197,31 @@ function normalizeSummaryRow(row: Record<string, any>) {
     benefit_drugs: stringifyValue(row.benefit_drugs),
     caution_drugs: stringifyValue(row.caution_drugs),
   }
+}
+
+function batchRowNeedsAttention(row: any) {
+  return (
+    ['failed', 'cancelled'].includes(row.status)
+    || ['FAIL', 'WARN'].includes(row.qa_status || '')
+    || Boolean(row.errors?.length)
+    || Boolean(row.warnings?.length)
+  )
+}
+
+function matchesBatchQuickFilter(row: any) {
+  if (batchQuickFilter.value === 'attention') return batchRowNeedsAttention(row)
+  if (batchQuickFilter.value === 'failed') return row.status === 'failed'
+  if (batchQuickFilter.value === 'qa_issues') return ['FAIL', 'WARN'].includes(row.qa_status || '')
+  if (batchQuickFilter.value === 'downloadable') return Boolean(row.download_url)
+  return true
+}
+
+function resetBatchFilters() {
+  batchQuickFilter.value = 'all'
+  batchSearchQuery.value = ''
+  batchStatusFilter.value = ''
+  batchQaFilter.value = ''
+  batchProjectFilter.value = ''
 }
 
 function formatSimilarity(value?: number | null) {
@@ -1844,6 +2003,79 @@ onMounted(fetchAll)
   margin-top: 12px;
 }
 
+.batch-result-tools {
+  padding: 14px;
+  border-bottom: 1px solid #e6edf3;
+  background: #fbfcfe;
+}
+
+.batch-filter-cards {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.batch-filter-card {
+  min-height: 78px;
+  padding: 10px 12px;
+  border: 1px solid #d9e2ec;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.batch-filter-card.active {
+  border-color: #409eff;
+  box-shadow: inset 0 0 0 1px #409eff;
+}
+
+.batch-filter-card span,
+.batch-filter-card em,
+.batch-filter-meta {
+  color: #667085;
+  font-size: 12px;
+}
+
+.batch-filter-card strong {
+  color: #1f2933;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.batch-filter-card em {
+  font-style: normal;
+}
+
+.batch-filter-card.danger strong {
+  color: #b42318;
+}
+
+.batch-filter-card.warning strong {
+  color: #b54708;
+}
+
+.batch-filter-card.success strong {
+  color: #16803c;
+}
+
+.batch-filter-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.4fr) repeat(3, minmax(130px, 0.7fr)) 92px;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.batch-filter-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
 .download-status {
   margin-top: 8px;
   color: #667085;
@@ -2101,7 +2333,9 @@ pre {
   .qa-grid,
   .diff-metrics,
   .gate-metrics,
-  .batch-summary-grid {
+  .batch-summary-grid,
+  .batch-filter-cards,
+  .batch-filter-row {
     grid-template-columns: 1fr;
   }
 
