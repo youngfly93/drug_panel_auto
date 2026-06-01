@@ -5177,6 +5177,40 @@ def test_qa_report_checks_crc_style_rules_pass_after_postprocessing(tmp_path):
     assert qa["checks"]["docx_style_rules"]["checked_table_count"] == 3
 
 
+def test_qa_report_treats_variant_detail_plain_marker_substrings_as_plain(tmp_path):
+    docx_path = tmp_path / "crc_style_plain_marker.docx"
+    doc = Document()
+    doc.add_paragraph("本次共检出体细胞变异：1 个")
+    doc.add_paragraph("与靶向药物用药相关的变异有：1 个")
+    doc.add_paragraph("TMB-L；MSS")
+    _add_crc_style_qa_tables(doc)
+    detail = doc.tables[1]
+    detail.rows[2].cells[4].text = "未见突变（质控通过）"
+    doc.save(docx_path)
+
+    context = {"panel_style": _crc_panel_style()}
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._restore_variant_summary_table_style(str(docx_path), context)
+    renderer._restore_variant_detail_table_style(str(docx_path), context)
+    renderer._restore_biomarker_table_style(str(docx_path), context)
+
+    report_data = ReportData(context=context)
+    report_data.set_field("total_variants_count", 1)
+    report_data.set_field("drug_related_count", 1)
+    report_data.set_field("tmb_status", "TMB-L")
+    report_data.set_field("msi_status", "MSS")
+    report_data.set_table("variants", [{"gene": "KRAS"}])
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        project_type="crc_358_msi",
+    )
+
+    assert qa["status"] == "PASS"
+    assert qa["checks"]["docx_style_rules"]["status"] == "PASS"
+
+
 def test_qa_report_flags_crc_style_rule_violations(tmp_path):
     docx_path = tmp_path / "crc_style_fail.docx"
     doc = Document()

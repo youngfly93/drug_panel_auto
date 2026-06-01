@@ -520,17 +520,71 @@ def _count_issues(counter: Counter[tuple[str, str]], severity: str, items: list[
 
 
 def _qa_status_from_output(output_path: str | None) -> str | None:
+    payload = _qa_payload_from_output(output_path)
+    status = payload.get("status") if payload else None
+    return str(status).upper() if status else None
+
+
+def _qa_payload_from_output(output_path: str | None) -> dict[str, Any]:
     if not output_path:
-        return None
+        return {}
     path = Path(output_path).with_suffix(".qa.json")
     if not path.exists():
-        return None
+        return {}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        return None
-    status = payload.get("status")
-    return str(status).upper() if status else None
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _count_qa_reasons(counter: Counter[tuple[str, str]], qa_report: dict[str, Any]) -> None:
+    status = str(qa_report.get("status") or "").upper()
+    if status not in {"FAIL", "WARN"}:
+        return
+
+    checks = qa_report.get("checks") or {}
+    template_contract = checks.get("template_contract") or {}
+    missing_paths = {
+        str(value)
+        for value in (
+            list(template_contract.get("missing_paths") or [])
+            + list(template_contract.get("missing_required_variables") or [])
+        )
+    }
+    if {"report_date_compact", "report_date_dot"} & missing_paths:
+        counter[("error", "QA: 报告日期缺失或未进入模板上下文")] += 1
+    if "receive_date_compact" in missing_paths:
+        counter[("error", "QA: 收样日期缺失或未进入模板上下文")] += 1
+    other_missing = {
+        value
+        for value in missing_paths
+        if value not in {"report_date_compact", "report_date_dot", "receive_date_compact"}
+    }
+    if other_missing:
+        counter[("error", "QA: 模板上下文变量缺失")] += len(other_missing)
+
+    missing_lists = template_contract.get("missing_required_lists") or []
+    missing_tables = template_contract.get("missing_required_tables") or []
+    if missing_lists:
+        counter[("error", "QA: 模板循环列表缺失")] += len(missing_lists)
+    if missing_tables:
+        counter[("error", "QA: 模板表格结构缺失")] += len(missing_tables)
+
+    style_check = checks.get("docx_style_rules") or {}
+    if style_check.get("status") == "FAIL":
+        failures = style_check.get("failures") or []
+        counter[("error", "QA: DOCX 表格样式规则失败")] += max(1, len(failures))
+
+    issue_codes = {
+        str(issue.get("code") or "")
+        for issue in (qa_report.get("issues") or [])
+        if isinstance(issue, dict)
+    }
+    for code in sorted(issue_codes):
+        if code in {"", "TEMPLATE_CONTRACT_FAILED", "DOCX_STYLE_RULES", "PIPELINE_FAILED"}:
+            continue
+        counter[("error", f"QA: {code}")] += 1
 
 
 def _empty_file_counts() -> dict[str, int]:
@@ -845,7 +899,9 @@ def _load_test_summary(db: Session, *, window_hours: int, recent_batch_limit: in
                 _count_issues(issue_counter, "error", _json_list(result.errors))
                 _count_issues(issue_counter, "warning", _json_list(result.warnings))
                 if result.status == "completed":
-                    qa_status = _qa_status_from_output(result.output_path)
+                    qa_payload = _qa_payload_from_output(result.output_path)
+                    qa_status = str(qa_payload.get("status") or "").upper() or None
+                    _count_qa_reasons(issue_counter, qa_payload)
                     if qa_status == "PASS":
                         qa_counts["pass"] += 1
                     elif qa_status == "WARN":
@@ -857,7 +913,9 @@ def _load_test_summary(db: Session, *, window_hours: int, recent_batch_limit: in
                     else:
                         qa_counts["missing"] += 1
         elif task.status == "completed":
-            qa_status = _qa_status_from_output(task.output_path)
+            qa_payload = _qa_payload_from_output(task.output_path)
+            qa_status = str(qa_payload.get("status") or "").upper() or None
+            _count_qa_reasons(issue_counter, qa_payload)
             if qa_status == "PASS":
                 qa_counts["pass"] += 1
             elif qa_status == "WARN":

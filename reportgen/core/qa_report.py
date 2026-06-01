@@ -1148,9 +1148,16 @@ def _check_variant_detail_table_style(
             or ["未见突变", "未检出", "未检出有害变异", "-", "--", "—"]
         )
     }
+
+    def is_plain_text(text: str) -> bool:
+        normalized = (text or "").strip()
+        return normalized in plain_texts or any(
+            token in normalized for token in plain_texts if len(token) > 1
+        )
+
     for row_idx, row in enumerate(table.rows[2:], start=2):
         locus_text = (row.cells[4].text or "").strip() if len(row.cells) > 4 else ""
-        row_has_variant = bool(locus_text) and locus_text not in plain_texts
+        row_has_variant = bool(locus_text) and not is_plain_text(locus_text)
         for col_idx, cell in enumerate(row.cells):
             dash_only = (cell.text or "").strip() in {"", "-", "--", "—"}
             link_cell = (col_idx == 0 and row_has_variant) or (

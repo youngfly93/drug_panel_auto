@@ -283,7 +283,32 @@ def test_load_test_summary_returns_sanitized_release_gate_payload(tmp_path, monk
     completed_docx = report_dir / "SensitivePatient.docx"
     completed_docx.write_bytes(b"docx")
     completed_docx.with_suffix(".qa.json").write_text(
-        json.dumps({"status": "WARN"}),
+        json.dumps(
+            {
+                "status": "FAIL",
+                "checks": {
+                    "template_contract": {
+                        "status": "FAIL",
+                        "missing_paths": ["report_date_compact", "receive_date_compact"],
+                    },
+                    "docx_style_rules": {
+                        "status": "FAIL",
+                        "failures": [
+                            {
+                                "table": "variant_detail_table",
+                                "property": "font_color",
+                                "expected": "0000FF",
+                                "actual": "000000",
+                            }
+                        ],
+                    },
+                },
+                "issues": [
+                    {"code": "TEMPLATE_CONTRACT_FAILED"},
+                    {"code": "DOCX_STYLE_RULES"},
+                ],
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -355,12 +380,24 @@ def test_load_test_summary_returns_sanitized_release_gate_payload(tmp_path, monk
     assert data["totals"]["units_total"] == 2
     assert data["totals"]["units_completed"] == 1
     assert data["totals"]["units_failed"] == 1
-    assert data["qa"]["warn"] == 1
+    assert data["qa"]["fail"] == 1
     assert data["downloads"]["summary"]["completed"] == 1
     assert data["downloads"]["summary"]["failed"] == 0
     assert data["gate"]["status"] == "block"
     assert any(item["reason"] == "Excel 数据问题" for item in data["failure_reasons"])
     assert any(item["reason"] == "模板渲染错误" for item in data["failure_reasons"])
+    assert any(
+        item["reason"] == "QA: 报告日期缺失或未进入模板上下文"
+        for item in data["failure_reasons"]
+    )
+    assert any(
+        item["reason"] == "QA: 收样日期缺失或未进入模板上下文"
+        for item in data["failure_reasons"]
+    )
+    assert any(
+        item["reason"] == "QA: DOCX 表格样式规则失败"
+        for item in data["failure_reasons"]
+    )
 
     response_text = response.text
     assert "SensitivePatient" not in response_text
