@@ -29,10 +29,6 @@ export function useDynamicForm(projectType: Ref<string | null>) {
               }
             }
           }
-          // Auto-fill report_date with today if not set
-          if (!formData['report_date']) {
-            formData['report_date'] = new Date().toISOString().slice(0, 10)
-          }
           // Auto-fill project_name from project_type (#1 fix)
           if (type) {
             const nameMap: Record<string, string> = {
@@ -86,7 +82,7 @@ export function useDynamicForm(projectType: Ref<string | null>) {
     let valid = true
     for (const group of schema.value.groups) {
       for (const field of group.fields) {
-        if (field.required && field.key !== 'report_date') {
+        if (field.required) {
           const val = formData[field.key]
           if (val === null || val === undefined || val === '') {
             errors.value[field.key] = `${field.label}不能为空`

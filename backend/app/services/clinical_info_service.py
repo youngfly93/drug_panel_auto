@@ -157,7 +157,7 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
         "require": ["methylation_result"],
     },
     "crc_301_msi": {"hide": ALWAYS_HIDE},
-    "crc_358_msi": {"hide": ALWAYS_HIDE},
+    "crc_358_msi": {"hide": ALWAYS_HIDE, "require": ["receive_date"]},
     "mlf_result": {"hide": ALWAYS_HIDE},
 }
 

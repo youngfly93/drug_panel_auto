@@ -622,7 +622,6 @@ const requiredClinicalFields = computed(() => {
 
 const missingRequiredClinicalFields = computed(() => {
   return requiredClinicalFields.value.filter((field) => {
-    if (field.key === 'report_date') return false
     const value = form.formData[field.key]
     return value === null || value === undefined || value === ''
   })

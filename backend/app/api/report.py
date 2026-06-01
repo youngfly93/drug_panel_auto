@@ -49,6 +49,10 @@ from app.services import reference_report_service as diff_svc
 from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
+from app.services.generation_preflight import (
+    required_dates_error_message,
+    validate_required_dates,
+)
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_recovery import write_single_generation_request
 
@@ -57,6 +61,29 @@ download_logger = get_logger("reportgen-web.download")
 DOWNLOAD_SLOW_WARN_SECONDS = float(
     os.environ.get("RG_WEB_DOWNLOAD_SLOW_WARN_SECONDS", "10")
 )
+
+
+def _raise_required_dates_if_missing(
+    bridge: ReportGenBridge,
+    *,
+    excel_path: str | Path,
+    clinical_payload: dict,
+    project_type: Optional[str],
+    project_name: Optional[str],
+) -> None:
+    preflight = validate_required_dates(
+        bridge,
+        excel_path=excel_path,
+        clinical_info=clinical_payload,
+        project_type=project_type,
+        project_name=project_name,
+    )
+    missing = list(preflight.get("missing") or [])
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=required_dates_error_message(missing),
+        )
 
 
 class ObservedFileResponse(FileResponse):
@@ -944,6 +971,13 @@ def generate_report(
         req.clinical_info,
         effective_project_type,
     )
+    _raise_required_dates_if_missing(
+        bridge,
+        excel_path=upload.stored_path,
+        clinical_payload=clinical_payload,
+        project_type=effective_project_type,
+        project_name=effective_project_name,
+    )
 
     # Create task record
     task = Task(
@@ -1098,6 +1132,13 @@ def generate_report_from_file(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
+    )
+    _raise_required_dates_if_missing(
+        bridge,
+        excel_path=str(stored_path),
+        clinical_payload=clinical_payload,
+        project_type=detected_project_type,
+        project_name=detected_project_name,
     )
 
     task_id = str(uuid.uuid4())
@@ -1254,6 +1295,13 @@ def generate_report_from_file_async(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
+    )
+    _raise_required_dates_if_missing(
+        bridge,
+        excel_path=str(stored_path),
+        clinical_payload=clinical_payload,
+        project_type=detected_project_type,
+        project_name=detected_project_name,
     )
 
     task_id = str(uuid.uuid4())

@@ -30,6 +30,10 @@ from app.services.audit_log import record_audit_event
 from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
+from app.services.generation_preflight import (
+    required_dates_error_message,
+    validate_required_dates,
+)
 from app.services import reference_report_service as diff_svc
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_manager import submit_batch_task
@@ -580,6 +584,25 @@ def batch_generate_from_files(
                 "stored_path": str(stored_path),
             }
         )
+    missing_date_rows: list[str] = []
+    for item in items:
+        preflight = validate_required_dates(
+            bridge,
+            excel_path=item["stored_path"],
+            clinical_info=shared_clinical_info,
+            project_type=project_type,
+            project_name=project_name,
+        )
+        missing = list(preflight.get("missing") or [])
+        if missing:
+            missing_date_rows.append(
+                f"第 {item['index']} 个 Excel：{required_dates_error_message(missing)}"
+            )
+    if missing_date_rows:
+        detail = "；".join(missing_date_rows[:5])
+        if len(missing_date_rows) > 5:
+            detail += f"；另有 {len(missing_date_rows) - 5} 个文件缺少必填日期"
+        raise HTTPException(status_code=400, detail=detail)
 
     task = Task(
         id=task_id,

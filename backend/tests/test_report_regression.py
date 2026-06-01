@@ -2884,6 +2884,39 @@ def test_clinical_schema_exposes_signature_people_as_editable_selects(monkeypatc
     assert fields["reviewer_signature_image_path"].ui.component == "file-upload"
 
 
+def test_crc358_clinical_schema_requires_receive_date(monkeypatch):
+    monkeypatch.setattr(
+        clinical_info_service,
+        "_load_mapping_yaml",
+        lambda: {
+            "single_values": {
+                "receive_date": {
+                    "synonyms": ["收样日期"],
+                    "type": "date",
+                    "required": False,
+                    "description": "样本接收/送检日期",
+                },
+                "report_date": {
+                    "synonyms": ["报告日期"],
+                    "type": "date",
+                    "required": True,
+                    "description": "报告生成日期",
+                },
+            }
+        },
+    )
+
+    schema = clinical_info_service.get_clinical_form_schema("crc_358_msi")
+    fields = {
+        field.key: field
+        for group in schema.groups
+        for field in group.fields
+    }
+
+    assert fields["receive_date"].required is True
+    assert fields["report_date"].required is True
+
+
 def test_template_renderer_removes_explicit_underlines(tmp_path):
     from zipfile import ZipFile
 

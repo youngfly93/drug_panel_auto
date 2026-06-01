@@ -91,7 +91,12 @@ class FakeBridge:
         }
 
     def get_mapped_clinical_fields(self, _excel_data):
-        return {"patient_name": "测试患者", "sample_id": "CASE001"}
+        return {
+            "patient_name": "测试患者",
+            "sample_id": "CASE001",
+            "receive_date": "2026-05-20",
+            "report_date": "2026-05-31",
+        }
 
     def generate_report(self, **kwargs):
         self.last_generate_kwargs = kwargs
@@ -153,6 +158,11 @@ class FailOnceBridge(FakeBridge):
                 "report_summary_file": None,
             }
         return super().generate_report(**kwargs)
+
+
+class MissingDateBridge(FakeBridge):
+    def get_mapped_clinical_fields(self, _excel_data):
+        return {"patient_name": "测试患者", "sample_id": "CASE001"}
 
 
 class SlowBridge(FakeBridge):
@@ -328,6 +338,24 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert data["qa_status"] == "PASS"
 
 
+def test_generate_file_blocks_missing_required_dates(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch, bridge=MissingDateBridge()) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": '{"patient_name":"测试患者","sample_id":"CASE001"}',
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+            },
+        )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "报告日期" in detail
+    assert "收样日期" in detail
+
+
 def test_generate_file_infers_project_type_from_form_project_name(
     tmp_path, monkeypatch
 ):
@@ -466,6 +494,27 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert "batch_report.json" in names
     assert sum(name.startswith("reports/") for name in names) == 2
     assert sum(name.startswith("summaries/") for name in names) == 2
+
+
+def test_batch_files_blocks_missing_required_dates(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch, bridge=MissingDateBridge()) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"placeholder1", "application/vnd.ms-excel")),
+                ("files", ("case2.xlsx", b"placeholder2", "application/vnd.ms-excel")),
+            ],
+            data={
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+            },
+        )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "第 1 个 Excel" in detail
+    assert "报告日期" in detail
+    assert "收样日期" in detail
 
 
 def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
