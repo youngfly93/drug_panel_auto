@@ -135,6 +135,39 @@ Maintenance logs are written to:
 /media/desk16/iyun6208/apps/reportgen-web-runtime/logs/maintenance.log
 ```
 
+## Restore Drill
+
+Install or refresh the non-destructive restore drill helper from a clean checkout:
+
+```bash
+rsync -az scripts/iyun62_restore_drill.sh \
+  iyun-server:/media/desk16/iyun6208/apps/reportgen-web-runtime/restore_drill.sh
+ssh iyun-server 'chmod +x /media/desk16/iyun6208/apps/reportgen-web-runtime/restore_drill.sh'
+```
+
+Run the default monthly drill:
+
+```bash
+ssh iyun-server '/media/desk16/iyun6208/apps/reportgen-web-runtime/restore_drill.sh'
+```
+
+The default drill verifies SHA-256, lists the entire `.tar.gz` archive, extracts
+only `meta/` and `db/reportgen_web.sqlite` into a temporary server-local
+directory, runs SQLite `PRAGMA integrity_check`, writes a redacted JSON report,
+and removes the temporary extraction. It does not modify production storage.
+
+The drill report is written to:
+
+```text
+/media/desk16/iyun6208/apps/reportgen-web-runtime/logs/restore-drill-YYYYmmdd_HHMMSS.json
+```
+
+Only run a full extraction when the target host has enough free disk:
+
+```bash
+ssh iyun-server 'RESTORE_DRILL_FULL=1 /media/desk16/iyun6208/apps/reportgen-web-runtime/restore_drill.sh'
+```
+
 ## Download Performance Triage
 
 Report download responses include diagnostic headers:
@@ -234,6 +267,12 @@ Manual checks:
 ssh iyun-server 'DRY_RUN=1 /media/desk16/iyun6208/apps/reportgen-web-runtime/alerts.sh check'
 ssh iyun-server 'tail -n 80 /media/desk16/iyun6208/apps/reportgen-web-runtime/logs/alerts.log'
 ```
+
+If `ALERT_WEBHOOK_URL` is omitted, the cron stays active but records alerts only
+in `logs/alerts.log`. For real enterprise WeChat delivery, keep the webhook URL
+out of Git and install it through the environment command above. The server-side
+secret file is `/media/desk16/iyun6208/apps/reportgen-web-runtime/alerts.env`
+with mode `600`.
 
 ## Operation Audit
 
