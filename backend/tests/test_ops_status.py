@@ -155,8 +155,13 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     payload = response.json()
     assert payload["success"] is True
     data = payload["data"]
+    assert data["schema_version"] == "1.1"
     assert data["deployment"]["release"] == "abcdef12"
     assert data["deployment"]["revision_short"] == "abcdef12"
+    assert isinstance(data["alerts"], list)
+    assert data["retention"]["upload_keep_days"] == 30
+    assert data["retention"]["report_keep_days"] == 180
+    assert data["retention"]["audit_log_keep_days"] == 365
     assert data["tasks"]["counts"]["total"] == 1
     assert data["tasks"]["recent"][0]["id"] == "task-sensitive"
     assert data["runtime"]["generation_queue"]["max_workers"] >= 1
@@ -178,3 +183,66 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     assert "secret-browser" not in response_text
     assert "203.0.113.10" not in response_text
     assert str(tmp_path) not in response_text
+
+
+def test_ops_status_returns_threshold_alerts(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        ops_api,
+        "_disk_usage",
+        lambda _path: {
+            "available": True,
+            "total_bytes": 100,
+            "used_bytes": 92,
+            "free_bytes": 8,
+            "used_percent": 92.0,
+        },
+    )
+    monkeypatch.setattr(
+        ops_api,
+        "queue_stats",
+        lambda: {
+            "max_workers": 2,
+            "queued": 3,
+            "active": 2,
+            "submitted_total": 5,
+            "finished_total": 0,
+        },
+    )
+    client, _SessionLocal, runtime_dir, _backup_dir = _client(tmp_path, monkeypatch)
+    (runtime_dir / "logs").mkdir(parents=True)
+    (runtime_dir / "logs" / "uvicorn.log").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "timestamp": "2026-05-31T15:01:00",
+                        "event_type": "report_download_failed",
+                        "task_id": "task-a",
+                        "duration_ms": 1200,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "timestamp": "2026-05-31T15:02:00",
+                        "event_type": "report_download_slow",
+                        "task_id": "task-b",
+                        "duration_ms": 45_000,
+                    }
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    assert response.status_code == 200
+    alert_ids = {alert["id"] for alert in response.json()["data"]["alerts"]}
+    assert "disk.critical" in alert_ids
+    assert "queue.backlog.high" in alert_ids
+    assert "downloads.failed" in alert_ids
+    assert "downloads.slow" in alert_ids
+    assert "downloads.duration.high" in alert_ids
+    assert "backup.missing" in alert_ids
+    assert "maintenance.cleanup.missing" in alert_ids

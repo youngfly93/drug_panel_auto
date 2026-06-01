@@ -8,6 +8,7 @@ export interface OpsStatusBlock {
 export interface OpsStatusPayload {
   schema_version: string
   generated_at: string
+  alerts: OpsAlert[]
   deployment: {
     release: string | null
     revision_short: string | null
@@ -123,11 +124,30 @@ export interface OpsStatusPayload {
       error_type: string | null
     }>
   }
+  retention: {
+    backup_keep_days: number
+    release_keep_count: number
+    preview_keep_days: number
+    log_keep_days: number
+    upload_keep_days: number
+    report_keep_days: number
+    zip_keep_days: number
+    audit_log_keep_days: number
+  }
   backups: {
     backup_dir_present: boolean
     latest: OpsBackupItem | null
     items: OpsBackupItem[]
   }
+}
+
+export interface OpsAlert {
+  id: string
+  severity: 'success' | 'warning' | 'danger' | 'info' | string
+  label: string
+  title: string
+  message: string
+  threshold?: string | null
 }
 
 export interface OpsBackupItem {

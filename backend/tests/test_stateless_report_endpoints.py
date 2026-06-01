@@ -1,6 +1,8 @@
+import io
 import json
 import sys
 import time
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -391,6 +393,7 @@ def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
     assert download_response.status_code == 200
     assert download_response.headers["x-reportgen-download-kind"] == "single_docx"
     assert download_response.headers["x-reportgen-task-id"] == data["task_id"]
+    assert download_response.headers["x-reportgen-download-retryable"] == "true"
     assert int(download_response.headers["x-reportgen-download-bytes"]) == len(
         download_response.content
     )
@@ -443,10 +446,25 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert item_response.status_code == 200
     assert item_response.headers["x-reportgen-download-kind"] == "batch_item_docx"
     assert item_response.headers["x-reportgen-task-id"] == task_id
+    assert item_response.headers["x-reportgen-download-retryable"] == "true"
+    assert int(item_response.headers["x-reportgen-download-bytes"]) == len(
+        item_response.content
+    )
     assert zip_response.status_code == 200
     assert zip_response.headers["content-type"].startswith("application/zip")
     assert zip_response.headers["x-reportgen-download-kind"] == "batch_zip"
     assert zip_response.headers["x-reportgen-task-id"] == task_id
+    assert zip_response.headers["x-reportgen-download-retryable"] == "true"
+    assert int(zip_response.headers["x-reportgen-download-bytes"]) == len(
+        zip_response.content
+    )
+    assert zip_response.headers["cache-control"] == "private, no-store"
+    assert "x-reportgen-prepare-duration-ms" in zip_response.headers
+    with zipfile.ZipFile(io.BytesIO(zip_response.content)) as zf:
+        names = zf.namelist()
+    assert "batch_report.json" in names
+    assert sum(name.startswith("reports/") for name in names) == 2
+    assert sum(name.startswith("summaries/") for name in names) == 2
 
 
 def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
@@ -568,6 +586,7 @@ def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
             json={"status": "delivered", "operator": "报告组"},
         )
         audit_response = client.get(f"/api/v1/reports/{task_id}/audit-package")
+        audit_log_response = client.get(f"/api/v1/reports/{task_id}/audit-log")
 
     assert gate_response.status_code == 200
     gate = gate_response.json()["data"]
@@ -579,6 +598,15 @@ def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
     assert update_response.json()["data"]["status"] == "delivered"
     assert audit_response.status_code == 200
     assert audit_response.headers["content-type"].startswith("application/zip")
+    assert audit_log_response.status_code == 200
+    audit_log = audit_log_response.json()["data"]["items"]
+    actions = {item["action"] for item in audit_log}
+    assert "report.generate_file_requested" in actions
+    assert "review_state.updated" in actions
+    assert "report.download_requested" in actions
+    audit_log_text = audit_log_response.text
+    assert "测试患者" not in audit_log_text
+    assert "case.xlsx" not in audit_log_text
 
 
 def test_quality_gate_blocks_failed_batch_delivery(tmp_path, monkeypatch):

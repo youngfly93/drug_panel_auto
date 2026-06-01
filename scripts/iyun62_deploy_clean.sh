@@ -88,8 +88,16 @@ fi
 if [ -f scripts/iyun62_backup.sh ]; then
     rsync -az scripts/iyun62_backup.sh "$SSH_HOST:$RUNTIME_DIR/backup.sh"
 fi
+if [ -f scripts/iyun62_alerts.sh ]; then
+    rsync -az scripts/iyun62_alerts.sh "$SSH_HOST:$RUNTIME_DIR/alerts.sh"
+fi
+if [ -f scripts/iyun62_restore_drill.sh ]; then
+    rsync -az scripts/iyun62_restore_drill.sh "$SSH_HOST:$RUNTIME_DIR/restore_drill.sh"
+fi
 ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/start_reportgen.sh' '$RUNTIME_DIR/watchdog.sh' 2>/dev/null || chmod +x '$RUNTIME_DIR/start_reportgen.sh'"
 ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/backup.sh' 2>/dev/null || true"
+ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/alerts.sh' 2>/dev/null || true"
+ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/restore_drill.sh' 2>/dev/null || true"
 
 echo "== Start remote service =="
 ssh "$SSH_HOST" "RELEASE_DIR='$release_dir' STORAGE_DIR='$STORAGE_DIR' VENV_DIR='$VENV_DIR' RUNTIME_DIR='$RUNTIME_DIR' PORT='$PORT' bash '$RUNTIME_DIR/start_reportgen.sh'"

@@ -14,6 +14,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
 )
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ from app.models.task import Task, TaskResult
 from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.services import clinical_info_service as clinical_svc
+from app.services.audit_log import record_audit_event
 from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
@@ -536,6 +538,7 @@ async def batch_generate(
 
 @router.post("/batch-files", response_model=ApiResponse)
 def batch_generate_from_files(
+    request: Request,
     files: list[UploadFile] = File(...),
     clinical_info: str = Form("{}"),
     project_type: Optional[str] = Form(None),
@@ -604,6 +607,22 @@ def batch_generate_from_files(
             )
         )
     db.commit()
+    record_audit_event(
+        db,
+        action="report.batch_queued",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "batch-files",
+            "task_type": "batch",
+            "project_type": project_type,
+            "template_name": template_name,
+            "template_contract_mode": template_contract_mode,
+            "status": "pending",
+            "total_files": len(items),
+        },
+    )
     _write_batch_inputs(
         output_dir=output_dir,
         task_id=task_id,
@@ -641,6 +660,7 @@ def batch_generate_from_files(
 @router.post("/{task_id}/batch/retry-failed", response_model=ApiResponse)
 def retry_failed_batch_files(
     task_id: str,
+    request: Request,
     include_cancelled: bool = False,
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
@@ -714,6 +734,22 @@ def retry_failed_batch_files(
     warnings.append(f"已重试失败文件 {len(retry_items)} 个")
     task.warnings = json.dumps(warnings, ensure_ascii=False)
     db.commit()
+    record_audit_event(
+        db,
+        action="report.batch_retry_queued",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "batch-retry",
+            "task_type": "batch",
+            "project_type": task.project_type,
+            "include_cancelled": include_cancelled,
+            "retry_files": len(retry_items),
+            "status": "pending",
+            "total_files": task.total_files,
+        },
+    )
     _write_batch_report(db, task)
 
     submit_generation_job(

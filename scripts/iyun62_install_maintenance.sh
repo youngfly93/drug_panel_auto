@@ -11,6 +11,10 @@ BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 RELEASE_KEEP_COUNT="${RELEASE_KEEP_COUNT:-8}"
 PREVIEW_KEEP_DAYS="${PREVIEW_KEEP_DAYS:-7}"
 LOG_KEEP_DAYS="${LOG_KEEP_DAYS:-14}"
+UPLOAD_KEEP_DAYS="${UPLOAD_KEEP_DAYS:-30}"
+REPORT_KEEP_DAYS="${REPORT_KEEP_DAYS:-180}"
+ZIP_KEEP_DAYS="${ZIP_KEEP_DAYS:-14}"
+AUDIT_LOG_KEEP_DAYS="${AUDIT_LOG_KEEP_DAYS:-365}"
 
 if [ ! -f "scripts/iyun62_backup.sh" ]; then
     echo "Run this script from the reportgen-web repository root." >&2
@@ -52,7 +56,7 @@ for line in lines:
 
 block = [
     '# BEGIN reportgen-web-maintenance',
-    '$CRON_SCHEDULE BACKUP_KEEP_DAYS=$BACKUP_KEEP_DAYS RELEASE_KEEP_COUNT=$RELEASE_KEEP_COUNT PREVIEW_KEEP_DAYS=$PREVIEW_KEEP_DAYS LOG_KEEP_DAYS=$LOG_KEEP_DAYS $RUNTIME_DIR/backup.sh all >/dev/null 2>&1',
+    '$CRON_SCHEDULE BACKUP_KEEP_DAYS=$BACKUP_KEEP_DAYS RELEASE_KEEP_COUNT=$RELEASE_KEEP_COUNT PREVIEW_KEEP_DAYS=$PREVIEW_KEEP_DAYS LOG_KEEP_DAYS=$LOG_KEEP_DAYS UPLOAD_KEEP_DAYS=$UPLOAD_KEEP_DAYS REPORT_KEEP_DAYS=$REPORT_KEEP_DAYS ZIP_KEEP_DAYS=$ZIP_KEEP_DAYS AUDIT_LOG_KEEP_DAYS=$AUDIT_LOG_KEEP_DAYS $RUNTIME_DIR/backup.sh all >/dev/null 2>&1',
     '# END reportgen-web-maintenance',
 ]
 if out and out[-1].strip():
@@ -67,4 +71,3 @@ crontab -l
 
 echo "== Dry-run cleanup preview =="
 ssh "$SSH_HOST" "DRY_RUN=1 '$RUNTIME_DIR/backup.sh' cleanup; tail -n 80 '$RUNTIME_DIR/logs/maintenance.log'"
-

@@ -18,6 +18,10 @@ BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 RELEASE_KEEP_COUNT="${RELEASE_KEEP_COUNT:-8}"
 PREVIEW_KEEP_DAYS="${PREVIEW_KEEP_DAYS:-7}"
 LOG_KEEP_DAYS="${LOG_KEEP_DAYS:-14}"
+UPLOAD_KEEP_DAYS="${UPLOAD_KEEP_DAYS:-30}"
+REPORT_KEEP_DAYS="${REPORT_KEEP_DAYS:-180}"
+ZIP_KEEP_DAYS="${ZIP_KEEP_DAYS:-14}"
+AUDIT_LOG_KEEP_DAYS="${AUDIT_LOG_KEEP_DAYS:-365}"
 MODE="${MODE:-all}"
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -44,6 +48,7 @@ Options:
 Environment overrides:
   APP_ROOT, LEGACY_APP_DIR, RUNTIME_DIR, STORAGE_DIR, RELEASES_DIR, BACKUP_DIR
   BACKUP_KEEP_DAYS=30, RELEASE_KEEP_COUNT=8, PREVIEW_KEEP_DAYS=7, LOG_KEEP_DAYS=14
+  UPLOAD_KEEP_DAYS=30, REPORT_KEEP_DAYS=180, ZIP_KEEP_DAYS=14, AUDIT_LOG_KEEP_DAYS=365
 EOF
 }
 
@@ -422,6 +427,106 @@ cleanup_previews() {
         done
 }
 
+is_positive_days() {
+    [[ "${1:-}" =~ ^[1-9][0-9]*$ ]]
+}
+
+cleanup_uploads() {
+    local upload_dir="$STORAGE_DIR/uploads"
+    log "cleanup uploads begin keep_days=$UPLOAD_KEEP_DAYS"
+    if ! is_positive_days "$UPLOAD_KEEP_DAYS"; then
+        log "cleanup uploads skipped keep_days=$UPLOAD_KEEP_DAYS"
+        return 0
+    fi
+    [ -d "$upload_dir" ] || return 0
+    find "$upload_dir" -mindepth 1 -maxdepth 1 -mtime +"$UPLOAD_KEEP_DAYS" -print \
+        | while IFS= read -r path; do
+            run_rm_rf "$path"
+        done
+}
+
+cleanup_regenerable_zips() {
+    local report_dir="$STORAGE_DIR/reports"
+    log "cleanup regenerable zips begin keep_days=$ZIP_KEEP_DAYS"
+    if ! is_positive_days "$ZIP_KEEP_DAYS"; then
+        log "cleanup regenerable zips skipped keep_days=$ZIP_KEEP_DAYS"
+        return 0
+    fi
+    [ -d "$report_dir" ] || return 0
+    find "$report_dir" -type f \( \
+        -name '*_reports.zip' -o \
+        -name '*_qa_pass_reports.zip' -o \
+        -name '*_audit_package.zip' -o \
+        -name '*_passed_audit_package.zip' \
+    \) -mtime +"$ZIP_KEEP_DAYS" -print | while IFS= read -r path; do
+        run_rm_rf "$path"
+    done
+}
+
+cleanup_reports() {
+    local report_dir="$STORAGE_DIR/reports"
+    log "cleanup reports begin keep_days=$REPORT_KEEP_DAYS"
+    if ! is_positive_days "$REPORT_KEEP_DAYS"; then
+        log "cleanup reports skipped keep_days=$REPORT_KEEP_DAYS"
+        return 0
+    fi
+    [ -d "$report_dir" ] || return 0
+    find "$report_dir" -mindepth 1 -maxdepth 1 -mtime +"$REPORT_KEEP_DAYS" -print \
+        | while IFS= read -r path; do
+            run_rm_rf "$path"
+        done
+}
+
+cleanup_audit_logs() {
+    local db_path="$STORAGE_DIR/db/reportgen_web.sqlite"
+    log "cleanup audit logs begin keep_days=$AUDIT_LOG_KEEP_DAYS"
+    if ! is_positive_days "$AUDIT_LOG_KEEP_DAYS"; then
+        log "cleanup audit logs skipped keep_days=$AUDIT_LOG_KEEP_DAYS"
+        return 0
+    fi
+    [ -f "$db_path" ] || return 0
+    local message
+    message="$(
+        DB_PATH="$db_path" \
+        AUDIT_LOG_KEEP_DAYS="$AUDIT_LOG_KEEP_DAYS" \
+        DRY_RUN="$DRY_RUN" \
+        python3 - <<'PY'
+from __future__ import annotations
+
+import datetime as dt
+import os
+import sqlite3
+
+db_path = os.environ["DB_PATH"]
+keep_days = int(os.environ["AUDIT_LOG_KEEP_DAYS"])
+dry_run = os.environ.get("DRY_RUN") == "1"
+cutoff = (dt.datetime.utcnow() - dt.timedelta(days=keep_days)).strftime("%Y-%m-%d %H:%M:%S")
+
+conn = sqlite3.connect(db_path)
+try:
+    table_exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_logs'"
+    ).fetchone()
+    if not table_exists:
+        print("audit_logs table missing; skipped")
+    else:
+        count = conn.execute(
+            "SELECT count(*) FROM audit_logs WHERE created_at < ?",
+            (cutoff,),
+        ).fetchone()[0]
+        if dry_run:
+            print(f"dry_run delete audit_logs rows={count} cutoff={cutoff}")
+        else:
+            conn.execute("DELETE FROM audit_logs WHERE created_at < ?", (cutoff,))
+            conn.commit()
+            print(f"deleted audit_logs rows={count} cutoff={cutoff}")
+finally:
+    conn.close()
+PY
+    )"
+    log "$message"
+}
+
 cleanup_logs() {
     log "cleanup rotated logs begin keep_days=$LOG_KEEP_DAYS"
     [ -d "$LOG_DIR" ] || return 0
@@ -435,6 +540,10 @@ cleanup_all() {
     cleanup_backups
     cleanup_releases
     cleanup_previews
+    cleanup_uploads
+    cleanup_regenerable_zips
+    cleanup_reports
+    cleanup_audit_logs
     cleanup_logs
     log "cleanup complete"
 }

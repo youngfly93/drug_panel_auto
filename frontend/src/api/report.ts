@@ -131,6 +131,21 @@ export interface ReviewState {
   history?: Array<Record<string, any>>
 }
 
+export interface OperationAuditItem {
+  id: number
+  action: string
+  resource_type?: string | null
+  resource_id?: string | null
+  created_at?: string | null
+  operator?: string | null
+  details: Record<string, any>
+}
+
+export interface OperationAuditLog {
+  task_id: string
+  items: OperationAuditItem[]
+}
+
 export interface QualityGate {
   schema_version?: string
   task_id: string
@@ -251,6 +266,31 @@ export interface ReportDiffResult {
   }
 }
 
+export interface DownloadResult {
+  filename: string
+  bytes: number
+  attempts: number
+}
+
+export interface DownloadProgress {
+  receivedBytes: number
+  expectedBytes: number | null
+  percent: number | null
+  attempt: number
+  maxAttempts: number
+  resumed: boolean
+}
+
+export interface DownloadOptions {
+  fallbackFilename?: string
+  timeoutMs?: number
+  stallTimeoutMs?: number
+  retries?: number
+  retryDelayMs?: number
+  onRetry?: (nextAttempt: number, maxAttempts: number, error: any) => void
+  onProgress?: (progress: DownloadProgress) => void
+}
+
 function buildReportFileForm(file: File, req: Omit<GenerateRequest, 'upload_id'>): FormData {
   const form = new FormData()
   form.append('file', file)
@@ -342,6 +382,197 @@ async function buildApiErrorMessage(error: any, fallback: string): Promise<strin
   return error?.message || fallback
 }
 
+function normalizeApiDownloadPath(path: string): string {
+  const trimmed = path.trim()
+  if (trimmed.startsWith('/api/v1/')) return trimmed.slice('/api/v1'.length)
+  if (trimmed.startsWith('/')) return trimmed
+  return `/${trimmed}`
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function parsePositiveNumber(raw: string | null | undefined): number | null {
+  if (!raw) return null
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function expectedDownloadBytes(headers: Headers): number | null {
+  return (
+    parsePositiveNumber(headers.get('x-reportgen-download-bytes'))
+    || parsePositiveNumber(headers.get('content-length'))
+  )
+}
+
+function contentRangeTotal(value: string | null): number | null {
+  const total = value?.match(/\/(\d+)$/)?.[1]
+  return parsePositiveNumber(total)
+}
+
+function isRetryableDownloadError(error: any): boolean {
+  if (error?.retryable) return true
+  const status = error?.response?.status || error?.status
+  if (!status) return true
+  return status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+function saveBlob(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+async function buildFetchDownloadError(response: Response): Promise<Error> {
+  let message = `下载失败：HTTP ${response.status}`
+  try {
+    const text = await response.text()
+    if (text) {
+      try {
+        const parsed = JSON.parse(text)
+        message = parsed.detail || parsed.error || parsed.message || text
+      } catch {
+        message = text
+      }
+    }
+  } catch {
+    // Keep the HTTP status fallback.
+  }
+  const error = new Error(message)
+  ;(error as any).status = response.status
+  return error
+}
+
+async function downloadBlobWithResume(
+  apiPath: string,
+  options: Required<Pick<DownloadOptions, 'fallbackFilename' | 'timeoutMs' | 'stallTimeoutMs' | 'retries' | 'retryDelayMs'>>,
+  onRetry?: DownloadOptions['onRetry'],
+  onProgress?: DownloadOptions['onProgress'],
+): Promise<DownloadResult & { blob: Blob }> {
+  const chunks: Uint8Array[] = []
+  const basePath = String(client.defaults.baseURL || '/api/v1').replace(/\/$/, '')
+  const fetchPath = `${basePath}${apiPath}`
+  let receivedBytes = 0
+  let expectedBytes: number | null = null
+  let filename = options.fallbackFilename
+  let contentType = 'application/octet-stream'
+  let lastError: any = null
+  const emitProgress = (attempt: number) => {
+    onProgress?.({
+      receivedBytes,
+      expectedBytes,
+      percent: expectedBytes ? Math.min(100, Math.round((receivedBytes / expectedBytes) * 100)) : null,
+      attempt,
+      maxAttempts: options.retries,
+      resumed: receivedBytes > 0,
+    })
+  }
+
+  for (let attempt = 1; attempt <= options.retries; attempt += 1) {
+    const controller = new AbortController()
+    let stallTimer: number | undefined
+    let timeoutTimer: number | undefined
+    const clearTimers = () => {
+      if (stallTimer !== undefined) window.clearTimeout(stallTimer)
+      if (timeoutTimer !== undefined) window.clearTimeout(timeoutTimer)
+      stallTimer = undefined
+      timeoutTimer = undefined
+    }
+    const refreshStallTimer = () => {
+      if (stallTimer !== undefined) window.clearTimeout(stallTimer)
+      stallTimer = window.setTimeout(() => controller.abort(), options.stallTimeoutMs)
+    }
+
+    try {
+      refreshStallTimer()
+      timeoutTimer = window.setTimeout(() => controller.abort(), options.timeoutMs)
+      const headers = new Headers()
+      const token = localStorage.getItem('token')
+      if (token) headers.set('Authorization', `Bearer ${token}`)
+      if (receivedBytes > 0) headers.set('Range', `bytes=${receivedBytes}-`)
+
+      const response = await fetch(fetchPath, {
+        headers,
+        signal: controller.signal,
+      })
+      if (!response.ok) throw await buildFetchDownloadError(response)
+
+      const disposition = response.headers.get('content-disposition') || ''
+      filename = parseContentDispositionFilename(disposition, filename)
+      contentType = response.headers.get('content-type') || contentType
+      if (response.status === 206) {
+        expectedBytes = (
+          contentRangeTotal(response.headers.get('content-range'))
+          || expectedDownloadBytes(response.headers)
+          || expectedBytes
+        )
+      } else {
+        if (receivedBytes > 0) {
+          chunks.length = 0
+          receivedBytes = 0
+        }
+        expectedBytes = expectedDownloadBytes(response.headers) || expectedBytes
+      }
+
+      if (!response.body) {
+        const blob = await response.blob()
+        const part = new Uint8Array(await blob.arrayBuffer())
+        chunks.push(part)
+        receivedBytes += part.byteLength
+        refreshStallTimer()
+        emitProgress(attempt)
+      } else {
+        const reader = response.body.getReader()
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value?.byteLength) {
+            chunks.push(value)
+            receivedBytes += value.byteLength
+            refreshStallTimer()
+            emitProgress(attempt)
+          }
+        }
+      }
+
+      clearTimers()
+      if (expectedBytes !== null && receivedBytes !== expectedBytes) {
+        const error = new Error(
+          `下载文件不完整：已收到 ${receivedBytes} 字节，应为 ${expectedBytes} 字节`,
+        )
+        ;(error as any).retryable = true
+        throw error
+      }
+
+      return {
+        filename,
+        bytes: receivedBytes,
+        attempts: attempt,
+        blob: new Blob(chunks, { type: contentType }),
+      }
+    } catch (error: any) {
+      clearTimers()
+      lastError = error?.name === 'AbortError'
+        ? new Error('下载连接长时间无进展，正在重试')
+        : error
+      if (error?.name === 'AbortError') {
+        ;(lastError as any).retryable = true
+      }
+      if (attempt >= options.retries || !isRetryableDownloadError(lastError)) break
+      onRetry?.(attempt + 1, options.retries, lastError)
+      await sleep(options.retryDelayMs * attempt)
+    }
+  }
+
+  throw lastError || new Error('报告下载失败')
+}
+
 export const reportApi = {
   async generate(req: GenerateRequest): Promise<GenerateResult> {
     const { data } = await client.post('/reports/generate', req)
@@ -408,6 +639,13 @@ export const reportApi = {
 
   async getReviewState(taskId: string): Promise<ReviewState> {
     const { data } = await client.get(`/reports/${taskId}/review-state`)
+    return data.data
+  },
+
+  async getAuditLog(taskId: string, limit = 50): Promise<OperationAuditLog> {
+    const { data } = await client.get(`/reports/${taskId}/audit-log`, {
+      params: { limit },
+    })
     return data.data
   },
 
@@ -519,25 +757,67 @@ export const reportApi = {
       : `/api/v1/reports/${taskId}/audit-package?include_failed=false`
   },
 
-  async download(taskId: string): Promise<void> {
+  async downloadUrl(path: string, options: DownloadOptions = {}): Promise<DownloadResult> {
+    const fallbackFilename = options.fallbackFilename || 'report.docx'
+    const retries = Math.max(1, options.retries ?? 3)
+    const timeoutMs = options.timeoutMs ?? 180000
+    const stallTimeoutMs = options.stallTimeoutMs ?? 45000
+    const retryDelayMs = options.retryDelayMs ?? 1200
+    const apiPath = normalizeApiDownloadPath(path)
+
     try {
-      const response = await client.get(`/reports/${taskId}/download`, {
-        responseType: 'blob',
-        timeout: 120000,
-      })
-      const disposition = String(response.headers['content-disposition'] || '')
-      const filename = parseContentDispositionFilename(disposition, `${taskId}.docx`)
-      const url = window.URL.createObjectURL(response.data)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
+      const result = await downloadBlobWithResume(
+        apiPath,
+        { fallbackFilename, timeoutMs, stallTimeoutMs, retries, retryDelayMs },
+        options.onRetry,
+        options.onProgress,
+      )
+      saveBlob(result.blob, result.filename)
+      return {
+        filename: result.filename,
+        bytes: result.bytes,
+        attempts: result.attempts,
+      }
     } catch (error: any) {
-      throw new Error(await buildApiErrorMessage(error, '报告下载失败'))
+      const message = await buildApiErrorMessage(error, '报告下载失败')
+      const suffix = retries > 1 ? `（已重试 ${retries} 次）` : ''
+      throw new Error(`${message}${suffix}`)
     }
+  },
+
+  async download(taskId: string, options: DownloadOptions = {}): Promise<DownloadResult> {
+    return this.downloadUrl(`/reports/${taskId}/download`, {
+      fallbackFilename: `${taskId}.docx`,
+      ...options,
+    })
+  },
+
+  async downloadBatchZip(
+    taskId: string,
+    qaPassOnly = false,
+    options: DownloadOptions = {},
+  ): Promise<DownloadResult> {
+    return this.downloadUrl(this.getBatchDownloadUrl(taskId, qaPassOnly), {
+      fallbackFilename: `${taskId}${qaPassOnly ? '_qa_pass' : ''}_reports.zip`,
+      timeoutMs: 180000,
+      stallTimeoutMs: 45000,
+      retries: 5,
+      ...options,
+    })
+  },
+
+  async downloadAuditPackage(
+    taskId: string,
+    includeFailed = true,
+    options: DownloadOptions = {},
+  ): Promise<DownloadResult> {
+    return this.downloadUrl(this.getAuditPackageUrl(taskId, includeFailed), {
+      fallbackFilename: `${taskId}_audit_package.zip`,
+      timeoutMs: 180000,
+      stallTimeoutMs: 45000,
+      retries: 5,
+      ...options,
+    })
   },
 
   downloadInline(result: GenerateResult): void {
@@ -552,13 +832,6 @@ export const reportApi = {
     const blob = new Blob([bytes], {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = result.output_filename || `${result.task_id}.docx`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    saveBlob(blob, result.output_filename || `${result.task_id}.docx`)
   },
 }

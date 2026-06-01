@@ -95,8 +95,9 @@
           <el-button
             v-if="row.status === 'completed' && row.task_type === 'single'"
             text type="primary" size="small"
+            :loading="Boolean(downloadingTasks[row.id])"
             @click="downloadReport(row.id)"
-          >下载</el-button>
+          >{{ downloadingTasks[row.id] ? '下载中' : '下载' }}</el-button>
           <el-popconfirm
             v-if="row.status === 'running' || row.status === 'pending'"
             title="确认取消?"
@@ -133,6 +134,7 @@ const router = useRouter()
 const tasks = ref<TaskItem[]>([])
 const stats = ref<TaskStats>({ total: 0, completed: 0, failed: 0, running: 0, pending: 0 })
 const loading = ref(false)
+const downloadingTasks = ref<Record<string, boolean>>({})
 const statusFilter = ref('')
 const page = ref(1)
 const pageSize = 20
@@ -209,8 +211,16 @@ async function cancelTask(taskId: string) {
   }
 }
 
-function downloadReport(taskId: string) {
-  window.open(reportApi.getDownloadUrl(taskId), '_blank')
+async function downloadReport(taskId: string) {
+  downloadingTasks.value[taskId] = true
+  try {
+    await reportApi.download(taskId)
+    ElMessage.success('报告下载完成')
+  } catch (err: any) {
+    ElMessage.error(err.message || '报告下载失败')
+  } finally {
+    downloadingTasks.value[taskId] = false
+  }
 }
 
 function openDetail(taskId: string) {
