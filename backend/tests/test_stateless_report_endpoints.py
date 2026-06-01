@@ -3,6 +3,7 @@ import json
 import sys
 import time
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -542,6 +543,81 @@ def test_batch_cancel_marks_pending_rows(tmp_path, monkeypatch):
     assert status["cancelled_files"] >= 1
     assert results["cancelled_files"] >= 1
     assert "cancelled" in [row["status"] for row in results["items"]]
+
+
+def test_task_list_supports_production_filters_and_review_state(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={"project_type": "crc_358_msi", "clinical_info": "{}"},
+        )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+
+        today = datetime.now().date().isoformat()
+        draft_response = client.get(
+            "/api/v1/tasks",
+            params={
+                "review_status": "draft",
+                "project_type": "crc_358_msi",
+                "created_from": today,
+                "q": task_id[:8],
+            },
+        )
+        assert draft_response.status_code == 200
+        draft_items = draft_response.json()["data"]["items"]
+        assert [item["id"] for item in draft_items] == [task_id]
+        assert draft_items[0]["review_status"] == "draft"
+        assert draft_items[0]["review_status_label"] == "待审核"
+        assert draft_items[0]["qa_status"] == "PASS"
+
+        delivered_response = client.post(
+            f"/api/v1/reports/{task_id}/review-state",
+            json={"status": "delivered", "operator": "qa"},
+        )
+        assert delivered_response.status_code == 200
+
+        filtered_response = client.get(
+            "/api/v1/tasks",
+            params={"review_status": "delivered", "qa_status": "PASS"},
+        )
+        assert filtered_response.status_code == 200
+        filtered = filtered_response.json()["data"]
+        assert filtered["total"] == 1
+        assert filtered["items"][0]["id"] == task_id
+        assert filtered["items"][0]["review_status_label"] == "已交付"
+
+        stats_response = client.get("/api/v1/tasks/stats")
+        assert stats_response.status_code == 200
+        stats = stats_response.json()["data"]
+        assert stats["today_total"] >= 1
+        assert stats["delivered"] == 1
+
+
+def test_task_list_attention_filter_surfaces_partial_failed_batch(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch, bridge=FailOnceBridge()) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"placeholder1", "application/vnd.ms-excel")),
+                ("files", ("case2.xlsx", b"placeholder2", "application/vnd.ms-excel")),
+            ],
+            data={"project_type": "crc_358_msi"},
+        )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+        for _ in range(20):
+            status = client.get(f"/api/v1/tasks/{task_id}").json()["data"]["status"]
+            if status in {"completed", "failed", "partial_failed"}:
+                break
+            time.sleep(0.05)
+
+        attention_response = client.get("/api/v1/tasks", params={"attention": True})
+        assert attention_response.status_code == 200
+        items = attention_response.json()["data"]["items"]
+        assert task_id in {item["id"] for item in items}
+        assert any(item["status"] == "partial_failed" for item in items)
 
 
 def test_report_summary_endpoint_reads_sidecar(tmp_path, monkeypatch):
