@@ -46,7 +46,13 @@ class GeneKnowledgeProvider:
         self._gene_analysis_cache: Dict[str, str] = {}
         self._reviewed_gene_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._reviewed_gene_section_overrides: Dict[str, Dict[str, str]] = {}
+        # gene-level (variant-agnostic) Part-3 overrides; lower precedence than
+        # variant-level, higher than the base KB. Keyed by normalized gene.
+        self._gene_level_section_overrides: Dict[str, Dict[str, str]] = {}
         self._reviewed_drug_section_overrides: Dict[tuple[str, str], List[Dict[str, str]]] = {}
+        # gene-level (variant-agnostic) drug-relation overrides; keyed by
+        # (normalized gene, drug_type). Lower precedence than variant-level.
+        self._gene_level_drug_overrides: Dict[tuple[str, str], List[Dict[str, str]]] = {}
         self._extra_references: List[str] = []
         self._drug_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._drug_full_cache: Dict[str, List[Dict[str, str]]] = {}  # 完整药物信息
@@ -174,16 +180,28 @@ class GeneKnowledgeProvider:
             for row in data.get("gene_sections") or []:
                 if not isinstance(row, dict):
                     continue
+                section = {
+                    k: self._norm_text(v)
+                    for k, v in row.items()
+                    if k in {"intro", "mutation_analysis"} and self._norm_text(v)
+                }
+                if not section:
+                    continue
                 key = self._variant_key(
                     row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs")
                 )
                 if key:
-                    self._reviewed_gene_section_overrides[key] = {
-                        k: self._norm_text(v)
-                        for k, v in row.items()
-                        if k in {"intro", "mutation_analysis"}
-                        and self._norm_text(v)
-                    }
+                    # variant-level override (gene + c_hgvs[+ p_hgvs])
+                    self._reviewed_gene_section_overrides[key] = section
+                else:
+                    # gene-level override (gene only, no c_hgvs): applies to ANY
+                    # variant of this gene. Lets a panel curate cancer-specific
+                    # wording (e.g. lung) without listing every variant.
+                    gene_key = self._hgvs_key(row.get("gene"))
+                    if gene_key:
+                        self._gene_level_section_overrides.setdefault(
+                            gene_key, section
+                        )
 
             for row in data.get("drug_sections") or []:
                 if not isinstance(row, dict):
@@ -192,8 +210,6 @@ class GeneKnowledgeProvider:
                     row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs")
                 )
                 drug_type = self._norm_text(row.get("type")) or "benefit"
-                if not variant_key:
-                    continue
                 clean_row = {
                     "gene": self._norm_text(row.get("gene")).upper(),
                     "c_hgvs": self._norm_text(row.get("c_hgvs")),
@@ -205,9 +221,18 @@ class GeneKnowledgeProvider:
                     "relation": self._norm_text(row.get("relation")),
                     "clinical": self._norm_text(row.get("clinical")),
                 }
-                self._reviewed_drug_section_overrides.setdefault(
-                    (variant_key, drug_type), []
-                ).append(clean_row)
+                if variant_key:
+                    self._reviewed_drug_section_overrides.setdefault(
+                        (variant_key, drug_type), []
+                    ).append(clean_row)
+                else:
+                    # gene-level drug override (gene only, no c_hgvs): applies to
+                    # any variant of the gene (e.g. lung-curated drug relation).
+                    gene_key = self._hgvs_key(row.get("gene"))
+                    if gene_key:
+                        self._gene_level_drug_overrides.setdefault(
+                            (gene_key, drug_type), []
+                        ).append(clean_row)
 
             # reviewed override 补充的参考文献全文（如 DNMT3A/FLT3 策展引用），
             # 供 build_reference_lookup 给这些被引 PMID 补上标题。
@@ -910,6 +935,15 @@ class GeneKnowledgeProvider:
             mutation_type=mutation_type,
             has_drug=has_drug,
         )
+        # gene-level overlay (panel-scoped, variant-agnostic): overrides the
+        # base KB for ANY variant of this gene. Lets e.g. lung supply lung
+        # wording without enumerating every variant.
+        gene_override = self._gene_level_section_overrides.get(
+            self._hgvs_key(gene), {}
+        )
+        intro = gene_override.get("intro") or intro
+        mutation_analysis = gene_override.get("mutation_analysis") or mutation_analysis
+        # variant-level overlay has the highest precedence.
         reviewed_override = self._reviewed_gene_section_overrides.get(
             self._variant_key(gene, c_hgvs, p_hgvs),
             {},
@@ -1286,7 +1320,7 @@ class GeneKnowledgeProvider:
         variants: List[Dict[str, Any]],
         sections: List[Dict[str, str]],
     ) -> List[Dict[str, str]]:
-        if not self._reviewed_drug_section_overrides:
+        if not self._reviewed_drug_section_overrides and not self._gene_level_drug_overrides:
             return sections
 
         grouped: Dict[tuple[str, str], List[Dict[str, str]]] = {}
@@ -1315,6 +1349,11 @@ class GeneKnowledgeProvider:
                 key = (variant_key, drug_type)
                 visited.add(key)
                 overrides = self._reviewed_drug_section_overrides.get(key)
+                if not overrides:
+                    # fall back to gene-level drug override (variant-agnostic)
+                    overrides = self._gene_level_drug_overrides.get(
+                        (self._hgvs_key(variant.get("gene")), drug_type)
+                    )
                 if overrides and self._has_drug_text(variant.get(source_field)):
                     variant_display = self._variant_display_from_row(variant)
                     for override in overrides:

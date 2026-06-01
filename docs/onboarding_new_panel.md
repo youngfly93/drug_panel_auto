@@ -45,7 +45,7 @@ python -m scripts.template_fit_analyzer \
 
 算法细节、阈值、为什么用 Jaccard 等:见 [`template_fit_methodology.md`](template_fit_methodology.md)。
 
-如果你的脚本还没写好(`scripts/template_fit_analyzer.py` 是后续工作),退而求其次:**用 git diff 或文本对比工具手工对一份 reviewed final 和 CRC358 golden** 的章节标题与段落,得到同样的"高/中/低/新"分类,只是更慢更主观。
+`scripts/template_fit_analyzer.py` 已就绪可直接用。若想退而求其次手工对齐:**用 git diff 或文本对比工具手工对一份 reviewed final 和 CRC358 golden** 的章节标题与段落,得到同样的"高/中/低/新"分类,只是更慢更主观。
 
 ---
 
@@ -181,9 +181,12 @@ variants_2_1:
 
 ### 7.2 模板 0 病例硬编码
 ```bash
-python -m scripts.scan_hardcoded_literals panels/<your_panel_id>/templates/<your>.docx
+python scripts/scan_hardcoded_literals.py panels/<your_panel_id>/templates/<your>.docx
+# 已知病人姓名/样本号也可显式查:--token 张三 --token NGS2024001
 ```
-变异记法(`c./p.`)、丰度百分比、日期、ID **必须全部 0 命中**。任何 >0 都是漏挖。
+两级判定(脚本退出码:有 HARD 命中即非零):
+- **HARD(必须 0)**:变异记法 `c.34G>A` / `p.G12C`、`3333…` 调试填充标记、以及 `--token` 指定的病人串。任何 >0 都是漏挖或残留垃圾。
+- **SOFT(人工复核,不自动 fail)**:小数百分比(像丰度 `46.29%`)、具体日期。可能是合规静态文案(流行病学比例、文献日期、指南发布日),逐条确认即可;真要严格用 `--strict` 把 SOFT 也升级为 fail。
 
 ### 7.3 双病例零泄漏(防硬编码 #1 法则)
 用 2 个不同病例生成报告,跑:
@@ -244,6 +247,7 @@ gh pr create --base main --title "feat(panel): add <your_panel_id> package"
 6. **`__MARKER__` 占位段必须放在最终输出位置**(渲染时整段替换)。不要放在 `{%tr %}` 循环内部,否则替换逻辑会错位。
 7. **接入新 panel 不需要改 `enhancer_registry` 的注册顺序**——loader 会按 panels/ 目录自动注册。但你需要把新 Enhancer 类**定义**在该文件里。
 8. **不要给 `status: pilot` 模板设为 `default_template`**——schema 不会阻止,但生产上线时会闹笑话。
+9. **`3333…` 调试填充标记会残留并变成近空白页**。上游终版报告里常有 `33333333…` 这类调试占位文本。`build_golden_template_seed.py` 会擦,但若模板是手工编辑/二次改过的,可能漏掉一处——它在 LO 下会单独占一页近空白页(实测 lung_329 v1 page2 就栽在这)。两道网都查得到:`scan_hardcoded_literals.py`(HARD `debug_marker`)+ `render_blank_page_check.py`(中段空白页)。修法:只清该 run 的文本、**保留所在段落**(那段往往挂着封面 drawing,删整段会连封面一起删)。
 
 ---
 

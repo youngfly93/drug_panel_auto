@@ -15,17 +15,35 @@ import zipfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-TEMPLATE = (
-    ROOT
-    / "panels"
-    / "lung_329_pdl1"
-    / "templates"
-    / "lung_329_pdl1_golden_template_v0.docx"
+_PANEL_DIR = ROOT / "panels" / "lung_329_pdl1"
+
+
+def _load_panel_spec() -> dict:
+    return yaml.safe_load((_PANEL_DIR / "panel.yaml").read_text(encoding="utf-8"))
+
+
+def _resolve_default_template(spec: dict) -> Path:
+    """跟随 panel.yaml 的 default_template 解析模板文件，避免硬编码漂移。
+
+    Codex P2：default 切到 v1 后，golden case 不能还只渲染/扫 v0——否则
+    生产实际用的模板从不被本包自己的 golden case 渲染或 PII 扫描。
+    """
+    default_id = spec["default_template"]
+    file_rel = next(t["file"] for t in spec["templates"] if t.get("id") == default_id)
+    return _PANEL_DIR / file_rel
+
+
+_PANEL_SPEC = _load_panel_spec()
+TEMPLATE = _resolve_default_template(_PANEL_SPEC)
+# 模板的循环集合（{%tr for ... %}）。冒烟渲染给空列表，断言零行不崩。
+_REQUIRED_LISTS = list(
+    (_PANEL_SPEC.get("template_contract") or {}).get("required_lists") or []
 )
 
 # 源病人禁忌 token——模板里出现任何一个都视为 PII 泄漏
@@ -78,6 +96,7 @@ def test_lung329_template_renders_with_scalars():
     tpl = DocxTemplate(str(TEMPLATE))
     # 用不含尖括号的哨兵值（避免被 XML 去标签正则误删）
     ctx = {k: f"SENTINEL_{k}_VAL" for k in _MVP_SCALARS}
+    ctx.update({k: [] for k in _REQUIRED_LISTS})  # 循环集合给空列表 → 渲染零行不报错
     tpl.render(ctx)
 
     # 渲染产物落盘到内存并复扫 PII

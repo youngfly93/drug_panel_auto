@@ -610,7 +610,11 @@ knowledge_bases:
   gene_knowledge_db:
     enabled: true
     path: "data/knowledge_bases/processed/gene_knowledge_db.xlsx"
-    reviewed_part3_overlay_path: "panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml"
+    # reviewed Part-3 wording overlay 现已**按 panel 作用域**：由各 panel.yaml 的
+    # rules.reviewed_part3_knowledge 声明，ReportGenerator 在构建 GeneKnowledgeProvider
+    # 时按当前 panel 覆盖此值（声明则用、未声明则置空）。此处保留为空仅作占位/向后兼容；
+    # 非 CRC panel（肺/妇科）不再继承 CRC 策展。
+    reviewed_part3_overlay_path: ""
     sheets:
       # 基因变异解析sheet：包含基因简介、基因变异说明模板、基因变异解析
       gene_analysis: "基因变异解析"

@@ -20,6 +20,25 @@ from reportgen.utils.hgvs_utils import format_variant_site
 
 class TargetedDrugMixin:
     # -------------------- targeted drug knowledge base --------------------
+    @staticmethod
+    def _normalize_drug_evidence_label(value: Any) -> Any:
+        """Collapse a baked-in CIViC/CGI evidence tag to a clean grade.
+
+        e.g. "Erlotinib（CIViC:Tier I - Level A）" -> "Erlotinib（A）".
+        Display-only: keeps the drug name and the evidence GRADE letter, only
+        tidying the label so every panel shows consistent "（A/B/C/D）".
+        Idempotent (already-clean "（A）" is left untouched).
+        """
+        if not isinstance(value, str) or not value:
+            return value
+        import re
+
+        return re.sub(
+            r"[（(]\s*(?:CIViC|CGI)[^）)]*?Level\s*([A-Da-d])[^）)]*[)）]",
+            lambda m: f"（{m.group(1).upper()}）",
+            value,
+        )
+
     def _load_targeted_drug_db(self) -> None:
         if self._targeted_drug_db_loaded:
             return
@@ -83,6 +102,16 @@ class TargetedDrugMixin:
 
             if gene_col is None or benefit_col is None or caution_col is None:
                 continue
+
+            # 显示归一化：库里部分条目写死了 CIViC/CGI 原始证据标签，例如
+            # "Erlotinib（CIViC:Tier I - Level A）"。收敛成干净的证据等级
+            # "Erlotinib（A）"。纯显示层——保留药名与等级、不改医学内容，只让各
+            # panel 的药物标签格式一致（修复 EGFR 等条目的标签外漏）。
+            for _col in (benefit_col, caution_col):
+                try:
+                    df[_col] = df[_col].map(self._normalize_drug_evidence_label)
+                except Exception:
+                    pass
 
             self._targeted_drug_db = df
             self._targeted_drug_db_cols = {

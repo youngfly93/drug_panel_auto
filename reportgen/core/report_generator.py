@@ -592,6 +592,31 @@ class ReportGenerator:
                     f"签名区将留空；请在签名库登记该人员，或上传临时签名图后重新生成。"
                 )
 
+    @staticmethod
+    def _resolve_panel_reviewed_part3_overlay(panel_package: Any) -> Optional[str]:
+        """Resolve the active panel's own reviewed Part-3 knowledge overlay.
+
+        Returns the path string when the panel package declares a
+        ``reviewed_part3_knowledge`` rule (panel.yaml ``rules``), else ``None``.
+        Panel-scoping this overlay (instead of one global CRC file applied to
+        every panel) keeps CRC panels on the CRC reviewed wording while non-CRC
+        panels get no overlay and fall back to the base (de-identified) KB.
+        """
+        if panel_package is None:
+            return None
+        raw = getattr(panel_package, "raw", None) or {}
+        declared = raw.get("reviewed_part3_overlay")
+        if not declared:
+            return None
+        try:
+            path = panel_package._resolve_path(str(declared))
+        except Exception:
+            return None
+        try:
+            return str(path) if path is not None and path.exists() else None
+        except Exception:
+            return None
+
     def _stage_panel_rule_execution(
         self,
         stage: StageHandle,
@@ -615,9 +640,19 @@ class ReportGenerator:
                 from reportgen.knowledge import GeneKnowledgeProvider  # lazy import
 
                 kb_cfg = self.config_loader.get_setting("knowledge_bases", {}) or {}
+                # Panel-scope the reviewed Part-3 overlay: each panel uses its
+                # own reviewed_part3_knowledge (declared in panel.yaml rules).
+                # Panels that don't declare one get NO overlay instead of
+                # inheriting the global CRC file — so non-CRC panels
+                # (lung/endometrial) no longer pick up colorectal wording.
+                gene_kb_cfg = dict(kb_cfg.get("gene_knowledge_db", {}) or {})
+                gene_kb_cfg["reviewed_part3_overlay_path"] = (
+                    self._resolve_panel_reviewed_part3_overlay(state.panel_package)
+                    or ""
+                )
                 provider_cfg = {
                     "enabled": True,
-                    "gene_knowledge_db": kb_cfg.get("gene_knowledge_db", {}),
+                    "gene_knowledge_db": gene_kb_cfg,
                     "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
                 }
                 gene_knowledge_provider = GeneKnowledgeProvider(provider_cfg)

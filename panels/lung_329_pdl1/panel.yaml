@@ -30,16 +30,38 @@ project_detector_rules:
 # Reuse the CRC enhancer (panel-parameterized) for the MVP, as crc_301 does.
 enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
 
-default_template: "lung_329_pdl1_golden_template_v0"
+default_template: "lung_329_pdl1_golden_template_v1"
 templates:
   - id: "lung_329_pdl1_golden_template_v0"
     file: "templates/lung_329_pdl1_golden_template_v0.docx"
     version: "0.0.1"
-    status: "draft"
-    description: "Lung 329 + PD-L1 golden template (variableized from a reviewed final report)."
+    status: "deprecated"
+    description: "Phase C-alpha MVP (scalar-only, per-variant content neutralized). Superseded by v1."
     processors:
       - "part3_formatted_sections"
       - "signature_placeholder"
+      - "bullet_lists"
+      - "signature_layout"
+      - "front_matter_spacing"
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
+      - "underlines_and_styles"
+  - id: "lung_329_pdl1_golden_template_v1"
+    file: "templates/lung_329_pdl1_golden_template_v1.docx"
+    version: "0.1.0"
+    status: "draft"
+    description: >
+      Phase C-beta golden template: __PART3_MARKER__ (per-variant narrative) +
+      variant/drug/immune {%tr%} loops (variants_2_1, targeted_drug_tips,
+      immune_positive/negative/hyperprogression_results) + PD-L1 scalars
+      (pdl1_tps/cps/result, IHC form-entered). NCCN table and per-drug
+      chemotherapy PGx (~35 tables) deferred to a follow-up sub-phase.
+    processors:
+      - "part3_formatted_sections"
+      - "rebuild_references"
+      - "signature_placeholder"
+      - "immune_table_notes"
       - "bullet_lists"
       - "signature_layout"
       - "front_matter_spacing"
@@ -60,6 +82,11 @@ rules:
   style: "rules/style.yaml"
   filtering: "config/filtering.yaml"
   drug_brands: "config/drug_brands.yaml"
+
+# Reviewed Part-3 wording overlay (panel-scoped, lung-curated FIRST PASS, harvested
+# from reviewed lung reports, de-identified). Gene-level entries override the base
+# (CRC-emphasized) KB wording for any variant. NEEDS report-team review/extension.
+reviewed_part3_overlay: "rules/reviewed_part3_knowledge.yaml"
 
 input_contract:
   required_tables:
@@ -97,6 +124,9 @@ template_contract:
   required_lists:
     - "targeted_drug_tips"
     - "variants_2_1"
+    - "immune_positive_results"
+    - "immune_negative_results"
+    - "immune_hyperprogression_results"
 
 processors:
   - "empty_table_rows"

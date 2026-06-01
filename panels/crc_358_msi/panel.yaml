@@ -62,6 +62,11 @@ rules:
   filtering: "config/filtering.yaml"
   drug_brands: "config/drug_brands.yaml"
 
+# Reviewed Part-3 wording overlay (panel-scoped, CRC-curated). Declared at top
+# level (not under `rules:`) because it is a content overlay, not a schema'd
+# rule file. ReportGenerator resolves this per-panel for the gene KB provider.
+reviewed_part3_overlay: "rules/reviewed_part3_knowledge.yaml"
+
 input_contract:
   required_tables:
     - "Variations"
