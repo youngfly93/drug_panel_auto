@@ -126,17 +126,22 @@ def inspect_excel(
     validation_warnings = bridge.validate_excel_data(excel_data)
 
     single_values = bridge.get_mapped_clinical_fields(excel_data)
-    sample_id = single_values.get("sample_id")
+    filename_project_code = clinical_svc.project_code_from_filename(file.filename)
+    sample_id = str(single_values.get("sample_id") or "").strip()
+    lookup_sample_id = filename_project_code or sample_id
     enrichment = None
-    if sample_id:
+    if lookup_sample_id:
+        if not sample_id and filename_project_code:
+            single_values["sample_id"] = filename_project_code
         enrichment = clinical_svc.enrich_patient(
-            str(sample_id),
+            lookup_sample_id,
             project_type=detect.get("project_type"),
         )
         single_values = clinical_svc.merge_enrichment_into_values(
             single_values,
             enrichment,
         )
+    single_values = clinical_svc.fill_missing_report_date(single_values)
 
     preview_summary = None
     try:

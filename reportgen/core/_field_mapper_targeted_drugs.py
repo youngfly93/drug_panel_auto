@@ -186,10 +186,12 @@ class TargetedDrugMixin:
         gene: str,
         c_point: str,
         p_point: str,
+        variant_level: str = "",
     ) -> Optional[tuple[str, str]]:
         gene_norm = str(gene or "").strip().upper()
         c_norm = self._norm_text(c_point)
         p_norm = self._norm_text(p_point)
+        level_norm = self._norm_text(variant_level)
         for override in self._get_reviewed_variant_overrides():
             genes = {
                 item.upper()
@@ -198,6 +200,16 @@ class TargetedDrugMixin:
                 )
             }
             if genes and gene_norm not in genes:
+                continue
+            level_values = self._as_text_list(
+                override.get("variant_level")
+                or override.get("variant_levels")
+                or override.get("level")
+                or override.get("levels")
+            )
+            if level_values and not self._variant_level_matches(
+                level_norm, level_values
+            ):
                 continue
             c_values = set(
                 self._as_text_list(override.get("c_hgvs") or override.get("cHGVS"))
@@ -214,6 +226,29 @@ class TargetedDrugMixin:
             if benefit or caution:
                 return benefit or "--", caution or "--"
         return None
+
+    @classmethod
+    def _variant_level_aliases(cls, value: Any) -> set[str]:
+        text = cls._norm_text(value).upper().replace(" ", "")
+        if not text:
+            return set()
+        if text in {"1", "I", "Ⅰ", "一类", "1类", "I类", "Ⅰ类"}:
+            return {"Ⅰ类", "1类", "I类", "一类"}
+        if text in {"2", "II", "Ⅱ", "二类", "2类", "II类", "Ⅱ类"}:
+            return {"Ⅱ类", "2类", "II类", "二类"}
+        if text in {"3", "III", "Ⅲ", "三类", "3类", "III类", "Ⅲ类"}:
+            return {"Ⅲ类", "3类", "III类", "三类"}
+        return {text}
+
+    @classmethod
+    def _variant_level_matches(cls, candidate: Any, allowed_values: list[str]) -> bool:
+        candidate_aliases = cls._variant_level_aliases(candidate)
+        if not candidate_aliases:
+            return False
+        for allowed in allowed_values:
+            if candidate_aliases & cls._variant_level_aliases(allowed):
+                return True
+        return False
 
     def _get_targeted_drug_db_filters(self) -> dict[str, Any]:
         cfg = (
@@ -416,6 +451,7 @@ class TargetedDrugMixin:
             gene_norm,
             c_norm,
             p_norm,
+            variant_level=variant_level,
         )
         if reviewed_override:
             benefit, caution = reviewed_override
@@ -670,9 +706,11 @@ class TargetedDrugMixin:
         overrides = self._get_targeted_drug_overrides()
         self._load_targeted_drug_db()
         has_kb = self._targeted_drug_db is not None
+        allow_ctdrug_fallback = not has_kb
 
-        # 2) 按位点逐行决策来源：override > KB > CtDrug 回退
-        #    每个基因/位点独立判断，不再整体切换模式
+        # 2) 按位点逐行决策来源：override > KB > CtDrug 回退。
+        #    生产配置中 KB 正常加载时，禁止再用 CtDrug 兜底。CtDrug 可能包含
+        #    化疗药物/其它治疗提示，不能污染“靶向药物相关体细胞变异用药提示”。
         ct = excel_data.get_table_data("CtDrug") or []
 
         # CtDrug 辅助函数
@@ -777,8 +815,11 @@ class TargetedDrugMixin:
                         c = kb_c or "--"
                         source = "kb"
 
-                # 优先级 3: CtDrug 表回退（基因级）
-                if source == "none" or (b == "--" and c == "--" and source != "override"):
+                # 优先级 3: CtDrug 表回退（仅 KB 不可用时启用）
+                if allow_ctdrug_fallback and (
+                    source == "none"
+                    or (b == "--" and c == "--" and source != "override")
+                ):
                     ct_b, ct_c = _ctdrug_lookup_for_gene(gene)
                     if ct_b != "--" or ct_c != "--":
                         b, c = ct_b, ct_c
@@ -791,6 +832,7 @@ class TargetedDrugMixin:
                     {
                         "gene": gene,
                         "variant_site": s["site"],
+                        "gene_class": s["level"],
                         "benefit_drugs": b,
                         "caution_drugs": c,
                         "af": s.get("af", ""),

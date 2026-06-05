@@ -1060,6 +1060,205 @@ def test_flt3_reviewed_override_brings_out_curated_drugs(tmp_path):
     assert flt3["caution_drugs"] == "--"
 
 
+def test_tp53_v274d_reviewed_rule_matches_reference_drugs_without_extra_drugs(tmp_path):
+    """TP53 c.821T>A (p.V274D) is locked to the reviewed summary-table drugs.
+
+    The report team's reference table contains exactly five C-level benefit
+    drugs for this site. MAPK/FAK combinations or chemotherapy entries must not
+    leak into the TP53 row from broader KB/CtDrug sources.
+    """
+    expected = [
+        "AZD1775（C）",
+        "AZD1775+奥拉帕利（C）",
+        "Alisertib（C）",
+        "Alisertib+AZD1775（C）",
+        "Eprenetapopt（C）",
+    ]
+    variations = [
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "TP53",
+            "Transcript": "NM_000546.6",
+            "Chr": "chr17",
+            "ExIn_ID": "EX8",
+            "cHGVS": "c.821T>A",
+            "pHGVS_S": "p.V274D",
+            "Function": "Missense",
+            "Freq(%)": 67.29,
+        }
+    ]
+    ctdrug = [
+        {
+            "检测基因": "TP53",
+            "药物": "Avutometinib+Defactinib",
+            "证据等级": "C",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+        {
+            "检测基因": "TP53",
+            "药物": "奥沙利铂",
+            "证据等级": "C",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+    ]
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    report_data = ReportData()
+    report_data.set_field("cancer_type", "乙状结肠癌")
+    excel_data = _excel(tmp_path, variations=variations, tables={"CtDrug": ctdrug})
+
+    rows = mapper._build_variants_2_1(excel_data, report_data)
+    tp53_row = next(row for row in rows if row["gene"] == "TP53")
+    assert tp53_row["benefit_drugs"].splitlines() == expected
+    assert tp53_row["caution_drugs"] == "--"
+    assert "Avutometinib" not in tp53_row["benefit_drugs"]
+    assert "Defactinib" not in tp53_row["benefit_drugs"]
+    assert "奥沙利铂" not in tp53_row["benefit_drugs"]
+
+    tips = mapper._build_targeted_drug_tips(excel_data, report_data)
+    tp53_tip = next(row for row in tips if row["gene"] == "TP53")
+    assert tp53_tip["benefit_drugs"].splitlines() == expected
+    assert tp53_tip["caution_drugs"] == "--"
+    assert "Avutometinib" not in tp53_tip["benefit_drugs"]
+    assert "Defactinib" not in tp53_tip["benefit_drugs"]
+    assert "奥沙利铂" not in tp53_tip["benefit_drugs"]
+
+
+def test_tsc1_class_ii_reviewed_override_brings_out_crc_mtor_drugs(tmp_path):
+    """TSC1 historical CRC final reports use a reviewed gene-level mTOR drug
+    rule. The public CGI rows are gene-level/non-COREAD and remain filtered; the
+    CRC panel override restores the reviewed 2.1/table-summary output for I/II
+    class variants only.
+    """
+    variations = [
+        {"ExistIn552": "2类", "ExistInsmall358": 1, "Gene_Symbol": "TSC1",
+         "Transcript": "NM_000368.5", "Chr": "chr9", "ExIn_ID": "EX6",
+         "cHGVS": "c.433C>T", "pHGVS_S": "p.Q145*", "Function": "Nonsense",
+         "Freq(%)": 67.7},
+        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "TSC1",
+         "Transcript": "NM_000368.5", "Chr": "chr9", "ExIn_ID": "EX12",
+         "cHGVS": "c.1237del", "pHGVS_S": "p.Q413Rfs*27",
+         "Function": "Frameshift", "Freq(%)": 0.55},
+    ]
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    report_data = ReportData()
+    report_data.set_field("cancer_type", "乙状结肠癌")
+    excel_data = _excel(tmp_path, variations=variations)
+
+    rows = mapper._build_variants_2_1(excel_data, report_data)
+    tsc1_class_ii = next(row for row in rows if row["locus"].startswith("c.433C>T"))
+    assert tsc1_class_ii["gene_class"] == "Ⅱ类"
+    for drug in ("依维莫司", "西罗莫司", "替西罗莫司", "Buparlisib", "Sapanisertib"):
+        assert drug in tsc1_class_ii["benefit_drugs"], tsc1_class_ii["benefit_drugs"]
+    assert tsc1_class_ii["caution_drugs"] == "--"
+
+    tsc1_class_iii = next(row for row in rows if row["locus"].startswith("c.1237del"))
+    assert tsc1_class_iii["benefit_drugs"] == "--"
+    assert tsc1_class_iii["caution_drugs"] == "--"
+
+    tips = mapper._build_targeted_drug_tips(excel_data, report_data)
+    tsc1_tip = next(row for row in tips if row["gene"] == "TSC1")
+    assert tsc1_tip["variant_site"].startswith("c.433C>T")
+    assert "Sapanisertib" in tsc1_tip["benefit_drugs"]
+    assert all("c.1237del" not in row["variant_site"] for row in tips)
+
+
+def test_egfr_g796d_uses_reviewed_targeted_drugs_not_ctdrug_chemo(tmp_path):
+    """EGFR G796D must follow the reviewed CRC targeted-drug rule.
+
+    The uploaded Excel CtDrug sheet can contain chemotherapy drugs for the same
+    gene. When the production KB is available, CtDrug must not be used as a
+    fallback source for the targeted-drug summary, otherwise chemotherapy leaks
+    into the 2.1/summary targeted-drug columns.
+    """
+    variations = [
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "EGFR",
+            "Transcript": "NM_005228.5",
+            "Chr": "chr7",
+            "ExIn_ID": "EX20",
+            "cHGVS": "c.2387G>A",
+            "pHGVS_S": "p.G796D",
+            "Function": "Missense",
+            "Freq(%)": 21.3,
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "GENEX",
+            "Transcript": "NM_FAKE",
+            "Chr": "chr1",
+            "ExIn_ID": "EX1",
+            "cHGVS": "c.100A>T",
+            "pHGVS_S": "p.K34N",
+            "Function": "Missense",
+            "Freq(%)": 11.1,
+        },
+    ]
+    ctdrug = [
+        {
+            "检测基因": "EGFR",
+            "药物": "奥沙利铂",
+            "证据等级": "C",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+        {
+            "检测基因": "EGFR",
+            "药物": "替加氟",
+            "证据等级": "C",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+        {
+            "检测基因": "EGFR",
+            "药物": "亚叶酸",
+            "证据等级": "C",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+        {
+            "检测基因": "EGFR",
+            "药物": "伊立替康",
+            "证据等级": "C",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+        {
+            "检测基因": "EGFR",
+            "药物": "5-FU",
+            "证据等级": "C",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+        {
+            "检测基因": "GENEX",
+            "药物": "DrugFromCtDrug",
+            "证据等级": "A",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+    ]
+
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    report_data = ReportData()
+    report_data.set_field("cancer_type", "乙状结肠癌")
+    excel_data = _excel(tmp_path, variations=variations, tables={"CtDrug": ctdrug})
+
+    rows = mapper._build_variants_2_1(excel_data, report_data)
+    egfr_row = next(row for row in rows if row["gene"] == "EGFR")
+    for drug in ("阿法替尼", "TQB3804", "EMB01", "MCLA-129"):
+        assert drug in egfr_row["benefit_drugs"], egfr_row["benefit_drugs"]
+    for chemo in ("奥沙利铂", "替加氟", "亚叶酸", "伊立替康", "5-FU"):
+        assert chemo not in egfr_row["benefit_drugs"]
+    assert egfr_row["caution_drugs"] == "--"
+
+    tips = mapper._build_targeted_drug_tips(excel_data, report_data)
+    egfr_tip = next(row for row in tips if row["gene"] == "EGFR")
+    for drug in ("阿法替尼", "TQB3804", "EMB01", "MCLA-129"):
+        assert drug in egfr_tip["benefit_drugs"], egfr_tip["benefit_drugs"]
+    for chemo in ("奥沙利铂", "替加氟", "亚叶酸", "伊立替康", "5-FU"):
+        assert chemo not in egfr_tip["benefit_drugs"]
+    assert egfr_tip["caution_drugs"] == "--"
+    assert all(row["gene"] != "GENEX" for row in tips)
+
+
 def test_immune_table_conditional_notes_and_numbering():
     """Immune-table footnotes are conditional and renumber correctly:
       * TMB-H            → append the FDA TMB-H sentence to note 2.
@@ -1169,14 +1368,17 @@ def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path):
          "Transcript": "NM_2", "Chr": "chr2", "ExIn_ID": "EX2",
          "cHGVS": "c.400C>G", "pHGVS_S": "p.P133A", "Function": "Missense", "Freq(%)": 40.0},
     ]
-    # CtDrug fallback guarantees each gene gets a benefit tip (so it appears in
-    # the summary) independent of the production knowledge base.
+    # CtDrug fallback is a legacy compatibility path and is only allowed when
+    # the production targeted-drug KB is unavailable.
     ctdrug = [
         {"检测基因": "GENEA", "药物": "DrugA", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
         {"检测基因": "GENEB", "药物": "DrugB", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
         {"检测基因": "GENEC", "药物": "DrugC", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
     ]
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    mapper._targeted_drug_db_loaded = True
+    mapper._targeted_drug_db = None
+    mapper._targeted_drug_db_cols = {}
     rows = mapper._build_targeted_drug_tips(
         _excel(tmp_path, variations=variations, tables={"CtDrug": ctdrug}),
         ReportData(),
@@ -1239,6 +1441,153 @@ def test_immune_negative_and_hyperprogression_summary_use_count_header():
 
     assert text == "检出（1个）\nDNMT3A：c.1367delA，p.K456Sfs*195"
     assert "检出：" not in text
+
+
+def test_immune_egfr_summary_respects_variant_specific_rules(tmp_path):
+    report_data = enhance_report_data(
+        ReportData(),
+        _excel(
+            tmp_path,
+            variations=[
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "ExistInsmall358": 1,
+                    "Gene_Symbol": "EGFR",
+                    "Transcript": "NM_005228",
+                    "Chr": "chr7",
+                    "ExIn_ID": "EX20",
+                    "cHGVS": "c.2387G>A",
+                    "pHGVS_S": "p.G796D",
+                    "Function": "Missense",
+                    "Freq(%)": 10.0,
+                    "CLNSIG": "Pathogenic",
+                },
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "ExistInsmall358": 1,
+                    "Gene_Symbol": "PTEN",
+                    "Transcript": "NM_000314",
+                    "Chr": "chr10",
+                    "ExIn_ID": "EX5",
+                    "cHGVS": "c.388C>T",
+                    "pHGVS_S": "p.R130*",
+                    "Function": "Nonsense",
+                    "Freq(%)": 8.0,
+                    "CLNSIG": "Pathogenic",
+                },
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "ExistInsmall358": 1,
+                    "Gene_Symbol": "DNMT3A",
+                    "Transcript": "NM_022552",
+                    "Chr": "chr2",
+                    "ExIn_ID": "EX11",
+                    "cHGVS": "c.1367delA",
+                    "pHGVS_S": "p.K456Sfs*195",
+                    "Function": "Frameshift",
+                    "Freq(%)": 6.0,
+                    "CLNSIG": "Pathogenic",
+                },
+            ],
+        ),
+        base_path=str(ROOT),
+    )
+
+    negative_text = report_data.get_field("immune_negative_result")
+    hyper_text = report_data.get_field("immune_hyperprogression_result")
+
+    assert "PTEN：c.388C>T，p.R130*" in negative_text
+    assert "EGFR" not in negative_text
+    assert "DNMT3A：c.1367delA，p.K456Sfs*195" in hyper_text
+    assert "EGFR" not in hyper_text
+    assert {v["gene"] for v in report_data.get_table("immune_negative_variants")} == {
+        "PTEN"
+    }
+    assert {
+        v["gene"] for v in report_data.get_table("immune_hyperprogression_variants")
+    } == {"DNMT3A"}
+
+
+def test_immune_egfr_l858r_and_amplification_still_match(tmp_path):
+    report_data = enhance_report_data(
+        ReportData(),
+        _excel(
+            tmp_path,
+            variations=[
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "ExistInsmall358": 1,
+                    "Gene_Symbol": "EGFR",
+                    "Transcript": "NM_005228",
+                    "Chr": "chr7",
+                    "ExIn_ID": "EX21",
+                    "cHGVS": "c.2573T>G",
+                    "pHGVS_S": "p.L858R",
+                    "Function": "Missense",
+                    "Freq(%)": 9.0,
+                    "CLNSIG": "Pathogenic",
+                },
+            ],
+            tables={"Cnv": [{"Gene": "EGFR", "Status": "扩增"}]},
+        ),
+        base_path=str(ROOT),
+    )
+
+    assert "EGFR：c.2573T>G，p.L858R" in report_data.get_field(
+        "immune_negative_result"
+    )
+    assert "EGFR：CNV:扩增" in report_data.get_field(
+        "immune_hyperprogression_result"
+    )
+    assert report_data.get_field("imm_neg_EGFR_L858R") == "c.2573T>G"
+    assert report_data.get_field("imm_hyper_EGFR_AMP") == "CNV:扩增"
+
+
+def test_field_mapper_immune_summary_applies_egfr_special_rules(tmp_path, monkeypatch):
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    monkeypatch.setattr(
+        mapper,
+        "_load_immune_gene_sets",
+        lambda: {
+            "pos": set(),
+            "neg": {"EGFR", "PTEN"},
+            "hyper": {"EGFR", "DNMT3A"},
+        },
+    )
+
+    summary = mapper._build_immuno_gene_summary(
+        _excel(
+            tmp_path,
+            variations=[
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "EGFR",
+                    "ExIn_ID": "EX20",
+                    "cHGVS": "c.2387G>A",
+                    "pHGVS_S": "p.G796D",
+                },
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "PTEN",
+                    "cHGVS": "c.388C>T",
+                    "pHGVS_S": "p.R130*",
+                },
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "DNMT3A",
+                    "cHGVS": "c.1367delA",
+                    "pHGVS_S": "p.K456Sfs*195",
+                },
+            ],
+            tables={"Cnv": [{"Gene": "EGFR", "Status": "扩增"}]},
+        )
+    )
+
+    assert "PTEN：c.388C>T，p.R130*" in summary["neg"]
+    assert "EGFR：c.2387G>A" not in summary["neg"]
+    assert "DNMT3A：c.1367delA，p.K456Sfs*195" in summary["hyper"]
+    assert "EGFR：CNV:扩增" in summary["hyper"]
+    assert "EGFR：c.2387G>A" not in summary["hyper"]
 
 
 def test_reviewed_variant_override_replaces_existing_targeted_tip():
@@ -1444,22 +1793,22 @@ def test_field_mapper_updates_msi_status_cn_from_mss(tmp_path):
     assert report_data.get_field("msi_status_cn") == "微卫星稳定型，MSS"
 
 
-def test_missing_report_date_is_not_backfilled_to_today():
+def test_missing_report_date_is_filled_with_generation_date():
     report_data = ReportData()
     generator = ReportGenerator(config_dir=str(ROOT / "config"), log_level="ERROR")
 
     generator._mark_missing_report_date(report_data)
 
-    assert report_data.get_field("report_date") == "未填写"
-    assert "缺失必填字段: report_date" in report_data.validation_errors
+    assert report_data.get_field("report_date") == date.today().isoformat()
+    assert "缺失必填字段: report_date" not in report_data.validation_errors
 
 
-def test_common_validation_warns_without_today_backfill(tmp_path):
+def test_common_validation_warns_with_generation_date_backfill(tmp_path):
     warnings = validate_excel_data_common(_excel(tmp_path), today=date(2026, 4, 19))
 
     report_date_warnings = [w for w in warnings if w.get("field") == "report_date"]
     assert report_date_warnings
-    assert "不会自动回填今天" in report_date_warnings[0]["message"]
+    assert "系统将使用生成报告当天日期 (2026-04-19)" in report_date_warnings[0]["message"]
 
 
 def test_detector_does_not_use_panel_column_numbers_as_crc_signal(tmp_path):
@@ -4452,7 +4801,7 @@ def test_template_renderer_default_processors_include_key_m1_processors():
     assert "underlines_and_styles" in names
 
 
-def test_front_matter_spacing_keeps_report_guide_page_top(tmp_path):
+def test_front_matter_spacing_restores_reviewed_report_guide_offset(tmp_path):
     docx_path = tmp_path / "front_matter.docx"
     doc = Document()
     doc.add_paragraph("检测报告")
@@ -4488,9 +4837,56 @@ def test_front_matter_spacing_keeps_report_guide_page_top(tmp_path):
         return any(node.attrib.get(w_type) == "page" for node in elem.iter(w_br))
 
     guide_idx = next(idx for idx, elem in enumerate(paragraphs) if text(elem) == "报告导读")
+    spacer_cluster = []
+    idx = guide_idx - 1
+    while idx >= 0 and not text(paragraphs[idx]):
+        spacer_cluster.append(paragraphs[idx])
+        idx -= 1
 
-    assert has_page_break(paragraphs[guide_idx - 1])
-    assert text(paragraphs[guide_idx - 2]) == "检测报告"
+    assert text(paragraphs[idx]) == "检测报告"
+    assert len(spacer_cluster) == 31
+    assert sum(1 for elem in spacer_cluster if has_page_break(elem)) == 1
+
+
+def test_crc358_golden_template_keeps_reviewed_report_guide_offset():
+    template_path = (
+        ROOT
+        / "panels"
+        / "crc_358_msi"
+        / "templates"
+        / "crc_358_msi_golden_template_v0.docx"
+    )
+
+    import xml.etree.ElementTree as ET
+    from zipfile import ZipFile
+
+    ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    w_p = f"{{{ns_w}}}p"
+    w_t = f"{{{ns_w}}}t"
+    w_br = f"{{{ns_w}}}br"
+    w_type = f"{{{ns_w}}}type"
+
+    with ZipFile(template_path) as zin:
+        root = ET.fromstring(zin.read("word/document.xml"))
+
+    paragraphs = [elem for elem in root.iter(w_p)]
+
+    def text(elem):
+        return "".join((node.text or "") for node in elem.iter(w_t)).strip()
+
+    def has_page_break(elem):
+        return any(node.attrib.get(w_type) == "page" for node in elem.iter(w_br))
+
+    guide_idx = next(idx for idx, elem in enumerate(paragraphs) if text(elem) == "报告导读")
+    spacer_cluster = []
+    idx = guide_idx - 1
+    while idx >= 0 and not text(paragraphs[idx]):
+        spacer_cluster.append(paragraphs[idx])
+        idx -= 1
+
+    assert "{{ report_date_compact }}" in text(paragraphs[idx])
+    assert len(spacer_cluster) == 31
+    assert sum(1 for elem in spacer_cluster if has_page_break(elem)) == 1
 
 
 def test_template_renderer_can_build_panel_declared_processors_only():
@@ -6104,6 +6500,207 @@ def test_reviewed_part3_knowledge_ships_dnmt3a_and_flt3_overrides():
     assert flt3 is not None, "FLT3 策展段落缺失"
     assert "酪氨酸激酶" in flt3["intro"]
     assert "p.G846D" in flt3["mutation_analysis"]
+
+
+def test_reviewed_part3_knowledge_ships_lz258889_feedback_overrides():
+    """lz258889 反馈的 Part3 逐基因解析不能回退到通用固定套话。"""
+    overlay_path = (
+        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
+    )
+    provider = GeneKnowledgeProvider(
+        {
+            "enabled": True,
+            "gene_knowledge_db": {
+                "enabled": True,
+                "path": "missing.xlsx",
+                "reviewed_part3_overlay_path": str(overlay_path),
+            },
+        }
+    )
+    assert provider.load(base_path=str(ROOT))
+
+    cases = [
+        ("FGFR1", "c.1648G>T", "p.A550S", "Missense", ("成纤维细胞生长因子受体", "酪氨酸激酶催化结构域")),
+        ("PCLO", "c.11722C>A", "p.H3908N", "Missense", ("Piccolo蛋白", "p.H3908N")),
+        ("DNMT3A", "c.2322+1G>A", "", "Splice", ("表观遗传学", "剪接异常")),
+        ("EGFR", "c.2387G>A", "p.G796D", "Missense", ("表皮生长因子受体", "p.G796D")),
+        ("TSC1", "c.1963C>T", "p.Q655*", "Nonsense", ("mTOR信号通路", "截短蛋白")),
+    ]
+    fallback_phrases = (
+        "基因的功能与肿瘤发生发展密切相关",
+        "临床意义是当前研究的热点领域",
+        "需自动化生成",
+    )
+
+    for gene, c_hgvs, p_hgvs, mutation_type, expected_phrases in cases:
+        section = provider.build_gene_knowledge_section(
+            gene=gene,
+            c_hgvs=c_hgvs,
+            p_hgvs=p_hgvs,
+            frequency=1.23,
+            mutation_type=mutation_type,
+        )
+        combined = f"{section['intro']}\n{section['mutation_analysis']}"
+        for phrase in expected_phrases:
+            assert phrase in combined, f"{gene} reviewed Part3 内容未命中: {phrase}"
+        for phrase in fallback_phrases:
+            assert phrase not in combined, f"{gene} 仍回退到兜底话术: {phrase}"
+
+
+def test_reviewed_part3_gene_level_fallbacks_cover_crc358_pressure_genes():
+    """CRC358 压测包暴露出的高频 Part3 缺口应有 gene-level reviewed 覆盖。"""
+    overlay_path = (
+        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
+    )
+    provider = GeneKnowledgeProvider(
+        {
+            "enabled": True,
+            "gene_knowledge_db": {
+                "enabled": True,
+                "path": "data/knowledge_bases/processed/gene_knowledge_db.xlsx",
+                "reviewed_part3_overlay_path": str(overlay_path),
+            },
+        }
+    )
+    assert provider.load(base_path=str(ROOT))
+
+    first_wave = {
+        "BAP1": "DNA损伤",
+        "MLH3": "错配修复",
+        "FANCA": "范可尼",
+        "PALB2": "同源重组",
+        "FANCD2": "DNA损伤",
+        "RAD50": "MRN复合物",
+        "NOTCH1": "Notch信号",
+        "SDHB": "琥珀酸脱氢酶",
+        "POLE": "DNA聚合酶",
+        "DNMT3A": "表观遗传",
+        "HRAS": "RAS",
+        "IDH1": "异柠檬酸脱氢酶",
+        "MAP2K1": "MEK1",
+        "JAK1": "JAK/STAT",
+        "JAK2": "JAK/STAT",
+        "VHL": "缺氧信号",
+        "STK11": "LKB1",
+        "PTCH1": "Hedgehog",
+        "RNF43": "Wnt信号",
+        "BARD1": "BRCA1",
+        "RAD51C": "同源重组",
+        "TSC2": "mTOR",
+        "FANCM": "DNA损伤",
+        "TSC1": "mTOR",
+        "FGFR2": "成纤维细胞生长因子受体2",
+        "PBRM1": "染色质重塑",
+        "WRN": "DNA解旋酶",
+        "BRIP1": "FANCJ",
+        "RAD51D": "同源重组",
+    }
+    fallback_phrases = (
+        "基因的功能与肿瘤发生发展密切相关",
+        "临床意义是当前研究的热点领域",
+        "需自动化生成",
+    )
+
+    for gene, expected in first_wave.items():
+        section = provider.build_gene_knowledge_section(
+            gene=gene,
+            c_hgvs="c.100del",
+            p_hgvs="p.A34Rfs*2",
+            frequency=1.23,
+            mutation_type="Frameshift",
+        )
+        combined = f"{section['intro']}\n{section['mutation_analysis']}"
+        assert expected in combined, f"{gene} gene-level reviewed 内容未命中"
+        for phrase in fallback_phrases:
+            assert phrase not in combined, f"{gene} 仍回退到兜底话术: {phrase}"
+
+
+def test_reviewed_part3_legacy_crc_gene_level_candidates_are_promoted():
+    """旧肠癌知识库通过审核后，应作为 CRC gene-level reviewed 内容随包发布。"""
+    overlay_path = (
+        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
+    )
+    data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
+    gene_level_sections = {
+        row.get("gene"): row
+        for row in data.get("gene_sections", [])
+        if row.get("gene") and not row.get("c_hgvs") and not row.get("p_hgvs")
+    }
+
+    legacy_genes = {
+        "APC",
+        "ARID1A",
+        "ATM",
+        "ATR",
+        "BRAF",
+        "BRCA1",
+        "BRCA2",
+        "CTNNB1",
+        "EPCAM",
+        "FBXW7",
+        "KMT2C",
+        "KMT2D",
+        "KRAS",
+        "MLH1",
+        "MSH2",
+        "MSH6",
+        "NF1",
+        "NRAS",
+        "NTRK1",
+        "NTRK2",
+        "NTRK3",
+        "PIK3CA",
+        "PMS2",
+        "PTEN",
+        "SMAD4",
+        "SMARCA4",
+        "SMARCB1",
+        "TCF7L2",
+        "TP53",
+    }
+    assert not (legacy_genes - set(gene_level_sections))
+
+    unsafe_phrases = (
+        "{XX癌",
+        "运营系统调取",
+        "该样本检出的突变可能导致",
+    )
+    for gene in legacy_genes:
+        section = gene_level_sections[gene]
+        combined = f"{section.get('intro', '')}\n{section.get('mutation_analysis', '')}"
+        assert section.get("intro"), f"{gene} 缺 gene-level intro"
+        assert section.get("mutation_analysis"), f"{gene} 缺 gene-level mutation_analysis"
+        for phrase in unsafe_phrases:
+            assert phrase not in combined, f"{gene} gene-level 内容含不应泛化的旧库话术"
+
+    provider = GeneKnowledgeProvider(
+        {
+            "enabled": True,
+            "gene_knowledge_db": {
+                "enabled": True,
+                "path": "missing.xlsx",
+                "reviewed_part3_overlay_path": str(overlay_path),
+            },
+        }
+    )
+    assert provider.load(base_path=str(ROOT))
+
+    samples = {
+        "BRAF": "BRAF V600E",
+        "MLH1": "错配修复",
+        "APC": "WNT信号通路",
+        "TP53": "DNA结合结构域",
+    }
+    for gene, expected in samples.items():
+        section = provider.build_gene_knowledge_section(
+            gene=gene,
+            c_hgvs="c.1A>G",
+            p_hgvs="p.M1V",
+            frequency=1.23,
+            mutation_type="Missense",
+        )
+        combined = f"{section['intro']}\n{section['mutation_analysis']}"
+        assert expected in combined
 
 
 def test_mutation_description_build_variant_lead_by_type():

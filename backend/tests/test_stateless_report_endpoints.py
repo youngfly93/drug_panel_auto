@@ -1,6 +1,8 @@
+import io
 import json
 import sys
 import time
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -219,6 +221,47 @@ def test_inspect_excel_returns_sheet_and_field_payload(tmp_path, monkeypatch):
     assert data["preview_summary"]["variants"]["total"] == 1
 
 
+def test_inspect_excel_uses_filename_project_code_for_enrichment(tmp_path, monkeypatch):
+    class NoSampleBridge(FakeBridge):
+        def get_mapped_clinical_fields(self, _excel_data):
+            return {}
+
+    calls = []
+
+    def fake_enrich_patient(sample_id, project_type=None):
+        calls.append((sample_id, project_type))
+        return clinical_svc.PatientEnrichment(
+            sample_id=sample_id,
+            found=True,
+            source="marvelbio",
+            fields={
+                "patient_name": "接口回填患者",
+                "receive_date": "2026-06-01",
+                "clinical_diagnosis": "结直肠癌",
+            },
+            field_sources={
+                "patient_name": "marvelbio",
+                "receive_date": "marvelbio",
+                "clinical_diagnosis": "marvelbio",
+            },
+        )
+
+    monkeypatch.setattr(clinical_svc, "enrich_patient", fake_enrich_patient)
+    with _client(tmp_path, monkeypatch, bridge=NoSampleBridge()) as client:
+        response = client.post(
+            "/api/v1/excel/inspect",
+            files={"file": ("LZFILE001.xlsx", b"placeholder", "application/vnd.ms-excel")},
+        )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert calls == [("LZFILE001", "crc_358_msi")]
+    assert data["single_values"]["sample_id"] == "LZFILE001"
+    assert data["single_values"]["patient_name"] == "接口回填患者"
+    assert data["single_values"]["receive_date"] == "2026-06-01"
+    assert data["single_values"]["clinical_diagnosis"] == "结直肠癌"
+
+
 def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
     class FakeResponse:
         def __enter__(self):
@@ -241,6 +284,7 @@ def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
                             "sampleType": "新鲜组织",
                             "sampleTime": "2025-11-21",
                             "sampleReachTime": "2025-11-22",
+                            "reportDate": "2025-11-29",
                             "hospital": "运营医院",
                             "department": "结直肠肿瘤科",
                         },
@@ -287,6 +331,7 @@ def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
     assert result.fields["sample_type"] == "新鲜组织"
     assert result.fields["collection_date"] == "2025-11-21"
     assert result.fields["receive_date"] == "2025-11-22"
+    assert result.fields["report_date"] == "2025-11-29"
     assert result.fields["hospital"] == "运营医院"
     assert result.fields["department"] == "结直肠肿瘤科"
 
@@ -323,6 +368,48 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert data["output_filename"] == "测试患者-癌种未填-结直肠癌358基因+msi-mljy-case001-修改版.docx"
     assert data["output_file_base64"].startswith("UEsD")
     assert data["qa_status"] == "PASS"
+
+
+def test_generate_file_uses_filename_project_code_for_enrichment(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_enrich_patient(sample_id, project_type=None):
+        calls.append((sample_id, project_type))
+        return clinical_svc.PatientEnrichment(
+            sample_id=sample_id,
+            found=True,
+            source="marvelbio",
+            fields={
+                "patient_name": "接口生成患者",
+                "clinical_diagnosis": "乙状结肠癌",
+                "receive_date": "2026-06-01",
+            },
+            field_sources={
+                "patient_name": "marvelbio",
+                "clinical_diagnosis": "marvelbio",
+                "receive_date": "marvelbio",
+            },
+        )
+
+    bridge = FakeBridge()
+    monkeypatch.setattr(clinical_svc, "enrich_patient", fake_enrich_patient)
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file",
+            files={"file": ("LZGEN001.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": "{}",
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+            },
+        )
+
+    assert response.status_code == 200
+    assert calls == [("LZGEN001", "crc_358_msi")]
+    clinical_info = bridge.last_generate_kwargs["clinical_info"]
+    assert clinical_info["sample_id"] == "LZGEN001"
+    assert clinical_info["patient_name"] == "接口生成患者"
+    assert clinical_info["clinical_diagnosis"] == "乙状结肠癌"
 
 
 def test_generate_file_infers_project_type_from_form_project_name(
@@ -391,12 +478,20 @@ def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
     assert download_response.status_code == 200
     assert download_response.headers["x-reportgen-download-kind"] == "single_docx"
     assert download_response.headers["x-reportgen-task-id"] == data["task_id"]
+    assert download_response.headers["x-reportgen-download-retryable"] == "true"
     assert int(download_response.headers["x-reportgen-download-bytes"]) == len(
         download_response.content
     )
 
 
 def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_enrich_patient(sample_id, project_type=None):
+        calls.append((sample_id, project_type))
+        return clinical_svc.PatientEnrichment(sample_id=sample_id)
+
+    monkeypatch.setattr(clinical_svc, "enrich_patient", fake_enrich_patient)
     with _client(tmp_path, monkeypatch) as client:
         response = client.post(
             "/api/v1/reports/batch-files",
@@ -436,6 +531,7 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert status["status"] == "completed"
     assert status["completed_files"] == 2
     assert status["failed_files"] == 0
+    assert calls == [("case1", "crc_358_msi"), ("case2", "crc_358_msi")]
     assert results_response.status_code == 200
     rows = result_rows
     assert [row["status"] for row in rows] == ["completed", "completed"]
@@ -443,10 +539,25 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert item_response.status_code == 200
     assert item_response.headers["x-reportgen-download-kind"] == "batch_item_docx"
     assert item_response.headers["x-reportgen-task-id"] == task_id
+    assert item_response.headers["x-reportgen-download-retryable"] == "true"
+    assert int(item_response.headers["x-reportgen-download-bytes"]) == len(
+        item_response.content
+    )
     assert zip_response.status_code == 200
     assert zip_response.headers["content-type"].startswith("application/zip")
     assert zip_response.headers["x-reportgen-download-kind"] == "batch_zip"
     assert zip_response.headers["x-reportgen-task-id"] == task_id
+    assert zip_response.headers["x-reportgen-download-retryable"] == "true"
+    assert int(zip_response.headers["x-reportgen-download-bytes"]) == len(
+        zip_response.content
+    )
+    assert zip_response.headers["cache-control"] == "private, no-store"
+    assert "x-reportgen-prepare-duration-ms" in zip_response.headers
+    with zipfile.ZipFile(io.BytesIO(zip_response.content)) as zf:
+        names = zf.namelist()
+    assert "batch_report.json" in names
+    assert sum(name.startswith("reports/") for name in names) == 2
+    assert sum(name.startswith("summaries/") for name in names) == 2
 
 
 def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):

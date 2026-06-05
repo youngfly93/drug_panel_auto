@@ -210,6 +210,8 @@ class ReportGenBridge:
             project_name = self._project_name_for_type(canonical_project_type)
 
         report_data = self.field_mapper.map(working)
+        if not str(report_data.get_field("report_date") or "").strip():
+            self.generator._fill_missing_report_date(report_data)
         report_data = self.data_cleaner.validate_and_clean(report_data)
         if project_name and canonical_project_type:
             current = report_data.get_field("project_name")
@@ -235,9 +237,6 @@ class ReportGenBridge:
         )
         self.generator._apply_clinical_diagnosis_for_display(report_data)
         self.generator._set_patient_salutation(report_data)
-        if not str(report_data.get_field("report_date") or "").strip():
-            self.generator._mark_missing_report_date(report_data)
-
         summary = build_report_summary(
             report_data=report_data,
             project_type=canonical_project_type,

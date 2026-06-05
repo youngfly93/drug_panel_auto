@@ -172,7 +172,14 @@ def _observed_file_response(
         "X-ReportGen-Task-Id": task.id,
         "X-ReportGen-Download-Kind": download_kind,
         "X-ReportGen-Download-Bytes": str(stat_result.st_size),
+        "X-ReportGen-Download-Retryable": "true",
+        "Cache-Control": "private, no-store",
+        "Accept-Ranges": "bytes",
+        "X-Content-Type-Options": "nosniff",
     }
+    prepare_duration_ms = context.get("prepare_duration_ms")
+    if prepare_duration_ms is not None:
+        headers["X-ReportGen-Prepare-Duration-Ms"] = str(prepare_duration_ms)
     if task.duration_seconds is not None:
         headers["X-ReportGen-Task-Duration-Seconds"] = str(
             _round_seconds(task.duration_seconds)
@@ -698,14 +705,20 @@ def _infer_project_type_from_name(
 def _enrich_clinical_payload(
     clinical_info: Optional[dict],
     project_type: Optional[str],
+    *,
+    lookup_sample_id: Optional[str] = None,
 ) -> dict:
     """Fill missing form values from the runtime patient registry/ops lookup."""
     payload = dict(clinical_info or {})
     sample_id = str(payload.get("sample_id") or payload.get("样本编号") or "").strip()
-    if not sample_id:
-        return payload
-    enrichment = clinical_svc.enrich_patient(sample_id, project_type=project_type)
-    return clinical_svc.merge_enrichment_into_values(payload, enrichment)
+    lookup_id = str(lookup_sample_id or "").strip() or sample_id
+    if not lookup_id:
+        return clinical_svc.fill_missing_report_date(payload)
+    if not sample_id and lookup_id:
+        payload["sample_id"] = lookup_id
+    enrichment = clinical_svc.enrich_patient(lookup_id, project_type=project_type)
+    payload = clinical_svc.merge_enrichment_into_values(payload, enrichment)
+    return clinical_svc.fill_missing_report_date(payload)
 
 
 def _compact_filename_part(value: object, fallback: str) -> str:
@@ -912,6 +925,7 @@ def generate_report(
     clinical_payload = _enrich_clinical_payload(
         req.clinical_info,
         effective_project_type,
+        lookup_sample_id=clinical_svc.project_code_from_filename(upload.original_filename),
     )
 
     # Create task record
@@ -1049,6 +1063,7 @@ def generate_report_from_file(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
+        lookup_sample_id=clinical_svc.project_code_from_filename(file.filename),
     )
 
     task_id = str(uuid.uuid4())
@@ -1187,6 +1202,7 @@ def generate_report_from_file_async(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
+        lookup_sample_id=clinical_svc.project_code_from_filename(file.filename),
     )
 
     task_id = str(uuid.uuid4())
@@ -1592,22 +1608,35 @@ def download_batch_reports_zip(
         detail = "没有 QA PASS 的成功报告" if qa_pass_only else "没有可打包的成功报告"
         raise HTTPException(status_code=404, detail=detail)
     prepare_started = time.perf_counter()
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        batch_report = _batch_report_path(task.output_path)
-        if batch_report and batch_report.exists():
-            zf.write(batch_report, "batch_report.json")
-        for row in rows:
-            if not row.output_path:
-                continue
-            docx_path = Path(row.output_path)
-            if docx_path.exists():
-                zf.write(docx_path, f"reports/{row.file_index:03d}_{docx_path.name}")
-            summary_path = _report_summary_sidecar_path(row.output_path)
-            if summary_path and summary_path.exists():
-                zf.write(
-                    summary_path,
-                    f"summaries/{row.file_index:03d}_{summary_path.name}",
-                )
+    temp_zip_path = output_root / f".{zip_path.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        with zipfile.ZipFile(
+            temp_zip_path,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+        ) as zf:
+            batch_report = _batch_report_path(task.output_path)
+            if batch_report and batch_report.exists():
+                zf.write(batch_report, "batch_report.json")
+            for row in rows:
+                if not row.output_path:
+                    continue
+                docx_path = Path(row.output_path)
+                if docx_path.exists():
+                    zf.write(
+                        docx_path,
+                        f"reports/{row.file_index:03d}_{docx_path.name}",
+                    )
+                summary_path = _report_summary_sidecar_path(row.output_path)
+                if summary_path and summary_path.exists():
+                    zf.write(
+                        summary_path,
+                        f"summaries/{row.file_index:03d}_{summary_path.name}",
+                    )
+        temp_zip_path.replace(zip_path)
+    finally:
+        if temp_zip_path.exists():
+            temp_zip_path.unlink(missing_ok=True)
     prepare_duration_ms = round((time.perf_counter() - prepare_started) * 1000, 3)
     return _observed_file_response(
         path=zip_path,

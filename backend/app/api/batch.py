@@ -71,13 +71,19 @@ def _infer_project_type_from_name(
 def _enrich_clinical_payload(
     clinical_info: Optional[dict],
     project_type: Optional[str],
+    *,
+    lookup_sample_id: Optional[str] = None,
 ) -> dict:
     payload = dict(clinical_info or {})
     sample_id = str(payload.get("sample_id") or payload.get("样本编号") or "").strip()
-    if not sample_id:
-        return payload
-    enrichment = clinical_svc.enrich_patient(sample_id, project_type=project_type)
-    return clinical_svc.merge_enrichment_into_values(payload, enrichment)
+    lookup_id = str(lookup_sample_id or "").strip() or sample_id
+    if not lookup_id:
+        return clinical_svc.fill_missing_report_date(payload)
+    if not sample_id and lookup_id:
+        payload["sample_id"] = lookup_id
+    enrichment = clinical_svc.enrich_patient(lookup_id, project_type=project_type)
+    payload = clinical_svc.merge_enrichment_into_values(payload, enrichment)
+    return clinical_svc.fill_missing_report_date(payload)
 
 
 def _batch_report_path(output_dir: str | Path) -> Path:
@@ -241,6 +247,7 @@ def _build_item_payload(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
+        lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
     )
 
     result = run_generate_report_with_timeout(

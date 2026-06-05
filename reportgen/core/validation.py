@@ -339,8 +339,7 @@ def validate_excel_data_common(
                 "level": "warning",
                 "field": "report_date",
                 "message": (
-                    f"Excel 中未找到报告日期；系统不会自动回填今天 ({today_text})，"
-                    "请在临床信息表单中手动填写。"
+                    f"Excel 中未找到报告日期；系统将使用生成报告当天日期 ({today_text})。"
                 ),
             }
         )

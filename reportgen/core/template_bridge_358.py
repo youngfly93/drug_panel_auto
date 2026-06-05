@@ -868,6 +868,17 @@ def load_crc_358_panel_config(*, base_path: Optional[str] = None) -> Optional[Pa
     return cfg_path
 
 EXPLICIT_GENE_CLASS_LABELS = {"Ⅰ类", "Ⅱ类", "Ⅲ类"}
+EXPLICIT_GENE_CLASS_ALIASES = {
+    "1类": "Ⅰ类",
+    "I类": "Ⅰ类",
+    "一类": "Ⅰ类",
+    "2类": "Ⅱ类",
+    "II类": "Ⅱ类",
+    "二类": "Ⅱ类",
+    "3类": "Ⅲ类",
+    "III类": "Ⅲ类",
+    "三类": "Ⅲ类",
+}
 
 # Mutation type translation
 MUTATION_TYPE_MAP = {
@@ -885,8 +896,10 @@ MUTATION_TYPE_MAP = {
 
 def _explicit_gene_class(value: Any) -> str:
     """Return the reviewed I/II/III label from a raw class cell, if present."""
-    val = _norm_text(value)
-    return val if val in EXPLICIT_GENE_CLASS_LABELS else ""
+    val = _norm_text(value).replace(" ", "")
+    if val in EXPLICIT_GENE_CLASS_LABELS:
+        return val
+    return EXPLICIT_GENE_CLASS_ALIASES.get(val.upper(), "")
 
 
 def _has_explicit_gene_class_labels(
@@ -927,8 +940,9 @@ def _get_gene_class(
         panel_config = get_default_panel_config()
 
     val = _norm_text(exist_in_552)
-    if val in EXPLICIT_GENE_CLASS_LABELS:
-        return val
+    explicit_class = _explicit_gene_class(val)
+    if explicit_class:
+        return explicit_class
     if val in ("0", "0.0", "False", "false"):
         return ""
     if not allow_gene_fallback:
@@ -995,6 +1009,29 @@ def _join_text_value(value: Any) -> str:
     return "\n".join(_as_text_list(value))
 
 
+def _variant_level_aliases(value: Any) -> Set[str]:
+    text = _norm_text(value).upper().replace(" ", "")
+    if not text:
+        return set()
+    if text in {"1", "I", "Ⅰ", "一类", "1类", "I类", "Ⅰ类"}:
+        return {"Ⅰ类", "1类", "I类", "一类"}
+    if text in {"2", "II", "Ⅱ", "二类", "2类", "II类", "Ⅱ类"}:
+        return {"Ⅱ类", "2类", "II类", "二类"}
+    if text in {"3", "III", "Ⅲ", "三类", "3类", "III类", "Ⅲ类"}:
+        return {"Ⅲ类", "3类", "III类", "三类"}
+    return {text}
+
+
+def _variant_level_matches(candidate: Any, allowed_values: List[str]) -> bool:
+    candidate_aliases = _variant_level_aliases(candidate)
+    if not candidate_aliases:
+        return False
+    for allowed in allowed_values:
+        if candidate_aliases & _variant_level_aliases(allowed):
+            return True
+    return False
+
+
 def _override_gene_values(override: Dict[str, Any]) -> Set[str]:
     values = _as_text_list(override.get("gene") or override.get("genes"))
     return {value.upper() for value in values}
@@ -1006,6 +1043,7 @@ def _variant_override_matches(
     c_hgvs: str = "",
     p_hgvs: str = "",
     locus: str = "",
+    gene_class: str = "",
 ) -> bool:
     """Match a variant row against a reviewed YAML override rule."""
     gene_norm = _norm_text(gene).upper()
@@ -1014,6 +1052,15 @@ def _variant_override_matches(
 
     override_genes = _override_gene_values(override)
     if override_genes and gene_norm not in override_genes:
+        return False
+
+    level_values = _as_text_list(
+        override.get("variant_level")
+        or override.get("variant_levels")
+        or override.get("level")
+        or override.get("levels")
+    )
+    if level_values and not _variant_level_matches(gene_class, level_values):
         return False
 
     c_values = set(_as_text_list(override.get("c_hgvs") or override.get("cHGVS")))
@@ -1036,9 +1083,12 @@ def _find_reviewed_variant_override(
     c_hgvs: str = "",
     p_hgvs: str = "",
     locus: str = "",
+    gene_class: str = "",
 ) -> Optional[Dict[str, Any]]:
     for override in panel_config.reviewed_variant_overrides:
-        if _variant_override_matches(override, gene, c_hgvs, p_hgvs, locus):
+        if _variant_override_matches(
+            override, gene, c_hgvs, p_hgvs, locus, gene_class=gene_class
+        ):
             return override
     return None
 
@@ -1127,6 +1177,7 @@ def build_variants_for_template(
             gene,
             c_hgvs,
             "" if p_hgvs in {"--", "*"} else p_hgvs,
+            gene_class=gene_class,
         )
 
         # Get clinical significance. Missing CLNSIG is not evidence of pathogenicity;
@@ -1296,6 +1347,120 @@ def build_immune_variants(
     positive_variants = []
     negative_variants = []
     hyperprogression_variants = []
+    seen_by_group: Dict[str, Set[Tuple[str, str, str]]] = {
+        "positive": set(),
+        "negative": set(),
+        "hyperprogression": set(),
+    }
+
+    def _variant_key(v: Dict[str, str]) -> Tuple[str, str, str]:
+        return (
+            str(v.get("gene") or "").upper(),
+            str(v.get("cHGVS") or ""),
+            str(v.get("pHGVS") or ""),
+        )
+
+    def _append_unique(group: str, v: Dict[str, str]) -> None:
+        key = _variant_key(v)
+        if key in seen_by_group[group]:
+            return
+        seen_by_group[group].add(key)
+        if group == "positive":
+            positive_variants.append(v)
+        elif group == "negative":
+            negative_variants.append(v)
+        else:
+            hyperprogression_variants.append(v)
+
+    def _row_genes(row: Dict[str, Any]) -> Set[str]:
+        return set(_as_upper_gene_list(row.get("genes")))
+
+    def _special_genes(rows: List[Dict[str, Any]]) -> Set[str]:
+        special: Set[str] = set()
+        for row in rows:
+            mode = str(row.get("mode") or "direct").strip()
+            if mode in {"variant_pattern", "cnv_amp"}:
+                special |= _row_genes(row)
+        return special
+
+    negative_special_genes = _special_genes(panel_config.immune_negative_rows)
+    hyper_special_genes = _special_genes(panel_config.immune_hyperprogression_rows)
+
+    def _is_immune_eligible(v: Dict[str, str]) -> bool:
+        gene_class = v.get("gene_class", "")
+        return not (filter_class_i_ii_only and gene_class == "Ⅲ类")
+
+    def _prepare_immune_variant(v: Dict[str, str]) -> Dict[str, str]:
+        gene_class = v.get("gene_class", "")
+        clinical_sig = v.get("clinical_significance", "临床意义未明")
+        if gene_class == "Ⅲ类" and "意义未明" not in clinical_sig:
+            copied = v.copy()
+            copied["clinical_significance"] = f"{clinical_sig}（意义未明突变）"
+            return copied
+        return v
+
+    def _variant_matches_patterns(v: Dict[str, str], patterns: List[str]) -> bool:
+        haystack = " ".join(
+            str(v.get(key) or "") for key in ("cHGVS", "pHGVS", "exon")
+        ).upper()
+        return any(str(pattern or "").upper() in haystack for pattern in patterns)
+
+    def _add_variant_pattern_rows(
+        group: str,
+        rows: List[Dict[str, Any]],
+        variants: List[Dict[str, str]],
+    ) -> None:
+        for row in rows:
+            if str(row.get("mode") or "direct").strip() != "variant_pattern":
+                continue
+            genes = _row_genes(row)
+            patterns = [str(x) for x in row.get("patterns") or [] if str(x)]
+            if not genes or not patterns:
+                continue
+            for variant in variants:
+                if str(variant.get("gene") or "").upper() not in genes:
+                    continue
+                if not _is_immune_eligible(variant):
+                    continue
+                if _variant_matches_patterns(variant, patterns):
+                    _append_unique(group, _prepare_immune_variant(variant))
+
+    def _add_cnv_amp_rows(group: str, rows: List[Dict[str, Any]]) -> None:
+        cnv_data = excel_data.get_table_data("Cnv") or []
+        for row in rows:
+            if str(row.get("mode") or "direct").strip() != "cnv_amp":
+                continue
+            genes = _row_genes(row)
+            match = str(row.get("match") or "扩增").strip()
+            if not genes:
+                continue
+            for raw in cnv_data:
+                gene = _norm_text(raw.get("Gene") or raw.get("gene")).upper()
+                if gene not in genes:
+                    continue
+                status = _norm_text(
+                    raw.get("Cnvkit") or raw.get("Status") or raw.get("status")
+                )
+                if not status:
+                    continue
+                status_upper = status.upper()
+                is_amp = (
+                    (match and match in status)
+                    or "扩增" in status
+                    or "AMP" in status_upper
+                )
+                if not is_amp:
+                    continue
+                _append_unique(
+                    group,
+                    {
+                        "gene": gene,
+                        "cHGVS": f"CNV:{status}",
+                        "pHGVS": "",
+                        "exon": "",
+                        "gene_class": "CNV",
+                    },
+                )
 
     # 免疫摘要与 3.3 详表口径保持一致：仅按 Ⅰ/Ⅱ 类过滤，不再叠加 CLNSIG
     # 致病性白名单。早前的致病性二次过滤会把 CLNSIG 为空的 Ⅰ/Ⅱ 类移码变异
@@ -1304,24 +1469,35 @@ def build_immune_variants(
     # _immune_eligible_variants（仅 Ⅰ/Ⅱ 类），此处与之对齐。
     for v in all_variants:
         gene = v["gene"].upper()
-        gene_class = v.get("gene_class", "")
 
         # 批注#12: 只显示Ⅰ类和Ⅱ类
-        if filter_class_i_ii_only and gene_class == "Ⅲ类":
+        if not _is_immune_eligible(v):
             continue
 
-        # Add "(意义未明突变)" annotation for Ⅲ类 if not filtered out
-        clinical_sig = v.get("clinical_significance", "临床意义未明")
-        if gene_class == "Ⅲ类" and "意义未明" not in clinical_sig:
-            v = v.copy()
-            v["clinical_significance"] = f"{clinical_sig}（意义未明突变）"
+        v = _prepare_immune_variant(v)
 
         if gene in panel_config.immune_positive_genes:
-            positive_variants.append(v)
-        if gene in panel_config.immune_negative_genes:
-            negative_variants.append(v)
-        if gene in panel_config.immune_hyperprogression_genes:
-            hyperprogression_variants.append(v)
+            _append_unique("positive", v)
+        if gene in panel_config.immune_negative_genes and gene not in negative_special_genes:
+            _append_unique("negative", v)
+        if (
+            gene in panel_config.immune_hyperprogression_genes
+            and gene not in hyper_special_genes
+        ):
+            _append_unique("hyperprogression", v)
+
+    _add_variant_pattern_rows(
+        "negative",
+        panel_config.immune_negative_rows,
+        all_variants,
+    )
+    _add_variant_pattern_rows(
+        "hyperprogression",
+        panel_config.immune_hyperprogression_rows,
+        all_variants,
+    )
+    _add_cnv_amp_rows("negative", panel_config.immune_negative_rows)
+    _add_cnv_amp_rows("hyperprogression", panel_config.immune_hyperprogression_rows)
 
     return {
         "positive": positive_variants,
@@ -1990,7 +2166,15 @@ def _override_has_detected_variant(
             c_hgvs = _norm_text(row.get("cHGVS") or row.get("c_hgvs"))
             p_hgvs = _norm_text(row.get("pHGVS") or row.get("p_hgvs"))
             locus = _norm_text(row.get("locus") or row.get("variant_site"))
-            if _variant_override_matches(override, gene, c_hgvs, p_hgvs, locus):
+            gene_class = _norm_text(
+                row.get("gene_class")
+                or row.get("variant_level")
+                or row.get("level")
+                or row.get("classification")
+            )
+            if _variant_override_matches(
+                override, gene, c_hgvs, p_hgvs, locus, gene_class=gene_class
+            ):
                 return True
     return False
 
@@ -2009,7 +2193,15 @@ def _patch_reviewed_variant_override_rows(
     for row in rows:
         gene = _norm_text(row.get("gene")).upper()
         locus = _norm_text(row.get("locus"))
-        override = _find_reviewed_variant_override(panel_config, gene, locus=locus)
+        gene_class = _norm_text(
+            row.get("gene_class")
+            or row.get("variant_level")
+            or row.get("level")
+            or row.get("classification")
+        )
+        override = _find_reviewed_variant_override(
+            panel_config, gene, locus=locus, gene_class=gene_class
+        )
         if not override:
             continue
         benefit, caution = _drugs_from_override(override)
@@ -2049,6 +2241,12 @@ def _patch_reviewed_variant_override_rows(
                 override,
                 _norm_text(row.get("gene")),
                 locus=_norm_text(row.get("variant_site")),
+                gene_class=_norm_text(
+                    row.get("gene_class")
+                    or row.get("variant_level")
+                    or row.get("level")
+                    or row.get("classification")
+                ),
             ):
                 continue
             row["variant_site"] = variant_site

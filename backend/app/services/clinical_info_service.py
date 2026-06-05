@@ -7,7 +7,10 @@ and reads/writes patient_info.yaml for patient management.
 
 import base64
 import json
+import shutil
+import subprocess
 import threading
+from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 from urllib import error as urlerror
@@ -96,6 +99,7 @@ ENRICHABLE_FIELDS = {
     "sample_site",
     "collection_date",
     "receive_date",
+    "report_date",
 }
 
 ENRICHMENT_KEY_ALIASES = {
@@ -127,6 +131,8 @@ ENRICHMENT_KEY_ALIASES = {
     "接收日期": "receive_date",
     "收样日期": "receive_date",
     "送检日期": "receive_date",
+    "报告日期": "report_date",
+    "出报告日期": "report_date",
     "userName": "patient_name",
     "sex": "gender",
     "age": "age",
@@ -137,6 +143,8 @@ ENRICHMENT_KEY_ALIASES = {
     "sampleType": "sample_type",
     "sampleTime": "collection_date",
     "sampleReachTime": "receive_date",
+    "reportDate": "report_date",
+    "reportTime": "report_date",
 }
 
 MISSING_MARKERS = {"", "-", "--", "未知", "unknown", "none", "null", "nan", "n/a", "na"}
@@ -413,6 +421,22 @@ def merge_enrichment_into_values(
     return merged
 
 
+def project_code_from_filename(filename: Optional[str]) -> str:
+    """Return the upload filename stem used by the external ops registry."""
+    name = Path(str(filename or "")).name.strip()
+    if not name:
+        return ""
+    return Path(name).stem.strip()
+
+
+def fill_missing_report_date(values: dict[str, Any]) -> dict[str, Any]:
+    """Return values with report_date filled by the generation date when absent."""
+    filled = dict(values or {})
+    if _is_missing_value(filled.get("report_date")):
+        filled["report_date"] = date.today().isoformat()
+    return filled
+
+
 def _patient_fields_from_local_registry(sample_id: str) -> dict[str, Any]:
     data = _load_patient_info()
     patients = data.get("patients", {}) or {}
@@ -503,23 +527,14 @@ def _fetch_marvelbio_patient(
         },
         ensure_ascii=False,
     ).encode("utf-8")
-    req = request.Request(
+    raw, lookup_warnings = _post_json_with_curl_fallback(
         url,
-        data=body,
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+        body,
+        timeout=float(settings.patient_enrichment_timeout_seconds),
+        source="MarvelBio",
     )
-    try:
-        with request.urlopen(
-            req,
-            timeout=float(settings.patient_enrichment_timeout_seconds),
-        ) as response:
-            raw = response.read().decode("utf-8")
-    except (urlerror.URLError, TimeoutError, OSError) as exc:
-        return {}, "marvelbio", [f"MarvelBio enrichment lookup failed: {exc}"]
+    if raw is None:
+        return {}, "marvelbio", lookup_warnings
 
     try:
         payload = json.loads(raw)
@@ -542,6 +557,74 @@ def _fetch_marvelbio_patient(
         fields.setdefault("cancer_type", cancer_name)
         fields.setdefault("clinical_diagnosis", cancer_name)
     return fields, "marvelbio", []
+
+
+def _post_json_with_curl_fallback(
+    url: str,
+    body: bytes,
+    *,
+    timeout: float,
+    source: str,
+) -> tuple[Optional[str], list[str]]:
+    req = request.Request(
+        url,
+        data=body,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Connection": "close",
+            "User-Agent": "ReportGen-Web/clinical-enrichment",
+        },
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=timeout) as response:
+            return response.read().decode("utf-8"), []
+    except (urlerror.URLError, TimeoutError, OSError) as exc:
+        urllib_error = str(exc)
+
+    curl = shutil.which("curl")
+    if not curl:
+        return None, [f"{source} enrichment lookup failed: {urllib_error}"]
+
+    try:
+        completed = subprocess.run(
+            [
+                curl,
+                "-ksS",
+                "--connect-timeout",
+                str(max(1, int(timeout))),
+                "--max-time",
+                str(max(2, int(timeout) + 2)),
+                "-H",
+                "Accept: application/json",
+                "-H",
+                "Content-Type: application/json",
+                "-X",
+                "POST",
+                "--data-binary",
+                "@-",
+                url,
+            ],
+            input=body,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout + 4,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, [
+            f"{source} enrichment lookup failed: {urllib_error}; "
+            f"curl fallback failed: {exc}"
+        ]
+
+    if completed.returncode != 0:
+        stderr = completed.stderr.decode("utf-8", errors="ignore").strip()
+        return None, [
+            f"{source} enrichment lookup failed: {urllib_error}; "
+            f"curl fallback failed: {stderr or completed.returncode}"
+        ]
+    return completed.stdout.decode("utf-8", errors="ignore"), []
 
 
 def _aes_cbc_pkcs5_base64(text: str, key: str) -> str:
