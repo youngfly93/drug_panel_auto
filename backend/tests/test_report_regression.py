@@ -6222,6 +6222,94 @@ def test_reviewed_part3_knowledge_ships_dnmt3a_and_flt3_overrides():
     assert "p.G846D" in flt3["mutation_analysis"]
 
 
+def test_reviewed_part3_legacy_crc_gene_level_candidates_are_promoted():
+    """旧肠癌知识库通过审核后，应作为 CRC gene-level reviewed 内容随包发布。"""
+    overlay_path = (
+        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
+    )
+    data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
+    gene_level_sections = {
+        row.get("gene"): row
+        for row in data.get("gene_sections", [])
+        if row.get("gene") and not row.get("c_hgvs") and not row.get("p_hgvs")
+    }
+
+    legacy_genes = {
+        "APC",
+        "ARID1A",
+        "ATM",
+        "ATR",
+        "BRAF",
+        "BRCA1",
+        "BRCA2",
+        "CTNNB1",
+        "EPCAM",
+        "FBXW7",
+        "KMT2C",
+        "KMT2D",
+        "KRAS",
+        "MLH1",
+        "MSH2",
+        "MSH6",
+        "NF1",
+        "NRAS",
+        "NTRK1",
+        "NTRK2",
+        "NTRK3",
+        "PIK3CA",
+        "PMS2",
+        "PTEN",
+        "SMAD4",
+        "SMARCA4",
+        "SMARCB1",
+        "TCF7L2",
+        "TP53",
+    }
+    assert not (legacy_genes - set(gene_level_sections))
+
+    unsafe_phrases = (
+        "{XX癌",
+        "运营系统调取",
+        "该样本检出的突变可能导致",
+    )
+    for gene in legacy_genes:
+        section = gene_level_sections[gene]
+        combined = f"{section.get('intro', '')}\n{section.get('mutation_analysis', '')}"
+        assert section.get("intro"), f"{gene} 缺 gene-level intro"
+        assert section.get("mutation_analysis"), f"{gene} 缺 gene-level mutation_analysis"
+        for phrase in unsafe_phrases:
+            assert phrase not in combined, f"{gene} gene-level 内容含不应泛化的旧库话术"
+
+    provider = GeneKnowledgeProvider(
+        {
+            "enabled": True,
+            "gene_knowledge_db": {
+                "enabled": True,
+                "path": "missing.xlsx",
+                "reviewed_part3_overlay_path": str(overlay_path),
+            },
+        }
+    )
+    assert provider.load(base_path=str(ROOT))
+
+    samples = {
+        "BRAF": "BRAF V600E",
+        "MLH1": "错配修复",
+        "APC": "WNT信号通路",
+        "TP53": "DNA结合结构域",
+    }
+    for gene, expected in samples.items():
+        section = provider.build_gene_knowledge_section(
+            gene=gene,
+            c_hgvs="c.1A>G",
+            p_hgvs="p.M1V",
+            frequency=1.23,
+            mutation_type="Missense",
+        )
+        combined = f"{section['intro']}\n{section['mutation_analysis']}"
+        assert expected in combined
+
+
 def test_mutation_description_build_variant_lead_by_type():
     from reportgen.knowledge.mutation_description import MutationDescriptionGenerator
 
