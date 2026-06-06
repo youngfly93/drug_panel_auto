@@ -8,6 +8,7 @@ write to the production knowledge overlay.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import re
 import sys
@@ -52,6 +53,21 @@ EXCLUDE_SNIPPET_KEYWORDS = (
     "报告导读",
     "致患者信",
 )
+PATIENT_SPECIFIC_MARKERS = (
+    "该样本检出",
+    "此突变在样本中",
+    "突变丰度",
+    "拷贝数为",
+    "扩增，拷贝数",
+)
+HGVS_IN_TEXT_RE = re.compile(r"\bc\.\d|p\.[A-Z][A-Za-z0-9*]+|\bchr\d", re.I)
+FREQUENCY_RE = re.compile(r"\d+(?:\.\d+)?\s*%")
+PRODUCT_TOKEN_RE = re.compile(
+    r"(基因|分子分型|HRD|hrd|精准治疗|靶向|PD[-_\s]?L1|pd[-_\s]?l1|MSI|msi|TMB|tmb)"
+)
+SAMPLE_TOKEN_RE = re.compile(r"^(?:MLJY|mljy|[Ll][ZzWw]\d{4,}|[A-Z]{2,}\d{5,}.*)$")
+PANEL_SIZE_RE = re.compile(r"(\d{1,4})\s*基因")
+RESOURCE_PREFIX = "._"
 
 
 @dataclass(frozen=True)
@@ -71,6 +87,50 @@ def _clean(value: Any) -> str:
     if text.lower() in {"nan", "none", "null"}:
         return ""
     return text
+
+
+def _stable_id(relative_path: Path) -> str:
+    digest = hashlib.sha256(str(relative_path).encode("utf-8")).hexdigest()
+    return f"rpt_{digest[:16]}"
+
+
+def _file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:16]
+
+
+def _normalize_product_family(value: str) -> str:
+    text = _clean(value).replace("＋", "+")
+    text = re.sub(r"\s+", "", text)
+    text = re.sub(r"PD[-_]?L1|PDL1", "pd-l1", text, flags=re.IGNORECASE)
+    text = re.sub(r"MSI", "msi", text, flags=re.IGNORECASE)
+    text = re.sub(r"TMB", "tmb", text, flags=re.IGNORECASE)
+    return text.strip("-_ ") or "未识别产品族"
+
+
+def _infer_product_family(filename: str) -> str:
+    stem = Path(filename).stem
+    if stem.startswith(RESOURCE_PREFIX):
+        stem = stem[len(RESOURCE_PREFIX) :]
+    stem = re.sub(r"终版\d*$|终版$|补充报告|修改版|已审核", "", stem, flags=re.IGNORECASE)
+    stem = re.sub(r"PD[-_\s]?L1", "PDL1", stem, flags=re.IGNORECASE)
+    parts = [
+        part.strip()
+        for part in re.split(r"[-－—–]", stem)
+        if part and part.strip()
+    ]
+    candidates: list[str] = []
+    for part in parts:
+        if SAMPLE_TOKEN_RE.match(part):
+            continue
+        if PRODUCT_TOKEN_RE.search(part):
+            candidates.append(part)
+    if candidates:
+        return _normalize_product_family(candidates[-1])
+    return "未识别产品族"
 
 
 def _docx_paragraphs(path: Path) -> list[str]:
@@ -120,9 +180,21 @@ def _looks_like_intro(gene: str, text: str) -> bool:
         return False
     if any(key in text for key in EXCLUDE_SNIPPET_KEYWORDS):
         return False
+    if _is_patient_specific_text(text):
+        return False
     if "常见突变基因有" in text or "检测基因" in text:
         return False
     return any(key in text for key in MECHANISM_KEYWORDS)
+
+
+def _is_patient_specific_text(text: str) -> bool:
+    if any(marker in text for marker in PATIENT_SPECIFIC_MARKERS):
+        return True
+    if HGVS_IN_TEXT_RE.search(text):
+        return True
+    # A standalone percentage in a Part3 paragraph is often abundance. Keep the
+    # gene-level pool conservative; exact-site candidates are handled separately.
+    return bool(FREQUENCY_RE.search(text))
 
 
 def _looks_like_analysis(gene: str, text: str) -> bool:
@@ -131,6 +203,8 @@ def _looks_like_analysis(gene: str, text: str) -> bool:
     if gene not in text:
         return False
     if any(key in text for key in EXCLUDE_SNIPPET_KEYWORDS):
+        return False
+    if _is_patient_specific_text(text):
         return False
     if "常见突变基因有" in text or "检测基因" in text:
         return False
@@ -193,11 +267,19 @@ def _iter_docx(corpus_dir: Path) -> list[Path]:
     )
 
 
-def _source_label(path: Path, corpus_dir: Path) -> str:
+def _source_info(path: Path, corpus_dir: Path) -> dict[str, Any]:
     try:
-        return str(path.relative_to(corpus_dir))
+        relative_path = path.relative_to(corpus_dir)
     except ValueError:
-        return str(path)
+        relative_path = Path(path.name)
+    product_family = _infer_product_family(path.name)
+    size_match = PANEL_SIZE_RE.search(product_family)
+    return {
+        "source_id": _stable_id(relative_path),
+        "content_hash": _file_hash(path),
+        "product_family": product_family,
+        "panel_size": int(size_match.group(1)) if size_match else "",
+    }
 
 
 def harvest(
@@ -232,7 +314,7 @@ def harvest(
         if not present_genes:
             continue
 
-        source = _source_label(docx, corpus_dir)
+        source = _source_info(docx, corpus_dir)
         for gene in present_genes:
             for cand in by_gene[gene]:
                 key = (cand.gene, cand.c_hgvs, cand.p_hgvs)
@@ -253,7 +335,10 @@ def harvest(
                             cand.c_hgvs,
                             cand.p_hgvs,
                             "精确位点候选",
-                            source,
+                            source["source_id"],
+                            source["content_hash"],
+                            source["product_family"],
+                            source["panel_size"],
                             text,
                             _candidate_section(paragraphs, idx),
                             "待审核",
@@ -275,9 +360,12 @@ def harvest(
                     [
                         gene,
                         candidate_type,
-                        source,
+                        source["source_id"],
+                        source["content_hash"],
+                        source["product_family"],
+                        source["panel_size"],
                         text,
-                        _candidate_section(paragraphs, idx, max_paragraphs=8),
+                        text,
                         "待审核",
                         "",
                     ]
@@ -288,8 +376,8 @@ def harvest(
     ws = wb.active
     ws.title = "候选汇总"
     summary_rows = [
-        ["缺口表", str(gap_xlsx)],
-        ["历史报告目录", str(corpus_dir)],
+        ["缺口表", gap_xlsx.name],
+        ["历史报告目录", corpus_dir.name],
         ["纳入优先级", ", ".join(sorted(priorities))],
         ["待处理位点数", len(candidates)],
         ["扫描终版报告数", len(docx_files)],
@@ -340,7 +428,10 @@ def harvest(
             "cHGVS",
             "pHGVS",
             "候选类型",
-            "来源报告",
+            "source_id",
+            "content_hash",
+            "产品族",
+            "基因数",
             "命中段落",
             "候选上下文",
             "审核结论",
@@ -352,7 +443,18 @@ def harvest(
     ws4 = wb.create_sheet("历史基因级候选")
     _append_table(
         ws4,
-        ["基因", "候选类型", "来源报告", "命中段落", "候选上下文", "审核结论", "备注"],
+        [
+            "基因",
+            "候选类型",
+            "source_id",
+            "content_hash",
+            "产品族",
+            "基因数",
+            "命中段落",
+            "候选上下文",
+            "审核结论",
+            "备注",
+        ],
         gene_rows,
     )
 
@@ -362,6 +464,7 @@ def harvest(
         ["项目", "说明"],
         [
             ["怎么用", "报告组优先看“需补库位点”，再看是否有历史精确位点候选。没有精确候选时，看基因级候选。"],
+            ["来源说明", "source_id/content_hash 为去标识来源，不显示患者姓名、样本号、完整文件名或报告原文之外的身份信息。"],
             ["审核通过", "确认内容适用于结直肠癌358报告后，在“审核结论”填“通过”。"],
             ["审核不通过", "填“不通过”并写原因，例如证据过旧、癌种不适用、措辞不适合复用。"],
             ["入库原则", "通过后再写入 reviewed_part3_knowledge.yaml；未审核内容不得进生产报告。"],
