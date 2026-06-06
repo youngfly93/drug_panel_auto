@@ -64,6 +64,24 @@ _HGVS_OR_FREQUENCY_RE = re.compile(
     re.IGNORECASE,
 )
 
+
+_REVIEWED_INTRO_KEYS = (
+    "审核后简介",
+    "审核后基因简介",
+    "入库简介",
+    "正式简介",
+    "修订后简介",
+)
+
+_REVIEWED_ANALYSIS_KEYS = (
+    "审核后解析",
+    "审核后变异解析",
+    "入库解析",
+    "正式解析",
+    "修订后解析",
+)
+
+
 def _rows_by_header(ws) -> list[dict[str, Any]]:
     headers = [_clean(cell.value) for cell in ws[1]]
     rows: list[dict[str, Any]] = []
@@ -98,6 +116,14 @@ def _is_safe_variant_level_text(text: str) -> bool:
     return True
 
 
+def _first_text(row: dict[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        text = _clean(row.get(key))
+        if text:
+            return text
+    return ""
+
+
 def _load_existing_keys(overlay_path: Path) -> set[tuple[str, str, str]]:
     if not overlay_path.exists():
         return set()
@@ -113,6 +139,13 @@ def _load_existing_keys(overlay_path: Path) -> set[tuple[str, str, str]]:
 
 
 def _approved_variant_sections(workbook_path: Path) -> list[dict[str, str]]:
+    """Convert approved gap rows into variant-level sections.
+
+    The ``需补库位点`` sheet contains base fallback text from the current KB.
+    That text is useful for review context, but it is not report-team reviewed
+    wording. Only explicit rewritten columns such as ``审核后简介`` or
+    ``审核后解析`` are eligible for promotion.
+    """
     wb = load_workbook(workbook_path)
     if "需补库位点" not in wb.sheetnames:
         return []
@@ -123,8 +156,8 @@ def _approved_variant_sections(workbook_path: Path) -> list[dict[str, str]]:
         gene = _clean(row.get("基因")).upper()
         c_hgvs = _clean(row.get("cHGVS"))
         p_hgvs = _clean(row.get("pHGVS"))
-        intro = _clean(row.get("基础候选简介"))
-        analysis = _clean(row.get("基础候选解析"))
+        intro = _first_text(row, _REVIEWED_INTRO_KEYS)
+        analysis = _first_text(row, _REVIEWED_ANALYSIS_KEYS)
         if intro and not _is_safe_variant_level_text(intro):
             intro = ""
         if analysis and not _is_safe_variant_level_text(analysis):

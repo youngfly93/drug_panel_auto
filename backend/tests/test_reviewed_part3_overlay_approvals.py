@@ -163,6 +163,60 @@ def _write_review_workbook(path: Path) -> None:
     wb.save(path)
 
 
+def _write_gap_review_workbook(path: Path) -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "需补库位点"
+    _append_table(
+        ws,
+        [
+            "优先级",
+            "基因",
+            "cHGVS",
+            "pHGVS",
+            "等级",
+            "当前状态",
+            "基础候选简介",
+            "基础候选解析",
+            "审核后简介",
+            "审核后解析",
+            "审核结论",
+            "备注",
+        ],
+        [
+            [
+                "P1",
+                "ERBB2",
+                "c.1133C>T",
+                "p.P378L",
+                "Ⅱ类",
+                "基础库通用内容",
+                "ERBB2基因的功能与肿瘤发生发展密切相关。",
+                "ERBB2基因突变在多种肿瘤中被报道，其临床意义是当前研究热点。",
+                "",
+                "",
+                "通过",
+                "基础候选不应直接入库",
+            ],
+            [
+                "P1",
+                "KMT2A",
+                "c.3950_3954del",
+                "p.K1317Sfs*7",
+                "Ⅱ类",
+                "基础库通用内容",
+                "KMT2A基因的功能与肿瘤发生发展密切相关。",
+                "KMT2A基因突变在多种肿瘤中被报道。",
+                "KMT2A基因编码组蛋白甲基转移酶相关蛋白，参与染色质修饰和转录调控。",
+                "KMT2A异常可能影响表观遗传调控和细胞增殖过程，具体临床意义需结合变异类型和结直肠癌背景综合判断。",
+                "通过",
+                "审核后文本可入库",
+            ],
+        ],
+    )
+    wb.save(path)
+
+
 def _write_overlay(path: Path, sections: list[dict[str, str]] | None = None) -> None:
     path.write_text(
         yaml.safe_dump({"schema_version": 1, "gene_sections": sections or []}, allow_unicode=True),
@@ -229,3 +283,29 @@ def test_build_draft_skips_existing_overlay_keys(tmp_path):
     assert result["skipped_existing"] == 1
     data = yaml.safe_load(output.read_text(encoding="utf-8"))
     assert [row["gene"] for row in data["gene_sections"]] == ["TP53"]
+
+
+def test_gap_base_candidate_text_is_not_promoted_without_reviewed_rewrite(tmp_path):
+    module = _load_module()
+    review_xlsx = tmp_path / "gap_review.xlsx"
+    existing = tmp_path / "existing.yaml"
+    output = tmp_path / "draft.yaml"
+    _write_gap_review_workbook(review_xlsx)
+    _write_overlay(existing)
+
+    result = module.build_draft(
+        review_xlsx=review_xlsx,
+        existing_overlay=existing,
+        output=output,
+        apply=False,
+        approve_all=False,
+    )
+
+    assert result["approved_variant_rows"] == 1
+    assert result["new_sections"] == 1
+    data = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert [row["gene"] for row in data["gene_sections"]] == ["KMT2A"]
+    rendered = output.read_text(encoding="utf-8")
+    assert "ERBB2" not in rendered
+    assert "当前研究热点" not in rendered
+    assert "审核后文本可入库" not in rendered

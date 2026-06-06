@@ -194,3 +194,61 @@ python -m pytest \
 1. 报告组在 `crc_part3_candidates_m1_20260606.xlsx` 中标注审核结论。
 2. 开发侧重新运行本脚本，先生成 draft YAML 人工复核。
 3. 确认无误后再加 `--apply` 写入正式 overlay，并重跑 CRC 压测覆盖率。
+
+## 2026-06-06：M2.1 报告组初审口径与基础候选安全闸
+
+目标：基于“全部按通过”模拟结果，从报告组视角区分“技术覆盖率提升”和“报告正文可交付”，
+防止把基础通用话术误当作 reviewed 内容入库。
+
+结论：
+
+| 类型 | 数量 | 初审判断 |
+|---|---:|---|
+| `需补库位点` 基础候选 | 18 | 不建议通过；仍是基础通用话术 |
+| 历史基因级候选 | 10 | 8 条可清洗后复核，2 条暂缓 |
+| 建议直接通过 | 0 | 无 |
+
+本轮安全改动：
+
+- `需补库位点` 的 `基础候选简介/基础候选解析` 只作为审核参考，不再被入库脚本读取。
+- 如报告组要让该 sheet 的内容入库，必须把最终文本写入 `审核后简介/审核后解析`
+  或同义的 `入库简介/入库解析`、`正式简介/正式解析`。
+- `harvest_crc_part3_candidates.py` 新生成的审核表已增加 `审核后简介/审核后解析` 两列。
+
+验证 all-pass 模拟：
+
+| 指标 | 安全闸前 | 安全闸后 |
+|---|---:|---:|
+| 可生成 overlay 条目 | 28 | 10 |
+| `需补库位点` 基础候选入库 | 18 | 0 |
+| 历史基因级候选入库 | 10 | 10 |
+
+清洗 draft：
+
+| 文件 | 用途 |
+|---|---|
+| `tmp/knowledge_buildout/crc_part3_cleaned_gene_intro_review_20260606.xlsx` | 报告组复核用 Excel |
+| `tmp/knowledge_buildout/crc_part3_cleaned_gene_intro_draft_20260606.yaml` | 仅 intro 的草稿 overlay，不 apply |
+
+清洗基因：
+
+- ALK
+- CCND1
+- ERBB2
+- GNAS
+- KMT2A
+- KMT2B
+- LRP1B
+- PDGFB
+
+限制：
+
+- 本稿只清洗 `intro`，不包含真正的 `mutation_analysis`。
+- 不写正式 `reviewed_part3_knowledge.yaml`。
+- 报告组确认前，不作为生产知识库。
+
+下一步：
+
+1. 报告组复核 8 条清洗后的基因简介。
+2. 对 ERBB2、KMT2A、LRP1B、GNAS 等优先补 `mutation_analysis`。
+3. 通过后再生成正式 overlay patch 并重跑 CRC 压测覆盖率。
