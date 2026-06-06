@@ -14,6 +14,7 @@ promoted as generic text.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -38,12 +39,63 @@ def _is_approved(value: Any) -> bool:
     return "通过" in text and "不通过" not in text
 
 
+_PATIENT_ID_PATTERNS = [
+    re.compile(r"\b(?:LZ|MLJY|MLO|KY|YB|XB|B)\d{4,}\b", re.IGNORECASE),
+    re.compile(r"\b\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?\b"),
+]
+
+_PATIENT_SPECIFIC_MARKERS = (
+    "突变丰度",
+    "拷贝数为",
+    "扩增，拷贝数",
+    "此突变在样本",
+    "本次样本",
+    "本病例",
+)
+
+_GENE_LEVEL_SPECIFIC_MARKERS = (
+    "该样本检出",
+    "本次检测到",
+    "本次检测检出",
+)
+
+_HGVS_OR_FREQUENCY_RE = re.compile(
+    r"(?:\bc\.\d|p\.[A-Z][A-Za-z0-9_*?=]+|\bchr(?:omosome)?\b|\d+(?:\.\d+)?%)",
+    re.IGNORECASE,
+)
+
 def _rows_by_header(ws) -> list[dict[str, Any]]:
     headers = [_clean(cell.value) for cell in ws[1]]
     rows: list[dict[str, Any]] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
         rows.append({headers[i]: row[i] if i < len(row) else "" for i in range(len(headers))})
     return rows
+
+
+def _has_patient_id_or_date(text: str) -> bool:
+    return any(pattern.search(text) for pattern in _PATIENT_ID_PATTERNS)
+
+
+def _is_safe_gene_level_text(text: str) -> bool:
+    if not text:
+        return False
+    if _has_patient_id_or_date(text):
+        return False
+    if any(marker in text for marker in _PATIENT_SPECIFIC_MARKERS):
+        return False
+    if any(marker in text for marker in _GENE_LEVEL_SPECIFIC_MARKERS):
+        return False
+    return not _HGVS_OR_FREQUENCY_RE.search(text)
+
+
+def _is_safe_variant_level_text(text: str) -> bool:
+    if not text:
+        return False
+    if _has_patient_id_or_date(text):
+        return False
+    if any(marker in text for marker in _PATIENT_SPECIFIC_MARKERS):
+        return False
+    return True
 
 
 def _load_existing_keys(overlay_path: Path) -> set[tuple[str, str, str]]:
@@ -73,11 +125,92 @@ def _approved_variant_sections(workbook_path: Path) -> list[dict[str, str]]:
         p_hgvs = _clean(row.get("pHGVS"))
         intro = _clean(row.get("基础候选简介"))
         analysis = _clean(row.get("基础候选解析"))
+        if intro and not _is_safe_variant_level_text(intro):
+            intro = ""
+        if analysis and not _is_safe_variant_level_text(analysis):
+            analysis = ""
         if not gene or not c_hgvs or not (intro or analysis):
             continue
         item: dict[str, str] = {"gene": gene, "c_hgvs": c_hgvs}
         if p_hgvs:
             item["p_hgvs"] = p_hgvs
+        if intro:
+            item["intro"] = intro
+        if analysis:
+            item["mutation_analysis"] = analysis
+        sections.append(item)
+    return sections
+
+
+def _section_field(candidate_type: str) -> str:
+    text = _clean(candidate_type)
+    if "简介" in text:
+        return "intro"
+    if "解析" in text or "分析" in text or "说明" in text:
+        return "mutation_analysis"
+    return ""
+
+
+def _approved_exact_candidate_sections(workbook_path: Path) -> list[dict[str, str]]:
+    wb = load_workbook(workbook_path)
+    if "历史精确位点候选" not in wb.sheetnames:
+        return []
+
+    grouped: dict[tuple[str, str, str], dict[str, list[str]]] = {}
+    for row in _rows_by_header(wb["历史精确位点候选"]):
+        if not _is_approved(row.get("审核结论")):
+            continue
+        gene = _clean(row.get("基因")).upper()
+        c_hgvs = _clean(row.get("cHGVS"))
+        p_hgvs = _clean(row.get("pHGVS"))
+        field = _section_field(_clean(row.get("候选类型")))
+        text = _clean(row.get("候选上下文")) or _clean(row.get("命中段落"))
+        if not gene or not c_hgvs or not field or not _is_safe_variant_level_text(text):
+            continue
+        grouped.setdefault((gene, c_hgvs, p_hgvs), {"intro": [], "mutation_analysis": []})
+        grouped[(gene, c_hgvs, p_hgvs)][field].append(text)
+
+    sections: list[dict[str, str]] = []
+    for (gene, c_hgvs, p_hgvs), fields in sorted(grouped.items()):
+        intro = _join_paragraphs(*fields["intro"])
+        analysis = _join_paragraphs(*fields["mutation_analysis"])
+        if not intro and not analysis:
+            continue
+        item: dict[str, str] = {"gene": gene, "c_hgvs": c_hgvs}
+        if p_hgvs:
+            item["p_hgvs"] = p_hgvs
+        if intro:
+            item["intro"] = intro
+        if analysis:
+            item["mutation_analysis"] = analysis
+        sections.append(item)
+    return sections
+
+
+def _approved_historical_gene_sections(workbook_path: Path) -> list[dict[str, str]]:
+    wb = load_workbook(workbook_path)
+    if "历史基因级候选" not in wb.sheetnames:
+        return []
+
+    grouped: dict[str, dict[str, list[str]]] = {}
+    for row in _rows_by_header(wb["历史基因级候选"]):
+        if not _is_approved(row.get("审核结论")):
+            continue
+        gene = _clean(row.get("基因")).upper()
+        field = _section_field(_clean(row.get("候选类型")))
+        text = _clean(row.get("候选上下文")) or _clean(row.get("命中段落"))
+        if not gene or not field or not _is_safe_gene_level_text(text):
+            continue
+        grouped.setdefault(gene, {"intro": [], "mutation_analysis": []})
+        grouped[gene][field].append(text)
+
+    sections: list[dict[str, str]] = []
+    for gene, fields in sorted(grouped.items()):
+        intro = _join_paragraphs(*fields["intro"])
+        analysis = _join_paragraphs(*fields["mutation_analysis"])
+        if not intro and not analysis:
+            continue
+        item: dict[str, str] = {"gene": gene}
         if intro:
             item["intro"] = intro
         if analysis:
@@ -127,6 +260,10 @@ def _approved_legacy_gene_sections(
             _clean(row.get("旧库结构域/变异说明")),
             _clean(row.get("旧库肠癌解析")),
         )
+        if intro and not _is_safe_gene_level_text(intro):
+            intro = ""
+        if analysis and not _is_safe_gene_level_text(analysis):
+            analysis = ""
         if not intro and not analysis:
             continue
 
@@ -148,8 +285,11 @@ def build_draft(
     approve_all: bool,
 ) -> dict[str, Any]:
     approved_variants = _approved_variant_sections(review_xlsx)
-    approved_genes = _approved_legacy_gene_sections(review_xlsx, approve_all=approve_all)
-    approved = approved_variants + approved_genes
+    approved_exact = _approved_exact_candidate_sections(review_xlsx)
+    approved_historical_genes = _approved_historical_gene_sections(review_xlsx)
+    approved_legacy_genes = _approved_legacy_gene_sections(review_xlsx, approve_all=approve_all)
+    approved_genes = approved_historical_genes + approved_legacy_genes
+    approved = approved_variants + approved_exact + approved_genes
     existing_keys = _load_existing_keys(existing_overlay)
     new_sections = []
     skipped_existing = 0
@@ -189,6 +329,9 @@ def build_draft(
     return {
         "approved_rows": len(approved),
         "approved_variant_rows": len(approved_variants),
+        "approved_exact_rows": len(approved_exact),
+        "approved_historical_gene_rows": len(approved_historical_genes),
+        "approved_legacy_gene_rows": len(approved_legacy_genes),
         "approved_gene_rows": len(approved_genes),
         "new_sections": len(new_sections),
         "skipped_existing": skipped_existing,

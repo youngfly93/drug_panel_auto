@@ -140,3 +140,57 @@ python scripts/harvest_crc_part3_candidates.py \
 1. 报告组先审 `crc_part3_candidates_m1_20260606.xlsx` 的“需补库位点”和“历史基因级候选”。
 2. 对 P1 的 ERBB2、KMT2A 优先标注“通过 / 修改后通过 / 不通过”。
 3. 开发侧读取审核通过内容，进入 M2：生成正式 `reviewed_part3_knowledge.yaml` overlay 补丁和回归测试。
+
+## 2026-06-06：M2 CRC 审核结果入库工具准备
+
+目标：在报告组审核候选表之后，把“通过 / 修改后通过”的内容转成
+`panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml` 可用的 overlay 草稿；
+未审核、审核不通过、含个案信息的内容不得进入知识库。
+
+工具：
+
+```bash
+python scripts/build_reviewed_part3_overlay_from_approvals.py \
+  --review-xlsx tmp/knowledge_buildout/crc_part3_candidates_m1_20260606.xlsx \
+  --existing-overlay panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml \
+  --output tmp/knowledge_buildout/crc_part3_overlay_draft_from_m1_20260606.yaml
+```
+
+本轮改动：
+
+- 支持读取 M1 候选表的“历史精确位点候选”。
+- 支持读取 M1 候选表的“历史基因级候选”。
+- 只接受审核结论包含“通过”且不包含“不通过”的行。
+- 基因级内容严格拒绝具体位点、丰度、拷贝数、样本号、日期和“该样本检出”等个案句。
+- 位点级内容允许 c./p. 位点，但拒绝样本号、日期、突变丰度、拷贝数等个案信息。
+- 输出 draft 不保留 `source_id`、`content_hash` 或历史报告文件名。
+- 继续支持旧候选表入库，但同样增加安全过滤。
+
+当前 dry run 结果：
+
+| 指标 | 数量 |
+|---|---:|
+| 审核通过内容 | 0 |
+| 通过的位点缺口行 | 0 |
+| 通过的历史精确位点行 | 0 |
+| 通过的历史基因级行 | 0 |
+| 新增 overlay 条目 | 0 |
+| 是否写入正式 overlay | 否 |
+
+验证：
+
+```bash
+python -m py_compile scripts/build_reviewed_part3_overlay_from_approvals.py
+python -m pytest \
+  backend/tests/test_reviewed_part3_overlay_approvals.py \
+  backend/tests/test_crc_part3_harvest_candidates.py \
+  backend/tests/test_historical_report_inventory.py
+```
+
+结果：5 passed；仅保留既有 `asyncio_mode` pytest 配置提示。
+
+下一步：
+
+1. 报告组在 `crc_part3_candidates_m1_20260606.xlsx` 中标注审核结论。
+2. 开发侧重新运行本脚本，先生成 draft YAML 人工复核。
+3. 确认无误后再加 `--apply` 写入正式 overlay，并重跑 CRC 压测覆盖率。
