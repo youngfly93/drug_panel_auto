@@ -6310,6 +6310,75 @@ def test_reviewed_part3_legacy_crc_gene_level_candidates_are_promoted():
         assert expected in combined
 
 
+def test_reviewed_part3_crc_pressure_sites_are_variant_level_only():
+    """报告组初审通过的 CRC358 压测缺口应按位点级入库，不能误作 gene-level 套话。"""
+    overlay_path = (
+        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
+    )
+    data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
+    sections = {
+        (row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs", "")): row
+        for row in data.get("gene_sections", [])
+        if row.get("gene")
+    }
+
+    approved_sites = {
+        ("ERBB2", "c.1133C>T", "p.P378L"): "现有证据不足以直接等同于ERBB2扩增",
+        ("ERBB2", "c.2521C>A", "p.L841I"): "p.L841I错义变异",
+        ("KMT2A", "c.3950_3954del", "p.K1317Sfs*7"): "p.K1317Sfs*7为移码变异",
+        ("KMT2A", "c.8848A>G", "p.S2950G"): "p.S2950G为错义变异",
+        ("ALK", "c.3388G>T", "p.V1130L"): "p.V1130L为错义变异",
+        ("CARD11", "c.2059G>A", "p.A687T"): "p.A687T为错义变异",
+        ("CCND1", "c.127T>G", "p.S43A"): "p.S43A为错义变异",
+        ("FAT3", "c.11941G>A", "p.G3981S"): "p.G3981S为错义变异",
+        ("GNAS", "c.1030G>A", "p.E344K"): "p.E344K为错义变异",
+        ("KMT2B", "c.1681C>T", "p.P561S"): "p.P561S为错义变异",
+        ("LRP1B", "c.1987G>A", "p.D663N"): "p.D663N为错义变异",
+        ("PDGFB", "c.671G>A", "p.R224Q"): "p.R224Q为错义变异",
+        ("PTPRS", "c.3073G>A", "p.V1025I"): "p.V1025I为错义变异",
+    }
+    unsafe_fragments = {
+        "突变丰度为",
+        "拷贝数为",
+        "c.6445C>T",
+        "p.R2149",
+        "c.729G>T",
+        "p.W243C",
+        "c.3304G>A",
+        "p.V1102M",
+        "c.641G>A",
+        "p.G214D",
+        "c.4622A>T",
+        "p.Q1541L",
+        "c.659+1G>A",
+        "c.3268G>A",
+        "p.E1090K",
+        "c.7677C>A",
+        "p.C2559",
+        "c.274G>A",
+        "p.A92T",
+        "c.604C>T",
+        "p.Q202",
+    }
+    for key, expected in approved_sites.items():
+        section = sections.get(key)
+        assert section is not None, f"{key} 位点级 reviewed 内容缺失"
+        combined = f"{section.get('intro', '')}\n{section.get('mutation_analysis', '')}"
+        assert expected in combined
+        for fragment in unsafe_fragments:
+            assert fragment not in combined, f"{key} 含旧报告其他位点/丰度片段: {fragment}"
+
+    rejected_sites = {
+        ("BCL2L11", "c.561dup", "p.R188Tfs*77"),
+        ("PCLO", "c.9368C>T", "p.T3123M"),
+        ("PDE4DIP", "c.525C>G", "p.I175M"),
+        ("SMAD3", "c.860G>A", "p.R287Q"),
+        ("SOS1", "c.2536G>A", "p.E846K"),
+    }
+    for key in rejected_sites:
+        assert key not in sections, f"{key} 初审暂不通过，不应进入 reviewed YAML"
+
+
 def test_mutation_description_build_variant_lead_by_type():
     from reportgen.knowledge.mutation_description import MutationDescriptionGenerator
 
