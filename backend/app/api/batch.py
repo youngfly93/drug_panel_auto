@@ -211,7 +211,7 @@ def _write_batch_report(db: Session, task: Task) -> dict:
     return payload
 
 
-def _build_item_payload(
+def _prepare_item_clinical_payload(
     *,
     stored_path: str,
     original_filename: str,
@@ -219,15 +219,15 @@ def _build_item_payload(
     shared_clinical_info: dict,
     project_type: Optional[str],
     project_name: Optional[str],
-    template_name: Optional[str],
-    output_dir: str,
-    template_contract_mode: str,
-) -> tuple[dict, dict, Optional[str], Optional[str]]:
+) -> tuple[dict, Optional[str], Optional[str]]:
     excel_data = bridge.read_excel(stored_path)
     detected_project_type = project_type
     detected_project_name = project_name
     if not detected_project_type:
-        detect = bridge.detect_project_type(stored_path, excel_data=excel_data)
+        detect = bridge.detect_project_type(
+            str(Path(stored_path).parent / (original_filename or "upload.xlsx")),
+            excel_data=excel_data,
+        )
         detected_project_type = detect.get("project_type")
         detected_project_name = detected_project_name or detect.get("project_name")
     detected_project_type, detected_project_name = _infer_project_type_from_name(
@@ -247,6 +247,31 @@ def _build_item_payload(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
+    )
+    return clinical_payload, detected_project_type, detected_project_name
+
+
+def _build_item_payload(
+    *,
+    stored_path: str,
+    original_filename: str,
+    bridge: ReportGenBridge,
+    shared_clinical_info: dict,
+    project_type: Optional[str],
+    project_name: Optional[str],
+    template_name: Optional[str],
+    output_dir: str,
+    template_contract_mode: str,
+) -> tuple[dict, dict, Optional[str], Optional[str]]:
+    clinical_payload, detected_project_type, detected_project_name = (
+        _prepare_item_clinical_payload(
+            stored_path=stored_path,
+            original_filename=original_filename,
+            bridge=bridge,
+            shared_clinical_info=shared_clinical_info,
+            project_type=project_type,
+            project_name=project_name,
+        )
     )
 
     result = run_generate_report_with_timeout(
@@ -586,12 +611,22 @@ def batch_generate_from_files(
         )
     missing_date_rows: list[str] = []
     for item in items:
+        clinical_payload, detected_project_type, detected_project_name = (
+            _prepare_item_clinical_payload(
+                stored_path=item["stored_path"],
+                original_filename=item["filename"],
+                bridge=bridge,
+                shared_clinical_info=shared_clinical_info,
+                project_type=project_type,
+                project_name=project_name,
+            )
+        )
         preflight = validate_required_dates(
             bridge,
             excel_path=item["stored_path"],
-            clinical_info=shared_clinical_info,
-            project_type=project_type,
-            project_name=project_name,
+            clinical_info=clinical_payload,
+            project_type=detected_project_type,
+            project_name=detected_project_name,
         )
         missing = list(preflight.get("missing") or [])
         if missing:

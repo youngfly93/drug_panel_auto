@@ -517,6 +517,48 @@ def test_batch_files_blocks_missing_required_dates(tmp_path, monkeypatch):
     assert "收样日期" in detail
 
 
+def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkeypatch):
+    bridge = MissingDateBridge()
+    enrich_calls = []
+
+    def fake_enrich_patient(sample_id, project_type=None):
+        enrich_calls.append((sample_id, project_type))
+        return SimpleNamespace(fields={"receive_date": "2026-05-20"})
+
+    monkeypatch.setattr(batch_api.clinical_svc, "enrich_patient", fake_enrich_patient)
+
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"placeholder1", "application/vnd.ms-excel")),
+            ],
+            data={
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+                "clinical_info": json.dumps(
+                    {"report_date": "2026-05-31"},
+                    ensure_ascii=False,
+                ),
+            },
+        )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+
+        status_response = None
+        for _ in range(20):
+            status_response = client.get(f"/api/v1/reports/{task_id}")
+            if status_response.json()["data"]["status"] != "running":
+                break
+            time.sleep(0.05)
+
+    assert status_response.status_code == 200
+    assert status_response.json()["data"]["status"] == "completed"
+    assert ("CASE001", "crc_358_msi") in enrich_calls
+    assert bridge.last_generate_kwargs["clinical_info"]["receive_date"] == "2026-05-20"
+    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == "2026-05-31"
+
+
 def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
     bridge = FailOnceBridge()
     with _client(tmp_path, monkeypatch, bridge=bridge) as client:

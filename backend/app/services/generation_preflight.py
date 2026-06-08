@@ -63,6 +63,14 @@ def validate_required_dates(
             effective_project_name = effective_project_name or inferred.get("project_name")
 
     mapped_fields = bridge.get_mapped_clinical_fields(excel_data)
+    if clinical_info:
+        mapped_fields.update(
+            {
+                key: value
+                for key, value in clinical_info.items()
+                if value not in (None, "")
+            }
+        )
     missing = [
         {"field": field, "label": label}
         for field, label in required_date_fields(effective_project_type)
