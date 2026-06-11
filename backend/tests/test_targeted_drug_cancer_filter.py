@@ -41,6 +41,26 @@ def _attach_db(mapper: FieldMapper, df: pd.DataFrame) -> None:
     }
 
 
+def test_reviewed_variant_override_can_be_limited_to_loss_of_function(tmp_path):
+    mapper = _make_mapper(tmp_path, {"knowledge_bases": {"targeted_drug_db": {"enabled": True}}})
+    mapper._get_reviewed_variant_overrides = lambda: [
+        {
+            "gene": "TSC1",
+            "applicability": "loss_of_function",
+            "benefit_drugs": ["依维莫司（C）"],
+            "caution_drugs": "--",
+        }
+    ]
+
+    lof = mapper._lookup_reviewed_variant_override_drugs("TSC1", "c.1963C>T", "p.Q655*")
+    missense = mapper._lookup_reviewed_variant_override_drugs("TSC1", "c.1648G>T", "p.A550S")
+    splice = mapper._lookup_reviewed_variant_override_drugs("TSC1", "c.211-2A>G", "")
+
+    assert lof == ("依维莫司（C）", "--")
+    assert splice == ("依维莫司（C）", "--")
+    assert missense is None
+
+
 def _lung_settings() -> dict:
     return {
         "knowledge_bases": {

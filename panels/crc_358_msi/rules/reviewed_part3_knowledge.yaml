@@ -564,6 +564,13 @@ drug_sections:
   drug_name: 依维莫司（Everolimus）
   relation: 该样本检出KRAS基因c.34G>A，p.G12S错义突变，为已知激活突变，对蛋白功能有重要影响。临床前研究表明，含有KRAS突变的结肠癌细胞系对依维莫司不敏感[29285035，28544747]。因此，该患者可能对依维莫司的治疗负相关。依维莫司已获FDA批准，用于治疗乳腺癌、神经内分泌瘤、肾癌等疾病，并已获NMPA批准，用于治疗肾癌、室管膜下巨细胞型星形细胞瘤。
   clinical: 临床前研究表明，含有KRAS突变的结肠癌细胞系对依维莫司不敏感[29285035，28544747]。在转移性癌症患者中，携带KRAS突变的患者接受依维莫司治疗后对依维莫司缺乏疗效，12例具有KRAS突变的肿瘤患者中11例均出现疾病进展，而31例KRAS野生型患者中仅16例患者未从依维莫司治疗中获益[20664172]。
+- gene: TSC1
+  type: benefit
+  applicability: loss_of_function
+  header: TSC1 功能缺失型变异相关潜在获益药物
+  drug_name: 依维莫司（Everolimus）、依维莫司（Everolimus）+Buparlisib、西罗莫司（Sirolimus）、替西罗莫司（Temsirolimus）、Sapanisertib
+  relation: TSC1/TSC2 缺失或失活可导致 mTOR 信号通路活化，提示携带 TSC1 功能缺失型变异的肿瘤患者可能从 mTOR 抑制剂及相关通路抑制剂治疗中获益。mTOR 抑制剂包括依维莫司、西罗莫司和替西罗莫司等；Buparlisib、Sapanisertib 等相关通路抑制剂仍需结合适应证和临床证据谨慎评估。
+  clinical: 病例研究及基因组变异与依维莫司敏感性研究提示，MTOR、TSC1、TSC2 等 mTOR 通路变异患者中可观察到 mTOR 抑制剂临床获益；TSC1/TSC2 失活突变相关实体瘤中，西罗莫司白蛋白结合纳米颗粒、替西罗莫司、Sapanisertib 等临床试验正在或曾开展。该结论需结合癌种、变异类型、证据等级和临床适应证综合判断。
 extra_references:
 - 'PMID: 28351930 Hyperprogressors after Immunotherapy: Analysis of Genomic Alterations
   Associated with Accelerated Growth Rate.'
