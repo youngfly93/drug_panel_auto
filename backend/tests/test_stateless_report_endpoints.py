@@ -3,7 +3,7 @@ import json
 import sys
 import time
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -338,8 +338,9 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert data["qa_status"] == "PASS"
 
 
-def test_generate_file_blocks_missing_required_dates(tmp_path, monkeypatch):
-    with _client(tmp_path, monkeypatch, bridge=MissingDateBridge()) as client:
+def test_generate_file_fills_missing_report_date(tmp_path, monkeypatch):
+    bridge = MissingDateBridge()
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
         response = client.post(
             "/api/v1/reports/generate-file",
             files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
@@ -350,10 +351,9 @@ def test_generate_file_blocks_missing_required_dates(tmp_path, monkeypatch):
             },
         )
 
-    assert response.status_code == 400
-    detail = response.json()["detail"]
-    assert "报告日期" in detail
-    assert "收样日期" in detail
+    assert response.status_code == 200
+    assert response.json()["data"]["success"] is True
+    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == date.today().isoformat()
 
 
 def test_generate_file_infers_project_type_from_form_project_name(
@@ -496,8 +496,9 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert sum(name.startswith("summaries/") for name in names) == 2
 
 
-def test_batch_files_blocks_missing_required_dates(tmp_path, monkeypatch):
-    with _client(tmp_path, monkeypatch, bridge=MissingDateBridge()) as client:
+def test_batch_files_fill_missing_report_date(tmp_path, monkeypatch):
+    bridge = MissingDateBridge()
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
         response = client.post(
             "/api/v1/reports/batch-files",
             files=[
@@ -509,12 +510,19 @@ def test_batch_files_blocks_missing_required_dates(tmp_path, monkeypatch):
                 "project_name": "结直肠癌358基因+MSI",
             },
         )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
 
-    assert response.status_code == 400
-    detail = response.json()["detail"]
-    assert "第 1 个 Excel" in detail
-    assert "报告日期" in detail
-    assert "收样日期" in detail
+        status_response = None
+        for _ in range(20):
+            status_response = client.get(f"/api/v1/reports/{task_id}")
+            if status_response.json()["data"]["status"] != "running":
+                break
+            time.sleep(0.05)
+
+    assert status_response.status_code == 200
+    assert status_response.json()["data"]["status"] == "completed"
+    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == date.today().isoformat()
 
 
 def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkeypatch):
@@ -554,7 +562,7 @@ def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkey
 
     assert status_response.status_code == 200
     assert status_response.json()["data"]["status"] == "completed"
-    assert ("CASE001", "crc_358_msi") in enrich_calls
+    assert ("case1", "crc_358_msi") in enrich_calls
     assert bridge.last_generate_kwargs["clinical_info"]["receive_date"] == "2026-05-20"
     assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == "2026-05-31"
 

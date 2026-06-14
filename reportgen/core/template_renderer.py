@@ -2926,13 +2926,14 @@ class TemplateRenderer:
         self.logger.debug("已移除标题前空白分页段落", removed=removed)
 
     def _normalize_front_matter_spacing(self, file_path: str) -> None:
-        """Keep the report guide on its own page without template spacer blanks.
+        """Restore the reviewed report-guide offset in front matter.
 
-        The reviewed CRC golden source contains a manual page break followed by
-        many empty paragraphs before ``报告导读``. Variableizing that source keeps
-        those empty paragraphs, so Word renders the guide in the lower half of
-        the page. This processor preserves the intended page separation while
-        collapsing the spacer cluster to a single page-break paragraph.
+        The reviewed CRC golden source starts ``报告导读`` in the lower half of
+        its page: a page-break paragraph is followed by a fixed spacer block.
+        Earlier cleanup collapsed that block to a single page break, which made
+        the guide render near the top of the page. Keep the page separation and
+        recreate the reviewed spacer block after other blank-paragraph cleanup
+        has run.
         """
         import os
         import shutil
@@ -2941,12 +2942,40 @@ class TemplateRenderer:
         from zipfile import ZIP_DEFLATED, ZipFile
 
         ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        for prefix, uri in {
+            "w": ns_w,
+            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+            "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
+            "wps": "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+            "v": "urn:schemas-microsoft-com:vml",
+            "o": "urn:schemas-microsoft-com:office:office",
+            "w10": "urn:schemas-microsoft-com:office:word",
+            "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
+            "w15": "http://schemas.microsoft.com/office/word/2012/wordml",
+        }.items():
+            ET.register_namespace(prefix, uri)
         w_p = f"{{{ns_w}}}p"
+        w_ppr = f"{{{ns_w}}}pPr"
         w_r = f"{{{ns_w}}}r"
         w_t = f"{{{ns_w}}}t"
         w_br = f"{{{ns_w}}}br"
+        w_tabs = f"{{{ns_w}}}tabs"
+        w_tab = f"{{{ns_w}}}tab"
+        w_spacing = f"{{{ns_w}}}spacing"
+        w_rpr = f"{{{ns_w}}}rPr"
+        w_sz = f"{{{ns_w}}}sz"
+        w_sz_cs = f"{{{ns_w}}}szCs"
         w_drawing = f"{{{ns_w}}}drawing"
         w_type = f"{{{ns_w}}}type"
+        w_val = f"{{{ns_w}}}val"
+        w_pos = f"{{{ns_w}}}pos"
+        w_after = f"{{{ns_w}}}after"
+        w_line = f"{{{ns_w}}}line"
+        w_line_rule = f"{{{ns_w}}}lineRule"
+
+        guide_spacer_count = 30
 
         def para_text(elem) -> str:
             return "".join((node.text or "") for node in elem.iter(w_t)).strip()
@@ -2965,6 +2994,24 @@ class TemplateRenderer:
             run = ET.SubElement(paragraph, w_r)
             br = ET.SubElement(run, w_br)
             br.set(w_type, "page")
+            return paragraph
+
+        def make_guide_spacer_paragraph() -> ET.Element:
+            paragraph = ET.Element(w_p)
+            ppr = ET.SubElement(paragraph, w_ppr)
+            tabs = ET.SubElement(ppr, w_tabs)
+            tab = ET.SubElement(tabs, w_tab)
+            tab.set(w_val, "left")
+            tab.set(w_pos, "2312")
+            spacing = ET.SubElement(ppr, w_spacing)
+            spacing.set(w_after, "0")
+            spacing.set(w_line, "240")
+            spacing.set(w_line_rule, "atLeast")
+            rpr = ET.SubElement(ppr, w_rpr)
+            sz = ET.SubElement(rpr, w_sz)
+            sz.set(w_val, "20")
+            sz_cs = ET.SubElement(rpr, w_sz_cs)
+            sz_cs.set(w_val, "20")
             return paragraph
 
         with ZipFile(file_path, "r") as zin:
@@ -2991,15 +3038,10 @@ class TemplateRenderer:
 
                 prev_idx = idx - 1
                 blank_cluster: list[ET.Element] = []
-                saw_page_break = False
                 while prev_idx >= 0 and is_blank_paragraph(children[prev_idx]):
                     prev = children[prev_idx]
-                    saw_page_break = saw_page_break or has_page_break(prev)
                     blank_cluster.append(prev)
                     prev_idx -= 1
-
-                if not blank_cluster:
-                    continue
 
                 for blank in blank_cluster:
                     parent.remove(blank)
@@ -3007,8 +3049,12 @@ class TemplateRenderer:
 
                 insert_at = list(parent).index(child)
                 parent.insert(insert_at, make_page_break_paragraph())
+                insert_at += 1
+                for _ in range(guide_spacer_count):
+                    parent.insert(insert_at, make_guide_spacer_paragraph())
+                    insert_at += 1
                 changed = True
-                if not saw_page_break:
+                if not any(has_page_break(blank) for blank in blank_cluster):
                     self.logger.debug("报告导读前缺少分页符，已补齐")
                 break
 
@@ -3030,7 +3076,11 @@ class TemplateRenderer:
             if os.path.exists(tmp_name):
                 os.unlink(tmp_name)
 
-        self.logger.debug("已清理报告导读前空白段落", removed=removed)
+        self.logger.debug(
+            "已恢复报告导读前金标留白",
+            removed=removed,
+            inserted_spacers=guide_spacer_count,
+        )
 
     def _cleanup_section_spacing(self, file_path: str) -> None:
         """删除章节标题前的空白段落。

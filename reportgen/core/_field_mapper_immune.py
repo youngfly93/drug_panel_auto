@@ -100,6 +100,27 @@ class ImmuneGeneMixin:
             }
 
         variations = excel_data.get_table_data("Variations") or []
+        cnv_rows = excel_data.get_table_data("Cnv") or []
+
+        def egfr_negative_match(row: dict) -> bool:
+            haystack = " ".join(
+                self._norm_text(row.get(key))
+                for key in ("cHGVS", "pHGVS_S", "pHGVS_A", "pHGVS", "ExIn_ID")
+            ).upper()
+            return "L858R" in haystack or "EX19" in haystack or "19DEL" in haystack
+
+        def egfr_amp_lines() -> list[str]:
+            lines: list[str] = []
+            for row in cnv_rows:
+                gene = self._norm_text(row.get("Gene") or row.get("gene")).upper()
+                if gene != "EGFR":
+                    continue
+                status = self._norm_text(
+                    row.get("Cnvkit") or row.get("Status") or row.get("status")
+                )
+                if "扩增" in status or "AMP" in status.upper():
+                    lines.append(f"EGFR：CNV:{status}")
+            return lines
 
         def build(group: str) -> str:
             wanted = gene_sets.get(group, set())
@@ -115,6 +136,10 @@ class ImmuneGeneMixin:
                 ).upper()
                 if not gene or gene not in wanted or gene in seen:
                     continue
+                if group == "neg" and gene == "EGFR" and not egfr_negative_match(r):
+                    continue
+                if group == "hyper" and gene == "EGFR":
+                    continue
                 c = self._norm_text(r.get("cHGVS"))
                 p = self._norm_text(r.get("pHGVS_S") or r.get("pHGVS_A"))
                 if not c:
@@ -122,6 +147,12 @@ class ImmuneGeneMixin:
                 line = f"{gene}：{c}，{p}" if p else f"{gene}：{c}"
                 lines.append(line)
                 seen.add(gene)
+
+            if group == "hyper" and "EGFR" in wanted:
+                for line in egfr_amp_lines():
+                    if "EGFR" not in seen:
+                        lines.append(line)
+                        seen.add("EGFR")
 
             if not lines:
                 return "未检出"

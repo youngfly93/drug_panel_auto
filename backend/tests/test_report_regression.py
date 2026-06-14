@@ -1164,7 +1164,7 @@ def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
     assert detected == [("TP53", 50.0), ("APC", 40.0), ("APC", 10.0), ("KRAS", 30.0)]
 
 
-def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path):
+def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path, monkeypatch):
     """The 1.检测结果小结 summary table (targeted_drug_tips) is ordered by
     frequency high→low and grouped by gene — consistent with the 2.1 table.
     """
@@ -1182,14 +1182,15 @@ def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path):
          "Transcript": "NM_2", "Chr": "chr2", "ExIn_ID": "EX2",
          "cHGVS": "c.400C>G", "pHGVS_S": "p.P133A", "Function": "Missense", "Freq(%)": 40.0},
     ]
-    # CtDrug fallback guarantees each gene gets a benefit tip (so it appears in
-    # the summary) independent of the production knowledge base.
+    # This test only verifies row ordering. Simulate an unavailable production KB
+    # so the legacy CtDrug fallback can provide simple synthetic drug rows.
     ctdrug = [
         {"检测基因": "GENEA", "药物": "DrugA", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
         {"检测基因": "GENEB", "药物": "DrugB", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
         {"检测基因": "GENEC", "药物": "DrugC", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
     ]
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    monkeypatch.setattr(mapper, "_load_targeted_drug_db", lambda: None)
     rows = mapper._build_targeted_drug_tips(
         _excel(tmp_path, variations=variations, tables={"CtDrug": ctdrug}),
         ReportData(),
@@ -1550,22 +1551,22 @@ def test_field_mapper_updates_msi_status_cn_from_mss(tmp_path):
     assert report_data.get_field("msi_status_cn") == "微卫星稳定型，MSS"
 
 
-def test_missing_report_date_is_not_backfilled_to_today():
+def test_missing_report_date_is_filled_with_generation_date():
     report_data = ReportData()
     generator = ReportGenerator(config_dir=str(ROOT / "config"), log_level="ERROR")
 
     generator._mark_missing_report_date(report_data)
 
-    assert report_data.get_field("report_date") == "未填写"
-    assert "缺失必填字段: report_date" in report_data.validation_errors
+    assert report_data.get_field("report_date") == date.today().isoformat()
+    assert "缺失必填字段: report_date" not in report_data.validation_errors
 
 
-def test_common_validation_warns_without_today_backfill(tmp_path):
+def test_common_validation_warns_with_today_backfill(tmp_path):
     warnings = validate_excel_data_common(_excel(tmp_path), today=date(2026, 4, 19))
 
     report_date_warnings = [w for w in warnings if w.get("field") == "report_date"]
     assert report_date_warnings
-    assert "不会自动回填今天" in report_date_warnings[0]["message"]
+    assert "系统将使用生成报告当天日期" in report_date_warnings[0]["message"]
 
 
 def test_detector_does_not_use_panel_column_numbers_as_crc_signal(tmp_path):
@@ -2990,7 +2991,7 @@ def test_clinical_schema_exposes_signature_people_as_editable_selects(monkeypatc
     assert fields["reviewer_signature_image_path"].ui.component == "file-upload"
 
 
-def test_crc358_clinical_schema_requires_receive_date(monkeypatch):
+def test_crc358_clinical_schema_does_not_require_receive_date(monkeypatch):
     monkeypatch.setattr(
         clinical_info_service,
         "_load_mapping_yaml",
@@ -3019,7 +3020,7 @@ def test_crc358_clinical_schema_requires_receive_date(monkeypatch):
         for field in group.fields
     }
 
-    assert fields["receive_date"].required is True
+    assert fields["receive_date"].required is False
     assert fields["report_date"].required is True
 
 
@@ -4591,7 +4592,7 @@ def test_template_renderer_default_processors_include_key_m1_processors():
     assert "underlines_and_styles" in names
 
 
-def test_front_matter_spacing_keeps_report_guide_page_top(tmp_path):
+def test_front_matter_spacing_restores_report_guide_golden_offset(tmp_path):
     docx_path = tmp_path / "front_matter.docx"
     doc = Document()
     doc.add_paragraph("检测报告")
@@ -4628,8 +4629,10 @@ def test_front_matter_spacing_keeps_report_guide_page_top(tmp_path):
 
     guide_idx = next(idx for idx, elem in enumerate(paragraphs) if text(elem) == "报告导读")
 
-    assert has_page_break(paragraphs[guide_idx - 1])
-    assert text(paragraphs[guide_idx - 2]) == "检测报告"
+    assert has_page_break(paragraphs[guide_idx - 31])
+    assert text(paragraphs[guide_idx - 32]) == "检测报告"
+    assert all(text(elem) == "" for elem in paragraphs[guide_idx - 30:guide_idx])
+    assert not any(has_page_break(elem) for elem in paragraphs[guide_idx - 30:guide_idx])
 
 
 def test_template_renderer_can_build_panel_declared_processors_only():

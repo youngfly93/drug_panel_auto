@@ -14,8 +14,6 @@ MISSING_MARKERS = {"", "-", "--", "未知", "未填写", "unknown", "none", "nul
 def required_date_fields(project_type: str | None) -> list[tuple[str, str]]:
     """Return date fields that must exist before generation for this panel."""
     required = [("report_date", "报告日期")]
-    if (project_type or "").lower() == "crc_358_msi":
-        required.append(("receive_date", "收样日期"))
     return required
 
 
