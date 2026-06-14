@@ -199,6 +199,14 @@ class TargetedDrugMixin:
             }
             if genes and gene_norm not in genes:
                 continue
+            if not self._reviewed_variant_override_applicable(
+                override.get("applicability")
+                or override.get("applies_to")
+                or override.get("variant_applicability"),
+                c_norm,
+                p_norm,
+            ):
+                continue
             c_values = set(
                 self._as_text_list(override.get("c_hgvs") or override.get("cHGVS"))
             )
@@ -214,6 +222,28 @@ class TargetedDrugMixin:
             if benefit or caution:
                 return benefit or "--", caution or "--"
         return None
+
+    @staticmethod
+    def _reviewed_variant_override_applicable(
+        applicability: Any,
+        c_point: str,
+        p_point: str,
+    ) -> bool:
+        text = str(applicability or "").strip().upper()
+        if not text or text in {"ANY", "ALL", "ANYVARIANT"}:
+            return True
+        parts = {
+            part.strip()
+            for part in re.split(r"[,;，；/|]+", text)
+            if part.strip()
+        }
+        if parts & {"LOSS_OF_FUNCTION", "LOF", "TRUNCATING"}:
+            return bool(
+                re.search(r"\*", p_point)
+                or re.search(r"fs", p_point, re.I)
+                or re.search(r"c\.\d+[+-]\d+", c_point)
+            )
+        return True
 
     def _get_targeted_drug_db_filters(self) -> dict[str, Any]:
         cfg = (

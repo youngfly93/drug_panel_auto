@@ -2336,6 +2336,13 @@ def enhance_report_data(
                 report_content_cfg.get("part3_reference_variant_scope", "variants"),
                 part3_variants,
             )
+            drug_variants = _select_part3_variants(
+                report_content_cfg.get(
+                    "part3_drug_variant_scope",
+                    report_content_cfg.get("part3_variant_scope", "variants"),
+                ),
+                part3_variants,
+            )
             gene_knowledge_sections = (
                 gene_knowledge_provider.build_all_gene_knowledge_sections(
                     variants=part3_variants, cancer_type="结直肠癌"
@@ -2344,9 +2351,12 @@ def enhance_report_data(
             report_data.set_table("gene_knowledge_sections", gene_knowledge_sections)
 
             # Build drug analysis sections (用药提示解析)
-            # Use variants (主表) which contains drug information
+            # Follow the configured Part 3 scope so drug text stays aligned with
+            # the variants actually rendered in the reviewed Part 3 section.
             drug_analysis_sections = (
-                gene_knowledge_provider.build_drug_analysis_sections(variants=variants)
+                gene_knowledge_provider.build_drug_analysis_sections(
+                    variants=drug_variants
+                )
             )
             report_data.set_table("drug_analysis_sections", drug_analysis_sections)
 

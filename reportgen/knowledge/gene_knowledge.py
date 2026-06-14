@@ -220,6 +220,11 @@ class GeneKnowledgeProvider:
                     "drug_name": self._norm_text(row.get("drug_name")),
                     "relation": self._norm_text(row.get("relation")),
                     "clinical": self._norm_text(row.get("clinical")),
+                    "applicability": self._norm_text(
+                        row.get("applicability")
+                        or row.get("applies_to")
+                        or row.get("variant_applicability")
+                    ),
                 }
                 if variant_key:
                     self._reviewed_drug_section_overrides.setdefault(
@@ -1315,6 +1320,32 @@ class GeneKnowledgeProvider:
         text = self._norm_text(value)
         return bool(text and text not in {"--", "无", "未检出"})
 
+    def _is_loss_of_function_variant(self, variant: Dict[str, Any]) -> bool:
+        c_hgvs = self._norm_text(variant.get("cHGVS") or variant.get("c_hgvs"))
+        p_hgvs = self._norm_text(variant.get("pHGVS") or variant.get("p_hgvs"))
+        if re.search(r"\*", p_hgvs) or re.search(r"fs", p_hgvs, re.I):
+            return True
+        if re.search(r"c\.\d+[+-]\d+", c_hgvs):
+            return True
+        return False
+
+    def _drug_override_matches_variant(
+        self,
+        override: Dict[str, str],
+        variant: Dict[str, Any],
+    ) -> bool:
+        applicability = self._hgvs_key(override.get("applicability"))
+        if not applicability or applicability in {"ANY", "ALL", "ANYVARIANT"}:
+            return True
+        parts = {
+            part.strip()
+            for part in re.split(r"[,;，；/|]+", applicability)
+            if part.strip()
+        }
+        if parts & {"LOSS_OF_FUNCTION", "LOF", "TRUNCATING"}:
+            return self._is_loss_of_function_variant(variant)
+        return True
+
     def _apply_reviewed_drug_section_overrides(
         self,
         variants: List[Dict[str, Any]],
@@ -1354,6 +1385,12 @@ class GeneKnowledgeProvider:
                     overrides = self._gene_level_drug_overrides.get(
                         (self._hgvs_key(variant.get("gene")), drug_type)
                     )
+                if overrides:
+                    overrides = [
+                        override
+                        for override in overrides
+                        if self._drug_override_matches_variant(override, variant)
+                    ]
                 if overrides and self._has_drug_text(variant.get(source_field)):
                     variant_display = self._variant_display_from_row(variant)
                     for override in overrides:

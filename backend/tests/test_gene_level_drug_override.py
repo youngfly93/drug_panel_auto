@@ -84,6 +84,66 @@ def test_no_override_keeps_base():
     assert "BASE_RELATION_结直肠癌" in blob, result
 
 
+def test_gene_level_drug_override_can_be_limited_to_loss_of_function():
+    p = _provider()
+    gkey = p._hgvs_key("TSC1")
+    p._gene_level_drug_overrides[(gkey, "benefit")] = [
+        {
+            "gene": "TSC1",
+            "drug_type": "benefit",
+            "drug_name": "依维莫司",
+            "relation": "TSC1_LOF_RELATION",
+            "clinical": "TSC1_LOF_CLINICAL",
+            "applicability": "loss_of_function",
+        }
+    ]
+    lof_variant = {
+        "gene": "TSC1",
+        "cHGVS": "c.1963C>T",
+        "pHGVS": "p.Q655*",
+        "benefit_drugs": "依维莫司（C）",
+        "caution_drugs": "--",
+    }
+    missense_variant = {
+        "gene": "TSC1",
+        "cHGVS": "c.1234A>G",
+        "pHGVS": "p.K412R",
+        "benefit_drugs": "依维莫司（C）",
+        "caution_drugs": "--",
+    }
+
+    lof_result = p._apply_reviewed_drug_section_overrides([lof_variant], [])
+    missense_result = p._apply_reviewed_drug_section_overrides([missense_variant], [])
+
+    assert any(row.get("relation") == "TSC1_LOF_RELATION" for row in lof_result)
+    assert not missense_result
+
+
+def test_loss_of_function_applicability_matches_splice_variant():
+    p = _provider()
+    gkey = p._hgvs_key("TSC1")
+    p._gene_level_drug_overrides[(gkey, "benefit")] = [
+        {
+            "gene": "TSC1",
+            "drug_type": "benefit",
+            "relation": "TSC1_LOF_RELATION",
+            "clinical": "",
+            "applicability": "loss_of_function",
+        }
+    ]
+    splice_variant = {
+        "gene": "TSC1",
+        "cHGVS": "c.211-2A>G",
+        "pHGVS": "",
+        "benefit_drugs": "依维莫司（C）",
+        "caution_drugs": "--",
+    }
+
+    result = p._apply_reviewed_drug_section_overrides([splice_variant], [])
+
+    assert any(row.get("relation") == "TSC1_LOF_RELATION" for row in result)
+
+
 if __name__ == "__main__":
     import pytest
 

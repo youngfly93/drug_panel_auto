@@ -237,6 +237,18 @@ class _FakeGeneKnowledgeProvider:
         return {row.get("gene"): [f"{row.get('gene')} reference"] for row in variants}
 
 
+class _FakeDrugSectionGeneKnowledgeProvider(_FakeGeneKnowledgeProvider):
+    def build_drug_analysis_sections(self, variants):
+        return [
+            {
+                "gene": row.get("gene"),
+                "drug_name": row.get("benefit_drugs"),
+                "drug_type": "benefit",
+            }
+            for row in variants
+        ]
+
+
 def test_reviewed_override_does_not_create_absent_erbb2_tip(tmp_path):
     excel_data = _excel(tmp_path, variations=[])
     report_data = enhance_report_data(
@@ -1340,6 +1352,51 @@ def test_part3_variant_scope_can_follow_summary_variants(tmp_path):
         "TP53 reference",
         "APC reference",
     ]
+
+
+def test_part3_drug_analysis_scope_follows_summary_variants(tmp_path):
+    report_data = ReportData()
+    report_data.set_field(
+        "report_content",
+        {
+            "part3_variant_scope": "summary_variants",
+            "part3_reference_variant_scope": "summary_variants",
+        },
+    )
+    report_data = enhance_report_data(
+        report_data,
+        _excel(
+            tmp_path,
+            variations=[
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "ExistInsmall358": 1,
+                    "Gene_Symbol": "TP53",
+                    "cHGVS": "c.844C>T",
+                    "pHGVS_S": "p.R282W",
+                    "Function": "Missense",
+                    "Freq(%)": 67.29,
+                    "CLNSIG": "Pathogenic",
+                },
+                {
+                    "ExistIn552": "Ⅲ类",
+                    "ExistInsmall358": 1,
+                    "Gene_Symbol": "APC",
+                    "cHGVS": "c.4348C>T",
+                    "pHGVS_S": "p.R1450*",
+                    "Function": "Nonsense",
+                    "Freq(%)": 41.12,
+                    "CLNSIG": "Pathogenic",
+                },
+            ],
+        ),
+        field_mapper=_FakeDrugLookup(),
+        gene_knowledge_provider=_FakeDrugSectionGeneKnowledgeProvider(),
+        base_path=str(ROOT),
+    )
+
+    genes = [row["gene"] for row in report_data.get_table("drug_analysis_sections")]
+    assert genes == ["TP53", "APC"]
 
 
 def test_part3_marker_renders_from_context_without_case_stub(tmp_path):

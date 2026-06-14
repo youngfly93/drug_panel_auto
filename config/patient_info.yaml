@@ -28,13 +28,11 @@ patients:
 defaults:
   hospital: "某某医院"
   department: "肿瘤科"
-  issuer: "张医生"
-  reviewer: "李医生"
+  issuer: "李晓媛"
+  reviewer: "默认审核者"
   report_number: ""
 
 # 项目信息
 project_info:
   project_name: "结直肠癌358基因检测"  # 项目名称
   detection_method: "NGS高通量测序"    # 检测方法
-
-

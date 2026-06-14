@@ -148,6 +148,17 @@ reviewed_variant_overrides:
       - "瑞戈非尼（C）"
       - "索拉非尼（C）"
       - "舒尼替尼（C）"
+  # TSC1 LoF：仅对无义/移码/剪接等功能缺失型变异触发 mTOR 通路相关药物；
+  # 普通错义 TSC1 不应自动带药，避免扩大解释范围。
+  - gene: TSC1
+    applicability: "loss_of_function"
+    benefit_drugs:
+      - "依维莫司（C）"
+      - "依维莫司+Buparlisib（C）"
+      - "西罗莫司（C）"
+      - "替西罗莫司（C）"
+      - "Sapanisertib（C）"
+    caution_drugs: "--"
   - gene: KRAS
     c_hgvs: "c.34G>A"
     p_hgvs: "p.G12S"

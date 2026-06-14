@@ -2,12 +2,12 @@
   "markers": {
     "part3_bullet_color": null,
     "references": {
-      "count": 5,
+      "count": 6,
       "titleless": 0
     },
     "signature": {
       "floating_anchors_here_and_prev": 0,
-      "inline_images": 0,
+      "inline_images": 2,
       "label": "检测者：                审核者："
     }
   },

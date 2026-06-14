@@ -14,6 +14,8 @@ detector:
   TEST检测者: storage/signatures/registry/test_detector.png
   # patient_info.yaml 默认签发人，登记后默认/合成报告不再触发"无签名图"警告
   张医生: storage/signatures/registry/test_detector.png
+  李晓媛: storage/signatures/registry/lixiaoyuan.png
 reviewer:
   TEST审核者: storage/signatures/registry/test_reviewer.png
   李医生: storage/signatures/registry/test_reviewer.png
+  默认审核者: storage/signatures/registry/default_reviewer_lz258792.png
