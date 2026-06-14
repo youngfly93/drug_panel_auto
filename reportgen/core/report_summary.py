@@ -215,8 +215,12 @@ def _normalize_variant_row(row: dict[str, Any]) -> dict[str, Any]:
             )
         ),
         "frequency": _safe_text(_pick(row, ("af_pct", "frequency", "Freq(%)", "AF", "丰度"))),
-        "benefit_drugs": _safe_text(_pick(row, ("benefit_drugs", "潜在获益药物"))),
-        "caution_drugs": _safe_text(_pick(row, ("caution_drugs", "潜在耐药药物"))),
+        "benefit_drugs": _safe_text(
+            _pick(row, ("benefit_drugs_full", "benefit_drugs", "潜在获益药物"))
+        ),
+        "caution_drugs": _safe_text(
+            _pick(row, ("caution_drugs_full", "caution_drugs", "潜在耐药药物"))
+        ),
     }
 
 
@@ -224,8 +228,12 @@ def _normalize_drug_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "gene": _safe_text(_pick(row, ("gene", "Gene", "基因"))),
         "variant_site": _safe_text(_pick(row, ("variant_site", "locus", "site", "变异位点"))),
-        "benefit_drugs": _safe_text(_pick(row, ("benefit_drugs", "潜在获益药物"))),
-        "caution_drugs": _safe_text(_pick(row, ("caution_drugs", "潜在耐药药物"))),
+        "benefit_drugs": _safe_text(
+            _pick(row, ("benefit_drugs_full", "benefit_drugs", "潜在获益药物"))
+        ),
+        "caution_drugs": _safe_text(
+            _pick(row, ("caution_drugs_full", "caution_drugs", "潜在耐药药物"))
+        ),
     }
 
 

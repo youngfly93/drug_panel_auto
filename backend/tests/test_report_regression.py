@@ -58,6 +58,7 @@ from reportgen.core.report_diff import ReportDiffOptions, compare_reports
 from reportgen.core.template_bridge_358 import (
     PanelConfig,
     _build_nccn_and_immune_fields,
+    _compact_drug_display_tables,
     _patch_reviewed_variant_override_rows,
     build_targeted_drug_brand_summary,
     build_tmb_summary,
@@ -1163,7 +1164,7 @@ def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
     assert detected == [("TP53", 50.0), ("APC", 40.0), ("APC", 10.0), ("KRAS", 30.0)]
 
 
-def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path):
+def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path, monkeypatch):
     """The 1.检测结果小结 summary table (targeted_drug_tips) is ordered by
     frequency high→low and grouped by gene — consistent with the 2.1 table.
     """
@@ -1181,14 +1182,15 @@ def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path):
          "Transcript": "NM_2", "Chr": "chr2", "ExIn_ID": "EX2",
          "cHGVS": "c.400C>G", "pHGVS_S": "p.P133A", "Function": "Missense", "Freq(%)": 40.0},
     ]
-    # CtDrug fallback guarantees each gene gets a benefit tip (so it appears in
-    # the summary) independent of the production knowledge base.
+    # This test only verifies row ordering. Simulate an unavailable production KB
+    # so the legacy CtDrug fallback can provide simple synthetic drug rows.
     ctdrug = [
         {"检测基因": "GENEA", "药物": "DrugA", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
         {"检测基因": "GENEB", "药物": "DrugB", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
         {"检测基因": "GENEC", "药物": "DrugC", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
     ]
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    monkeypatch.setattr(mapper, "_load_targeted_drug_db", lambda: None)
     rows = mapper._build_targeted_drug_tips(
         _excel(tmp_path, variations=variations, tables={"CtDrug": ctdrug}),
         ReportData(),
@@ -1297,6 +1299,54 @@ def test_reviewed_variant_override_replaces_existing_targeted_tip():
     assert "Avutometinib+Defactinib" not in tip_row["benefit_drugs"]
     assert "Defactinib+Avutometinib（C）" in tip_row["benefit_drugs"]
     assert "帕尼单抗（A）" in tip_row["caution_drugs"]
+
+
+def test_long_drug_lists_are_compacted_for_word_tables_but_kept_full_in_summary():
+    long_list = "\n".join(f"药物{i}（C）" for i in range(1, 8))
+    report_data = ReportData(
+        context={
+            "variants_2_1": [
+                {
+                    "gene": "ERBB2",
+                    "locus": "c.1979G>A,\np.G660D",
+                    "benefit_drugs": long_list,
+                    "caution_drugs": "--",
+                }
+            ],
+            "targeted_drug_tips": [
+                {
+                    "gene": "ERBB2",
+                    "variant_site": "c.1979G>A,\np.G660D",
+                    "benefit_drugs": long_list,
+                    "caution_drugs": "--",
+                }
+            ],
+        }
+    )
+
+    _compact_drug_display_tables(report_data)
+
+    variant_row = report_data.get_table("variants_2_1")[0]
+    tip_row = report_data.get_table("targeted_drug_tips")[0]
+    assert variant_row["benefit_drugs"].splitlines() == [
+        "药物1（C）",
+        "药物2（C）",
+        "药物3（C）",
+        "药物4（C）",
+        "药物5（C）",
+        "另2项详见第三部分",
+    ]
+    assert variant_row["benefit_drugs_full"] == long_list
+    assert tip_row["benefit_drugs_full"] == long_list
+
+    summary = build_report_summary(
+        report_data=report_data,
+        project_type="crc_358_msi",
+        qa_report={"status": "PASS", "issues": []},
+    )
+
+    assert summary["variants"]["key_rows"][0]["benefit_drugs"] == long_list
+    assert summary["drugs"]["targeted_rows"][0]["benefit_drugs"] == long_list
 
 
 def test_part3_variant_scope_can_follow_summary_variants(tmp_path):
@@ -1501,22 +1551,22 @@ def test_field_mapper_updates_msi_status_cn_from_mss(tmp_path):
     assert report_data.get_field("msi_status_cn") == "微卫星稳定型，MSS"
 
 
-def test_missing_report_date_is_not_backfilled_to_today():
+def test_missing_report_date_is_filled_with_generation_date():
     report_data = ReportData()
     generator = ReportGenerator(config_dir=str(ROOT / "config"), log_level="ERROR")
 
     generator._mark_missing_report_date(report_data)
 
-    assert report_data.get_field("report_date") == "未填写"
-    assert "缺失必填字段: report_date" in report_data.validation_errors
+    assert report_data.get_field("report_date") == date.today().isoformat()
+    assert "缺失必填字段: report_date" not in report_data.validation_errors
 
 
-def test_common_validation_warns_without_today_backfill(tmp_path):
+def test_common_validation_warns_with_today_backfill(tmp_path):
     warnings = validate_excel_data_common(_excel(tmp_path), today=date(2026, 4, 19))
 
     report_date_warnings = [w for w in warnings if w.get("field") == "report_date"]
     assert report_date_warnings
-    assert "不会自动回填今天" in report_date_warnings[0]["message"]
+    assert "系统将使用生成报告当天日期" in report_date_warnings[0]["message"]
 
 
 def test_detector_does_not_use_panel_column_numbers_as_crc_signal(tmp_path):
@@ -2939,6 +2989,39 @@ def test_clinical_schema_exposes_signature_people_as_editable_selects(monkeypatc
     assert fields["reviewer"].ui.options == ["李四"]
     assert fields["detector_signature_image_path"].ui.component == "file-upload"
     assert fields["reviewer_signature_image_path"].ui.component == "file-upload"
+
+
+def test_crc358_clinical_schema_does_not_require_receive_date(monkeypatch):
+    monkeypatch.setattr(
+        clinical_info_service,
+        "_load_mapping_yaml",
+        lambda: {
+            "single_values": {
+                "receive_date": {
+                    "synonyms": ["收样日期"],
+                    "type": "date",
+                    "required": False,
+                    "description": "样本接收/送检日期",
+                },
+                "report_date": {
+                    "synonyms": ["报告日期"],
+                    "type": "date",
+                    "required": True,
+                    "description": "报告生成日期",
+                },
+            }
+        },
+    )
+
+    schema = clinical_info_service.get_clinical_form_schema("crc_358_msi")
+    fields = {
+        field.key: field
+        for group in schema.groups
+        for field in group.fields
+    }
+
+    assert fields["receive_date"].required is False
+    assert fields["report_date"].required is True
 
 
 def test_template_renderer_removes_explicit_underlines(tmp_path):
@@ -4509,7 +4592,7 @@ def test_template_renderer_default_processors_include_key_m1_processors():
     assert "underlines_and_styles" in names
 
 
-def test_front_matter_spacing_keeps_report_guide_page_top(tmp_path):
+def test_front_matter_spacing_restores_report_guide_golden_offset(tmp_path):
     docx_path = tmp_path / "front_matter.docx"
     doc = Document()
     doc.add_paragraph("检测报告")
@@ -4546,8 +4629,10 @@ def test_front_matter_spacing_keeps_report_guide_page_top(tmp_path):
 
     guide_idx = next(idx for idx, elem in enumerate(paragraphs) if text(elem) == "报告导读")
 
-    assert has_page_break(paragraphs[guide_idx - 1])
-    assert text(paragraphs[guide_idx - 2]) == "检测报告"
+    assert has_page_break(paragraphs[guide_idx - 31])
+    assert text(paragraphs[guide_idx - 32]) == "检测报告"
+    assert all(text(elem) == "" for elem in paragraphs[guide_idx - 30:guide_idx])
+    assert not any(has_page_break(elem) for elem in paragraphs[guide_idx - 30:guide_idx])
 
 
 def test_template_renderer_can_build_panel_declared_processors_only():
@@ -5232,6 +5317,40 @@ def test_qa_report_checks_crc_style_rules_pass_after_postprocessing(tmp_path):
     assert qa["status"] == "PASS"
     assert qa["checks"]["docx_style_rules"]["status"] == "PASS"
     assert qa["checks"]["docx_style_rules"]["checked_table_count"] == 3
+
+
+def test_qa_report_treats_variant_detail_plain_marker_substrings_as_plain(tmp_path):
+    docx_path = tmp_path / "crc_style_plain_marker.docx"
+    doc = Document()
+    doc.add_paragraph("本次共检出体细胞变异：1 个")
+    doc.add_paragraph("与靶向药物用药相关的变异有：1 个")
+    doc.add_paragraph("TMB-L；MSS")
+    _add_crc_style_qa_tables(doc)
+    detail = doc.tables[1]
+    detail.rows[2].cells[4].text = "未见突变（质控通过）"
+    doc.save(docx_path)
+
+    context = {"panel_style": _crc_panel_style()}
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._restore_variant_summary_table_style(str(docx_path), context)
+    renderer._restore_variant_detail_table_style(str(docx_path), context)
+    renderer._restore_biomarker_table_style(str(docx_path), context)
+
+    report_data = ReportData(context=context)
+    report_data.set_field("total_variants_count", 1)
+    report_data.set_field("drug_related_count", 1)
+    report_data.set_field("tmb_status", "TMB-L")
+    report_data.set_field("msi_status", "MSS")
+    report_data.set_table("variants", [{"gene": "KRAS"}])
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        project_type="crc_358_msi",
+    )
+
+    assert qa["status"] == "PASS"
+    assert qa["checks"]["docx_style_rules"]["status"] == "PASS"
 
 
 def test_qa_report_flags_crc_style_rule_violations(tmp_path):
@@ -6161,6 +6280,163 @@ def test_reviewed_part3_knowledge_ships_dnmt3a_and_flt3_overrides():
     assert flt3 is not None, "FLT3 策展段落缺失"
     assert "酪氨酸激酶" in flt3["intro"]
     assert "p.G846D" in flt3["mutation_analysis"]
+
+
+def test_reviewed_part3_legacy_crc_gene_level_candidates_are_promoted():
+    """旧肠癌知识库通过审核后，应作为 CRC gene-level reviewed 内容随包发布。"""
+    overlay_path = (
+        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
+    )
+    data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
+    gene_level_sections = {
+        row.get("gene"): row
+        for row in data.get("gene_sections", [])
+        if row.get("gene") and not row.get("c_hgvs") and not row.get("p_hgvs")
+    }
+
+    legacy_genes = {
+        "APC",
+        "ARID1A",
+        "ATM",
+        "ATR",
+        "BRAF",
+        "BRCA1",
+        "BRCA2",
+        "CTNNB1",
+        "EPCAM",
+        "FBXW7",
+        "KMT2C",
+        "KMT2D",
+        "KRAS",
+        "MLH1",
+        "MSH2",
+        "MSH6",
+        "NF1",
+        "NRAS",
+        "NTRK1",
+        "NTRK2",
+        "NTRK3",
+        "PIK3CA",
+        "PMS2",
+        "PTEN",
+        "SMAD4",
+        "SMARCA4",
+        "SMARCB1",
+        "TCF7L2",
+        "TP53",
+    }
+    assert not (legacy_genes - set(gene_level_sections))
+
+    unsafe_phrases = (
+        "{XX癌",
+        "运营系统调取",
+        "该样本检出的突变可能导致",
+    )
+    for gene in legacy_genes:
+        section = gene_level_sections[gene]
+        combined = f"{section.get('intro', '')}\n{section.get('mutation_analysis', '')}"
+        assert section.get("intro"), f"{gene} 缺 gene-level intro"
+        assert section.get("mutation_analysis"), f"{gene} 缺 gene-level mutation_analysis"
+        for phrase in unsafe_phrases:
+            assert phrase not in combined, f"{gene} gene-level 内容含不应泛化的旧库话术"
+
+    provider = GeneKnowledgeProvider(
+        {
+            "enabled": True,
+            "gene_knowledge_db": {
+                "enabled": True,
+                "path": "missing.xlsx",
+                "reviewed_part3_overlay_path": str(overlay_path),
+            },
+        }
+    )
+    assert provider.load(base_path=str(ROOT))
+
+    samples = {
+        "BRAF": "BRAF V600E",
+        "MLH1": "错配修复",
+        "APC": "WNT信号通路",
+        "TP53": "DNA结合结构域",
+    }
+    for gene, expected in samples.items():
+        section = provider.build_gene_knowledge_section(
+            gene=gene,
+            c_hgvs="c.1A>G",
+            p_hgvs="p.M1V",
+            frequency=1.23,
+            mutation_type="Missense",
+        )
+        combined = f"{section['intro']}\n{section['mutation_analysis']}"
+        assert expected in combined
+
+
+def test_reviewed_part3_crc_pressure_sites_are_variant_level_only():
+    """报告组初审通过的 CRC358 压测缺口应按位点级入库，不能误作 gene-level 套话。"""
+    overlay_path = (
+        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
+    )
+    data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
+    sections = {
+        (row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs", "")): row
+        for row in data.get("gene_sections", [])
+        if row.get("gene")
+    }
+
+    approved_sites = {
+        ("ERBB2", "c.1133C>T", "p.P378L"): "现有证据不足以直接等同于ERBB2扩增",
+        ("ERBB2", "c.2521C>A", "p.L841I"): "p.L841I错义变异",
+        ("KMT2A", "c.3950_3954del", "p.K1317Sfs*7"): "p.K1317Sfs*7为移码变异",
+        ("KMT2A", "c.8848A>G", "p.S2950G"): "p.S2950G为错义变异",
+        ("ALK", "c.3388G>T", "p.V1130L"): "p.V1130L为错义变异",
+        ("CARD11", "c.2059G>A", "p.A687T"): "p.A687T为错义变异",
+        ("CCND1", "c.127T>G", "p.S43A"): "p.S43A为错义变异",
+        ("FAT3", "c.11941G>A", "p.G3981S"): "p.G3981S为错义变异",
+        ("GNAS", "c.1030G>A", "p.E344K"): "p.E344K为错义变异",
+        ("KMT2B", "c.1681C>T", "p.P561S"): "p.P561S为错义变异",
+        ("LRP1B", "c.1987G>A", "p.D663N"): "p.D663N为错义变异",
+        ("PDGFB", "c.671G>A", "p.R224Q"): "p.R224Q为错义变异",
+        ("PTPRS", "c.3073G>A", "p.V1025I"): "p.V1025I为错义变异",
+    }
+    unsafe_fragments = {
+        "突变丰度为",
+        "拷贝数为",
+        "c.6445C>T",
+        "p.R2149",
+        "c.729G>T",
+        "p.W243C",
+        "c.3304G>A",
+        "p.V1102M",
+        "c.641G>A",
+        "p.G214D",
+        "c.4622A>T",
+        "p.Q1541L",
+        "c.659+1G>A",
+        "c.3268G>A",
+        "p.E1090K",
+        "c.7677C>A",
+        "p.C2559",
+        "c.274G>A",
+        "p.A92T",
+        "c.604C>T",
+        "p.Q202",
+    }
+    for key, expected in approved_sites.items():
+        section = sections.get(key)
+        assert section is not None, f"{key} 位点级 reviewed 内容缺失"
+        combined = f"{section.get('intro', '')}\n{section.get('mutation_analysis', '')}"
+        assert expected in combined
+        for fragment in unsafe_fragments:
+            assert fragment not in combined, f"{key} 含旧报告其他位点/丰度片段: {fragment}"
+
+    rejected_sites = {
+        ("BCL2L11", "c.561dup", "p.R188Tfs*77"),
+        ("PCLO", "c.9368C>T", "p.T3123M"),
+        ("PDE4DIP", "c.525C>G", "p.I175M"),
+        ("SMAD3", "c.860G>A", "p.R287Q"),
+        ("SOS1", "c.2536G>A", "p.E846K"),
+    }
+    for key in rejected_sites:
+        assert key not in sections, f"{key} 初审暂不通过，不应进入 reviewed YAML"
 
 
 def test_mutation_description_build_variant_lead_by_type():

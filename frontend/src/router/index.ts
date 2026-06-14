@@ -57,6 +57,11 @@ const router = createRouter({
           component: () => import('@/views/ProductionStatusView.vue'),
         },
         {
+          path: 'load-test',
+          name: 'load-test',
+          component: () => import('@/views/LoadTestDashboardView.vue'),
+        },
+        {
           path: 'tasks/:id',
           name: 'task-detail',
           component: () => import('@/views/TaskDetailView.vue'),

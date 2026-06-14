@@ -12,9 +12,10 @@
           v-if="task?.status === 'completed' && task.task_type === 'single'"
           type="primary"
           :icon="Download"
+          :loading="reportDownloading"
           @click="downloadReport"
         >
-          下载报告
+          {{ reportDownloading ? '正在下载' : '下载报告' }}
         </el-button>
       </div>
     </div>
@@ -108,8 +109,12 @@
             >
               标记已交付
             </el-button>
-            <el-button :icon="Download" @click="downloadAuditPackage(true)">
-              下载审计包
+            <el-button
+              :icon="Download"
+              :loading="auditDownloading"
+              @click="downloadAuditPackage(true)"
+            >
+              {{ auditDownloading ? '正在下载审计包' : '下载审计包' }}
             </el-button>
           </div>
           <el-alert
@@ -142,6 +147,36 @@
         </div>
       </section>
 
+      <section class="qa-panel audit-panel section-gap">
+        <div class="panel-title">
+          <span>操作审计</span>
+          <div class="stage-title-meta">
+            <el-tag size="small" type="info">{{ auditTrail.length }} 条</el-tag>
+            <el-button text type="primary" :loading="auditLoading" @click="fetchAuditTrail">
+              刷新
+            </el-button>
+          </div>
+        </div>
+        <div v-if="auditTrail.length" class="audit-list">
+          <div
+            v-for="item in auditTrail"
+            :key="item.id"
+            :class="['audit-item', `audit-${auditTone(item.action)}`]"
+          >
+            <div class="audit-marker" />
+            <div class="audit-body">
+              <div>
+                <strong>{{ auditActionLabel(item.action) }}</strong>
+                <span>{{ formatAuditTime(item.created_at) }}</span>
+              </div>
+              <p>{{ formatAuditMeta(item) }}</p>
+            </div>
+            <el-tag size="small" type="info">{{ item.operator || '未登录操作员' }}</el-tag>
+          </div>
+        </div>
+        <el-empty v-else description="暂无操作记录" :image-size="70" />
+      </section>
+
       <section v-if="isBatchTask" class="qa-panel section-gap">
         <div class="panel-title">
           <span>批量生成进度</span>
@@ -170,17 +205,19 @@
               v-if="task?.completed_files"
               type="primary"
               :icon="Download"
+              :loading="batchDownloading"
               @click="downloadBatchZip"
             >
-              下载成功报告 ZIP
+              {{ batchDownloading ? '正在下载 ZIP' : '下载成功报告 ZIP' }}
             </el-button>
             <el-button
               v-if="task?.completed_files"
               plain
               :icon="Download"
+              :loading="batchPassDownloading"
               @click="downloadBatchPassZip"
             >
-              下载 QA PASS ZIP
+              {{ batchPassDownloading ? '正在下载 QA PASS ZIP' : '下载 QA PASS ZIP' }}
             </el-button>
             <el-popconfirm
               v-if="task?.status === 'running' || task?.status === 'pending'"
@@ -202,13 +239,66 @@
             </el-button>
             <el-button :icon="Refresh" @click="fetchAll">刷新</el-button>
           </div>
+          <div v-if="downloadStatus" class="download-status">
+            {{ downloadStatus }}
+          </div>
+        </div>
+        <div v-if="batchResultDetailRows.length" class="batch-result-tools">
+          <div class="batch-filter-cards">
+            <button
+              v-for="card in batchResultFilterCards"
+              :key="card.key"
+              :class="['batch-filter-card', card.tone, { active: batchQuickFilter === card.key }]"
+              type="button"
+              @click="batchQuickFilter = card.key"
+            >
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+              <em>{{ card.detail }}</em>
+            </button>
+          </div>
+          <div class="batch-filter-row">
+            <el-input
+              v-model="batchSearchQuery"
+              clearable
+              :prefix-icon="Search"
+              placeholder="搜索 Excel、患者/样本、项目、错误说明"
+            />
+            <el-select v-model="batchStatusFilter" placeholder="文件状态" clearable>
+              <el-option label="已完成" value="completed" />
+              <el-option label="失败" value="failed" />
+              <el-option label="待执行" value="pending" />
+              <el-option label="运行中" value="running" />
+              <el-option label="已取消" value="cancelled" />
+            </el-select>
+            <el-select v-model="batchQaFilter" placeholder="QA 状态" clearable>
+              <el-option label="PASS" value="PASS" />
+              <el-option label="WARN" value="WARN" />
+              <el-option label="FAIL" value="FAIL" />
+              <el-option label="SKIP" value="SKIP" />
+            </el-select>
+            <el-select v-model="batchProjectFilter" placeholder="项目" clearable filterable>
+              <el-option
+                v-for="option in batchProjectOptions"
+                :key="option"
+                :label="option"
+                :value="option"
+              />
+            </el-select>
+            <el-button :icon="Close" @click="resetBatchFilters">清空</el-button>
+          </div>
+          <div class="batch-filter-meta">
+            <span>显示 {{ filteredBatchResultRows.length }}/{{ batchResultDetailRows.length }} 个文件</span>
+            <span v-if="batchSearchQuery">搜索：{{ batchSearchQuery }}</span>
+          </div>
         </div>
         <el-table
           v-if="batchResultDetailRows.length"
-          :data="batchResultDetailRows"
+          :data="filteredBatchResultRows"
           size="small"
           border
           class="batch-detail-table"
+          empty-text="当前筛选无逐文件结果"
         >
           <el-table-column prop="index" label="#" width="70" />
           <el-table-column prop="excel_filename" label="Excel" min-width="220" show-overflow-tooltip />
@@ -250,14 +340,19 @@
                 text
                 type="primary"
                 size="small"
-                @click="downloadBatchItem(row.download_url)"
+                :loading="Boolean(batchItemDownloading[row.index])"
+                @click="downloadBatchItem(row.download_url, row.index)"
               >
-                下载
+                {{ batchItemDownloading[row.index] ? '下载中' : '下载' }}
               </el-button>
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-else description="暂无逐文件结果" :image-size="70" />
+        <el-empty
+          v-if="!batchResultDetailRows.length"
+          description="暂无逐文件结果"
+          :image-size="70"
+        />
       </section>
 
       <section v-if="!isBatchTask" class="qa-panel report-summary section-gap">
@@ -684,11 +779,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, Download, Refresh, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, Close, Download, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   reportApi,
   type BatchResults,
+  type DownloadProgress,
+  type OperationAuditItem,
   type QualityGate,
   type ReportDiffResult,
   type ReportSummary,
@@ -707,6 +804,14 @@ const autoDiffing = ref(false)
 const batchRetrying = ref(false)
 const batchCancelling = ref(false)
 const reviewUpdating = ref(false)
+const reportDownloading = ref(false)
+const auditDownloading = ref(false)
+const batchDownloading = ref(false)
+const batchPassDownloading = ref(false)
+const batchItemDownloading = ref<Record<number, boolean>>({})
+const downloadStatus = ref('')
+const auditLoading = ref(false)
+const auditTrail = ref<OperationAuditItem[]>([])
 const task = ref<TaskStatus | null>(null)
 const qaReport = ref<Record<string, any> | null>(null)
 const reportSummary = ref<ReportSummary | null>(null)
@@ -720,6 +825,11 @@ const reportDiff = ref<ReportDiffResult | null>(null)
 const referenceFile = ref<File | null>(null)
 const referenceFileList = ref<any[]>([])
 const diffFailOn = ref<'fail' | 'warn'>('fail')
+const batchQuickFilter = ref('all')
+const batchSearchQuery = ref('')
+const batchStatusFilter = ref('')
+const batchQaFilter = ref('')
+const batchProjectFilter = ref('')
 const qaLoadError = ref('')
 const summaryLoadError = ref('')
 const provenanceLoadError = ref('')
@@ -832,7 +942,82 @@ const batchResultDetailRows = computed(() => {
         clinical.patient_name,
         clinical.sample_id,
       ].filter(Boolean).join(' / ') || '-',
+      search_text: [
+        row.index,
+        row.excel_filename,
+        row.status,
+        row.project_type,
+        row.project_name,
+        row.qa_status,
+        clinical.patient_name,
+        clinical.sample_id,
+        ...(row.errors || []),
+        ...(row.warnings || []),
+      ].filter(Boolean).join(' ').toLowerCase(),
     }
+  })
+})
+const batchProjectOptions = computed(() => {
+  const values = new Set<string>()
+  for (const row of batchResultDetailRows.value) {
+    const value = row.project_name || row.project_type
+    if (value) values.add(String(value))
+  }
+  return Array.from(values).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+})
+const batchResultFilterCards = computed(() => {
+  const rows = batchResultDetailRows.value
+  const count = (predicate: (row: any) => boolean) => rows.filter(predicate).length
+  return [
+    {
+      key: 'all',
+      label: '全部文件',
+      value: rows.length,
+      detail: '批量输入',
+      tone: 'neutral',
+    },
+    {
+      key: 'attention',
+      label: '需处理',
+      value: count(batchRowNeedsAttention),
+      detail: '失败/QA/警告',
+      tone: 'danger',
+    },
+    {
+      key: 'failed',
+      label: '生成失败',
+      value: count((row) => row.status === 'failed'),
+      detail: '可重试优先',
+      tone: 'danger',
+    },
+    {
+      key: 'qa_issues',
+      label: 'QA 风险',
+      value: count((row) => ['FAIL', 'WARN'].includes(row.qa_status || '')),
+      detail: '需人工核对',
+      tone: 'warning',
+    },
+    {
+      key: 'downloadable',
+      label: '可下载',
+      value: count((row) => Boolean(row.download_url)),
+      detail: '已生成 DOCX',
+      tone: 'success',
+    },
+  ]
+})
+const filteredBatchResultRows = computed(() => {
+  const query = batchSearchQuery.value.trim().toLowerCase()
+  return batchResultDetailRows.value.filter((row) => {
+    if (!matchesBatchQuickFilter(row)) return false
+    if (batchStatusFilter.value && row.status !== batchStatusFilter.value) return false
+    if (batchQaFilter.value && row.qa_status !== batchQaFilter.value) return false
+    if (batchProjectFilter.value) {
+      const project = row.project_name || row.project_type || ''
+      if (project !== batchProjectFilter.value) return false
+    }
+    if (query && !row.search_text.includes(query)) return false
+    return true
   })
 })
 const summaryPatientItems = computed(() => {
@@ -1014,6 +1199,31 @@ function normalizeSummaryRow(row: Record<string, any>) {
   }
 }
 
+function batchRowNeedsAttention(row: any) {
+  return (
+    ['failed', 'cancelled'].includes(row.status)
+    || ['FAIL', 'WARN'].includes(row.qa_status || '')
+    || Boolean(row.errors?.length)
+    || Boolean(row.warnings?.length)
+  )
+}
+
+function matchesBatchQuickFilter(row: any) {
+  if (batchQuickFilter.value === 'attention') return batchRowNeedsAttention(row)
+  if (batchQuickFilter.value === 'failed') return row.status === 'failed'
+  if (batchQuickFilter.value === 'qa_issues') return ['FAIL', 'WARN'].includes(row.qa_status || '')
+  if (batchQuickFilter.value === 'downloadable') return Boolean(row.download_url)
+  return true
+}
+
+function resetBatchFilters() {
+  batchQuickFilter.value = 'all'
+  batchSearchQuery.value = ''
+  batchStatusFilter.value = ''
+  batchQaFilter.value = ''
+  batchProjectFilter.value = ''
+}
+
 function formatSimilarity(value?: number | null) {
   if (value === null || value === undefined) return '-'
   return `${(value * 100).toFixed(2)}%`
@@ -1023,6 +1233,47 @@ function formatDurationMs(value?: number | null) {
   if (value === null || value === undefined) return '-'
   if (value >= 1000) return `${(value / 1000).toFixed(2)}s`
   return `${Number(value).toFixed(1)}ms`
+}
+
+function auditActionLabel(action: string) {
+  const map: Record<string, string> = {
+    'report.generate_requested': '发起生成',
+    'report.generate_file_requested': '上传并生成',
+    'report.generate_async_queued': '提交后台生成',
+    'report.batch_queued': '提交批量生成',
+    'report.batch_retry_queued': '重试失败文件',
+    'report.download_requested': '下载产物',
+    'review_state.updated': '更新审核状态',
+  }
+  return map[action] || action
+}
+
+function auditTone(action: string) {
+  if (action.includes('download')) return 'download'
+  if (action.includes('review')) return 'review'
+  if (action.includes('retry')) return 'warning'
+  return 'generate'
+}
+
+function formatAuditTime(value?: string | null) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function formatAuditMeta(item: OperationAuditItem) {
+  const details = item.details || {}
+  const parts = [
+    details.task_type === 'batch' ? '批量任务' : details.task_type === 'single' ? '单份任务' : '',
+    details.project_type ? `项目 ${details.project_type}` : '',
+    details.review_status_label ? `状态 ${details.review_status_label}` : '',
+    details.download_kind ? `下载 ${details.download_kind}` : '',
+    details.total_files ? `文件 ${details.total_files}` : '',
+    details.retry_files ? `重试 ${details.retry_files}` : '',
+    details.gate_status ? `门禁 ${details.gate_status}` : '',
+  ].filter(Boolean)
+  return parts.join(' · ') || '已记录'
 }
 
 function stageLabel(name?: string) {
@@ -1114,6 +1365,18 @@ function reviewStatusTagType(status?: string | null) {
   return status ? map[status] || 'info' : 'info'
 }
 
+async function fetchAuditTrail() {
+  auditLoading.value = true
+  try {
+    const payload = await reportApi.getAuditLog(taskId, 50)
+    auditTrail.value = payload.items
+  } catch {
+    auditTrail.value = []
+  } finally {
+    auditLoading.value = false
+  }
+}
+
 async function fetchAll() {
   loading.value = true
   qaLoadError.value = ''
@@ -1143,6 +1406,7 @@ async function fetchAll() {
     } catch {
       reviewState.value = null
     }
+    await fetchAuditTrail()
     if (task.value?.task_type === 'batch') {
       try {
         batchResults.value = await reportApi.getBatchResults(taskId)
@@ -1273,24 +1537,131 @@ function downloadBatchItemDiff(itemKey: string, artifact: 'report_diff.json' | '
   window.open(reportApi.getBatchDiffItemDownloadUrl(taskId, itemKey, artifact), '_blank')
 }
 
-function downloadReport() {
-  window.open(reportApi.getDownloadUrl(taskId), '_blank')
+function formatDownloadProgress(progress: DownloadProgress) {
+  const percent = progress.percent == null ? '计算中' : `${progress.percent}%`
+  const received = `${(progress.receivedBytes / 1024 / 1024).toFixed(1)} MB`
+  const total = progress.expectedBytes
+    ? `${(progress.expectedBytes / 1024 / 1024).toFixed(1)} MB`
+    : '-'
+  const retry = progress.attempt > 1 ? `，第 ${progress.attempt}/${progress.maxAttempts} 次续传` : ''
+  return `${percent} · ${received}/${total}${retry}`
 }
 
-function downloadBatchZip() {
-  window.open(reportApi.getBatchDownloadUrl(taskId), '_blank')
+async function downloadReport() {
+  reportDownloading.value = true
+  downloadStatus.value = '正在准备报告下载'
+  try {
+    await reportApi.download(taskId, {
+      onProgress: (progress) => {
+        downloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
+    ElMessage.success('报告下载完成')
+    await fetchAuditTrail()
+  } catch (err: any) {
+    ElMessage.error(err.message || '报告下载失败')
+  } finally {
+    reportDownloading.value = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
+  }
 }
 
-function downloadBatchPassZip() {
-  window.open(reportApi.getBatchDownloadUrl(taskId, true), '_blank')
+async function downloadBatchZip() {
+  batchDownloading.value = true
+  downloadStatus.value = '正在准备 ZIP 下载'
+  try {
+    const result = await reportApi.downloadBatchZip(taskId, false, {
+      onProgress: (progress) => {
+        downloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
+    if (result.attempts > 1) {
+      ElMessage.success(`ZIP 下载成功，已重试 ${result.attempts - 1} 次`)
+    } else {
+      ElMessage.success('ZIP 下载完成')
+    }
+    await fetchAuditTrail()
+  } catch (err: any) {
+    ElMessage.error(err.message || 'ZIP 下载失败')
+  } finally {
+    batchDownloading.value = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
+  }
 }
 
-function downloadBatchItem(url: string) {
-  window.open(url, '_blank')
+async function downloadBatchPassZip() {
+  batchPassDownloading.value = true
+  downloadStatus.value = '正在准备 QA PASS ZIP 下载'
+  try {
+    const result = await reportApi.downloadBatchZip(taskId, true, {
+      onProgress: (progress) => {
+        downloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
+    if (result.attempts > 1) {
+      ElMessage.success(`QA PASS ZIP 下载成功，已重试 ${result.attempts - 1} 次`)
+    } else {
+      ElMessage.success('QA PASS ZIP 下载完成')
+    }
+    await fetchAuditTrail()
+  } catch (err: any) {
+    ElMessage.error(err.message || 'QA PASS ZIP 下载失败')
+  } finally {
+    batchPassDownloading.value = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
+  }
 }
 
-function downloadAuditPackage(includeFailed: boolean) {
-  window.open(reportApi.getAuditPackageUrl(taskId, includeFailed), '_blank')
+async function downloadBatchItem(url: string, index: number) {
+  batchItemDownloading.value[index] = true
+  try {
+    await reportApi.downloadUrl(url, {
+      fallbackFilename: `${taskId}.docx`,
+      retries: 3,
+      timeoutMs: 300000,
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `单份报告连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
+    ElMessage.success('报告下载完成')
+    await fetchAuditTrail()
+  } catch (err: any) {
+    ElMessage.error(err.message || '报告下载失败')
+  } finally {
+    batchItemDownloading.value[index] = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
+  }
+}
+
+async function downloadAuditPackage(includeFailed: boolean) {
+  auditDownloading.value = true
+  downloadStatus.value = '正在准备审计包下载'
+  try {
+    await reportApi.downloadAuditPackage(taskId, includeFailed, {
+      onProgress: (progress) => {
+        downloadStatus.value = formatDownloadProgress(progress)
+      },
+      onRetry: (nextAttempt, maxAttempts) => {
+        downloadStatus.value = `连接无进展，正在第 ${nextAttempt}/${maxAttempts} 次断点续传`
+      },
+    })
+    ElMessage.success('审计包下载完成')
+    await fetchAuditTrail()
+  } catch (err: any) {
+    ElMessage.error(err.message || '审计包下载失败')
+  } finally {
+    auditDownloading.value = false
+    window.setTimeout(() => { downloadStatus.value = '' }, 3000)
+  }
 }
 
 async function refreshGate() {
@@ -1311,6 +1682,7 @@ async function markReviewState(status: 'reviewed' | 'delivered') {
       operator: '报告组',
     })
     qualityGate.value = await reportApi.getQualityGate(taskId)
+    await fetchAuditTrail()
     ElMessage.success(status === 'delivered' ? '已标记交付' : '已标记审核')
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || '审核状态更新失败')
@@ -1626,8 +1998,160 @@ onMounted(fetchAll)
 
 .batch-detail-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.batch-result-tools {
+  padding: 14px;
+  border-bottom: 1px solid #e6edf3;
+  background: #fbfcfe;
+}
+
+.batch-filter-cards {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.batch-filter-card {
+  min-height: 78px;
+  padding: 10px 12px;
+  border: 1px solid #d9e2ec;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.batch-filter-card.active {
+  border-color: #409eff;
+  box-shadow: inset 0 0 0 1px #409eff;
+}
+
+.batch-filter-card span,
+.batch-filter-card em,
+.batch-filter-meta {
+  color: #667085;
+  font-size: 12px;
+}
+
+.batch-filter-card strong {
+  color: #1f2933;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.batch-filter-card em {
+  font-style: normal;
+}
+
+.batch-filter-card.danger strong {
+  color: #b42318;
+}
+
+.batch-filter-card.warning strong {
+  color: #b54708;
+}
+
+.batch-filter-card.success strong {
+  color: #16803c;
+}
+
+.batch-filter-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.4fr) repeat(3, minmax(130px, 0.7fr)) 92px;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.batch-filter-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.download-status {
+  margin-top: 8px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.audit-panel {
+  border-color: #d7dde6;
+}
+
+.audit-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.audit-item {
+  min-height: 64px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #edf0f3;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.audit-marker {
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #6b7280;
+}
+
+.audit-generate .audit-marker {
+  background: #2f6f9f;
+}
+
+.audit-download .audit-marker {
+  background: #2f8f68;
+}
+
+.audit-review .audit-marker {
+  background: #7c5cbd;
+}
+
+.audit-warning .audit-marker {
+  background: #b86d1c;
+}
+
+.audit-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.audit-body div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.audit-body strong {
+  font-size: 14px;
+}
+
+.audit-body span,
+.audit-body p {
+  color: #667085;
+  font-size: 12px;
+}
+
+.audit-body p {
+  margin: 5px 0 0;
 }
 
 .batch-detail-table {
@@ -1809,7 +2333,9 @@ pre {
   .qa-grid,
   .diff-metrics,
   .gate-metrics,
-  .batch-summary-grid {
+  .batch-summary-grid,
+  .batch-filter-cards,
+  .batch-filter-row {
     grid-template-columns: 1fr;
   }
 

@@ -148,17 +148,45 @@ reviewed_variant_overrides:
       - "瑞戈非尼（C）"
       - "索拉非尼（C）"
       - "舒尼替尼（C）"
-  # TSC1 LoF：仅对无义/移码/剪接等功能缺失型变异触发 mTOR 通路相关药物；
-  # 普通错义 TSC1 不应自动带药，避免扩大解释范围。
+  # TP53 c.821T>A (p.V274D)：报告组金标准小结表按该位点固定给出
+  # WEE1/PARP/Alisertib/Eprenetapopt 相关 C 级药物；避免公共库或 CtDrug
+  # 兜底把 MAPK/化疗等其它药物串入 TP53 行。
+  - gene: TP53
+    c_hgvs: "c.821T>A"
+    p_hgvs: "p.V274D"
+    variant_site: "c.821T>A,\np.V274D"
+    benefit_drugs:
+      - "AZD1775（C）"
+      - "AZD1775+奥拉帕利（C）"
+      - "Alisertib（C）"
+      - "Alisertib+AZD1775（C）"
+      - "Eprenetapopt（C）"
+  # TSC1 Ⅱ类：历史结直肠癌终版报告采用基因级 mTOR 抑制剂口径。
+  # 公共 CGI 库内 TSC1 条目为基因级、非 COREAD 癌种，生产过滤会正确排除；
+  # 此处用 CRC panel reviewed rule 补回已审核终版口径，不放宽公共库过滤。
   - gene: TSC1
     applicability: "loss_of_function"
+    variant_level:
+      - "Ⅱ类"
+      - "II类"
+      - "2类"
     benefit_drugs:
       - "依维莫司（C）"
-      - "依维莫司+Buparlisib（C）"
       - "西罗莫司（C）"
       - "替西罗莫司（C）"
+      - "依维莫司+Buparlisib（C）"
       - "Sapanisertib（C）"
-    caution_drugs: "--"
+  # EGFR c.2387G>A (p.G796D)：历史 CRC358 终版报告已按该位点给出
+  # EGFR 靶向药物。该规则同时防止 CtDrug 化疗药物误入靶向药物小结。
+  - gene: EGFR
+    c_hgvs: "c.2387G>A"
+    p_hgvs: "p.G796D"
+    variant_site: "c.2387G>A,\np.G796D"
+    benefit_drugs:
+      - "阿法替尼（C）"
+      - "TQB3804（C）"
+      - "EMB01（C）"
+      - "MCLA-129（C）"
   - gene: KRAS
     c_hgvs: "c.34G>A"
     p_hgvs: "p.G12S"

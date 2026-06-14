@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal, get_db
+from app.models.audit import AuditLog
 from app.dependencies import get_bridge
 from app.models.task import Task, TaskResult
 from app.models.upload import Upload
@@ -43,10 +44,15 @@ from app.schemas.report import (
     TaskStatus,
 )
 from app.services import clinical_info_service as clinical_svc
+from app.services.audit_log import audit_event_payload, record_audit_event
 from app.services import reference_report_service as diff_svc
 from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
+from app.services.generation_preflight import (
+    required_dates_error_message,
+    validate_required_dates,
+)
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_recovery import write_single_generation_request
 
@@ -55,6 +61,29 @@ download_logger = get_logger("reportgen-web.download")
 DOWNLOAD_SLOW_WARN_SECONDS = float(
     os.environ.get("RG_WEB_DOWNLOAD_SLOW_WARN_SECONDS", "10")
 )
+
+
+def _raise_required_dates_if_missing(
+    bridge: ReportGenBridge,
+    *,
+    excel_path: str | Path,
+    clinical_payload: dict,
+    project_type: Optional[str],
+    project_name: Optional[str],
+) -> None:
+    preflight = validate_required_dates(
+        bridge,
+        excel_path=excel_path,
+        clinical_info=clinical_payload,
+        project_type=project_type,
+        project_name=project_name,
+    )
+    missing = list(preflight.get("missing") or [])
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=required_dates_error_message(missing),
+        )
 
 
 class ObservedFileResponse(FileResponse):
@@ -154,6 +183,7 @@ def _observed_file_response(
     task: Task,
     request: Request,
     extra_context: Optional[dict] = None,
+    db: Optional[Session] = None,
 ) -> FileResponse:
     started_at = time.perf_counter()
     stat_result = path.stat()
@@ -172,10 +202,37 @@ def _observed_file_response(
         "X-ReportGen-Task-Id": task.id,
         "X-ReportGen-Download-Kind": download_kind,
         "X-ReportGen-Download-Bytes": str(stat_result.st_size),
+        "X-ReportGen-Download-Retryable": "true",
+        "Cache-Control": "private, no-store",
+        "Accept-Ranges": "bytes",
+        "X-Content-Type-Options": "nosniff",
     }
+    prepare_duration_ms = context.get("prepare_duration_ms")
+    if prepare_duration_ms is not None:
+        headers["X-ReportGen-Prepare-Duration-Ms"] = str(prepare_duration_ms)
     if task.duration_seconds is not None:
         headers["X-ReportGen-Task-Duration-Seconds"] = str(
             _round_seconds(task.duration_seconds)
+        )
+    if db is not None and request.method.upper() != "HEAD":
+        record_audit_event(
+            db,
+            action="report.download_requested",
+            resource_type="task",
+            resource_id=task.id,
+            request=request,
+            details={
+                "download_kind": download_kind,
+                "file_index": context.get("file_index"),
+                "file_size_bytes": stat_result.st_size,
+                "file_size_mb": round(stat_result.st_size / 1024 / 1024, 3),
+                "include_failed": context.get("include_failed"),
+                "item_count": context.get("item_count"),
+                "project_type": task.project_type,
+                "qa_filter": context.get("qa_filter"),
+                "task_status": task.status,
+                "task_type": task.task_type,
+            },
         )
     return ObservedFileResponse(
         path=str(path),
@@ -698,14 +755,20 @@ def _infer_project_type_from_name(
 def _enrich_clinical_payload(
     clinical_info: Optional[dict],
     project_type: Optional[str],
+    *,
+    lookup_sample_id: Optional[str] = None,
 ) -> dict:
     """Fill missing form values from the runtime patient registry/ops lookup."""
     payload = dict(clinical_info or {})
     sample_id = str(payload.get("sample_id") or payload.get("样本编号") or "").strip()
-    if not sample_id:
-        return payload
-    enrichment = clinical_svc.enrich_patient(sample_id, project_type=project_type)
-    return clinical_svc.merge_enrichment_into_values(payload, enrichment)
+    lookup_id = str(lookup_sample_id or "").strip() or sample_id
+    if not lookup_id:
+        return clinical_svc.fill_missing_report_date(payload)
+    if not sample_id and lookup_id:
+        payload["sample_id"] = lookup_id
+    enrichment = clinical_svc.enrich_patient(lookup_id, project_type=project_type)
+    payload = clinical_svc.merge_enrichment_into_values(payload, enrichment)
+    return clinical_svc.fill_missing_report_date(payload)
 
 
 def _compact_filename_part(value: object, fallback: str) -> str:
@@ -889,6 +952,7 @@ def _generate_response_from_result(
 @router.post("/generate", response_model=ApiResponse[GenerateResponse])
 def generate_report(
     req: GenerateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
 ):
@@ -912,6 +976,14 @@ def generate_report(
     clinical_payload = _enrich_clinical_payload(
         req.clinical_info,
         effective_project_type,
+        lookup_sample_id=clinical_svc.project_code_from_filename(upload.original_filename),
+    )
+    _raise_required_dates_if_missing(
+        bridge,
+        excel_path=upload.stored_path,
+        clinical_payload=clinical_payload,
+        project_type=effective_project_type,
+        project_name=effective_project_name,
     )
 
     # Create task record
@@ -930,6 +1002,23 @@ def generate_report(
     )
     db.add(task)
     db.commit()
+    record_audit_event(
+        db,
+        action="report.generate_requested",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "generate",
+            "task_type": "single",
+            "project_type": effective_project_type,
+            "template_name": req.template_name,
+            "strict_mode": req.strict_mode,
+            "template_contract_mode": req.template_contract_mode,
+            "qa_visual_render": req.qa_visual_render,
+            "status": "running",
+        },
+    )
 
     try:
         result = run_generate_report_with_timeout(
@@ -1000,6 +1089,7 @@ def generate_report(
 
 @router.post("/generate-file", response_model=ApiResponse[GenerateResponse])
 def generate_report_from_file(
+    request: Request,
     file: UploadFile = File(...),
     clinical_info: str = Form("{}"),
     project_type: Optional[str] = Form(None),
@@ -1049,6 +1139,14 @@ def generate_report_from_file(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
+        lookup_sample_id=clinical_svc.project_code_from_filename(file.filename),
+    )
+    _raise_required_dates_if_missing(
+        bridge,
+        excel_path=str(stored_path),
+        clinical_payload=clinical_payload,
+        project_type=detected_project_type,
+        project_name=detected_project_name,
     )
 
     task_id = str(uuid.uuid4())
@@ -1067,6 +1165,23 @@ def generate_report_from_file(
     )
     db.add(task)
     db.commit()
+    record_audit_event(
+        db,
+        action="report.generate_file_requested",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "generate-file",
+            "task_type": "single",
+            "project_type": detected_project_type,
+            "template_name": template_name,
+            "strict_mode": strict_mode,
+            "template_contract_mode": template_contract_mode,
+            "qa_visual_render": qa_visual_render,
+            "status": "running",
+        },
+    )
 
     try:
         result = run_generate_report_with_timeout(
@@ -1138,6 +1253,7 @@ def generate_report_from_file(
 
 @router.post("/generate-file-async", response_model=ApiResponse[GenerateResponse])
 def generate_report_from_file_async(
+    request: Request,
     file: UploadFile = File(...),
     clinical_info: str = Form("{}"),
     project_type: Optional[str] = Form(None),
@@ -1187,6 +1303,14 @@ def generate_report_from_file_async(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
+        lookup_sample_id=clinical_svc.project_code_from_filename(file.filename),
+    )
+    _raise_required_dates_if_missing(
+        bridge,
+        excel_path=str(stored_path),
+        clinical_payload=clinical_payload,
+        project_type=detected_project_type,
+        project_name=detected_project_name,
     )
 
     task_id = str(uuid.uuid4())
@@ -1224,6 +1348,23 @@ def generate_report_from_file_async(
     task.context_json_path = str(request_path)
     db.add(task)
     db.commit()
+    record_audit_event(
+        db,
+        action="report.generate_async_queued",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "generate-file-async",
+            "task_type": "single",
+            "project_type": detected_project_type,
+            "template_name": template_name,
+            "strict_mode": strict_mode,
+            "template_contract_mode": template_contract_mode,
+            "qa_visual_render": qa_visual_render,
+            "status": "pending",
+        },
+    )
 
     submit_generation_job(
         _complete_file_generation_task,
@@ -1482,10 +1623,35 @@ def get_review_state(task_id: str, db: Session = Depends(get_db)):
     return ApiResponse(data=_load_review_state(task))
 
 
+@router.get("/{task_id}/audit-log", response_model=ApiResponse[dict])
+def get_task_audit_log(
+    task_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.resource_type == "task", AuditLog.resource_id == task_id)
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return ApiResponse(
+        data={
+            "task_id": task_id,
+            "items": [audit_event_payload(row) for row in rows],
+        }
+    )
+
+
 @router.post("/{task_id}/review-state", response_model=ApiResponse[dict])
 def update_review_state(
     task_id: str,
     req: ReviewStateUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -1522,7 +1688,26 @@ def update_review_state(
     state["task_id"] = task.id
     state["schema_version"] = "1.0"
     state["history"] = history
-    return ApiResponse(data=_write_review_state(task, state))
+    updated_state = _write_review_state(task, state)
+    record_audit_event(
+        db,
+        action="review_state.updated",
+        resource_type="task",
+        resource_id=task.id,
+        request=request,
+        details={
+            "gate_blockers": gate["blockers"],
+            "gate_status": gate["status"],
+            "operator": req.operator or "未登录操作员",
+            "override_gate": bool(req.override_gate),
+            "project_type": task.project_type,
+            "review_status": req.status,
+            "review_status_label": REVIEW_STATUSES[req.status],
+            "task_status": task.status,
+            "task_type": task.task_type,
+        },
+    )
+    return ApiResponse(data=updated_state)
 
 
 @router.get("/{task_id}/batch-results/{file_index}/download")
@@ -1555,6 +1740,7 @@ def download_batch_item_report(
         task=task,
         request=request,
         extra_context={"file_index": file_index},
+        db=db,
     )
 
 
@@ -1592,22 +1778,35 @@ def download_batch_reports_zip(
         detail = "没有 QA PASS 的成功报告" if qa_pass_only else "没有可打包的成功报告"
         raise HTTPException(status_code=404, detail=detail)
     prepare_started = time.perf_counter()
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        batch_report = _batch_report_path(task.output_path)
-        if batch_report and batch_report.exists():
-            zf.write(batch_report, "batch_report.json")
-        for row in rows:
-            if not row.output_path:
-                continue
-            docx_path = Path(row.output_path)
-            if docx_path.exists():
-                zf.write(docx_path, f"reports/{row.file_index:03d}_{docx_path.name}")
-            summary_path = _report_summary_sidecar_path(row.output_path)
-            if summary_path and summary_path.exists():
-                zf.write(
-                    summary_path,
-                    f"summaries/{row.file_index:03d}_{summary_path.name}",
-                )
+    temp_zip_path = output_root / f".{zip_path.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        with zipfile.ZipFile(
+            temp_zip_path,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+        ) as zf:
+            batch_report = _batch_report_path(task.output_path)
+            if batch_report and batch_report.exists():
+                zf.write(batch_report, "batch_report.json")
+            for row in rows:
+                if not row.output_path:
+                    continue
+                docx_path = Path(row.output_path)
+                if docx_path.exists():
+                    zf.write(
+                        docx_path,
+                        f"reports/{row.file_index:03d}_{docx_path.name}",
+                    )
+                summary_path = _report_summary_sidecar_path(row.output_path)
+                if summary_path and summary_path.exists():
+                    zf.write(
+                        summary_path,
+                        f"summaries/{row.file_index:03d}_{summary_path.name}",
+                    )
+        temp_zip_path.replace(zip_path)
+    finally:
+        if temp_zip_path.exists():
+            temp_zip_path.unlink(missing_ok=True)
     prepare_duration_ms = round((time.perf_counter() - prepare_started) * 1000, 3)
     return _observed_file_response(
         path=zip_path,
@@ -1621,6 +1820,7 @@ def download_batch_reports_zip(
             "item_count": len(rows),
             "prepare_duration_ms": prepare_duration_ms,
         },
+        db=db,
     )
 
 
@@ -1773,6 +1973,7 @@ def download_audit_package(
             "include_failed": include_failed,
             "prepare_duration_ms": prepare_duration_ms,
         },
+        db=db,
     )
 
 
@@ -1981,6 +2182,7 @@ def download_batch_report_diff_artifact(
         download_kind="batch_diff_artifact",
         task=task,
         request=request,
+        db=db,
     )
 
 
@@ -2017,6 +2219,7 @@ def download_batch_report_diff_item_artifact(
         download_kind="batch_diff_item_artifact",
         task=task,
         request=request,
+        db=db,
     )
 
 
@@ -2040,6 +2243,7 @@ def download_report_diff_artifact(
         download_kind="diff_artifact",
         task=task,
         request=request,
+        db=db,
     )
 
 
@@ -2069,6 +2273,7 @@ def _download_report_response(task_id: str, db: Session, request: Request) -> Fi
         download_kind="single_docx",
         task=task,
         request=request,
+        db=db,
     )
 
 

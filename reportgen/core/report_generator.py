@@ -8,7 +8,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, field as dc_field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -525,6 +525,13 @@ class ReportGenerator:
 
         self.logger.log_event("field_mapping_started")
         state.report_data = self.field_mapper.map(state.excel_data)
+        rd = state.report_data.get_field("report_date")
+        if rd is None or (isinstance(rd, str) and rd.strip() == ""):
+            self._fill_missing_report_date(state.report_data)
+            stage.warn(
+                "REPORT_DATE_MISSING",
+                "report_date is missing and was set to the generation date.",
+            )
         self.logger.log_event(
             "field_mapping_completed",
             validation_errors=len(state.report_data.validation_errors),
@@ -770,13 +777,6 @@ class ReportGenerator:
                     details={"missing_fields": missing_important},
                 )
 
-        rd = state.report_data.get_field("report_date")
-        if rd is None or (isinstance(rd, str) and rd.strip() == ""):
-            self._mark_missing_report_date(state.report_data)
-            stage.warn(
-                "REPORT_DATE_MISSING",
-                "report_date is missing and was marked as 未填写.",
-            )
         return None
 
     def _stage_output_path(self, stage: StageHandle, state: _GenerationState) -> None:
@@ -1473,15 +1473,15 @@ class ReportGenerator:
         self.logger.debug("生成输出文件名", filename=filename)
         return filename
 
+    def _fill_missing_report_date(self, report_data: ReportData) -> None:
+        """Fill missing report_date with the generation date."""
+        report_date = date.today().isoformat()
+        report_data.set_field("report_date", report_date)
+        self.logger.warning("report_date缺失，已使用生成报告当天日期", report_date=report_date)
+
     def _mark_missing_report_date(self, report_data: ReportData) -> None:
-        """Mark missing report_date explicitly instead of silently using today."""
-        report_data.set_field("report_date", "未填写")
-        if not any(
-            str(err).startswith("缺失必填字段: report_date")
-            for err in report_data.validation_errors
-        ):
-            report_data.add_validation_error("缺失必填字段: report_date")
-        self.logger.warning("report_date缺失，报告中已标记为未填写")
+        """Backward-compatible wrapper for callers that fill missing report_date."""
+        self._fill_missing_report_date(report_data)
 
     def _set_patient_salutation(self, report_data: ReportData) -> None:
         """Derive the patient-letter salutation from the mapped gender field."""

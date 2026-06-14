@@ -1059,6 +1059,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                 # 批注：变异类型依据 c.HGVS 关键字 del/dup/ins/delins
                 "var_type_cn": variant_type_cn(c),
                 "af_pct": self._norm_text(r.get("Freq(%)") or r.get("AF")),
+                "gene_class": level,
                 "benefit_drugs": benefit or "--",
                 "caution_drugs": caution or "--",
             }

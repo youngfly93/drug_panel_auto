@@ -49,6 +49,10 @@
           <el-icon><Odometer /></el-icon>
           <span>生产状态</span>
         </el-menu-item>
+        <el-menu-item index="/load-test">
+          <el-icon><Odometer /></el-icon>
+          <span>压测看板</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -120,6 +124,7 @@ const titleMap: Record<string, string> = {
   '/references': '基准报告',
   '/tasks': '任务队列',
   '/ops': '生产状态',
+  '/load-test': '压测看板',
 }
 const currentTitle = computed(() => {
   if (route.path.startsWith('/tasks/')) return '任务质控详情'

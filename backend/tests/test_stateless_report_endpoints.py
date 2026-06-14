@@ -1,6 +1,9 @@
+import io
 import json
 import sys
 import time
+import zipfile
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -88,7 +91,12 @@ class FakeBridge:
         }
 
     def get_mapped_clinical_fields(self, _excel_data):
-        return {"patient_name": "测试患者", "sample_id": "CASE001"}
+        return {
+            "patient_name": "测试患者",
+            "sample_id": "CASE001",
+            "receive_date": "2026-05-20",
+            "report_date": "2026-05-31",
+        }
 
     def generate_report(self, **kwargs):
         self.last_generate_kwargs = kwargs
@@ -150,6 +158,11 @@ class FailOnceBridge(FakeBridge):
                 "report_summary_file": None,
             }
         return super().generate_report(**kwargs)
+
+
+class MissingDateBridge(FakeBridge):
+    def get_mapped_clinical_fields(self, _excel_data):
+        return {"patient_name": "测试患者", "sample_id": "CASE001"}
 
 
 class SlowBridge(FakeBridge):
@@ -325,6 +338,24 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert data["qa_status"] == "PASS"
 
 
+def test_generate_file_fills_missing_report_date(tmp_path, monkeypatch):
+    bridge = MissingDateBridge()
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": '{"patient_name":"测试患者","sample_id":"CASE001"}',
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["success"] is True
+    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == date.today().isoformat()
+
+
 def test_generate_file_infers_project_type_from_form_project_name(
     tmp_path, monkeypatch
 ):
@@ -391,6 +422,7 @@ def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
     assert download_response.status_code == 200
     assert download_response.headers["x-reportgen-download-kind"] == "single_docx"
     assert download_response.headers["x-reportgen-task-id"] == data["task_id"]
+    assert download_response.headers["x-reportgen-download-retryable"] == "true"
     assert int(download_response.headers["x-reportgen-download-bytes"]) == len(
         download_response.content
     )
@@ -443,10 +475,96 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert item_response.status_code == 200
     assert item_response.headers["x-reportgen-download-kind"] == "batch_item_docx"
     assert item_response.headers["x-reportgen-task-id"] == task_id
+    assert item_response.headers["x-reportgen-download-retryable"] == "true"
+    assert int(item_response.headers["x-reportgen-download-bytes"]) == len(
+        item_response.content
+    )
     assert zip_response.status_code == 200
     assert zip_response.headers["content-type"].startswith("application/zip")
     assert zip_response.headers["x-reportgen-download-kind"] == "batch_zip"
     assert zip_response.headers["x-reportgen-task-id"] == task_id
+    assert zip_response.headers["x-reportgen-download-retryable"] == "true"
+    assert int(zip_response.headers["x-reportgen-download-bytes"]) == len(
+        zip_response.content
+    )
+    assert zip_response.headers["cache-control"] == "private, no-store"
+    assert "x-reportgen-prepare-duration-ms" in zip_response.headers
+    with zipfile.ZipFile(io.BytesIO(zip_response.content)) as zf:
+        names = zf.namelist()
+    assert "batch_report.json" in names
+    assert sum(name.startswith("reports/") for name in names) == 2
+    assert sum(name.startswith("summaries/") for name in names) == 2
+
+
+def test_batch_files_fill_missing_report_date(tmp_path, monkeypatch):
+    bridge = MissingDateBridge()
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"placeholder1", "application/vnd.ms-excel")),
+                ("files", ("case2.xlsx", b"placeholder2", "application/vnd.ms-excel")),
+            ],
+            data={
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+            },
+        )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+
+        status_response = None
+        for _ in range(20):
+            status_response = client.get(f"/api/v1/reports/{task_id}")
+            if status_response.json()["data"]["status"] != "running":
+                break
+            time.sleep(0.05)
+
+    assert status_response.status_code == 200
+    assert status_response.json()["data"]["status"] == "completed"
+    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == date.today().isoformat()
+
+
+def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkeypatch):
+    bridge = MissingDateBridge()
+    enrich_calls = []
+
+    def fake_enrich_patient(sample_id, project_type=None):
+        enrich_calls.append((sample_id, project_type))
+        return SimpleNamespace(fields={"receive_date": "2026-05-20"})
+
+    monkeypatch.setattr(batch_api.clinical_svc, "enrich_patient", fake_enrich_patient)
+
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"placeholder1", "application/vnd.ms-excel")),
+            ],
+            data={
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+                "clinical_info": json.dumps(
+                    {"report_date": "2026-05-31"},
+                    ensure_ascii=False,
+                ),
+            },
+        )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+
+        status_response = None
+        for _ in range(20):
+            status_response = client.get(f"/api/v1/reports/{task_id}")
+            if status_response.json()["data"]["status"] != "running":
+                break
+            time.sleep(0.05)
+
+    assert status_response.status_code == 200
+    assert status_response.json()["data"]["status"] == "completed"
+    assert ("case1", "crc_358_msi") in enrich_calls
+    assert bridge.last_generate_kwargs["clinical_info"]["receive_date"] == "2026-05-20"
+    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == "2026-05-31"
 
 
 def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
@@ -526,6 +644,81 @@ def test_batch_cancel_marks_pending_rows(tmp_path, monkeypatch):
     assert "cancelled" in [row["status"] for row in results["items"]]
 
 
+def test_task_list_supports_production_filters_and_review_state(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={"project_type": "crc_358_msi", "clinical_info": "{}"},
+        )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+
+        today = datetime.now().date().isoformat()
+        draft_response = client.get(
+            "/api/v1/tasks",
+            params={
+                "review_status": "draft",
+                "project_type": "crc_358_msi",
+                "created_from": today,
+                "q": task_id[:8],
+            },
+        )
+        assert draft_response.status_code == 200
+        draft_items = draft_response.json()["data"]["items"]
+        assert [item["id"] for item in draft_items] == [task_id]
+        assert draft_items[0]["review_status"] == "draft"
+        assert draft_items[0]["review_status_label"] == "待审核"
+        assert draft_items[0]["qa_status"] == "PASS"
+
+        delivered_response = client.post(
+            f"/api/v1/reports/{task_id}/review-state",
+            json={"status": "delivered", "operator": "qa"},
+        )
+        assert delivered_response.status_code == 200
+
+        filtered_response = client.get(
+            "/api/v1/tasks",
+            params={"review_status": "delivered", "qa_status": "PASS"},
+        )
+        assert filtered_response.status_code == 200
+        filtered = filtered_response.json()["data"]
+        assert filtered["total"] == 1
+        assert filtered["items"][0]["id"] == task_id
+        assert filtered["items"][0]["review_status_label"] == "已交付"
+
+        stats_response = client.get("/api/v1/tasks/stats")
+        assert stats_response.status_code == 200
+        stats = stats_response.json()["data"]
+        assert stats["today_total"] >= 1
+        assert stats["delivered"] == 1
+
+
+def test_task_list_attention_filter_surfaces_partial_failed_batch(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch, bridge=FailOnceBridge()) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"placeholder1", "application/vnd.ms-excel")),
+                ("files", ("case2.xlsx", b"placeholder2", "application/vnd.ms-excel")),
+            ],
+            data={"project_type": "crc_358_msi"},
+        )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+        for _ in range(20):
+            status = client.get(f"/api/v1/tasks/{task_id}").json()["data"]["status"]
+            if status in {"completed", "failed", "partial_failed"}:
+                break
+            time.sleep(0.05)
+
+        attention_response = client.get("/api/v1/tasks", params={"attention": True})
+        assert attention_response.status_code == 200
+        items = attention_response.json()["data"]["items"]
+        assert task_id in {item["id"] for item in items}
+        assert any(item["status"] == "partial_failed" for item in items)
+
+
 def test_report_summary_endpoint_reads_sidecar(tmp_path, monkeypatch):
     with _client(tmp_path, monkeypatch) as client:
         response = client.post(
@@ -568,6 +761,7 @@ def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
             json={"status": "delivered", "operator": "报告组"},
         )
         audit_response = client.get(f"/api/v1/reports/{task_id}/audit-package")
+        audit_log_response = client.get(f"/api/v1/reports/{task_id}/audit-log")
 
     assert gate_response.status_code == 200
     gate = gate_response.json()["data"]
@@ -579,6 +773,15 @@ def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
     assert update_response.json()["data"]["status"] == "delivered"
     assert audit_response.status_code == 200
     assert audit_response.headers["content-type"].startswith("application/zip")
+    assert audit_log_response.status_code == 200
+    audit_log = audit_log_response.json()["data"]["items"]
+    actions = {item["action"] for item in audit_log}
+    assert "report.generate_file_requested" in actions
+    assert "review_state.updated" in actions
+    assert "report.download_requested" in actions
+    audit_log_text = audit_log_response.text
+    assert "测试患者" not in audit_log_text
+    assert "case.xlsx" not in audit_log_text
 
 
 def test_quality_gate_blocks_failed_batch_delivery(tmp_path, monkeypatch):

@@ -13,6 +13,9 @@ export interface TaskItem {
   diff_gate_passed?: boolean | null
   diff_reference_id?: string | null
   diff_reference_name?: string | null
+  review_status?: string | null
+  review_status_label?: string | null
+  review_updated_at?: string | null
   total_files: number
   completed_files: number
   failed_files: number
@@ -44,10 +47,26 @@ export interface TaskStats {
   pending: number
   partial_failed?: number
   cancelled?: number
+  today_total?: number
+  needs_attention?: number
+  awaiting_review?: number
+  delivered?: number
 }
 
 export const taskApi = {
-  async list(params: { status?: string; task_type?: string; page?: number; page_size?: number } = {}): Promise<TaskListResponse> {
+  async list(params: {
+    status?: string
+    task_type?: string
+    project_type?: string
+    qa_status?: string
+    review_status?: string
+    attention?: boolean
+    q?: string
+    created_from?: string
+    created_to?: string
+    page?: number
+    page_size?: number
+  } = {}): Promise<TaskListResponse> {
     const { data } = await client.get('/tasks', { params })
     return data.data
   },

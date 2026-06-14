@@ -14,6 +14,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
 )
 from sqlalchemy.orm import Session
@@ -25,9 +26,14 @@ from app.models.task import Task, TaskResult
 from app.models.upload import Upload
 from app.schemas.common import ApiResponse
 from app.services import clinical_info_service as clinical_svc
+from app.services.audit_log import record_audit_event
 from app.services.file_manager import ensure_report_dir, save_upload
 from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
+from app.services.generation_preflight import (
+    required_dates_error_message,
+    validate_required_dates,
+)
 from app.services import reference_report_service as diff_svc
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_manager import submit_batch_task
@@ -71,13 +77,19 @@ def _infer_project_type_from_name(
 def _enrich_clinical_payload(
     clinical_info: Optional[dict],
     project_type: Optional[str],
+    *,
+    lookup_sample_id: Optional[str] = None,
 ) -> dict:
     payload = dict(clinical_info or {})
     sample_id = str(payload.get("sample_id") or payload.get("样本编号") or "").strip()
-    if not sample_id:
-        return payload
-    enrichment = clinical_svc.enrich_patient(sample_id, project_type=project_type)
-    return clinical_svc.merge_enrichment_into_values(payload, enrichment)
+    lookup_id = str(lookup_sample_id or "").strip() or sample_id
+    if not lookup_id:
+        return clinical_svc.fill_missing_report_date(payload)
+    if not sample_id and lookup_id:
+        payload["sample_id"] = lookup_id
+    enrichment = clinical_svc.enrich_patient(lookup_id, project_type=project_type)
+    payload = clinical_svc.merge_enrichment_into_values(payload, enrichment)
+    return clinical_svc.fill_missing_report_date(payload)
 
 
 def _batch_report_path(output_dir: str | Path) -> Path:
@@ -205,7 +217,7 @@ def _write_batch_report(db: Session, task: Task) -> dict:
     return payload
 
 
-def _build_item_payload(
+def _prepare_item_clinical_payload(
     *,
     stored_path: str,
     original_filename: str,
@@ -213,15 +225,15 @@ def _build_item_payload(
     shared_clinical_info: dict,
     project_type: Optional[str],
     project_name: Optional[str],
-    template_name: Optional[str],
-    output_dir: str,
-    template_contract_mode: str,
-) -> tuple[dict, dict, Optional[str], Optional[str]]:
+) -> tuple[dict, Optional[str], Optional[str]]:
     excel_data = bridge.read_excel(stored_path)
     detected_project_type = project_type
     detected_project_name = project_name
     if not detected_project_type:
-        detect = bridge.detect_project_type(stored_path, excel_data=excel_data)
+        detect = bridge.detect_project_type(
+            str(Path(stored_path).parent / (original_filename or "upload.xlsx")),
+            excel_data=excel_data,
+        )
         detected_project_type = detect.get("project_type")
         detected_project_name = detected_project_name or detect.get("project_name")
     detected_project_type, detected_project_name = _infer_project_type_from_name(
@@ -241,6 +253,32 @@ def _build_item_payload(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
+        lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
+    )
+    return clinical_payload, detected_project_type, detected_project_name
+
+
+def _build_item_payload(
+    *,
+    stored_path: str,
+    original_filename: str,
+    bridge: ReportGenBridge,
+    shared_clinical_info: dict,
+    project_type: Optional[str],
+    project_name: Optional[str],
+    template_name: Optional[str],
+    output_dir: str,
+    template_contract_mode: str,
+) -> tuple[dict, dict, Optional[str], Optional[str]]:
+    clinical_payload, detected_project_type, detected_project_name = (
+        _prepare_item_clinical_payload(
+            stored_path=stored_path,
+            original_filename=original_filename,
+            bridge=bridge,
+            shared_clinical_info=shared_clinical_info,
+            project_type=project_type,
+            project_name=project_name,
+        )
     )
 
     result = run_generate_report_with_timeout(
@@ -536,6 +574,7 @@ async def batch_generate(
 
 @router.post("/batch-files", response_model=ApiResponse)
 def batch_generate_from_files(
+    request: Request,
     files: list[UploadFile] = File(...),
     clinical_info: str = Form("{}"),
     project_type: Optional[str] = Form(None),
@@ -577,6 +616,35 @@ def batch_generate_from_files(
                 "stored_path": str(stored_path),
             }
         )
+    missing_date_rows: list[str] = []
+    for item in items:
+        clinical_payload, detected_project_type, detected_project_name = (
+            _prepare_item_clinical_payload(
+                stored_path=item["stored_path"],
+                original_filename=item["filename"],
+                bridge=bridge,
+                shared_clinical_info=shared_clinical_info,
+                project_type=project_type,
+                project_name=project_name,
+            )
+        )
+        preflight = validate_required_dates(
+            bridge,
+            excel_path=item["stored_path"],
+            clinical_info=clinical_payload,
+            project_type=detected_project_type,
+            project_name=detected_project_name,
+        )
+        missing = list(preflight.get("missing") or [])
+        if missing:
+            missing_date_rows.append(
+                f"第 {item['index']} 个 Excel：{required_dates_error_message(missing)}"
+            )
+    if missing_date_rows:
+        detail = "；".join(missing_date_rows[:5])
+        if len(missing_date_rows) > 5:
+            detail += f"；另有 {len(missing_date_rows) - 5} 个文件缺少必填日期"
+        raise HTTPException(status_code=400, detail=detail)
 
     task = Task(
         id=task_id,
@@ -604,6 +672,22 @@ def batch_generate_from_files(
             )
         )
     db.commit()
+    record_audit_event(
+        db,
+        action="report.batch_queued",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "batch-files",
+            "task_type": "batch",
+            "project_type": project_type,
+            "template_name": template_name,
+            "template_contract_mode": template_contract_mode,
+            "status": "pending",
+            "total_files": len(items),
+        },
+    )
     _write_batch_inputs(
         output_dir=output_dir,
         task_id=task_id,
@@ -641,6 +725,7 @@ def batch_generate_from_files(
 @router.post("/{task_id}/batch/retry-failed", response_model=ApiResponse)
 def retry_failed_batch_files(
     task_id: str,
+    request: Request,
     include_cancelled: bool = False,
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
@@ -714,6 +799,22 @@ def retry_failed_batch_files(
     warnings.append(f"已重试失败文件 {len(retry_items)} 个")
     task.warnings = json.dumps(warnings, ensure_ascii=False)
     db.commit()
+    record_audit_event(
+        db,
+        action="report.batch_retry_queued",
+        resource_type="task",
+        resource_id=task_id,
+        request=request,
+        details={
+            "source": "batch-retry",
+            "task_type": "batch",
+            "project_type": task.project_type,
+            "include_cancelled": include_cancelled,
+            "retry_files": len(retry_items),
+            "status": "pending",
+            "total_files": task.total_files,
+        },
+    )
     _write_batch_report(db, task)
 
     submit_generation_job(

@@ -38,6 +38,31 @@
       </el-col>
     </el-row>
 
+    <section v-if="healthAlerts.length" class="ops-section alert-section">
+      <div class="section-head">
+        <div>
+          <h3>当前告警</h3>
+          <span>按后端阈值实时计算，优先处理红色项</span>
+        </div>
+      </div>
+      <div class="alert-grid">
+        <div
+          v-for="alert in healthAlerts"
+          :key="alert.id"
+          :class="['alert-item', `alert-${alertTone(alert.severity)}`]"
+        >
+          <el-tag size="small" :type="alertTagType(alert.severity)">
+            {{ alert.label }}
+          </el-tag>
+          <div>
+            <strong>{{ alert.title }}</strong>
+            <span>{{ alert.message }}</span>
+            <small v-if="alert.threshold">阈值 {{ alert.threshold }}</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <el-row :gutter="16">
       <el-col :xs="24" :xl="12">
         <section class="ops-section">
@@ -165,6 +190,12 @@
               <strong>{{ formatDate(status?.runtime.maintenance.last_cleanup_at) }}</strong>
             </div>
           </div>
+          <div class="retention-grid">
+            <div v-for="item in retentionRows" :key="item.label">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
           <el-table :data="storageRows" size="small" stripe>
             <el-table-column prop="label" label="存储区" />
             <el-table-column prop="entries" label="一级条目" width="100" align="right" />
@@ -244,7 +275,7 @@ import {
   TrendCharts,
   WarningFilled,
 } from '@element-plus/icons-vue'
-import { opsApi, type OpsStatusPayload } from '@/api/ops'
+import { opsApi, type OpsAlert, type OpsStatusPayload } from '@/api/ops'
 
 type Tone = 'success' | 'warning' | 'danger' | 'info'
 
@@ -258,6 +289,7 @@ let refreshTimer: number | undefined
 const taskCounts = computed(() => status.value?.tasks.counts.by_status || {})
 const downloadSummary = computed(() => status.value?.downloads.summary)
 const diskUsed = computed(() => status.value?.storage.disk.used_percent ?? null)
+const healthAlerts = computed<OpsAlert[]>(() => status.value?.alerts || [])
 
 const backupAgeHours = computed(() => {
   const lastBackup = parseDate(status.value?.runtime.maintenance.last_backup_at)
@@ -443,6 +475,15 @@ const downloadMetrics = computed(() => [
   { label: '最大文件', value: formatMb(downloadSummary.value?.largest_file_mb) },
 ])
 
+const retentionRows = computed(() => [
+  { label: '上传 Excel', value: formatDays(status.value?.retention.upload_keep_days) },
+  { label: '报告产物', value: formatDays(status.value?.retention.report_keep_days) },
+  { label: 'ZIP 包', value: formatDays(status.value?.retention.zip_keep_days) },
+  { label: '审计日志', value: formatDays(status.value?.retention.audit_log_keep_days) },
+  { label: '预览图', value: formatDays(status.value?.retention.preview_keep_days) },
+  { label: '运行日志', value: formatDays(status.value?.retention.log_keep_days) },
+])
+
 const storageRows = computed(() => {
   const labels: Record<string, string> = {
     uploads: '上传 Excel',
@@ -495,6 +536,17 @@ function statusTagType(value?: string | null) {
     unknown: 'info',
   }
   return map[value || 'unknown'] || 'info'
+}
+
+function alertTone(value?: string | null): Tone {
+  if (value === 'danger') return 'danger'
+  if (value === 'warning') return 'warning'
+  if (value === 'success') return 'success'
+  return 'info'
+}
+
+function alertTagType(value?: string | null) {
+  return alertTone(value)
 }
 
 function taskStatusText(value: string) {
@@ -588,6 +640,12 @@ function formatMb(value: number | null | undefined) {
 function formatSpeed(value: number | null | undefined) {
   if (value == null || Number.isNaN(value)) return '-'
   return `${value.toFixed(1)} Mbps`
+}
+
+function formatDays(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return '-'
+  if (value <= 0) return '不清理'
+  return `${value} 天`
 }
 
 watch(autoRefresh, (enabled) => {
@@ -738,6 +796,60 @@ onUnmounted(() => {
   background: #fff;
 }
 
+.alert-section {
+  border-color: #d7dde6;
+}
+
+.alert-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.alert-item {
+  min-height: 82px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.alert-item div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.alert-item strong {
+  font-size: 14px;
+}
+
+.alert-item span,
+.alert-item small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.alert-danger {
+  border-color: #efc4c1;
+  background: #fff5f4;
+}
+
+.alert-warning {
+  border-color: #f1d4a8;
+  background: #fff8ed;
+}
+
+.alert-info {
+  border-color: #cfddea;
+  background: #f5f9fd;
+}
+
 .section-head {
   display: flex;
   align-items: flex-start;
@@ -883,7 +995,8 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
-.maintenance-grid div {
+.maintenance-grid div,
+.retention-grid div {
   min-height: 62px;
   display: flex;
   flex-direction: column;
@@ -894,12 +1007,21 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 
-.maintenance-grid span {
+.retention-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.maintenance-grid span,
+.retention-grid span {
   color: #667085;
   font-size: 12px;
 }
 
-.maintenance-grid strong {
+.maintenance-grid strong,
+.retention-grid strong {
   overflow: hidden;
   font-size: 13px;
   text-overflow: ellipsis;
@@ -907,6 +1029,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1100px) {
+  .alert-grid,
   .metric-grid,
   .metric-grid.compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -923,7 +1046,12 @@ onUnmounted(() => {
     justify-content: space-between;
   }
 
-  .maintenance-grid {
+  .maintenance-grid,
+  .retention-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .alert-grid {
     grid-template-columns: 1fr;
   }
 }
