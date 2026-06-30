@@ -84,7 +84,22 @@ class TargetedDrugMixin:
                     return c
             return None
 
-        for sheet in xl.sheet_names:
+        configured_sheet = str(cfg.get("sheet") or "").strip()
+        if configured_sheet:
+            if configured_sheet in xl.sheet_names:
+                candidate_sheets = [configured_sheet]
+            else:
+                self.logger.warning(
+                    "靶向药物数据库指定sheet不存在，将回退自动查找",
+                    path=str(db_path),
+                    sheet=configured_sheet,
+                    available_sheets=xl.sheet_names,
+                )
+                candidate_sheets = xl.sheet_names
+        else:
+            candidate_sheets = xl.sheet_names
+
+        for sheet in candidate_sheets:
             try:
                 df = xl.parse(sheet)
             except Exception:
@@ -95,6 +110,7 @@ class TargetedDrugMixin:
             level_col = find_col(cols, exact="变异等级")
             c_col = find_col(cols, exact="c_point")
             p_col = find_col(cols, exact="p_point")
+            variant_type_col = find_col(cols, exact="扩增/缺失/融合/胚系/未见突变")
             benefit_col = find_col(cols, contains="潜在获益靶向药物")
             caution_col = find_col(cols, contains="可能耐药") or find_col(
                 cols, contains="慎重"
@@ -119,6 +135,9 @@ class TargetedDrugMixin:
                 "level": str(level_col) if level_col is not None else "",
                 "c": str(c_col) if c_col is not None else "",
                 "p": str(p_col) if p_col is not None else "",
+                "variant_type": str(variant_type_col)
+                if variant_type_col is not None
+                else "",
                 "benefit": str(benefit_col),
                 "caution": str(caution_col),
             }
@@ -168,6 +187,36 @@ class TargetedDrugMixin:
             except Exception:
                 cfg = {}
         rows = cfg.get("reviewed_variant_overrides", []) if isinstance(cfg, dict) else []
+        if not isinstance(rows, list):
+            return []
+        return [dict(row) for row in rows if isinstance(row, dict)]
+
+    def _get_targeted_drug_applicability_rules(self) -> list[dict[str, Any]]:
+        """Load guardrails for broad targeted-drug DB rows.
+
+        These rules are intentionally narrower than reviewed_variant_overrides:
+        they do not create drug conclusions. They only reject over-broad KB rows
+        such as internal gene-level rows for genes whose drug interpretation must
+        be variant-/event-specific.
+        """
+        project_root = Path(getattr(self.config_loader, "project_root", "."))
+        candidates = [
+            project_root / "panels" / "crc_358_msi" / "rules" / "crc.yaml",
+            Path(self.config_loader.config_dir) / "panels" / "crc_358.yaml",
+        ]
+        cfg = {}
+        for cfg_path in candidates:
+            try:
+                if cfg_path.exists():
+                    cfg = self.config_loader.load_yaml(str(cfg_path))
+                    break
+            except Exception:
+                cfg = {}
+        rows = (
+            cfg.get("targeted_drug_applicability_rules", [])
+            if isinstance(cfg, dict)
+            else []
+        )
         if not isinstance(rows, list):
             return []
         return [dict(row) for row in rows if isinstance(row, dict)]
@@ -288,6 +337,64 @@ class TargetedDrugMixin:
             or {}
         )
         return cfg if isinstance(cfg, dict) else {}
+
+    @classmethod
+    def _source_matches_rule(cls, source_db: str, sources: Any) -> bool:
+        values = {str(x).strip().upper() for x in cls._as_text_list(sources)}
+        return not values or str(source_db or "").strip().upper() in values
+
+    def _targeted_drug_db_row_applicable(
+        self,
+        *,
+        gene: str,
+        source_db: str,
+        db_c: str,
+        db_p: str,
+        db_variant_type: str,
+    ) -> bool:
+        """Return whether a DB row may be used for this patient variant.
+
+        Reviewed overrides are checked before the DB lookup and bypass this
+        guardrail. This function only prevents broad KB rows from being treated
+        as variant-specific evidence.
+        """
+        gene_norm = str(gene or "").strip().upper()
+        source_norm = str(source_db or "").strip().upper()
+        variant_type_norm = str(db_variant_type or "").strip().upper()
+
+        for rule in self._get_targeted_drug_applicability_rules():
+            genes = {
+                item.upper()
+                for item in self._as_text_list(rule.get("gene") or rule.get("genes"))
+            }
+            if genes and gene_norm not in genes:
+                continue
+
+            sources = (
+                rule.get("source_db")
+                or rule.get("source_dbs")
+                or rule.get("sources")
+                or rule.get("apply_to_sources")
+            )
+            if not self._source_matches_rule(source_norm, sources):
+                continue
+
+            if bool(rule.get("reject_when_db_position_missing", False)) and not (
+                db_c or db_p
+            ):
+                return False
+
+            required_types = {
+                item.strip().upper()
+                for item in self._as_text_list(
+                    rule.get("required_variant_type")
+                    or rule.get("required_variant_types")
+                )
+            }
+            if required_types and variant_type_norm not in required_types:
+                return False
+
+        return True
 
     @staticmethod
     def _cgi_evidence_rank(evidence: str) -> int:
@@ -505,6 +612,7 @@ class TargetedDrugMixin:
         c_col = cols.get("c") or None
         p_col = cols.get("p") or None
         level_col = cols.get("level") or None
+        variant_type_col = cols.get("variant_type") or None
 
         df = self._targeted_drug_db
         if not gene_col or gene_col not in df.columns:
@@ -588,6 +696,11 @@ class TargetedDrugMixin:
             db_c = self._norm_text(row.get(c_col)) if c_col else ""
             db_p = self._norm_text(row.get(p_col)) if p_col else ""
             db_level = self._norm_text(row.get(level_col)) if level_col else ""
+            db_variant_type = (
+                self._norm_text(row.get(variant_type_col))
+                if variant_type_col
+                else ""
+            )
 
             if db_c:
                 if not c_point or db_c != c_point:
@@ -597,6 +710,14 @@ class TargetedDrugMixin:
                     continue
 
             source_db = self._norm_text(row.get("source_db")).strip().upper()
+            if not self._targeted_drug_db_row_applicable(
+                gene=gene_norm,
+                source_db=source_db,
+                db_c=db_c,
+                db_p=db_p,
+                db_variant_type=db_variant_type,
+            ):
+                continue
             should_filter = filters_enabled and (source_db in apply_sources)
 
             # 生产筛选：必须位点匹配（防止公共库"仅基因级别"条目误入输出）

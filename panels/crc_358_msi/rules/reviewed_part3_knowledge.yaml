@@ -20,6 +20,13 @@ source:
   origin_main_gene_fields_filled: 58
   origin_main_drug_rows_appended: 0
   origin_main_drug_fields_filled: 0
+  knowledge_gap_fill_applied_at: '2026-06-30T12:06:37.135903+00:00'
+  knowledge_gap_fill_policy: Promote conservative gene-level entries for five CRC358
+    genes that had no Part3/base text; no drug conclusion is added.
+  knowledge_gap_fill_source: tmp/knowledge_optimization_step1_20260621/reviewed_part3_knowledge.step1_candidates.yaml
+  low_information_refinement_applied_at: '2026-06-30T12:09:34.669033+00:00'
+  low_information_refinement_policy: Replace generic mutation_analysis wording with
+    pathway/domain-oriented conservative text; no new drug conclusions are added.
 gene_sections:
 - gene: TP53
   c_hgvs: c.844C>T
@@ -145,7 +152,9 @@ gene_sections:
 - gene: FANCA
   intro: 范可尼贫血互补基团（FANC）目前包括FANCA，FANCB，FANCC，FANCD1（BRCA2），FANCD2，FANCE，FANCF，FANCG，FANCI，FANCJ（BRIP1），FANCL，FANCM和FANCN（PALB2）。范可尼贫血症是一种遗传抑制性隐性遗传病，其特点是细胞遗传不稳定、DNA交联剂过敏、染色体断裂增加、DNA修复缺陷。FANCA基因突变是引起范可尼贫血的最常见原因[NCBI]。FANCA可能募集
     SWI/SNF 复合体靶基因，从而使共轭核的转录和DNA修复功能成为可能[11726552]。
-  mutation_analysis: FANCA异常可能导致DNA损伤修复缺陷与基因组不稳定，并可能影响DNA损伤修复相关治疗策略的评估。该基因变异在肿瘤发生发展及DDR通路相关用药判断中具有潜在意义，具体临床价值需结合变异证据等级和肿瘤类型综合判断。
+  mutation_analysis: FANCA属于Fanconi贫血/BRCA DNA链间交联修复通路核心成员，参与FA核心复合体形成、FANCD2/FANCI单泛素化及同源重组修复过程。FANCA功能缺失型变异可提示DNA损伤修复缺陷；普通错义变异需依据变异分级、功能资料和肿瘤背景解释，不能直接等同于明确PARP抑制剂获益标志。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: FANCM
   intro: FANCM编码一种多功能蛋白，FANCM与范可尼贫血（FA）相关蛋白FAAP24能形成稳定的异二聚体复合物，在DNA损伤应答过程中参与FA通路的激活，与其他蛋白共同作用保护细胞免受DNA链间交联损伤。有研究报道FANCM基因中鉴定了一种新的乳腺癌等位基因，其在Fanconi贫血中起（FA）DNA修复途径的作用。3933例乳腺癌患者中检测到4例乳腺癌患者的FANCM
     c.5101C>T突变与肿瘤特征，患者生存期和治疗结果相关[27542569]。有研究表明，FANCM为乳腺癌可能的新型易感基因，该基因突变（包括功能缺失）与乳腺癌的患病风险密切相关[25288723，28033443，29351780]。
@@ -222,10 +231,14 @@ gene_sections:
   intro: POLD1基因编码DNA聚合酶δ催化亚基（DNA polymerase delta, Pold），又名p125，具有聚合酶活性和外切酶活性。Pold是真核生物DNA复制过程中主要的复制酶之一，在DNA复制、损伤修复方面起着重要的作用。研究发现在下颌发育不良、耳聋、早衰、脂肪代谢障碍和非典型Werner综合征的发育障碍中检测出POLD1基因突变，POLD1表达水平的变化及活性与细胞的衰老和个体的衰老有关[27320729]。
 - gene: POLE
   intro: POLE基因编码DNA聚合酶ε的催化亚基。该酶参与DNA修复和染色体DNA的复制。POLE基因突变与结直肠癌、面部畸形、免疫缺陷、青斑以及身材矮小有关[GeneCards]。POLE基因突变与子宫内膜癌亚型中DNA错配修复基因的体细胞突变有关[25224212]。在晚期结直肠癌中，POLE体细胞突变存在但比较少见[29072370]。目前，已在子宫内膜癌、肠癌和胃癌等多种癌症中检测到POLE基因的错义突变、无义突变、沉默突变、移码缺失、插入以及整码缺失。
-  mutation_analysis: POLE变异可能影响DNA复制保真性和肿瘤突变负荷。若变异涉及外切酶结构域并具有功能证据，可能与高突变负荷、免疫治疗获益和预后评估相关；其他区域变异的临床意义需结合位点、结构域和证据等级综合判断。
+  mutation_analysis: POLE编码DNA聚合酶ε催化亚基，参与DNA复制和校对。POLE外切酶结构域致病变异可与超突变表型、免疫治疗敏感性评估和预后分层相关；非外切酶区或证据不足位点需按变异类型、结构域位置、TMB/MSI状态及临床资料解释。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: RAD50
   intro: RAD50基因编码的蛋白与MRE11以及NBN基因编码的蛋白组成MRN复合体，行使修复双链DNA的功能，对维持基因组及其端粒的稳定有重要意义。有研究表明，RAD50基因SNP位点与克罗恩病的易感性相关[16724073]，且有研究发现该基因突变导致患乳腺癌的风险增加[24894818]。有研究报道，RAD50高表达与结直肠癌患者的生存率差相关[29322791]。目前，已经在子宫内膜癌、肠癌和胃癌等多种癌症中观察到RAD50基因发生错义突变、无义突变、沉默突变、移码缺失和插入。
-  mutation_analysis: RAD50变异可能影响MRN复合物功能，导致DNA双链断裂修复缺陷。该基因异常在肿瘤发生发展、DNA损伤修复通路评估及相关治疗策略判断中具有潜在意义，具体临床价值需结合变异证据综合判断。
+  mutation_analysis: RAD50与MRE11、NBN组成MRN复合体，参与DNA双链断裂识别、末端处理、ATM检查点激活和同源重组修复。RAD50截短、移码或关键剪接改变可提示DNA损伤修复通路异常；其在结直肠癌中的用药解释需依据HRD背景、致病性分级和其他HRR基因状态。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: SETD2
   intro: SETD2基因又名KMT3A或HYPB，该基因编码的蛋白是一个含有SET结构域的组蛋白H3K36特异性三甲基转移酶，最早是由人造血干细胞分离的，也是与亨廷顿病的发病机制相关的蛋白[9700202]。在人体中，SETD2是H3K36唯一的三甲基转移酶，参与调节H3K36三甲基化过程（H3K36me3）[12730288，18157086]。SETD2蛋白主要包含WW结构域和AWS-SET-postSET三联结构域，负责与H3K36的特异性结合发挥甲基转移酶活性；保守的低电荷区域(
     low charge region) ，被认为是富有谷氨酰胺和脯氨酸的转录激活结构域；SETD2通过羧基端与高度磷酸化的RNA聚合酶Ⅱ相结合[16118227]。因此SETD2可能是组蛋白甲基化修饰与基因转录调控之间的桥梁。SETD2通过抑制转录起始、激活转录因子p53、参与DNA修复过程和对细胞凋亡基因的调节等防止肿瘤的发生。目前，已在肾透明细胞癌、结直肠癌、乳腺癌、急性淋巴细胞性白血病和晚期脑胶质细胞瘤等多种肿瘤中发现SETD2基因发生突变，而绝大多数突变导致H3K36me3水平降低，表明SETD2的突变导致其编码蛋白失活[20501857，20944102，24509477]。
@@ -332,7 +345,9 @@ gene_sections:
 - gene: BAP1
   intro: BAP1 基因属于去泛素化酶的亚家族：泛素C端水解酶，参与蛋白泛素的去除。基因所编码的酶会与BRCA1蛋白相结合，通过BRCA1上的RING锌指结构域，起到肿瘤抑制因子的作用。此外，所编码的酶能够参与转录的调控、细胞周期及生长的调控、应对
     DNA损伤以及染色体动力学。BAP1基因发生的胚系突变与肿瘤易感性综合征（TPDS）相关，能够导致患肿瘤的风险增加，包括恶性间皮细胞瘤、葡萄膜黑色素瘤以及皮肤黑色素瘤等[23550303]。
-  mutation_analysis: BAP1蛋白参与同源重组相关DNA修复和染色质稳态维持。BAP1功能受损可能导致DNA修复能力下降和基因组不稳定，从而参与肿瘤发生发展。该基因变异的具体临床意义需结合变异类型、结构域位置、证据等级及癌种背景综合判断。
+  mutation_analysis: BAP1编码去泛素化酶，参与染色质调控、DNA损伤应答、细胞周期和细胞死亡过程。BAP1失活在部分肿瘤中具有抑癌基因意义，胚系异常还与BAP1肿瘤易感综合征相关；在结直肠癌报告中按DDR/染色质调控相关基因解释，并依据变异类型、结构域位置和临床资料分层解读。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: BARD1
   intro: BARD1基因编码的蛋白与BRCA1环指区结合形成稳定的二聚体。BARD1与BRCA1相互结合，增强BRCA1的E3连接酶活性，而这种活性在DNA损伤应答和修复相关的多种生物通路中是BRCA1所必须的。有研究报道，在复发性乳腺癌患者中，检测到BARD1有害变体c.1921C>T，该突变为无义突变，通过截短或无义介导的mRNA衰变引起正常蛋白质功能的丧失。大型疾病组的基因组筛查报告在三阴性乳腺癌、神经母细胞瘤和胰腺癌中的检测到这种突变[28174632]。
   mutation_analysis: BARD1功能异常可能导致同源重组修复缺陷和基因组不稳定，并与DNA损伤修复相关治疗策略评估有关。该基因变异可能与疾病发生发展及用药评估相关，需结合变异类型和证据等级判断。
@@ -376,7 +391,9 @@ gene_sections:
   intro: ESR1基因编码一种雌激素受体，属于被雌激素激活的转录因子，同DNA结合、转录活性调节等分子生物学过程有关。ESR1的主要功能是促进性别和生殖功能发育，同时它也参与人体多种生理过程，包括乳腺癌、子宫内膜癌和骨质疏松症[NCBI]。有研究报道，在乳腺癌中，ESR1基因K303R突变可能通过激活IGF-1R/IRS-1/Akt通路，从而对内分泌治疗耐药[26183887]。
 - gene: FANCD2
   intro: FANCD2基因编码的蛋白是范可尼贫血症补体组D2，是范可尼贫血互补组成员之一。该蛋白复合物在范可尼贫血中起作用，在染色体断裂和缺陷DNA修复中发挥作用[GeneCards]。目前，在子宫内膜癌、肠癌和胃癌等癌症中观察到了该基因的错义突变、无义突变、沉默突变、移码缺失和插入。
-  mutation_analysis: FANCD2异常可能造成DNA损伤修复能力下降和基因组不稳定。该通路异常在肿瘤发生发展及DNA损伤修复相关治疗评估中具有潜在意义，具体临床意义需结合变异类型和证据等级综合判断。
+  mutation_analysis: FANCD2是Fanconi贫血通路的关键效应蛋白，单泛素化后的FANCD2参与DNA链间交联损伤修复、复制叉稳定和同源重组修复调控。FANCD2截短、移码或关键剪接改变可作为DDR通路异常线索；普通错义变异需依据位点、功能资料和变异分级解释，避免外推为明确用药依据。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: FANCI
   intro: FANCI基因是范可尼贫血互补组（FANC）的成员之一，其他成员还包括FANCA、FANCB、FANCC、FANCD1（也称为BRCA2）、FANCD2、FANCE、FANCF、FANCG、FANCJ（也称为BRIP1）、FANCL、FANCM和FANCN（也称为PALB2）[GeneCards]。FANCI基因编码的蛋白在DNA修复中起作用。目前，已在甲状腺癌、结肠癌和皮肤癌等癌症中观察到FANCI基因的错义突变、同义突变、无义突变、移码插入和移码缺失。
 - gene: FANCL
@@ -560,10 +577,14 @@ gene_sections:
   intro: PIK3C2G基因编码的蛋白属于磷酸肌醇3-激酶（PI3K）家族。PI3K在细胞增殖、致癌转化、细胞存活、细胞迁移和细胞内蛋白运输的信号通路中起作用。该蛋白含有脂质激酶催化结构域以及C端C2结构域，这是II型PI3K的特征。C2结构域作为钙依赖性磷脂结合基序，其介导蛋白向膜的移位，并且还可介导蛋白之间的相互作用[NCBI]。有研究表明，PIK3C2G低拷贝数是III期结直肠癌预后的重要且独立的预测因子[25785104]。
 - gene: RAD51C
   intro: RAD51C基因编码的蛋白质属于是高度保守的RAD51重组酶的五个旁系同源物（RAD51B、RAD51C、RAD51D、XRCC2、XRCC3）之一。其在哺乳动物细胞中DNA双链断裂（DSB）的同源修复（HR）中起重要作用，介导同源DNA配对和链交换[8929543]。RAD51C被认为是遗传性乳腺癌和卵巢恶性肿瘤的人类癌症易感基因[20400964]。
-  mutation_analysis: RAD51C功能缺失可能导致同源重组修复缺陷，并可能影响PARP抑制剂等DNA损伤修复相关治疗策略评估。该基因变异的临床意义需结合变异类型、功能证据和癌种背景综合判断。
+  mutation_analysis: RAD51C属于RAD51旁系同源重组修复基因，参与DNA双链断裂修复和复制叉保护。RAD51C功能缺失型变异可提示HRR缺陷；在CRC报告中应区分胚系/体细胞来源、致病性分级、HRD背景和药物适应证，避免把任意错义变异直接解释为明确获益证据。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: RAD51D
   intro: RAD51D基因编码蛋白是RAD51蛋白质家族的成员。RAD51家族成员是通过同源重组进行DNA修复所必需的蛋白质。RAD51D蛋白与RAD51家族的其他几个成员形成复合物，包括RAD51L1、RAD51L2和XRCC2。已经证明与该蛋白质形成的蛋白质复合物催化单链和双链DNA之间的同源配对，并被认为在DNA重组修复的早期阶段发挥作用[GeneCards]。目前，已经在结肠癌、皮肤癌和尿道癌等多种癌症中观察到该基因的错义突变、沉默突变和无义突变。
-  mutation_analysis: RAD51D功能缺失可能导致同源重组修复缺陷，并可能影响PARP抑制剂等DNA损伤修复相关治疗策略评估。该基因变异的临床意义需结合变异类型、功能证据和癌种背景综合判断。
+  mutation_analysis: RAD51D参与同源重组修复和RAD51复合体功能维持。RAD51D功能缺失型变异可提示HRR缺陷；在CRC报告中应区分胚系/体细胞来源、致病性分级、HRD背景和药物适应证，避免把任意错义变异直接解释为明确获益证据。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: RAD54B
   intro: RAD54B基因编码的蛋白属于DEAD样解旋酶超家族，与已知参与DNA同源重组和修复的蛋白质酿酒酵母Rad54具有相似性[NCBI]。RAD54B蛋白质在DNA双链断裂的同源重组相关修复中发挥作用。RAD54B在许多癌症类型中发生体细胞突变或缺失，包括结直肠癌、乳腺癌、肺癌等[27902462]。
 - gene: RAD54L
@@ -1007,67 +1028,115 @@ gene_sections:
   c_hgvs: c.1133C>T
   p_hgvs: p.P378L
   intro: ERBB2又名HER2，是表皮生长因子受体家族成员之一。ERBB2可与其他EGF受体家族成员形成异二聚体，激活MAPK、PI3K/AKT等下游信号通路，参与细胞增殖、分化和存活调控。ERBB2扩增、过表达或特定位点突变可见于多种实体瘤，是肿瘤治疗研究中的重要靶点。
-  mutation_analysis: ERBB2基因异常在多种肿瘤中被报道，可能影响HER2相关下游信号通路活性。该样本检出的p.P378L错义变异位于ERBB2胞外区域，现有证据不足以直接等同于ERBB2扩增或HER2过表达；其在结直肠癌中的明确临床意义仍需结合变异证据等级、药物提示表和临床背景综合判断。
+  mutation_analysis: 该样本检出的ERBB2 p.P378L为错义变异，位于HER2胞外结构域。现有证据不足以直接等同于ERBB2扩增或HER2过表达，也不同于已明确整理的ERBB2激酶结构域热点；因此报告中仅按HER2通路相关点突变解释，不自动套用扩增阳性用药口径。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: ERBB2
   c_hgvs: c.2521C>A
   p_hgvs: p.L841I
   intro: ERBB2又名HER2，是表皮生长因子受体家族成员之一。ERBB2可与其他EGF受体家族成员形成异二聚体，激活MAPK、PI3K/AKT等下游信号通路，参与细胞增殖、分化和存活调控。ERBB2扩增、过表达或特定位点突变可见于多种实体瘤，是肿瘤治疗研究中的重要靶点。
-  mutation_analysis: ERBB2基因异常在多种肿瘤中被报道，可能影响HER2相关下游信号通路活性。该样本检出的p.L841I错义变异位于ERBB2蛋白激酶结构域附近/相关区域，可能影响受体酪氨酸激酶功能；但该位点在结直肠癌中的明确临床意义仍需结合证据等级、药物提示表和临床背景综合判断。
+  mutation_analysis: 该样本检出的ERBB2 p.L841I错义变异，位于HER2酪氨酸激酶结构域相关区域。激酶区点突变需区分已知激活热点、耐药位点和证据不足位点；本位点在结直肠癌报告中按HER2通路相关变异呈现，具体药物提示以靶向药物表的位点级匹配结果为准。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: KMT2A
   c_hgvs: c.3950_3954del
   p_hgvs: p.K1317Sfs*7
   intro: KMT2A又称MLL，编码组蛋白甲基转移酶相关转录调控蛋白，参与染色质修饰和基因转录调控。KMT2A异常在急性白血病中较常见，也可在肠癌、胃癌、皮肤癌等实体瘤中检出错义、无义、移码、缺失或融合等改变。
-  mutation_analysis: 该样本检出的KMT2A p.K1317Sfs*7为移码变异，可能导致蛋白翻译提前终止并产生截短蛋白，从而影响KMT2A相关转录调控功能。KMT2A变异可能参与肿瘤发生发展，但该位点在结直肠癌中的明确临床意义仍需结合证据等级和临床背景综合判断。
+  mutation_analysis: 该样本检出的KMT2A p.K1317Sfs*7为移码变异，可造成开放阅读框改变并产生截短蛋白。KMT2A参与组蛋白甲基化相关转录调控；截短型改变更偏向功能缺失线索，报告中按染色质修饰/转录调控相关变异解释，并结合肿瘤背景和变异分级评估。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: KMT2A
   c_hgvs: c.8848A>G
   p_hgvs: p.S2950G
   intro: KMT2A又称MLL，编码组蛋白甲基转移酶相关转录调控蛋白，参与染色质修饰和基因转录调控。KMT2A异常在急性白血病中较常见，也可在肠癌、胃癌、皮肤癌等实体瘤中检出错义、无义、移码、缺失或融合等改变。
-  mutation_analysis: 该样本检出的KMT2A p.S2950G为错义变异，可能影响KMT2A蛋白结构或相关转录调控功能。KMT2A变异可能参与肿瘤发生发展，但该位点在结直肠癌中的明确临床意义仍需结合证据等级和临床背景综合判断。
+  mutation_analysis: 该样本检出的KMT2A p.S2950G为错义变异。KMT2A参与染色质修饰和转录调控；与移码、无义或融合事件相比，单个错义变异的功能后果更依赖位点保守性和功能资料。报告中按染色质调控相关变异呈现，不作为明确靶向用药依据。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: ALK
   c_hgvs: c.3388G>T
   p_hgvs: p.V1130L
   intro: ALK基因编码受体酪氨酸激酶，参与JAK/STAT、PI3K/AKT、RAS/ERK等信号通路调控。ALK异常可通过融合、突变或扩增等形式参与肿瘤发生发展，其中ALK融合在部分肿瘤中具有明确治疗意义。
-  mutation_analysis: 该样本检出的ALK p.V1130L为错义变异，位于ALK蛋白酪氨酸激酶结构域相关区域，可能影响ALK激酶功能及下游信号通路。当前该位点在结直肠癌中的明确临床意义证据有限，需结合变异证据等级和药物提示表综合判断。
+  mutation_analysis: 该样本检出的ALK p.V1130L为错义变异，定位于ALK受体酪氨酸激酶结构域。该结构域负责激酶活性和下游JAK/STAT、PI3K/AKT、RAS/ERK信号传递；在结直肠癌报告中，此类点突变不能按ALK融合阳性口径外推，解读以变异分级、药物提示表和临床资料为准。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: CARD11
   c_hgvs: c.2059G>A
   p_hgvs: p.A687T
   intro: CARD11编码含caspase募集结构域的支架蛋白，参与T、B淋巴细胞受体信号转导及NF-κB通路调控。CARD11异常在部分淋巴系统肿瘤中较常见，也可在实体瘤测序中检出。
-  mutation_analysis: 该样本检出的CARD11 p.A687T为错义变异，位于CARD11蛋白PDZ结构域相关区域，可能影响蛋白相互作用及NF-κB相关信号调控。该位点在结直肠癌中的明确临床意义仍不充分，需结合证据等级和临床背景综合判断。
+  mutation_analysis: 该样本检出的CARD11 p.A687T为错义变异，位于CARD11蛋白PDZ结构域相关区域。CARD11作为淋巴细胞受体信号支架蛋白，可连接CBM复合体与NF-κB通路；在结直肠癌中，该位点不作为明确驱动或用药标志，报告解读以变异分级和共突变背景为准。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: CCND1
   c_hgvs: c.127T>G
   p_hgvs: p.S43A
   intro: CCND1编码细胞周期蛋白D1，是cyclin D1-CDK4/6复合物的重要组成部分，参与调控细胞周期G1/S期转换。CCND1扩增、过表达或突变可影响细胞周期进程，并在多种肿瘤中被报道。
-  mutation_analysis: 该样本检出的CCND1 p.S43A为错义变异，位于cyclin D1蛋白N端功能区域，可能影响细胞周期相关调控。当前该位点在结直肠癌中的明确临床意义证据有限，需结合变异证据等级、共突变背景及临床资料综合判断。
+  mutation_analysis: 该样本检出的CCND1 p.S43A为错义变异，位于cyclin D1蛋白N端调控区域。CCND1参与cyclin D1-CDK4/6复合体形成和G1/S期转换；点突变与扩增/过表达的临床含义不同，本位点按细胞周期通路相关变异描述，并以变异分级和共突变背景解释。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: FAT3
   c_hgvs: c.11941G>A
   p_hgvs: p.G3981S
   intro: FAT3属于FAT钙黏蛋白家族成员，该家族蛋白参与细胞黏附、组织发育和细胞信号调控。FAT家族基因异常可在多种肿瘤中检出，部分成员被认为与肿瘤发生发展相关。
-  mutation_analysis: 该样本检出的FAT3 p.G3981S为错义变异，可能影响FAT3蛋白结构或细胞黏附相关功能。当前该位点在结直肠癌中的明确临床意义证据有限，需结合证据等级和临床背景综合判断。
+  mutation_analysis: 该样本检出的FAT3 p.G3981S为错义变异。FAT3属于FAT钙黏蛋白家族，家族成员参与细胞黏附、组织结构维持和信号调控；本位点位于长链钙黏蛋白相关区域，报告中按细胞黏附/迁移相关长尾变异解释，不作为明确靶向用药标志。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: GNAS
   c_hgvs: c.1030G>A
   p_hgvs: p.E344K
   intro: GNAS编码G蛋白α亚基，参与G蛋白偶联受体介导的信号转导，可调控腺苷酸环化酶和cAMP相关通路。GNAS活化突变可见于多种肿瘤，在结直肠癌等癌种中也有报道。
-  mutation_analysis: 该样本检出的GNAS p.E344K为错义变异，可能影响GNAS相关信号转导功能。GNAS异常可能参与肿瘤发生发展，但该位点并非经典高频热点，其在结直肠癌中的明确临床意义仍需结合证据等级和临床背景综合判断。
+  mutation_analysis: 该样本检出的GNAS p.E344K为错义变异。GNAS编码Gsα亚基，经典活化热点多集中于影响GTP酶活性的特定位点；p.E344K不属于本库已整理的经典热点，报告中按G蛋白-cAMP通路相关变异呈现，并结合变异分级、MSI/TMB及共突变背景解读。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: KMT2B
   c_hgvs: c.1681C>T
   p_hgvs: p.P561S
   intro: KMT2B编码混合系白血病家族相关蛋白，参与染色质修饰和转录调控。KMT2B异常可见于多种实体瘤测序结果中，可能与肿瘤发生发展相关。
-  mutation_analysis: 该样本检出的KMT2B p.P561S为错义变异，可能影响KMT2B相关转录调控功能。当前该位点在结直肠癌中的明确临床意义证据有限，需结合证据等级和临床背景综合判断。
+  mutation_analysis: 该样本检出的KMT2B p.P561S为错义变异。KMT2B属于KMT2/MLL家族，参与H3K4甲基化相关转录调控；本位点按染色质修饰通路相关长尾变异解释，临床口径以变异分级、是否伴随明确驱动变异及样本分子背景为准。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: LRP1B
   c_hgvs: c.1987G>A
   p_hgvs: p.D663N
   intro: LRP1B是低密度脂蛋白受体相关蛋白家族成员，被认为具有候选抑癌基因特征，参与配体内吞、细胞信号转导以及肿瘤浸润和转移相关过程。LRP1B异常可在多种肿瘤中检出。
-  mutation_analysis: 该样本检出的LRP1B p.D663N为错义变异，可能影响LRP1B蛋白结构或相关信号功能。当前该位点在结直肠癌中的明确临床意义证据有限，需结合证据等级、突变负荷及临床背景综合判断。
+  mutation_analysis: 该样本检出的LRP1B p.D663N为错义变异。LRP1B属于低密度脂蛋白受体相关蛋白家族，具有候选抑癌基因特征，并与配体内吞、细胞信号和肿瘤浸润相关；本位点按长尾抑癌相关变异解释，不能单独作为治疗决策依据。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: PDGFB
   c_hgvs: c.671G>A
   p_hgvs: p.R224Q
   intro: PDGFB编码血小板衍生生长因子B亚单位，可通过激活PDGF受体酪氨酸激酶参与细胞增殖、迁移和血管生成等过程。PDGFB异常表达或相关通路改变在多种肿瘤中被报道。
-  mutation_analysis: 该样本检出的PDGFB p.R224Q为错义变异，可能影响PDGFB蛋白结构或PDGF相关信号功能。当前该位点在结直肠癌中的明确临床意义证据有限，需结合证据等级和临床背景综合判断。
+  mutation_analysis: 该样本检出的PDGFB p.R224Q为错义变异。PDGFB编码血小板衍生生长因子B亚单位，参与PDGF受体介导的细胞增殖、迁移和血管生成信号；该点突变不同于PDGFB重排或明确过表达事件，报告中按PDGF通路相关变异呈现。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 - gene: PTPRS
   c_hgvs: c.3073G>A
   p_hgvs: p.V1025I
   intro: PTPRS编码受体型蛋白酪氨酸磷酸酶，参与细胞生长、分化、信号转导和细胞间相互作用调控。PTPRS异常在多种肿瘤中被报道，可能具有肿瘤抑制相关作用。
-  mutation_analysis: 该样本检出的PTPRS p.V1025I为错义变异，可能影响PTPRS蛋白结构或酪氨酸磷酸酶相关信号调控。当前该位点在结直肠癌中的明确临床意义证据有限，需结合证据等级和临床背景综合判断。
+  mutation_analysis: 该样本检出的PTPRS p.V1025I为错义变异。PTPRS编码受体型蛋白酪氨酸磷酸酶，参与细胞黏附、轴突导向和酪氨酸磷酸化信号调控；本位点按磷酸酶信号相关长尾变异解释，不作为明确靶向用药标志。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
+- gene: CHD2
+  intro: CHD2基因编码染色质结构调控相关的ATP依赖性染色质重塑蛋白，属于CHD家族，含有chromodomain和SNF2相关ATPase/helicase结构域，参与染色质开放状态、转录调控和基因组稳定性维持。
+  mutation_analysis: CHD2变异可能影响染色质重塑和转录调控过程。当前CHD2在结直肠癌中的位点级用药或预后证据有限，建议作为染色质重塑相关长尾基因谨慎解释；若检出无义、移码、剪接等可能功能缺失型变异，应结合变异等级、等位基因频率、共突变背景和临床资料综合判断。
+  source_note: NCBI Gene 1106；MedlinePlus Genetics CHD2；候选中文表述需医学审核。
+- gene: HIST1H3B
+  intro: HIST1H3B（现行命名中常对应H3C2）编码复制依赖性组蛋白H3家族成员，是核小体核心组分，参与DNA包装为染色质，并影响转录、DNA复制、DNA修复和染色体稳定性。
+  mutation_analysis: HIST1H3B变异可能影响组蛋白H3相关染色质结构和表观遗传调控。当前该基因在结直肠癌中的明确位点级临床证据有限，需结合变异是否位于已知组蛋白功能位点、变异等级及肿瘤分子背景综合判断。
+  source_note: NCBI Gene 8358/H3C2；Human Protein Atlas/UniProt function summary；候选中文表述需医学审核。
+- gene: HLA-DPA1
+  intro: HLA-DPA1编码MHC II类DP分子的α链，与DPβ链形成膜结合异二聚体，主要在抗原递呈细胞中表达，参与外源性抗原肽递呈和CD4+T细胞免疫应答。
+  mutation_analysis: HLA-DPA1异常可能与抗原递呈能力和肿瘤免疫微环境相关。单个HLA-DPA1体细胞变异通常不足以直接给出用药结论，建议结合MSI/TMB、HLA表达或缺失、免疫相关共变异及证据等级综合评估。
+  source_note: NCBI Gene/Datasets 3113；RefSeq/HLA class II function summary；候选中文表述需医学审核。
+- gene: WDR90
+  intro: WDR90编码WD重复结构域蛋白，公开资料提示其与中心粒结构、纤毛发生和微管相关结构维持有关。WD重复蛋白常作为蛋白复合体装配或信号调控的支架蛋白。
+  mutation_analysis: WDR90在结直肠癌中的明确临床证据有限。检出WDR90变异时，建议以长尾基因谨慎解释，重点结合变异类型、证据等级、是否影响关键结构域，以及是否存在其他明确驱动或用药相关变异综合判断。
+  source_note: UniProt Q96KV7；GeneCards/Harmonizome function summaries；候选中文表述需医学审核。
+- gene: ZNF703
+  intro: ZNF703编码锌指蛋白703，属于转录调控相关蛋白，公开资料提示其与细胞黏附、迁移和增殖调控有关，并在部分肿瘤中作为扩增或过表达相关基因受到关注。
+  mutation_analysis: ZNF703编码锌指蛋白703，属于转录调控相关蛋白，在部分肿瘤中以扩增或过表达事件受到关注。若检出ZNF703变异，报告中应区分扩增、截短和普通错义改变；在CRC场景下主要作为转录调控/增殖迁移相关长尾基因解释，不单独给出治疗结论。
+  source_note: UniProt Q9H7S9；ZNF703 cancer review；候选中文表述需医学审核。
+  refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
+    wording only.
 drug_sections:
 - gene: TP53
   c_hgvs: c.844C>T

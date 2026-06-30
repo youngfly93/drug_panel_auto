@@ -36,6 +36,7 @@ def _attach_db(mapper: FieldMapper, df: pd.DataFrame) -> None:
         "level": "变异等级",
         "c": "c_point",
         "p": "p_point",
+        "variant_type": "扩增/缺失/融合/胚系/未见突变",
         "benefit": "潜在获益靶向药物（证据等级）",
         "caution": "可能耐药或慎重药物（证据等级）",
     }
@@ -59,6 +60,235 @@ def test_reviewed_variant_override_can_be_limited_to_loss_of_function(tmp_path):
     assert lof == ("依维莫司（C）", "--")
     assert splice == ("依维莫司（C）", "--")
     assert missense is None
+
+
+def test_targeted_drug_db_uses_configured_sheet(tmp_path):
+    db_path = tmp_path / "targeted.xlsx"
+    bad = pd.DataFrame(
+        [
+            {
+                "基因名称": "EGFR",
+                "变异等级": "",
+                "c_point": "",
+                "p_point": "p.L858R",
+                "潜在获益靶向药物（证据等级）": "WrongSheetDrug",
+                "可能耐药或慎重药物（证据等级）": "--",
+            }
+        ]
+    )
+    good = pd.DataFrame(
+        [
+            {
+                "基因名称": "EGFR",
+                "变异等级": "",
+                "c_point": "",
+                "p_point": "p.L858R",
+                "潜在获益靶向药物（证据等级）": "ConfiguredSheetDrug",
+                "可能耐药或慎重药物（证据等级）": "--",
+            }
+        ]
+    )
+    with pd.ExcelWriter(db_path, engine="openpyxl") as writer:
+        bad.to_excel(writer, sheet_name="first_sheet", index=False)
+        good.to_excel(writer, sheet_name="public_targeted_drug_tips", index=False)
+
+    mapper = _make_mapper(
+        tmp_path,
+        {
+            "knowledge_bases": {
+                "targeted_drug_db": {
+                    "enabled": True,
+                    "path": str(db_path),
+                    "sheet": "public_targeted_drug_tips",
+                }
+            }
+        },
+    )
+
+    benefit, _caution, score = mapper._lookup_targeted_drugs_for_variant(
+        "EGFR",
+        c_point="c.2573T>G",
+        p_point="p.L858R",
+        variant_level="Ⅱ类",
+        cancer_type="结直肠癌",
+    )
+    assert "ConfiguredSheetDrug" in benefit
+    assert "WrongSheetDrug" not in benefit
+    assert score > 0
+
+
+def test_p0_internal_gene_level_row_is_rejected_by_applicability_rule(tmp_path):
+    mapper = _make_mapper(
+        tmp_path,
+        {"knowledge_bases": {"targeted_drug_db": {"enabled": True}}},
+    )
+    mapper._get_targeted_drug_applicability_rules = lambda: [
+        {
+            "genes": ["TP53"],
+            "sources": ["internal"],
+            "reject_when_db_position_missing": True,
+        }
+    ]
+    _attach_db(
+        mapper,
+        pd.DataFrame(
+            [
+                {
+                    "基因名称": "TP53",
+                    "变异等级": "",
+                    "c_point": "",
+                    "p_point": "",
+                    "扩增/缺失/融合/胚系/未见突变": "",
+                    "潜在获益靶向药物（证据等级）": "OverbroadInternalDrug",
+                    "可能耐药或慎重药物（证据等级）": "--",
+                    "source_db": "internal",
+                }
+            ]
+        ),
+    )
+
+    benefit, caution, score = mapper._lookup_targeted_drugs_for_variant(
+        "TP53",
+        c_point="c.844C>T",
+        p_point="p.R282W",
+        variant_level="Ⅱ类",
+        cancer_type="结直肠癌",
+    )
+    assert benefit == "--"
+    assert caution == "--"
+    assert score == 0.0
+
+
+def test_p0_internal_variant_level_row_is_still_allowed(tmp_path):
+    mapper = _make_mapper(
+        tmp_path,
+        {"knowledge_bases": {"targeted_drug_db": {"enabled": True}}},
+    )
+    mapper._get_targeted_drug_applicability_rules = lambda: [
+        {
+            "genes": ["TP53"],
+            "sources": ["internal"],
+            "reject_when_db_position_missing": True,
+        }
+    ]
+    _attach_db(
+        mapper,
+        pd.DataFrame(
+            [
+                {
+                    "基因名称": "TP53",
+                    "变异等级": "",
+                    "c_point": "c.659A>G",
+                    "p_point": "p.Y220C",
+                    "扩增/缺失/融合/胚系/未见突变": "",
+                    "潜在获益靶向药物（证据等级）": "SpecificInternalDrug",
+                    "可能耐药或慎重药物（证据等级）": "--",
+                    "source_db": "internal",
+                }
+            ]
+        ),
+    )
+
+    benefit, _caution, score = mapper._lookup_targeted_drugs_for_variant(
+        "TP53",
+        c_point="c.659A>G",
+        p_point="p.Y220C",
+        variant_level="Ⅱ类",
+        cancer_type="结直肠癌",
+    )
+    assert benefit == "SpecificInternalDrug"
+    assert score > 0
+
+
+def test_p0_internal_wildcard_variant_row_is_still_allowed(tmp_path):
+    mapper = _make_mapper(
+        tmp_path,
+        {"knowledge_bases": {"targeted_drug_db": {"enabled": True}}},
+    )
+    mapper._get_targeted_drug_applicability_rules = lambda: [
+        {
+            "genes": ["KRAS"],
+            "sources": ["internal"],
+            "reject_when_db_position_missing": True,
+        }
+    ]
+    _attach_db(
+        mapper,
+        pd.DataFrame(
+            [
+                {
+                    "基因名称": "KRAS",
+                    "变异等级": "",
+                    "c_point": "",
+                    "p_point": "p.G12X(X为除C、D外的任何氨基酸)",
+                    "扩增/缺失/融合/胚系/未见突变": "",
+                    "潜在获益靶向药物（证据等级）": "KrasWildcardDrug",
+                    "可能耐药或慎重药物（证据等级）": "--",
+                    "source_db": "internal",
+                }
+            ]
+        ),
+    )
+
+    benefit, _caution, score = mapper._lookup_targeted_drugs_for_variant(
+        "KRAS",
+        c_point="c.35G>C",
+        p_point="p.G12A",
+        variant_level="Ⅱ类",
+        cancer_type="结直肠癌",
+    )
+    assert benefit == "KrasWildcardDrug"
+    assert score > 0
+
+
+def test_reviewed_override_bypasses_p0_internal_guardrail(tmp_path):
+    mapper = _make_mapper(
+        tmp_path,
+        {"knowledge_bases": {"targeted_drug_db": {"enabled": True}}},
+    )
+    mapper._get_targeted_drug_applicability_rules = lambda: [
+        {
+            "genes": ["TSC1"],
+            "sources": ["internal"],
+            "reject_when_db_position_missing": True,
+        }
+    ]
+    mapper._get_reviewed_variant_overrides = lambda: [
+        {
+            "gene": "TSC1",
+            "applicability": "loss_of_function",
+            "benefit_drugs": ["依维莫司（C）"],
+            "caution_drugs": "--",
+        }
+    ]
+    _attach_db(
+        mapper,
+        pd.DataFrame(
+            [
+                {
+                    "基因名称": "TSC1",
+                    "变异等级": "",
+                    "c_point": "",
+                    "p_point": "",
+                    "扩增/缺失/融合/胚系/未见突变": "",
+                    "潜在获益靶向药物（证据等级）": "OverbroadInternalDrug",
+                    "可能耐药或慎重药物（证据等级）": "--",
+                    "source_db": "internal",
+                }
+            ]
+        ),
+    )
+
+    benefit, caution, score = mapper._lookup_targeted_drugs_for_variant(
+        "TSC1",
+        c_point="c.1963C>T",
+        p_point="p.Q655*",
+        variant_level="Ⅱ类",
+        cancer_type="结直肠癌",
+    )
+    assert benefit == "依维莫司（C）"
+    assert caution == "--"
+    assert score == 100.0
 
 
 def _lung_settings() -> dict:

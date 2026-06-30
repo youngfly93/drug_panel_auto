@@ -520,9 +520,11 @@ knowledge_bases:
   targeted_drug_db:
     enabled: true
     # 由 tools/knowledge_bases/build_public_kb.py 生成：
-    # - sheet `targeted_drug_tips`: internal + public (CIViC/CGI) 合并结果（程序默认读取第一个可用sheet）
+    # - sheet `targeted_drug_tips`: internal + public (CIViC/CGI) 合并结果
     # - 其他sheet仅用于溯源/对照
     path: "data/knowledge_bases/processed/targeted_drug_db_public.xlsx"
+    # 显式锁定生产主表，避免后续有人调整 Excel sheet 顺序后静默切错表。
+    sheet: "targeted_drug_tips"
     # 生产级筛选策略（建议启用后再进入生产输出）：
     # - 按癌种：仅使用与当前癌种匹配的条目（CGI: Primary Tumor type / CIViC: disease）
     # - 按证据等级：过滤掉低证据条目（避免“研究级/个案”进入终版报告）

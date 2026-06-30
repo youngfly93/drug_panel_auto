@@ -135,6 +135,27 @@ panel_display_genes:
     transcript: NM_000546.6
     chromosome: "17"
 
+# Targeted-drug DB guardrails.
+# These rows do not create drug conclusions. They only reject over-broad
+# internal KB rows for P0 genes where drug interpretation must be driven by a
+# reviewed override or a row with explicit c_point/p_point.
+targeted_drug_applicability_rules:
+  - genes:
+      - EGFR
+      - ERBB2
+      - KRAS
+      - NRAS
+      - BRAF
+      - NTRK1
+      - NTRK2
+      - NTRK3
+      - TP53
+      - TSC1
+    sources:
+      - internal
+    reject_when_db_position_missing: true
+    note: "P0药物规则护栏：内部库只有基因、无位点/事件的泛化行不进入2.1靶向用药提示；已审核reviewed override仍优先生效。"
+
 # Reviewed variant-level overrides.
 # Use this only for lab-reviewed rules that should override the public/internal KB.
 reviewed_variant_overrides:

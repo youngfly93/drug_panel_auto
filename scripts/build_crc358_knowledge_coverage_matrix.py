@@ -1,476 +1,521 @@
 #!/usr/bin/env python3
-"""Build a CRC358 knowledge coverage matrix.
+"""Build a CRC358 production knowledge coverage matrix.
 
-This workbook is a planning/audit artifact. It does not change production
-knowledge. It combines the template gene list, Part3 reviewed overlay, base
-gene KB, targeted drug KB, immune KB, and pressure-test gap workbook.
+The script is read-only for production knowledge bases. It extracts the 358
+gene list from the approved CRC358 golden template, compares it with the
+current reviewed Part3 overlay, targeted drug table, immune gene table, and
+CRC rule overrides, then writes review artifacts under ``tmp/``.
 """
 
 from __future__ import annotations
 
 import argparse
+import html
+import json
 import re
-import sys
+import zipfile
 from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import yaml
-from docx import Document
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
-from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
+DEFAULT_TEMPLATE = Path("panels/crc_358_msi/templates/crc_358_msi_golden_template_v0.docx")
+DEFAULT_OVERLAY = Path("panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml")
+DEFAULT_CRC_RULES = Path("panels/crc_358_msi/rules/crc.yaml")
+DEFAULT_TARGETED_DB = Path("data/knowledge_bases/processed/targeted_drug_db_public.xlsx")
+DEFAULT_IMMUNE_DB = Path("data/knowledge_bases/processed/immune_gene_list_public.xlsx")
+DEFAULT_GENE_DB = Path("data/knowledge_bases/processed/gene_knowledge_db.xlsx")
+DEFAULT_OUT_DIR = Path("tmp/knowledge_coverage")
 
-
-GENE_RE = re.compile(r"^[A-Z][A-Z0-9-]{1,15}$")
-
-
-def _clean(value: Any) -> str:
-    text = str(value or "").strip()
-    if text.lower() in {"nan", "none", "null"}:
-        return ""
-    return text
-
-
-def _is_gene(value: Any) -> bool:
-    text = _clean(value).upper()
-    return bool(GENE_RE.match(text)) and text not in {"GENE", "LIST", "MLSEQ"}
-
-
-def _extract_template_gene_list(template_docx: Path) -> list[str]:
-    doc = Document(template_docx)
-    best: list[str] = []
-    for table in doc.tables:
-        first_row = " ".join(cell.text for cell in table.rows[0].cells) if table.rows else ""
-        if "Gene List for MLseq" not in first_row and "n=358" not in first_row:
-            continue
-        genes: list[str] = []
-        for row in table.rows[1:]:
-            for cell in row.cells:
-                gene = _clean(cell.text).upper()
-                if _is_gene(gene):
-                    genes.append(gene)
-        # Preserve template order while removing duplicate cells caused by Word
-        # merged-cell quirks.
-        ordered = []
-        seen = set()
-        for gene in genes:
-            if gene not in seen:
-                seen.add(gene)
-                ordered.append(gene)
-        if len(ordered) > len(best):
-            best = ordered
-    return best
+LOW_INFO_PATTERNS = (
+    "具体临床价值需结合",
+    "潜在意义",
+    "可能影响",
+    "综合判断",
+    "肿瘤发生发展",
+    "证据等级",
+    "相关治疗策略",
+    "有待明确",
+    "尚未见",
+    "较少",
+)
+SPECIAL_RULE_GENES = {"KRAS", "NRAS", "BRAF", "NTRK1", "NTRK2", "NTRK3", "ERBB2", "EGFR", "TSC1", "TP53"}
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
+def clean(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def norm_gene(value: Any) -> str:
+    return clean(value).upper()
+
+
+def load_yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def _load_provider(project_root: Path) -> GeneKnowledgeProvider:
-    settings = _load_yaml(project_root / "config/settings.yaml")
-    gene_cfg = dict(settings["knowledge_bases"]["gene_knowledge_db"])
-    gene_cfg["reviewed_part3_overlay_path"] = (
-        "panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml"
-    )
-    provider = GeneKnowledgeProvider(
-        {
-            "enabled": True,
-            "gene_knowledge_db": gene_cfg,
-            "gene_transcript_db": {"enabled": False},
-        }
-    )
-    provider.load(str(project_root))
-    return provider
+def docx_table_cells(path: Path) -> list[list[str]]:
+    xml = zipfile.ZipFile(path).read("word/document.xml").decode("utf-8", "ignore")
+    tables: list[list[str]] = []
+    for tbl in re.findall(r"<w:tbl[ >].*?</w:tbl>", xml, re.S):
+        cells: list[str] = []
+        for tc in re.findall(r"<w:tc[ >].*?</w:tc>", tbl, re.S):
+            texts = re.findall(r"<w:t[^>]*>(.*?)</w:t>", tc, re.S)
+            text = "".join(re.sub(r"<[^>]+>", "", item) for item in texts)
+            cells.append(html.unescape(text).strip())
+        tables.append(cells)
+    return tables
 
 
-def _overlay_variant_counts(provider: GeneKnowledgeProvider) -> Counter[str]:
-    counts: Counter[str] = Counter()
-    for key in provider._reviewed_gene_section_overrides:
-        gene = key.split("|", 1)[0]
-        counts[gene] += 1
-    return counts
+def extract_crc358_panel_genes(template_path: Path) -> list[str]:
+    for cells in docx_table_cells(template_path):
+        if cells and "Gene List for MLseq" in cells[0]:
+            genes = [norm_gene(cell) for cell in cells[1:] if norm_gene(cell)]
+            duplicate_genes = [gene for gene, count in Counter(genes).items() if count > 1]
+            if duplicate_genes:
+                raise ValueError(f"Duplicated genes in template gene list: {duplicate_genes[:10]}")
+            return genes
+    raise ValueError(f"Gene List for MLseq table not found in {template_path}")
 
 
-def _load_crc_rule_sets(path: Path) -> dict[str, set[str]]:
-    data = _load_yaml(path)
+def low_info_hits(text: str) -> list[str]:
+    return [pattern for pattern in LOW_INFO_PATTERNS if pattern in clean(text)]
+
+
+def overlay_indexes(path: Path) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    data = load_yaml(path)
+    gene_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    drug_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in data.get("gene_sections") or []:
+        gene = norm_gene(row.get("gene"))
+        if gene:
+            gene_rows[gene].append(row)
+    for row in data.get("drug_sections") or []:
+        gene = norm_gene(row.get("gene"))
+        if gene:
+            drug_rows[gene].append(row)
+    return gene_rows, drug_rows
+
+
+def crc_rule_indexes(path: Path) -> dict[str, Any]:
+    data = load_yaml(path)
+    class_i = {norm_gene(gene) for gene in data.get("class_i_genes") or []}
+    class_ii = {norm_gene(gene) for gene in data.get("class_ii_genes") or []}
+    important = {norm_gene(gene) for gene in data.get("crc_important_genes") or []}
+    display = {norm_gene(row.get("name")) for row in data.get("panel_display_genes") or [] if row.get("name")}
+    overrides: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in data.get("reviewed_variant_overrides") or []:
+        gene = norm_gene(row.get("gene"))
+        if gene:
+            overrides[gene].append(row)
     return {
-        "class_i": {str(x).upper() for x in data.get("class_i_genes") or []},
-        "class_ii": {str(x).upper() for x in data.get("class_ii_genes") or []},
-        "important": {str(x).upper() for x in data.get("crc_important_genes") or []},
-        "drug_override": {
-            str(row.get("gene", "")).upper()
-            for row in data.get("reviewed_variant_overrides") or []
-            if row.get("gene")
-        },
+        "class_i": class_i,
+        "class_ii": class_ii,
+        "important": important,
+        "display": display,
+        "overrides": overrides,
     }
 
 
-def _load_targeted_drug_counts(path: Path) -> dict[str, Counter[str]]:
-    counts: dict[str, Counter[str]] = defaultdict(Counter)
-    if not path.exists():
-        return counts
-    df = pd.read_excel(path, sheet_name="targeted_drug_tips")
-    for _, row in df.iterrows():
-        gene = _clean(row.get("基因名称")).upper()
-        if not _is_gene(gene):
-            continue
-        benefit = _clean(row.get("潜在获益靶向药物（证据等级）"))
-        caution = _clean(row.get("可能耐药或慎重药物（证据等级）"))
-        source = _clean(row.get("source_db")) or "unknown"
-        counts[gene]["total"] += 1
-        counts[gene][f"source:{source}"] += 1
-        if benefit and benefit not in {"--", "-"}:
-            counts[gene]["benefit"] += 1
-        if caution and caution not in {"--", "-"}:
-            counts[gene]["caution"] += 1
-    return counts
-
-
-def _load_immune_sets(path: Path) -> dict[str, set[str]]:
-    result = {"positive": set(), "negative": set(), "hyper": set()}
-    if not path.exists():
-        return result
-    df = pd.read_excel(path, sheet_name="immune_gene_list")
-    col_map = {
-        "positive": "免疫治疗正相关基因",
-        "negative": "免疫治疗负相关基因",
-        "hyper": "免疫超进展相关基因",
+def targeted_drug_indexes(path: Path) -> dict[str, Any]:
+    wb = load_workbook(path, read_only=True, data_only=True)
+    result: dict[str, Any] = {
+        "exact": defaultdict(list),
+        "internal": defaultdict(list),
+        "public": defaultdict(list),
+        "composite_mentions": defaultdict(list),
+        "sheet_rows": {},
     }
-    for key, col in col_map.items():
-        if col not in df.columns:
+    sheet_aliases = {
+        "targeted_drug_tips": "exact",
+        "internal_targeted_drug_tips": "internal",
+        "public_targeted_drug_tips": "public",
+    }
+    for sheet_name, bucket in sheet_aliases.items():
+        if sheet_name not in wb.sheetnames:
             continue
-        for value in df[col].dropna():
-            gene = _clean(value).upper()
-            if _is_gene(gene):
-                result[key].add(gene)
+        ws = wb[sheet_name]
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            continue
+        headers = [clean(value) for value in rows[0]]
+        result["sheet_rows"][sheet_name] = max(0, len(rows) - 1)
+        gene_idx = headers.index("基因名称") if "基因名称" in headers else 0
+        for excel_row, raw in enumerate(rows[1:], start=2):
+            gene_value = norm_gene(raw[gene_idx] if gene_idx < len(raw) else "")
+            if not gene_value:
+                continue
+            row = {
+                "excel_row": excel_row,
+                "sheet": sheet_name,
+                "gene_value": gene_value,
+                "raw": raw,
+                "headers": headers,
+            }
+            if "/" in gene_value:
+                for part in gene_value.split("/"):
+                    part = norm_gene(part)
+                    if part:
+                        result["composite_mentions"][part].append(row)
+            else:
+                result[bucket][gene_value].append(row)
+    wb.close()
     return result
 
 
-def _load_gap_counts(path: Path | None) -> dict[str, Counter[str]]:
-    counts: dict[str, Counter[str]] = defaultdict(Counter)
-    if not path or not path.exists():
-        return counts
-    wb = load_workbook(path)
-    if "缺口明细" in wb.sheetnames:
-        ws = wb["缺口明细"]
-        headers = [_clean(c.value) for c in ws[1]]
-        idx = {h: i for i, h in enumerate(headers)}
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            gene = _clean(row[idx.get("基因", -1)]).upper() if "基因" in idx else ""
-            if not _is_gene(gene):
-                continue
-            counts[gene]["pressure_variants"] += 1
-            risk = _clean(row[idx.get("固定套话风险", -1)]) if "固定套话风险" in idx else ""
-            priority = _clean(row[idx.get("优先级", -1)]) if "优先级" in idx else ""
-            status = _clean(row[idx.get("覆盖状态", -1)]) if "覆盖状态" in idx else ""
-            if risk == "高":
-                counts[gene]["high_risk"] += 1
-            if priority:
-                counts[gene][f"priority:{priority}"] += 1
-            if status:
-                counts[gene][f"status:{status}"] += 1
-    if "待审核候选内容" in wb.sheetnames:
-        ws = wb["待审核候选内容"]
-        headers = [_clean(c.value) for c in ws[1]]
-        idx = {h: i for i, h in enumerate(headers)}
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            gene = _clean(row[idx.get("基因", -1)]).upper() if "基因" in idx else ""
-            if _is_gene(gene):
-                counts[gene]["review_candidates"] += 1
-    return counts
+def immune_indexes(path: Path) -> dict[str, set[str]]:
+    wb = load_workbook(path, read_only=True, data_only=True)
+    result = {"positive": set(), "negative": set(), "hyper": set()}
+    if "immune_gene_list" not in wb.sheetnames:
+        return result
+    ws = wb["immune_gene_list"]
+    for row in ws.iter_rows(min_row=3, values_only=True):
+        if len(row) > 0 and norm_gene(row[0]):
+            result["positive"].add(norm_gene(row[0]))
+        if len(row) > 1 and norm_gene(row[1]):
+            result["negative"].add(norm_gene(row[1]))
+        if len(row) > 2 and norm_gene(row[2]):
+            result["hyper"].add(norm_gene(row[2]))
+    wb.close()
+    return result
 
 
-def _part3_level(
-    *,
+def base_gene_db_index(path: Path) -> set[str]:
+    wb = load_workbook(path, read_only=True, data_only=True)
+    genes: set[str] = set()
+    if "基因变异解析" in wb.sheetnames:
+        ws = wb["基因变异解析"]
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            gene = norm_gene(row[0] if row else "")
+            if gene and re.match(r"^[A-Z0-9-]+$", gene):
+                genes.add(gene)
+    wb.close()
+    return genes
+
+
+def yes(value: bool) -> str:
+    return "是" if value else "否"
+
+
+def recommend_action(
     gene: str,
-    provider: GeneKnowledgeProvider,
-    variant_count: int,
-) -> str:
-    gene_key = provider._hgvs_key(gene)
-    if variant_count:
-        return "A 位点级已审核"
-    if gene_key in provider._gene_level_section_overrides:
-        return "B 基因级已审核"
-    if gene in provider._reviewed_gene_analysis_cache:
-        return "C 基础库可自动拼接"
-    if gene in provider._gene_analysis_cache or gene in provider._gene_intro_cache:
-        return "D 基础库通用"
-    return "E 缺失"
+    has_overlay: bool,
+    has_intro: bool,
+    has_mutation: bool,
+    low_info_count: int,
+    has_base: bool,
+    is_critical: bool,
+    is_special: bool,
+    targeted_exact_count: int,
+) -> tuple[str, str, str]:
+    if not has_overlay and is_critical:
+        return "P0", "关键基因缺少 reviewed Part3 覆盖", "优先补基因简介和 CRC 语境变异解析"
+    if is_special:
+        return "P0", "药物/免疫规则需结构化确认", "核对触发条件，必要时拆成位点/变异类型/组合规则"
+    if not has_overlay and not has_base:
+        return "P1", "panel 基因无生产解析覆盖", "补 gene-level reviewed 简介与基础解析"
+    if not has_overlay:
+        return "P2", "仅基础库覆盖，未进入 reviewed overlay", "评估是否需要升级为 CRC reviewed 文案"
+    if not has_intro or not has_mutation:
+        return "P1", "reviewed 条目字段不完整", "补齐 intro/mutation_analysis"
+    if low_info_count:
+        return "P1", "存在低信息量/套话风险", "用更具体的通路、CRC 证据或位点意义替换"
+    if is_critical and targeted_exact_count == 0:
+        return "P2", "关键基因无精确用药主表行", "确认是否应有用药提示或仅作为 Part3 解释"
+    return "", "", "保持现状，后续随真实样本补库"
 
 
-def _suggestion(row: dict[str, Any]) -> str:
-    level = row["Part3覆盖级别"]
-    high = int(row["压测高风险次数"] or 0)
-    p0p1 = int(row["P0/P1次数"] or 0)
-    candidates = int(row["待审核候选数"] or 0)
-    drug_total = int(row["靶向药物条目数"] or 0)
-    if high and p0p1:
-        return "优先补位点级/基因级内容，报告组审核后入库"
-    if level == "E 缺失":
-        return "补基因级兜底内容"
-    if level == "D 基础库通用" and candidates:
-        return "已有候选，待报告组审核升级"
-    if level == "D 基础库通用":
-        return "后续从历史报告补充肠癌语境"
-    if level.startswith("C") and high:
-        return "抽查拼接效果，必要时升级为已审核"
-    if drug_total and not (row["免疫正相关"] or row["免疫负相关"] or row["免疫超进展相关"]):
-        return "药物已有覆盖，按压测结果抽查"
-    return "维持，后续按反馈补充"
+def build_matrix(args: argparse.Namespace) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+    panel_genes = extract_crc358_panel_genes(args.template)
+    gene_overlay, drug_overlay = overlay_indexes(args.overlay)
+    rules = crc_rule_indexes(args.crc_rules)
+    targeted = targeted_drug_indexes(args.targeted_db)
+    immune = immune_indexes(args.immune_db)
+    base_genes = base_gene_db_index(args.gene_db)
+    panel_set = set(panel_genes)
 
+    matrix: list[dict[str, Any]] = []
+    low_info_rows: list[dict[str, Any]] = []
+    rule_todos: list[dict[str, Any]] = []
 
-def _append_table(ws, headers: list[str], rows: list[list[Any]]) -> None:
-    ws.append(headers)
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    for row in rows:
-        ws.append(row)
-    for row in ws.iter_rows(min_row=2):
-        for cell in row:
-            cell.alignment = Alignment(vertical="top", wrap_text=True)
-    ws.freeze_panes = "A2"
-    for idx, header in enumerate(headers, start=1):
-        max_len = len(str(header))
-        for col in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
-            for cell in col:
-                max_len = max(max_len, min(len(str(cell.value or "")), 60))
-        ws.column_dimensions[get_column_letter(idx)].width = min(max(max_len + 2, 10), 34)
-
-
-def build_matrix(
-    *,
-    project_root: Path,
-    template_docx: Path,
-    crc_rules: Path,
-    targeted_drug_db: Path,
-    immune_gene_db: Path,
-    gap_xlsx: Path | None,
-    output: Path,
-) -> dict[str, Any]:
-    genes = _extract_template_gene_list(template_docx)
-    provider = _load_provider(project_root)
-    rule_sets = _load_crc_rule_sets(crc_rules)
-    variant_overlay_counts = _overlay_variant_counts(provider)
-    targeted_counts = _load_targeted_drug_counts(targeted_drug_db)
-    immune_sets = _load_immune_sets(immune_gene_db)
-    gap_counts = _load_gap_counts(gap_xlsx)
-
-    matrix_rows: list[dict[str, Any]] = []
-    for order, gene in enumerate(genes, start=1):
-        gene_key = provider._hgvs_key(gene)
-        part3_level = _part3_level(
+    for index, gene in enumerate(panel_genes, start=1):
+        rows = gene_overlay.get(gene, [])
+        has_overlay = bool(rows)
+        has_intro = any(clean(row.get("intro")) for row in rows)
+        has_mutation = any(clean(row.get("mutation_analysis")) for row in rows)
+        variant_sections = [row for row in rows if clean(row.get("c_hgvs")) or clean(row.get("p_hgvs"))]
+        low_rows = [(row, low_info_hits(row.get("mutation_analysis") or "")) for row in rows]
+        low_rows = [(row, hits) for row, hits in low_rows if len(hits) >= 3]
+        phgvs_blank = [row for row in rows if clean(row.get("c_hgvs")) and not clean(row.get("p_hgvs"))]
+        target_exact = targeted["exact"].get(gene, [])
+        internal_rows = targeted["internal"].get(gene, [])
+        public_rows = targeted["public"].get(gene, [])
+        composite_rows = targeted["composite_mentions"].get(gene, [])
+        override_rows = rules["overrides"].get(gene, [])
+        is_critical = gene in rules["class_i"] or gene in rules["class_ii"] or gene in rules["important"]
+        is_special = gene in SPECIAL_RULE_GENES
+        priority, gap_reason, action = recommend_action(
             gene=gene,
-            provider=provider,
-            variant_count=variant_overlay_counts.get(gene, 0),
+            has_overlay=has_overlay,
+            has_intro=has_intro,
+            has_mutation=has_mutation,
+            low_info_count=len(low_rows),
+            has_base=gene in base_genes,
+            is_critical=is_critical,
+            is_special=is_special,
+            targeted_exact_count=len(target_exact),
         )
-        groups = []
-        if gene in rule_sets["class_i"]:
-            groups.append("I类")
-        if gene in rule_sets["class_ii"]:
-            groups.append("II类")
-        if gene in rule_sets["important"]:
-            groups.append("CRC重点")
-        if gene in rule_sets["drug_override"]:
-            groups.append("药物人工规则")
-        drug = targeted_counts.get(gene, Counter())
-        gaps = gap_counts.get(gene, Counter())
-        row = {
-            "序号": order,
-            "基因": gene,
-            "分组": "、".join(groups) or "检测基因",
-            "Part3覆盖级别": part3_level,
-            "基因简介": "有" if gene in provider._gene_intro_cache else "缺",
-            "基础库reviewed列": "有" if gene in provider._reviewed_gene_analysis_cache else "缺",
-            "基础通用解析": "有" if gene in provider._gene_analysis_cache else "缺",
-            "reviewed基因级": "有" if gene_key in provider._gene_level_section_overrides else "缺",
-            "reviewed位点级数量": variant_overlay_counts.get(gene, 0),
-            "靶向药物条目数": drug.get("total", 0),
-            "获益条目数": drug.get("benefit", 0),
-            "慎用/耐药条目数": drug.get("caution", 0),
-            "免疫正相关": "是" if gene in immune_sets["positive"] else "",
-            "免疫负相关": "是" if gene in immune_sets["negative"] else "",
-            "免疫超进展相关": "是" if gene in immune_sets["hyper"] else "",
-            "压测出现次数": gaps.get("pressure_variants", 0),
-            "压测高风险次数": gaps.get("high_risk", 0),
-            "P0/P1次数": gaps.get("priority:P0", 0) + gaps.get("priority:P1", 0),
-            "P2次数": gaps.get("priority:P2", 0),
-            "待审核候选数": gaps.get("review_candidates", 0),
-        }
-        row["建议动作"] = _suggestion(row)
-        matrix_rows.append(row)
-
-    level_counts = Counter(row["Part3覆盖级别"] for row in matrix_rows)
-    no_intro = sum(1 for row in matrix_rows if row["基因简介"] == "缺")
-    no_analysis = sum(1 for row in matrix_rows if row["基础通用解析"] == "缺")
-    drug_gene_count = sum(1 for row in matrix_rows if row["靶向药物条目数"])
-    immune_gene_count = sum(
-        1
-        for row in matrix_rows
-        if row["免疫正相关"] or row["免疫负相关"] or row["免疫超进展相关"]
-    )
-    high_risk_gene_count = sum(1 for row in matrix_rows if row["压测高风险次数"])
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "汇总"
-    summary = [
-        ["矩阵基因数", len(matrix_rows)],
-        ["来源", "金标模板 Gene List for MLseq (n=358)"],
-        ["A 位点级已审核", level_counts.get("A 位点级已审核", 0)],
-        ["B 基因级已审核", level_counts.get("B 基因级已审核", 0)],
-        ["C 基础库可自动拼接", level_counts.get("C 基础库可自动拼接", 0)],
-        ["D 基础库通用", level_counts.get("D 基础库通用", 0)],
-        ["E 缺失", level_counts.get("E 缺失", 0)],
-        ["缺基因简介", no_intro],
-        ["缺基础通用解析", no_analysis],
-        ["有靶向药物条目的基因", drug_gene_count],
-        ["有免疫相关规则的基因", immune_gene_count],
-        ["压测中出现高风险的基因", high_risk_gene_count],
-        ["结论", "当前适合按P0/P1/高频反馈逐步补库；不建议宣称知识库已完整。"],
-    ]
-    _append_table(ws, ["指标", "结果"], summary)
-
-    headers = list(matrix_rows[0].keys()) if matrix_rows else []
-    ws2 = wb.create_sheet("CRC358覆盖矩阵")
-    _append_table(ws2, headers, [[row[h] for h in headers] for row in matrix_rows])
-    for row_idx in range(2, ws2.max_row + 1):
-        level = ws2.cell(row_idx, headers.index("Part3覆盖级别") + 1).value
-        fill = None
-        if str(level).startswith("A"):
-            fill = PatternFill("solid", fgColor="D9EAD3")
-        elif str(level).startswith("B"):
-            fill = PatternFill("solid", fgColor="E2F0D9")
-        elif str(level).startswith("C"):
-            fill = PatternFill("solid", fgColor="FFF2CC")
-        elif str(level).startswith("D"):
-            fill = PatternFill("solid", fgColor="FCE4D6")
-        elif str(level).startswith("E"):
-            fill = PatternFill("solid", fgColor="F4CCCC")
-        if fill:
-            for col_idx in range(1, ws2.max_column + 1):
-                ws2.cell(row_idx, col_idx).fill = fill
-
-    ws3 = wb.create_sheet("位点级覆盖清单")
-    variant_rows = []
-    for key, section in sorted(provider._reviewed_gene_section_overrides.items()):
-        gene, c_hgvs, p_hgvs = (key.split("|") + ["", ""])[:3]
-        variant_rows.append(
-            [
-                gene,
-                c_hgvs,
-                p_hgvs,
-                "有" if section.get("intro") else "缺",
-                "有" if section.get("mutation_analysis") else "缺",
-                (section.get("mutation_analysis") or "")[:180],
-            ]
+        if has_overlay and has_intro and has_mutation and not low_rows:
+            coverage_level = "reviewed覆盖"
+        elif has_overlay:
+            coverage_level = "reviewed需完善"
+        elif gene in base_genes:
+            coverage_level = "仅基础库覆盖"
+        else:
+            coverage_level = "缺口"
+        matrix.append(
+            {
+                "序号": index,
+                "gene": gene,
+                "Part3覆盖等级": coverage_level,
+                "优先级": priority,
+                "问题原因": gap_reason,
+                "建议动作": action,
+                "class_i": yes(gene in rules["class_i"]),
+                "class_ii": yes(gene in rules["class_ii"]),
+                "CRC重点基因": yes(gene in rules["important"]),
+                "报告展示基因": yes(gene in rules["display"]),
+                "reviewed_gene_sections": len(rows),
+                "reviewed_variant_sections": len(variant_sections),
+                "有基因简介": yes(has_intro),
+                "有变异解析": yes(has_mutation),
+                "低信息量条目数": len(low_rows),
+                "c有_p空条目数": len(phgvs_blank),
+                "基础库覆盖": yes(gene in base_genes),
+                "Part3药物解析条数": len(drug_overlay.get(gene, [])),
+                "用药主表精确行数": len(target_exact),
+                "internal行数": len(internal_rows),
+                "public行数": len(public_rows),
+                "合并语义行提及": len(composite_rows),
+                "override条数": len(override_rows),
+                "免疫正相关": yes(gene in immune["positive"]),
+                "免疫负相关": yes(gene in immune["negative"]),
+                "免疫超进展": yes(gene in immune["hyper"]),
+                "审核状态": "待审核" if priority else "",
+                "审核意见": "",
+            }
         )
-    _append_table(
-        ws3,
-        ["基因", "cHGVS", "pHGVS", "简介", "解析", "解析预览"],
-        variant_rows,
-    )
-
-    ws4 = wb.create_sheet("补库优先级")
-    priority_rows = []
-    for row in matrix_rows:
-        if (
-            row["压测高风险次数"]
-            or row["Part3覆盖级别"].startswith("E")
-            or row["P0/P1次数"]
-            or row["待审核候选数"]
-        ):
-            priority_rows.append(
-                [
-                    row["基因"],
-                    row["Part3覆盖级别"],
-                    row["压测高风险次数"],
-                    row["P0/P1次数"],
-                    row["P2次数"],
-                    row["待审核候选数"],
-                    row["建议动作"],
-                ]
+        for row, hits in low_rows:
+            low_info_rows.append(
+                {
+                    "gene": gene,
+                    "c_hgvs": clean(row.get("c_hgvs")),
+                    "p_hgvs": clean(row.get("p_hgvs")),
+                    "命中套话数": len(hits),
+                    "命中套话": "；".join(hits),
+                    "当前基因简介": clean(row.get("intro")),
+                    "当前变异解析": clean(row.get("mutation_analysis")),
+                    "建议": "报告组判断是否替换为更具体的 CRC/通路/位点解释",
+                    "审核状态": "待审核",
+                    "审核意见": "",
+                }
             )
-    priority_rows.sort(key=lambda x: (-int(x[3] or 0), -int(x[2] or 0), str(x[1]), str(x[0])))
-    _append_table(
-        ws4,
-        ["基因", "Part3覆盖级别", "压测高风险次数", "P0/P1次数", "P2次数", "待审核候选数", "建议动作"],
-        priority_rows,
-    )
+        if is_special:
+            rule_todos.append(
+                {
+                    "优先级": "P0",
+                    "gene": gene,
+                    "规则化主题": special_rule_topic(gene),
+                    "当前证据": f"主表精确行 {len(target_exact)}；override {len(override_rows)}；合并语义提及 {len(composite_rows)}",
+                    "建议动作": special_rule_action(gene),
+                    "审核状态": "待审核",
+                    "审核意见": "",
+                }
+            )
 
-    ws5 = wb.create_sheet("口径说明")
-    _append_table(
-        ws5,
-        ["项目", "说明"],
-        [
-            ["A 位点级已审核", "reviewed_part3_knowledge.yaml 中有 gene+cHGVS/pHGVS 精确覆盖；只代表这些位点已审核。"],
-            ["B 基因级已审核", "reviewed_part3_knowledge.yaml 中有 gene 级覆盖；适合兜底，但高频位点仍建议补位点级。"],
-            ["C 基础库可自动拼接", "gene_knowledge_db.xlsx 中有 reviewed 列，可按位点类型自动拼接；需报告组抽查措辞。"],
-            ["D 基础库通用", "只有通用简介/解析，容易显得像套话。"],
-            ["E 缺失", "当前缺少可用 Part3 内容，需优先补基因级兜底。"],
-            ["用途", "这张表用于补库排期、报告组审核和领导汇报，不会自动修改生产知识库。"],
-        ],
-    )
-
-    output.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(output)
-    return {
-        "gene_count": len(matrix_rows),
-        "level_counts": dict(level_counts),
-        "drug_gene_count": drug_gene_count,
-        "immune_gene_count": immune_gene_count,
-        "high_risk_gene_count": high_risk_gene_count,
-        "output": str(output),
+    overlay_genes = set(gene_overlay)
+    summary = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "template": str(args.template),
+        "panel_gene_count": len(panel_genes),
+        "panel_gene_unique_count": len(panel_set),
+        "reviewed_overlay_gene_count_total": len(overlay_genes),
+        "reviewed_overlay_gene_count_in_panel": len(overlay_genes & panel_set),
+        "reviewed_overlay_gene_count_outside_panel": len(overlay_genes - panel_set),
+        "panel_genes_without_reviewed_overlay": sum(1 for row in matrix if row["reviewed_gene_sections"] == 0),
+        "panel_genes_without_any_gene_text": sum(1 for row in matrix if row["Part3覆盖等级"] == "缺口"),
+        "panel_genes_low_info": sum(1 for row in matrix if row["低信息量条目数"] > 0),
+        "panel_genes_with_targeted_drug_rows": sum(1 for row in matrix if row["用药主表精确行数"] > 0),
+        "panel_genes_with_immune_tags": sum(
+            1
+            for row in matrix
+            if row["免疫正相关"] == "是" or row["免疫负相关"] == "是" or row["免疫超进展"] == "是"
+        ),
+        "targeted_sheet_rows": targeted["sheet_rows"],
+        "priority_counts": dict(Counter(row["优先级"] or "无" for row in matrix)),
+        "coverage_level_counts": dict(Counter(row["Part3覆盖等级"] for row in matrix)),
     }
+    return matrix, summary, low_info_rows, rule_todos
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--project-root", type=Path, default=Path.cwd())
-    parser.add_argument(
-        "--template-docx",
-        type=Path,
-        default=Path("panels/crc_358_msi/templates/crc_358_msi_golden_template_v0.docx"),
+def special_rule_topic(gene: str) -> str:
+    if gene in {"KRAS", "NRAS", "BRAF"}:
+        return "RAS/RAF 组合野生型、任一突变、BRAF V600E/non-V600E"
+    if gene in {"NTRK1", "NTRK2", "NTRK3"}:
+        return "NTRK 融合限定"
+    if gene == "ERBB2":
+        return "ERBB2 扩增 vs 点突变"
+    if gene == "EGFR":
+        return "EGFR 位点级靶药/免疫/超进展分流"
+    if gene == "TSC1":
+        return "TSC1 loss-of-function 用药触发"
+    if gene == "TP53":
+        return "TP53 药物提示触发边界"
+    return "特殊规则"
+
+
+def special_rule_action(gene: str) -> str:
+    if gene in {"KRAS", "NRAS", "BRAF"}:
+        return "拆成组合条件规则，避免把单基因行误当作抗EGFR获益/耐药完整逻辑"
+    if gene in {"NTRK1", "NTRK2", "NTRK3"}:
+        return "仅融合阳性触发拉罗替尼/恩曲替尼等相关提示，普通 SNV 不自动触发"
+    if gene == "ERBB2":
+        return "扩增、点突变、融合分别建条件，且标记 CRC 适用范围"
+    if gene == "EGFR":
+        return "免疫负相关仅保留 L858R/EX19del；超进展仅保留扩增；其他位点走靶药/Part3"
+    if gene == "TSC1":
+        return "确认无义/移码/剪接等 LOF 才触发 mTOR 相关药物"
+    if gene == "TP53":
+        return "确认是否按 II 类/特定位点/功能缺失触发药物，不泛化所有 TP53"
+    return "补结构化适用条件"
+
+
+def add_sheet(wb: Workbook, title: str, headers: list[str], rows: list[dict[str, Any]], widths: dict[str, int] | None = None) -> None:
+    ws = wb.create_sheet(title)
+    header_fill = PatternFill("solid", fgColor="00A9B7")
+    header_font = Font(bold=True, color="FFFFFF")
+    thin = Side(style="thin", color="D9E2E3")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+    for row in rows:
+        ws.append([row.get(header, "") for header in headers])
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    for body_row in ws.iter_rows(min_row=2):
+        for cell in body_row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            cell.border = border
+    if widths:
+        for col, width in widths.items():
+            ws.column_dimensions[col].width = width
+    else:
+        for idx, header in enumerate(headers, start=1):
+            ws.column_dimensions[get_column_letter(idx)].width = min(max(len(header) * 2, 10), 28)
+    ws.sheet_view.showGridLines = False
+
+
+def write_outputs(
+    matrix: list[dict[str, Any]],
+    summary: dict[str, Any],
+    low_info_rows: list[dict[str, Any]],
+    rule_todos: list[dict[str, Any]],
+    out_dir: Path,
+) -> tuple[Path, Path]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d")
+    xlsx_path = out_dir / f"CRC358_知识库覆盖矩阵_{stamp}.xlsx"
+    json_path = out_dir / f"crc358_knowledge_coverage_summary_{stamp}.json"
+    wb = Workbook()
+    wb.remove(wb.active)
+    summary_rows = [{"指标": key, "结果": json.dumps(value, ensure_ascii=False) if isinstance(value, dict) else value} for key, value in summary.items()]
+    add_sheet(wb, "覆盖汇总", ["指标", "结果"], summary_rows, {"A": 36, "B": 90})
+    matrix_headers = [
+        "序号",
+        "gene",
+        "Part3覆盖等级",
+        "优先级",
+        "问题原因",
+        "建议动作",
+        "class_i",
+        "class_ii",
+        "CRC重点基因",
+        "报告展示基因",
+        "reviewed_gene_sections",
+        "reviewed_variant_sections",
+        "有基因简介",
+        "有变异解析",
+        "低信息量条目数",
+        "c有_p空条目数",
+        "基础库覆盖",
+        "Part3药物解析条数",
+        "用药主表精确行数",
+        "internal行数",
+        "public行数",
+        "合并语义行提及",
+        "override条数",
+        "免疫正相关",
+        "免疫负相关",
+        "免疫超进展",
+        "审核状态",
+        "审核意见",
+    ]
+    add_sheet(
+        wb,
+        "358基因覆盖矩阵",
+        matrix_headers,
+        matrix,
+        {"A": 8, "B": 13, "C": 16, "D": 10, "E": 26, "F": 42, "G": 10, "H": 10, "I": 12, "J": 12},
     )
-    parser.add_argument(
-        "--crc-rules",
-        type=Path,
-        default=Path("panels/crc_358_msi/rules/crc.yaml"),
-    )
-    parser.add_argument(
-        "--targeted-drug-db",
-        type=Path,
-        default=Path("data/knowledge_bases/processed/targeted_drug_db_public.xlsx"),
-    )
-    parser.add_argument(
-        "--immune-gene-db",
-        type=Path,
-        default=Path("data/knowledge_bases/processed/immune_gene_list_public.xlsx"),
-    )
-    parser.add_argument("--gap-xlsx", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-    result = build_matrix(
-        project_root=args.project_root.resolve(),
-        template_docx=args.template_docx,
-        crc_rules=args.crc_rules,
-        targeted_drug_db=args.targeted_drug_db,
-        immune_gene_db=args.immune_gene_db,
-        gap_xlsx=args.gap_xlsx,
-        output=args.output,
-    )
-    print(yaml.safe_dump(result, allow_unicode=True, sort_keys=False))
+    priority_rows = [row for row in matrix if row["优先级"]]
+    priority_rows.sort(key=lambda row: ({"P0": 0, "P1": 1, "P2": 2}.get(row["优先级"], 9), row["gene"]))
+    add_sheet(wb, "补库优先级", matrix_headers, priority_rows)
+    rule_headers = ["优先级", "gene", "规则化主题", "当前证据", "建议动作", "审核状态", "审核意见"]
+    add_sheet(wb, "药物规则化待办", rule_headers, rule_todos, {"A": 10, "B": 12, "C": 42, "D": 36, "E": 62, "F": 12, "G": 34})
+    low_headers = ["gene", "c_hgvs", "p_hgvs", "命中套话数", "命中套话", "当前基因简介", "当前变异解析", "建议", "审核状态", "审核意见"]
+    add_sheet(wb, "低信息量条目", low_headers, low_info_rows, {"A": 12, "B": 18, "C": 18, "D": 12, "E": 34, "F": 60, "G": 78, "H": 42, "I": 12, "J": 34})
+    source_rows = [
+        {"来源": "panel gene list", "路径": summary["template"], "说明": "从 Gene List for MLseq (n=358) 表提取"},
+        {"来源": "reviewed Part3 overlay", "路径": str(DEFAULT_OVERLAY), "说明": "生产 reviewed Part3 文案"},
+        {"来源": "targeted drug DB", "路径": str(DEFAULT_TARGETED_DB), "说明": "当前用药提示主表与 public/internal 源表"},
+        {"来源": "immune gene list", "路径": str(DEFAULT_IMMUNE_DB), "说明": "免疫正/负/超进展基因标签"},
+        {"来源": "CRC rules", "路径": str(DEFAULT_CRC_RULES), "说明": "重点基因、展示基因、override"},
+    ]
+    add_sheet(wb, "来源与说明", ["来源", "路径", "说明"], source_rows, {"A": 24, "B": 88, "C": 68})
+    wb.save(xlsx_path)
+    json_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    return xlsx_path, json_path
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
+    parser.add_argument("--overlay", type=Path, default=DEFAULT_OVERLAY)
+    parser.add_argument("--crc-rules", type=Path, default=DEFAULT_CRC_RULES)
+    parser.add_argument("--targeted-db", type=Path, default=DEFAULT_TARGETED_DB)
+    parser.add_argument("--immune-db", type=Path, default=DEFAULT_IMMUNE_DB)
+    parser.add_argument("--gene-db", type=Path, default=DEFAULT_GENE_DB)
+    parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    matrix, summary, low_info_rows, rule_todos = build_matrix(args)
+    xlsx_path, json_path = write_outputs(matrix, summary, low_info_rows, rule_todos, args.out_dir)
+    print(json.dumps({"xlsx": str(xlsx_path), "json": str(json_path), **summary}, ensure_ascii=False, indent=2))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
