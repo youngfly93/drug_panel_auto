@@ -55,6 +55,11 @@ tmp/
 # template assets in subdirs stay committable.
 /*.xlsx
 /*.docx
+/*.zip
+/*.png
+/*.jpg
+/*.jpeg
+/AESTool.java
 !templates/**/*.docx
 !panels/**/*.docx
 !data/knowledge_bases/processed/*.xlsx
