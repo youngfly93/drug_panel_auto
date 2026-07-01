@@ -866,3 +866,40 @@ def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):
     assert attempt("PASS") == 200  # 正常报告不受影响
     assert attempt("WARN") == 200  # WARN 不拦
     assert attempt(None) == 200  # 无 QA 记录的历史任务不误伤
+
+
+def test_batch_item_download_blocks_qa_fail(tmp_path):
+    """交付门禁（第3步）：批量逐文件下载与单份一致——QA=FAIL 被 409 拦截、
+    override 放行、PASS/WARN/无记录不误伤。"""
+    from unittest.mock import MagicMock, patch
+
+    from fastapi import HTTPException
+
+    docx = tmp_path / "r.docx"
+    docx.write_text("fake")
+
+    def attempt(qa_status, override=False):
+        row = SimpleNamespace(
+            output_path=str(docx),
+            excel_filename="case01.xlsx",
+            validation_summary=(
+                json.dumps({"qa_status": qa_status}) if qa_status else "{}"
+            ),
+        )
+        task = SimpleNamespace(task_type="batch")
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.side_effect = [task, row]
+        with patch.object(report_api, "_observed_file_response", return_value="OK"):
+            try:
+                report_api.download_batch_item_report(
+                    "t1", 1, MagicMock(), db=db, override_gate=override
+                )
+                return 200
+            except HTTPException as exc:
+                return exc.status_code
+
+    assert attempt("FAIL") == 409
+    assert attempt("FAIL", override=True) == 200
+    assert attempt("PASS") == 200
+    assert attempt("WARN") == 200
+    assert attempt(None) == 200

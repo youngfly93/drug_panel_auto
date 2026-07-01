@@ -1716,6 +1716,9 @@ def download_batch_item_report(
     file_index: int,
     request: Request,
     db: Session = Depends(get_db),
+    override_gate: bool = Query(
+        False, description="复核人显式放行：QA FAIL 时仍允许下载交付"
+    ),
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -1732,6 +1735,20 @@ def download_batch_item_report(
     path = Path(row.output_path)
     if not path.exists():
         raise HTTPException(status_code=404, detail="报告文件已被删除")
+
+    # 交付门禁（第3步）：与单份下载一致——QA=FAIL 的批量逐文件报告不允许直接
+    # 下载交付，需复核人显式 override。只拦 FAIL 这一硬失败，不误伤 WARN/无记录。
+    if (
+        _load_json_dict(row.validation_summary).get("qa_status") == "FAIL"
+        and not override_gate
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{row.excel_filename or '该报告'} QA 状态为 FAIL，已阻止下载交付。"
+                "请先核查修复；确需交付可由复核人显式 override（加 override_gate=1）。"
+            ),
+        )
     return _observed_file_response(
         path=path,
         download_filename=path.name,
@@ -1749,6 +1766,9 @@ def download_batch_reports_zip(
     task_id: str,
     request: Request,
     qa: Optional[str] = Query(None, pattern="^(pass|all)$"),
+    override_gate: bool = Query(
+        False, description="配合 qa=all：复核人显式放行，打包含 QA FAIL 的报告"
+    ),
     db: Session = Depends(get_db),
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -1768,14 +1788,34 @@ def download_batch_reports_zip(
         .order_by(TaskResult.file_index.asc())
         .all()
     )
+    # 交付门禁（第3步）三态过滤：
+    #   qa=pass          → 只打包 QA PASS 的报告（最严，保持原语义）
+    #   默认（不传/其它）→ 排除 QA=FAIL，但保留 PASS/WARN/无记录（默认即安全，
+    #                      不把坏报告混进交付包）
+    #   qa=all + override_gate=1 → 复核人显式放行，打包全部含 FAIL
+    force_all = qa == "all" and override_gate
     if qa_pass_only:
         rows = [
             row
             for row in rows
             if _load_json_dict(row.validation_summary).get("qa_status") == "PASS"
         ]
+    elif not force_all:
+        rows = [
+            row
+            for row in rows
+            if _load_json_dict(row.validation_summary).get("qa_status") != "FAIL"
+        ]
     if not rows:
-        detail = "没有 QA PASS 的成功报告" if qa_pass_only else "没有可打包的成功报告"
+        if qa_pass_only:
+            detail = "没有 QA PASS 的成功报告"
+        elif not force_all:
+            detail = (
+                "没有可打包的合格报告（QA=FAIL 的报告已被排除）。"
+                "确需打包含 FAIL 可用 qa=all&override_gate=1。"
+            )
+        else:
+            detail = "没有可打包的成功报告"
         raise HTTPException(status_code=404, detail=detail)
     prepare_started = time.perf_counter()
     temp_zip_path = output_root / f".{zip_path.name}.{uuid.uuid4().hex}.tmp"
