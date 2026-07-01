@@ -126,6 +126,33 @@ def _references_fingerprint(doc) -> dict[str, Any]:
     return {"count": len(refs), "titleless": len(titleless)}
 
 
+def _report_integrity_fingerprint(docx_path: str) -> dict[str, Any]:
+    """报告完整性/自洽指纹（确定性，与页码/时间无关）。
+
+    冻结这些信号，可在后处理改动后立即抓出"计数对不上、占位符没渲染、
+    结构性段落丢失"这类静默退化——补齐样式基线只盖"样式"、不盖"数值/结构
+    自洽"的盲区。刻意只取确定性强的量：
+    - variant_count_text / drug_count_text：正文里写明的计数（不是重新计算，
+      而是冻结"正文当时说了几个"，改动若让计数措辞或数值漂移即报警）。
+    - unrendered_placeholders：``{{ }}`` / ``{%% %%}`` 残留数，正常应为 0。
+    - part_section_markers：``第X部分`` 出现次数（结构性骨架，丢段会变）。
+    """
+    with ZipFile(docx_path) as zf:
+        xml = zf.read("word/document.xml").decode("utf-8", "ignore")
+    text = re.sub(r"<[^>]+>", "", xml)
+
+    def _first_int(pattern: str) -> int | None:
+        m = re.search(pattern, text)
+        return int(m.group(1)) if m else None
+
+    return {
+        "variant_count_text": _first_int(r"检出体细胞变异[：:]\s*(\d+)\s*个"),
+        "drug_count_text": _first_int(r"用药相关的变异有[：:]\s*(\d+)\s*个"),
+        "unrendered_placeholders": len(re.findall(r"\{\{|\{%", xml)),
+        "part_section_markers": len(re.findall(r"第[一二三四五六]部分", text)),
+    }
+
+
 def extract_style_baseline(docx_path: str) -> dict[str, Any]:
     """提取关键表 + 标志位的确定性样式指纹。"""
     doc = Document(docx_path)
@@ -146,6 +173,7 @@ def extract_style_baseline(docx_path: str) -> dict[str, Any]:
             "part3_bullet_color": _part3_bullet_color(doc),
             "signature": _signature_fingerprint(doc),
             "references": _references_fingerprint(doc),
+            "integrity": _report_integrity_fingerprint(docx_path),
         },
     }
 

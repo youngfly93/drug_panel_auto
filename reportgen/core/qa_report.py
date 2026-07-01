@@ -986,10 +986,20 @@ def _build_style_checks(
             )
 
     if not checked:
+        # 走到这里的前提：这是 CRC 项目（_is_crc 已判真）且上下文提供了
+        # panel_style 样式规则——也就是说这份报告本应包含受样式管理的 2.1
+        # 变异表 / 生物标志物表。正常产物会认出 3 张这类表；一张都认不出，
+        # 几乎只可能是模板表头/列结构被改动导致认表逻辑（依赖硬编码列数+表头
+        # 串）静默失配。此前这里返回 SKIP（绿灯），会让"模板被改坏、所有表
+        # 样式丢失"的报告悄悄通过 QA。改判为 FAIL，让这种静默失效立刻报警。
         return {
             "docx_style_rules": {
-                "status": "SKIP",
-                "message": "No style-managed CRC tables were detected.",
+                "status": "FAIL",
+                "message": (
+                    "未识别到任何受样式管理的 CRC 表格（2.1 变异表/生物标志物表）。"
+                    "正常报告应含这些表；通常是模板表头或列结构改动导致表格识别失配，"
+                    "样式可能整体未生效，请核对模板与 panel_style 规则。"
+                ),
                 "checked_table_count": 0,
                 "table_counts": table_counts,
                 "failures": [],

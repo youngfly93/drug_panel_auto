@@ -1,5 +1,11 @@
 {
   "markers": {
+    "integrity": {
+      "drug_count_text": 1,
+      "part_section_markers": 16,
+      "unrendered_placeholders": 0,
+      "variant_count_text": 2
+    },
     "part3_bullet_color": null,
     "references": {
       "count": 6,
