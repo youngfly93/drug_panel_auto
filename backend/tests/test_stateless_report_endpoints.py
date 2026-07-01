@@ -825,3 +825,44 @@ def test_bridge_infers_crc358_from_project_name_text():
 
     assert result["detected"] is True
     assert result["project_type"] == "crc_358_msi"
+
+
+def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):
+    """交付门禁（B 步）：QA=FAIL 的报告下载被 409 拦截，需显式 override；
+    QA=PASS/WARN 及无 QA 记录的历史任务不被误伤。锁死"下载不查 QA"不会被改回。"""
+    from unittest.mock import MagicMock, patch
+
+    from fastapi import HTTPException
+
+    docx = tmp_path / "r.docx"
+    docx.write_text("fake")
+    qa = tmp_path / "r.qa.json"
+
+    task = SimpleNamespace(
+        output_path=str(docx), project_type="crc_358_msi", status="completed"
+    )
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = task
+
+    def attempt(qa_status, override=False):
+        if qa_status is None:
+            if qa.exists():
+                qa.unlink()
+        else:
+            qa.write_text(json.dumps({"status": qa_status, "issues": []}))
+        with patch.object(report_api, "_observed_file_response", return_value="OK"), \
+             patch.object(report_api, "_clinical_snapshot", return_value={}), \
+             patch.object(report_api, "_business_report_filename", return_value="x.docx"):
+            try:
+                report_api._download_report_response(
+                    "t1", db, MagicMock(), override_gate=override
+                )
+                return 200
+            except HTTPException as exc:
+                return exc.status_code
+
+    assert attempt("FAIL") == 409  # QA FAIL → 拦截
+    assert attempt("FAIL", override=True) == 200  # 复核人显式放行
+    assert attempt("PASS") == 200  # 正常报告不受影响
+    assert attempt("WARN") == 200  # WARN 不拦
+    assert attempt(None) == 200  # 无 QA 记录的历史任务不误伤

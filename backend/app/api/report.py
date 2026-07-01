@@ -2247,7 +2247,12 @@ def download_report_diff_artifact(
     )
 
 
-def _download_report_response(task_id: str, db: Session, request: Request) -> FileResponse:
+def _download_report_response(
+    task_id: str,
+    db: Session,
+    request: Request,
+    override_gate: bool = False,
+) -> FileResponse:
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -2257,6 +2262,21 @@ def _download_report_response(task_id: str, db: Session, request: Request) -> Fi
     file_path = Path(task.output_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="报告文件已被删除")
+
+    # 交付门禁（B 步）：QA 明确判定 FAIL 的报告不允许直接下载交付。生成不拦
+    # （方便排查），出厂才拦——坏报告可以留档诊断，但不许流到客户手里。只拦
+    # qa_status == "FAIL" 这一硬失败，刻意不拦 QA_MISSING / WARN / diff 未跑
+    # 等环境性问题，避免误伤无 QA 记录的历史任务。需人工显式 override_gate=1
+    # 才放行（与审核交付的 override 语义一致）。
+    _, qa_status, _ = _load_qa_summary(task.output_path)
+    if qa_status == "FAIL" and not override_gate:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "报告 QA 状态为 FAIL，已阻止下载交付。请先在质控门禁中核查并修复问题；"
+                "确需交付可由复核人显式 override（下载时加 override_gate=1）。"
+            ),
+        )
 
     clinical_info = _clinical_snapshot(task)
     download_filename = _business_report_filename(
@@ -2291,5 +2311,8 @@ def download_report(
     task_id: str,
     request: Request,
     db: Session = Depends(get_db),
+    override_gate: bool = Query(
+        False, description="复核人显式放行：QA FAIL 时仍允许下载交付"
+    ),
 ):
-    return _download_report_response(task_id, db, request)
+    return _download_report_response(task_id, db, request, override_gate=override_gate)
