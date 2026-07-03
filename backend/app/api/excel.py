@@ -1,6 +1,7 @@
 """Excel upload and preview endpoints."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
@@ -133,14 +134,28 @@ def inspect_excel(
     if lookup_sample_id:
         if not sample_id and filename_project_code:
             single_values["sample_id"] = filename_project_code
-        enrichment = clinical_svc.enrich_patient(
-            lookup_sample_id,
-            project_type=detect.get("project_type"),
-        )
-        single_values = clinical_svc.merge_enrichment_into_values(
-            single_values,
-            enrichment,
-        )
+        # 患者富集只是“锦上添花”：填不上时用户可手填。它内部走外部接口
+        # （marvelbio），冷启动或抖动时最坏可能十几秒，若同步阻塞会拖累整个
+        # 上传/识别请求、触发前端超时。这里加硬上限：最多等 12s，超时/异常
+        # 就跳过富集、继续返回（绝不让辅助功能拖垮主流程）。
+        _pool = ThreadPoolExecutor(max_workers=1)
+        try:
+            enrichment = _pool.submit(
+                clinical_svc.enrich_patient,
+                lookup_sample_id,
+                project_type=detect.get("project_type"),
+            ).result(timeout=12)
+        except (FutureTimeout, Exception):
+            enrichment = None
+        finally:
+            # 超时不等待后台线程收尾（避免卡住的富集把请求线程也拖住）；
+            # cancel_futures 让尚未开始的任务直接取消。
+            _pool.shutdown(wait=False, cancel_futures=True)
+        if enrichment is not None:
+            single_values = clinical_svc.merge_enrichment_into_values(
+                single_values,
+                enrichment,
+            )
     single_values = clinical_svc.fill_missing_report_date(single_values)
 
     preview_summary = None
