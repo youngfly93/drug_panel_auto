@@ -85,6 +85,7 @@ from reportgen.rules import PanelRuleEngine, load_rule_package
 from app.services import clinical_info_service
 from reportgen.rules.evaluators import apply_report_text_rules, collect_report_texts
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
+from reportgen.docx_sections import find_reference_section_bounds
 from reportgen.utils import docx_render
 
 
@@ -2192,6 +2193,66 @@ def test_panel_package_schema_rejects_missing_default_template():
     assert any("default_template" in error for error in errors)
 
 
+def test_panel_package_validator_rejects_missing_required_marker(tmp_path):
+    panel_yaml = _write_minimal_panel_package(tmp_path, "marker_panel")
+    template_path = tmp_path / "panels" / "marker_panel" / "templates" / "standard.docx"
+    template_doc = Document()
+    template_doc.add_paragraph("模板正文，无 Part 3 标记")
+    template_doc.save(template_path)
+    payload = yaml.safe_load(panel_yaml.read_text(encoding="utf-8"))
+    payload["template_contract"]["required_markers"] = ["__PART3_MARKER__"]
+    panel_yaml.write_text(
+        yaml.safe_dump(payload, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    report = validate_panel_package_path(
+        panel_yaml,
+        project_root=tmp_path,
+        panels_dir=tmp_path / "panels",
+    )
+
+    assert report.ok is False
+    assert any(
+        issue.code == "TEMPLATE_MARKER_MISSING" for issue in report.errors
+    )
+
+
+def test_panel_package_validator_accepts_marker_split_across_runs(tmp_path):
+    panel_yaml = _write_minimal_panel_package(tmp_path, "split_marker_panel")
+    template_path = (
+        tmp_path
+        / "panels"
+        / "split_marker_panel"
+        / "templates"
+        / "standard.docx"
+    )
+    template_doc = Document()
+    paragraph = template_doc.add_paragraph()
+    paragraph.add_run("__PART3")
+    paragraph.add_run("_MARKER__")
+    template_doc.save(template_path)
+    payload = yaml.safe_load(panel_yaml.read_text(encoding="utf-8"))
+    payload["template_contract"]["required_markers"] = ["__PART3_MARKER__"]
+    panel_yaml.write_text(
+        yaml.safe_dump(payload, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    report = validate_panel_package_path(
+        panel_yaml,
+        project_root=tmp_path,
+        panels_dir=tmp_path / "panels",
+    )
+
+    marker_errors = {
+        "TEMPLATE_MARKER_MISSING",
+        "TEMPLATE_MARKER_DUPLICATED",
+        "TEMPLATE_MARKER_CHECK_FAILED",
+    }
+    assert marker_errors.isdisjoint({issue.code for issue in report.errors})
+
+
 def test_template_contract_fails_when_declared_variable_is_removed(tmp_path):
     template_path = tmp_path / "missing_declared_variable.docx"
     doc = Document()
@@ -2209,6 +2270,75 @@ def test_template_contract_fails_when_declared_variable_is_removed(tmp_path):
     assert report["ok"] is False
     assert report["missing_paths"] == []
     assert "sample_id" in report["declared_contract"]["missing_required_variables"]
+
+
+@pytest.mark.parametrize("marker_count", [0, 2])
+def test_template_contract_requires_exactly_one_structural_marker(
+    tmp_path, marker_count
+):
+    template_path = tmp_path / f"part3_marker_{marker_count}.docx"
+    doc = Document()
+    doc.add_paragraph("报告正文")
+    for _ in range(marker_count):
+        doc.add_paragraph("__PART3_MARKER__")
+    doc.save(template_path)
+
+    report = TemplateRenderer(log_level="ERROR").validate_template_contract(
+        str(template_path),
+        {},
+        contract_spec={"required_markers": ["__PART3_MARKER__"]},
+    )
+
+    declared = report["declared_contract"]
+    assert report["ok"] is False
+    assert declared["marker_counts"]["__PART3_MARKER__"] == marker_count
+    if marker_count == 0:
+        assert declared["missing_required_markers"] == ["__PART3_MARKER__"]
+        assert declared["duplicate_required_markers"] == []
+    else:
+        assert declared["missing_required_markers"] == []
+        assert declared["duplicate_required_markers"] == ["__PART3_MARKER__"]
+
+
+@pytest.mark.parametrize("with_body_marker", [False, True])
+def test_template_contract_rejects_part3_marker_in_table(
+    tmp_path,
+    with_body_marker,
+):
+    template_path = tmp_path / f"table_marker_{with_body_marker}.docx"
+    doc = Document()
+    if with_body_marker:
+        doc.add_paragraph("__PART3_MARKER__")
+    doc.add_table(rows=1, cols=1).cell(0, 0).text = "__PART3_MARKER__"
+    doc.save(template_path)
+
+    report = TemplateRenderer(log_level="ERROR").validate_template_contract(
+        str(template_path),
+        {},
+        contract_spec={"required_markers": ["__PART3_MARKER__"]},
+    )
+
+    declared = report["declared_contract"]
+    assert report["ok"] is False
+    if with_body_marker:
+        assert declared["duplicate_required_markers"] == ["__PART3_MARKER__"]
+        assert declared["marker_counts"]["__PART3_MARKER__"] == 2
+    else:
+        assert declared["missing_required_markers"] == ["__PART3_MARKER__"]
+        assert declared["marker_counts"]["__PART3_MARKER__"] == 1
+
+
+def test_part3_renderer_rejects_duplicate_marker_in_one_paragraph(tmp_path):
+    template_path = tmp_path / "duplicate_part3_marker.docx"
+    doc = Document()
+    doc.add_paragraph("__PART3_MARKER__ / __PART3_MARKER__")
+    doc.save(template_path)
+
+    with pytest.raises(ValueError, match="expected exactly one"):
+        TemplateRenderer(log_level="ERROR")._render_part3_formatted(
+            str(template_path),
+            {},
+        )
 
 
 def test_template_contract_fails_when_declared_table_shape_changes(tmp_path):
@@ -2316,6 +2446,112 @@ def test_report_generator_fails_bad_panel_template_before_rendering(tmp_path):
     declared = result["template_contract"]["declared_contract"]
     assert "sample_id" in declared["missing_required_variables"]
     assert "variant_detail" in declared["missing_required_tables"]
+
+
+def test_report_generator_blocks_missing_part3_marker_even_in_warn_mode(tmp_path):
+    template_path = tmp_path / "missing_part3_marker.docx"
+    doc = Document()
+    doc.add_paragraph("患者：{{ patient_name }}")
+    doc.save(template_path)
+    output_dir = tmp_path / "out"
+
+    result = ReportGenerator(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).generate(
+        excel_file=str(tmp_path / "case.xlsx"),
+        template_file=str(template_path),
+        output_dir=str(output_dir),
+        output_filename="must_not_render.docx",
+        excel_data=_excel(
+            tmp_path,
+            single_values={
+                "患者姓名": "测试患者",
+                "样本编号": "TEST-PART3",
+                "报告日期": "2026.07.10",
+            },
+            variations=[],
+        ),
+        project_type="crc_358_msi",
+        template_contract_mode="warn",
+    )
+
+    assert result["success"] is False
+    assert result["output_file"] is None
+    assert not (output_dir / "must_not_render.docx").exists()
+    stage_by_name = {stage["name"]: stage for stage in result["stage_results"]}
+    assert stage_by_name["TemplateContractStage"]["status"] == "FAIL"
+    assert stage_by_name["TemplateContractStage"]["issues"][0]["code"] == (
+        "PART3_CONTRACT_FAILED"
+    )
+    assert "TemplateRenderStage" not in stage_by_name
+
+
+def test_report_generator_blocks_partial_part3_variant_coverage(
+    tmp_path,
+    monkeypatch,
+):
+    original = GeneKnowledgeProvider.build_all_gene_knowledge_sections
+
+    def drop_last_section(self, variants, cancer_type=""):
+        return original(self, variants, cancer_type)[:-1]
+
+    monkeypatch.setattr(
+        GeneKnowledgeProvider,
+        "build_all_gene_knowledge_sections",
+        drop_last_section,
+    )
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    output_dir = tmp_path / "out"
+    result = ReportGenerator(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).generate(
+        excel_file=str(tmp_path / "case.xlsx"),
+        template_file=str(package.resolve_template_file()),
+        output_dir=str(output_dir),
+        output_filename="partial_part3.docx",
+        excel_data=_excel(
+            tmp_path,
+            single_values={
+                "患者姓名": "测试患者",
+                "样本编号": "TEST-PART3-COVERAGE",
+                "报告日期": "2026.07.10",
+                "癌种": "结直肠癌",
+            },
+            variations=[
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "ExistInsmall358": 1,
+                    "Gene_Symbol": "TP53",
+                    "cHGVS": "c.844C>T",
+                    "pHGVS_S": "p.R282W",
+                    "Function": "Missense",
+                    "Freq(%)": 67.29,
+                },
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "ExistInsmall358": 1,
+                    "Gene_Symbol": "APC",
+                    "cHGVS": "c.4348C>T",
+                    "pHGVS_S": "p.R1450*",
+                    "Function": "Nonsense",
+                    "Freq(%)": 41.12,
+                },
+            ],
+        ),
+        project_type="crc_358_msi",
+        template_contract_mode="warn",
+    )
+
+    assert result["success"] is False
+    assert result["output_file"] is None
+    assert not (output_dir / "partial_part3.docx").exists()
+    stage = next(
+        row for row in result["stage_results"] if row["name"] == "TemplateContractStage"
+    )
+    assert stage["status"] == "FAIL"
+    assert "variant coverage mismatch" in stage["issues"][0]["message"]
 
 
 def test_msi_percentage_label_conflict_is_warned(tmp_path):
@@ -4667,6 +4903,66 @@ def test_template_renderer_can_disable_panel_processors(tmp_path):
     assert renderer.last_processor_report == []
 
 
+def test_template_renderer_blocks_critical_part3_processor_error(
+    tmp_path, monkeypatch
+):
+    docx_path = tmp_path / "critical_part3.docx"
+    doc = Document()
+    doc.add_paragraph("__PART3_MARKER__")
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    monkeypatch.setattr(
+        renderer,
+        "_render_part3_formatted",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("part3 failed")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Critical DOCX post-processing failed"):
+        renderer._run_post_render_processors(
+            str(docx_path),
+            {},
+            str(docx_path),
+            processor_names=["part3_formatted_sections"],
+        )
+
+    assert renderer.last_processor_report[0]["name"] == "part3_formatted_sections"
+    assert renderer.last_processor_report[0]["status"] == "ERROR"
+
+
+def test_template_renderer_does_not_leave_output_after_critical_failure(
+    tmp_path,
+    monkeypatch,
+):
+    template_path = tmp_path / "atomic_template.docx"
+    output_path = tmp_path / "atomic_output.docx"
+    doc = Document()
+    doc.add_paragraph("__PART3_MARKER__")
+    doc.save(template_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    monkeypatch.setattr(
+        renderer,
+        "_render_part3_formatted",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("synthetic part3 failure")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="Critical DOCX post-processing failed"):
+        renderer.render(
+            str(template_path),
+            ReportData(),
+            str(output_path),
+            post_processor_names=["part3_formatted_sections"],
+        )
+
+    assert not output_path.exists()
+    assert list(tmp_path.glob(".atomic_output.*.docx")) == []
+
+
 def _docx_xml_signature(docx_path: Path) -> dict[str, str]:
     """Return a deterministic XML signature for idempotency checks."""
     import re
@@ -5086,6 +5382,32 @@ def test_qa_report_records_post_processor_errors(tmp_path):
     assert qa["status"] == "WARN"
     assert qa["checks"]["post_processors"]["error_count"] == 1
     assert any(i["code"] == "POST_PROCESSOR_ERRORS" for i in qa["issues"])
+
+
+def test_qa_report_fails_on_critical_part3_processor_error(tmp_path):
+    docx_path = tmp_path / "clean.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        processor_report=[
+            {
+                "name": "part3_formatted_sections",
+                "status": "ERROR",
+                "error": "marker failed",
+            }
+        ],
+    )
+
+    assert qa["status"] == "FAIL"
+    assert qa["checks"]["post_processors"]["status"] == "FAIL"
+    assert qa["checks"]["post_processors"]["critical_error_count"] == 1
+    assert any(
+        issue["code"] == "CRITICAL_POST_PROCESSOR_ERROR"
+        for issue in qa["issues"]
+    )
 
 
 def test_qa_report_detects_placeholder_residue(tmp_path):
@@ -6657,6 +6979,93 @@ def test_rebuild_reference_section_covers_cited_pmids(tmp_path):
     assert "stale ref one" not in blob  # 静态条目被替换
     assert "99999999" not in blob  # “如编号”示例被排除
     assert blob.index("20664172") < blob.index("24579064")  # PMID 升序
+
+
+def test_rebuild_reference_section_preserves_following_report_sections(tmp_path):
+    """重建文献只能改文献区，不能吞掉其后的 QC/方法/局限/公司正文。"""
+    docx_path = tmp_path / "refs_with_tail.docx"
+    doc = Document()
+    doc.add_paragraph("正文引用[24579064]。")
+    doc.add_paragraph("5. 参考文献")
+    doc.add_paragraph("PMID:0000001 stale ref one")
+    doc.add_paragraph("PMID:0000002 stale ref two")
+    doc.add_paragraph("")
+    doc.add_paragraph("本次检测质控结果")
+    qc_table = doc.add_table(rows=2, cols=2)
+    qc_table.cell(0, 0).text = "质控指标"
+    qc_table.cell(0, 1).text = "结果"
+    qc_table.cell(1, 0).text = "Q30"
+    qc_table.cell(1, 1).text = "合格"
+    doc.add_paragraph("*质控结果分为“合格”和“风险”两个等级。")
+    doc.add_paragraph("高通量测序检测方法说明")
+    doc.add_paragraph("检测方法正文必须保留。")
+    doc.add_paragraph("高通量测序局限性")
+    doc.add_paragraph("检测局限正文必须保留。")
+    doc.add_paragraph("脉络医学检验简介")
+    doc.add_paragraph("公司简介正文必须保留。")
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._rebuild_reference_section(
+        str(docx_path),
+        {
+            "reference_lookup": {
+                "pmid": {"24579064": "PMID: 24579064 BRCA paper"},
+                "trial": {},
+                "other": [],
+            }
+        },
+    )
+
+    rendered = Document(docx_path)
+    paragraphs = [(p.text or "").strip() for p in rendered.paragraphs]
+    blob = "\n".join(paragraphs)
+    assert "PMID: 24579064 BRCA paper" in blob
+    assert "stale ref one" not in blob
+    assert "stale ref two" not in blob
+    tail = [
+        "本次检测质控结果",
+        "*质控结果分为“合格”和“风险”两个等级。",
+        "高通量测序检测方法说明",
+        "检测方法正文必须保留。",
+        "高通量测序局限性",
+        "检测局限正文必须保留。",
+        "脉络医学检验简介",
+        "公司简介正文必须保留。",
+    ]
+    assert all(text in paragraphs for text in tail)
+    assert [paragraphs.index(text) for text in tail] == sorted(
+        paragraphs.index(text) for text in tail
+    )
+    assert any(
+        "质控指标" in " ".join(cell.text for row in table.rows for cell in row.cells)
+        for table in rendered.tables
+    )
+
+
+def test_reference_bounds_ignore_local_colon_heading_in_endometrial_appendix():
+    package = load_panel_package("endometrial_29", project_root=ROOT)
+    document = Document(package.resolve_template_file())
+    texts = [(paragraph.text or "").strip() for paragraph in document.paragraphs]
+
+    start, end = find_reference_section_bounds(document.paragraphs)
+
+    assert start is not None
+    assert texts[start].startswith("5") and "参考文献" in texts[start]
+    assert texts[end].startswith("第四部分")
+    assert texts.index("参考文献：") > end
+
+
+def test_rebuild_references_blocks_cited_document_without_main_heading(tmp_path):
+    docx_path = tmp_path / "missing_reference_heading.docx"
+    doc = Document()
+    doc.add_paragraph("正文引用[24579064]。")
+    doc.save(docx_path)
+
+    with pytest.raises(ValueError, match="reference heading is missing"):
+        TemplateRenderer(log_level="ERROR")._rebuild_reference_section(
+            str(docx_path),
+            {"reference_lookup": {"pmid": {}, "trial": {}, "other": []}},
+        )
 
 
 def test_build_reference_lookup_includes_extra_references(tmp_path):

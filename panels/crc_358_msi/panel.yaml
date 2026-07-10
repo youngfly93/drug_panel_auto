@@ -114,6 +114,8 @@ template_contract:
     - "targeted_drug_tips"
     - "variants_2_1"
     - "chemotherapy"
+  required_markers:
+    - "__PART3_MARKER__"
   required_table_structures:
     targeted_drug_tips:
       columns: 4

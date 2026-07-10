@@ -14,7 +14,9 @@ import re
 from typing import Any, Iterable, Mapping, Sequence, Union
 
 import yaml
+from docx import Document
 
+from reportgen.docx_sections import inspect_structural_marker
 from reportgen.panels.loader import (
     QA_PROFILE_FILENAME,
     PanelPackage,
@@ -648,6 +650,50 @@ class PanelPackageValidator:
                     panel_id=package.panel_id,
                     path=package.root_dir / "panel.yaml",
                 )
+
+        template_contract = raw.get("template_contract") or {}
+        required_markers = (
+            template_contract.get("required_markers", [])
+            if isinstance(template_contract, Mapping)
+            else []
+        )
+        if isinstance(required_markers, list) and required_markers:
+            try:
+                template_path = package.resolve_template_file()
+                document = Document(template_path)
+            except Exception as exc:
+                report.add(
+                    "ERROR",
+                    "TEMPLATE_MARKER_CHECK_FAILED",
+                    f"Cannot inspect default template markers: {exc}",
+                    panel_id=package.panel_id,
+                    path=package.root_dir / "panel.yaml",
+                )
+            else:
+                for raw_marker in required_markers:
+                    marker = str(raw_marker or "").strip()
+                    if not marker:
+                        continue
+                    marker_indices, count = inspect_structural_marker(
+                        document,
+                        marker,
+                    )
+                    if not marker_indices:
+                        report.add(
+                            "ERROR",
+                            "TEMPLATE_MARKER_MISSING",
+                            f"Default template is missing required marker {marker!r}",
+                            panel_id=package.panel_id,
+                            path=template_path,
+                        )
+                    elif count > 1:
+                        report.add(
+                            "ERROR",
+                            "TEMPLATE_MARKER_DUPLICATED",
+                            f"Default template contains required marker {marker!r} {count} times",
+                            panel_id=package.panel_id,
+                            path=template_path,
+                        )
 
     def _validate_golden_cases(
         self,

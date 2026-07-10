@@ -4,12 +4,19 @@
 负责使用docxtpl渲染Docx模板。
 """
 
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from docx import Document
 
+from reportgen.docx_sections import (
+    find_reference_section_bounds,
+    inspect_structural_marker,
+)
 from reportgen.core.processors import (
+    CRITICAL_DOCX_PROCESSOR_NAMES,
     ProcessorContext,
     build_docx_processors,
     run_processors,
@@ -79,6 +86,7 @@ class TemplateRenderer:
 
         self.logger.info("开始渲染模板", template=template_path, output=output_path)
         self.last_processor_report = []
+        temporary_output: Optional[Path] = None
 
         try:
             try:
@@ -103,11 +111,20 @@ class TemplateRenderer:
             # 渲染
             doc.render(context)
 
-            # 保存
-            doc.save(output_path)
+            # Render and post-process atomically in the destination directory.
+            # A critical processor failure must never leave a half-built report
+            # at the final output path.
+            fd, temporary_name = tempfile.mkstemp(
+                prefix=f".{output_path_obj.stem}.",
+                suffix=".docx",
+                dir=str(output_path_obj.parent),
+            )
+            os.close(fd)
+            temporary_output = Path(temporary_name)
+            doc.save(str(temporary_output))
 
             self._run_post_render_processors(
-                output_path,
+                str(temporary_output),
                 context,
                 template_path,
                 processor_names=post_processor_names,
@@ -115,7 +132,7 @@ class TemplateRenderer:
 
             # 验证生成的文件可以被正常打开
             try:
-                Document(output_path)
+                Document(str(temporary_output))
             except Exception as verify_err:
                 self.logger.error(
                     "生成的docx文件无法打开，可能已损坏",
@@ -124,11 +141,19 @@ class TemplateRenderer:
                 )
                 raise ValueError(f"生成的docx文件无法打开: {verify_err}")
 
+            os.replace(temporary_output, output_path_obj)
+            temporary_output = None
+
             self.logger.info("模板渲染成功", output=output_path)
 
             return output_path
 
         except Exception as e:
+            if temporary_output is not None:
+                try:
+                    temporary_output.unlink(missing_ok=True)
+                except OSError:
+                    pass
             self.logger.error(
                 "模板渲染失败", template=template_path, output=output_path, error=str(e)
             )
@@ -166,6 +191,20 @@ class TemplateRenderer:
             processors=len(self.last_processor_report),
             errors=len(errors),
         )
+        critical_errors = [
+            row
+            for row in errors
+            if row.get("name") in CRITICAL_DOCX_PROCESSOR_NAMES
+        ]
+        if critical_errors:
+            summary = "; ".join(
+                f"{row.get('name')}: {row.get('error') or row.get('warning_message') or 'failed'}"
+                for row in critical_errors
+            )
+            raise RuntimeError(
+                "Critical DOCX post-processing failed; report generation was blocked: "
+                + summary
+            )
 
     def _normalize_template_context(self, obj):
         """Normalize template context.
@@ -1823,7 +1862,6 @@ class TemplateRenderer:
         This keeps one shared template usable for both 358 and 301 CRC reports while
         matching the reviewed final-report layout.
         """
-        import copy
         import os
         import re
         import tempfile
@@ -3224,14 +3262,20 @@ class TemplateRenderer:
         content_cfg = self._report_content_config(context)
 
         # 找到占位标记段落
-        placeholder_para = None
-        for p in doc.paragraphs:
-            if "__PART3_MARKER__" in p.text:
-                placeholder_para = p
-                break
-
-        if placeholder_para is None:
+        marker = "__PART3_MARKER__"
+        marker_indices, all_marker_occurrences = inspect_structural_marker(doc, marker)
+        required_markers = set(context.get("required_structural_markers") or [])
+        if all_marker_occurrences > 1:
+            raise ValueError(
+                "DOCX contains multiple __PART3_MARKER__ occurrences; expected exactly one"
+            )
+        if not marker_indices:
+            if marker in required_markers or all_marker_occurrences:
+                raise ValueError(
+                    "DOCX must contain __PART3_MARKER__ as one standalone body paragraph"
+                )
             return  # 无占位标记，跳过
+        placeholder_para = doc.paragraphs[marker_indices[0]]
 
         def element_text(element) -> str:
             return "".join(node.text or "" for node in element.iter(qn("w:t")))
@@ -3693,23 +3737,30 @@ class TemplateRenderer:
         pmid_map = dict(lookup.get("pmid") or {})
         trial_map = dict(lookup.get("trial") or {})
         other_refs = list(lookup.get("other") or [])
-        if not (pmid_map or trial_map or other_refs):
-            return
 
         doc = Document(file_path)
         paragraphs = doc.paragraphs
 
-        ref_idx = None
-        for idx, paragraph in enumerate(paragraphs):
-            text = (paragraph.text or "").strip()
-            if re.fullmatch(r"5\s*[\.\．、]?\s*参考文献", text) or text == "参考文献":
-                ref_idx = idx  # 取最后一个（附录级）
+        ref_idx, ref_end_idx = find_reference_section_bounds(paragraphs)
         if ref_idx is None:
+            body_text = "\n".join(paragraph.text or "" for paragraph in paragraphs)
+            if re.search(
+                r"\[[^\]]*(?:\d{5,9}|(?:NCT|CTR|ChiCTR)\d+)[^\]]*\]",
+                body_text,
+                re.I,
+            ):
+                raise ValueError(
+                    "Cited PMID/trial identifiers exist but the main reference heading is missing"
+                )
             return
 
         # 把原静态参考文献也解析进映射（KB 优先、静态补缺），使静态附录章节
         # （诊疗知识/信号通路等）引用的 PMID 仍能保留全文，不退化为无标题兜底。
-        existing = [p for p in paragraphs[ref_idx + 1:] if (p.text or "").strip()]
+        existing = [
+            p
+            for p in paragraphs[ref_idx + 1 : ref_end_idx]
+            if (p.text or "").strip()
+        ]
         for paragraph in existing:
             entry = (paragraph.text or "").strip()
             m_static = re.match(r"PMID[:\s]*0*(\d+)", entry, re.I)
@@ -3769,7 +3820,9 @@ class TemplateRenderer:
             paragraph.add_run(text)
 
         if not existing:
-            return  # 没有可复用的静态条目则不动（保守）
+            raise ValueError(
+                "Cited identifiers exist but the main reference section has no reusable entries"
+            )
 
         reuse = min(len(refs), len(existing))
         for i in range(reuse):
@@ -3788,6 +3841,25 @@ class TemplateRenderer:
             paragraph._p.getparent().remove(paragraph._p)
 
         doc.save(file_path)
+
+        final_doc = Document(file_path)
+        final_start, final_end = find_reference_section_bounds(final_doc.paragraphs)
+        if final_start is None:
+            raise ValueError("Main reference heading disappeared after rebuilding")
+        final_text = "\n".join(
+            paragraph.text or ""
+            for paragraph in final_doc.paragraphs[final_start + 1 : final_end]
+        ).upper()
+        missing_ids = [
+            identifier
+            for identifier in [*cited_pmids, *cited_trials]
+            if identifier.upper() not in final_text
+        ]
+        if missing_ids:
+            raise ValueError(
+                "Reference rebuild left cited identifiers unresolved: "
+                + ", ".join(missing_ids)
+            )
         self.logger.info("参考文献按引用重建完成", references=len(refs))
 
     def _render_signature_placeholder(self, file_path: str, context: dict) -> None:

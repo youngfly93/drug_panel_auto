@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 from docx import Document
 
 from reportgen.core.pipeline.summary import summarize_stage_results
+from reportgen.core.processors import CRITICAL_DOCX_PROCESSOR_NAMES
 from reportgen.models.report_data import ReportData
 from reportgen.utils.artifacts import write_json
 from reportgen.utils.docx_render import render_docx_to_pngs
@@ -206,19 +207,38 @@ def build_docx_qa_report(
         for row in processor_rows
         if isinstance(row, Mapping) and row.get("status") == "ERROR"
     ]
+    critical_processor_errors = [
+        row
+        for row in processor_errors
+        if row.get("name") in CRITICAL_DOCX_PROCESSOR_NAMES
+    ]
     checks["post_processors"] = {
-        "status": "WARN"
-        if processor_errors
-        else ("PASS" if processor_report is not None else "SKIP"),
+        "status": (
+            "FAIL"
+            if critical_processor_errors
+            else (
+                "WARN"
+                if processor_errors
+                else ("PASS" if processor_report is not None else "SKIP")
+            )
+        ),
         "count": len(processor_rows),
         "error_count": len(processor_errors),
         "errors": processor_errors,
+        "critical_error_count": len(critical_processor_errors),
+        "critical_errors": critical_processor_errors,
     }
     if processor_errors:
         issue(
-            "warning",
+            "error" if critical_processor_errors else "warning",
             "POST_PROCESSOR_ERRORS",
             "One or more DOCX post-render processors reported errors.",
+        )
+    if critical_processor_errors:
+        issue(
+            "error",
+            "CRITICAL_POST_PROCESSOR_ERROR",
+            "Part 3 or reference rebuilding failed; the report is not deliverable.",
         )
 
     table_checks = _build_table_checks(table_metrics, project_type, context)
@@ -384,6 +404,12 @@ def _template_contract_check(
         declared.get("missing_required_variables") or []
     )
     missing_required_lists = list(declared.get("missing_required_lists") or [])
+    missing_required_markers = list(
+        declared.get("missing_required_markers") or []
+    )
+    duplicate_required_markers = list(
+        declared.get("duplicate_required_markers") or []
+    )
     missing_required_tables = list(declared.get("missing_required_tables") or [])
     table_errors = dict(declared.get("table_errors") or {})
 
@@ -396,6 +422,9 @@ def _template_contract_check(
         "missing_row_fields": missing_row_fields,
         "missing_required_variables": missing_required_variables,
         "missing_required_lists": missing_required_lists,
+        "missing_required_markers": missing_required_markers,
+        "duplicate_required_markers": duplicate_required_markers,
+        "marker_counts": dict(declared.get("marker_counts") or {}),
         "missing_required_tables": missing_required_tables,
         "table_errors": table_errors,
         "message": (
@@ -405,6 +434,8 @@ def _template_contract_check(
             f"missing_paths={missing_paths}, missing_lists={missing_lists}, "
             f"missing_required_variables={missing_required_variables}, "
             f"missing_required_lists={missing_required_lists}, "
+            f"missing_required_markers={missing_required_markers}, "
+            f"duplicate_required_markers={duplicate_required_markers}, "
             f"missing_required_tables={missing_required_tables}, "
             f"table_errors={table_errors}"
         ),

@@ -89,6 +89,17 @@ def test_crc358_golden_template_part3_uses_dynamic_marker():
     assert "46.29" not in dynamic_stub
 
 
+def test_crc358_golden_template_reference_section_has_qc_boundary():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    template_path = package.resolve_template_file("crc_358_msi_golden_template_v0")
+    paragraphs = [(p.text or "").strip() for p in Document(template_path).paragraphs]
+
+    ref_idx = paragraphs.index("5. 参考文献")
+    qc_idx = paragraphs.index("本次检测质控结果")
+    assert ref_idx < qc_idx
+    assert sum(bool(text) for text in paragraphs[ref_idx + 1 : qc_idx]) == 97
+
+
 def test_crc301_golden_template_declares_active_default_processors():
     package = load_panel_package("crc_301_msi", project_root=ROOT)
     template = package.templates["crc_301_msi_golden_template_v1"]
@@ -132,6 +143,17 @@ def test_crc301_golden_template_part3_uses_dynamic_marker():
     assert "检测者：" in text
     assert "审核者：" in text
     assert "报告日期：{{ report_date_dot }}" in text
+
+
+def test_crc301_golden_template_reference_section_has_qc_boundary():
+    package = load_panel_package("crc_301_msi", project_root=ROOT)
+    template_path = package.resolve_template_file("crc_301_msi_golden_template_v1")
+    paragraphs = [(p.text or "").strip() for p in Document(template_path).paragraphs]
+
+    ref_idx = paragraphs.index("5. 参考文献")
+    qc_idx = paragraphs.index("本次检测质控结果")
+    assert ref_idx < qc_idx
+    assert sum(bool(text) for text in paragraphs[ref_idx + 1 : qc_idx]) == 100
 
 
 def test_crc301_golden_template_docxtpl_renders_minimal_context(tmp_path):

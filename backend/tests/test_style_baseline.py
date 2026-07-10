@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from docx import Document
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -40,6 +41,18 @@ def test_golden_style_baseline(panel: str, tmp_path):
         )
     )
     assert result.get("ok"), result.get("errors")
+
+    rendered_paragraphs = [
+        (paragraph.text or "").strip()
+        for paragraph in Document(result["output_file"]).paragraphs
+    ]
+    for required_tail_heading in (
+        "本次检测质控结果",
+        "高通量测序检测方法说明",
+        "高通量测序局限性",
+        "脉络医学检验简介",
+    ):
+        assert rendered_paragraphs.count(required_tail_heading) == 1
 
     actual = extract_style_baseline(result["output_file"])
     baseline_path = BASELINE_DIR / f"{panel}_style_baseline.json"

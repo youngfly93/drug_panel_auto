@@ -26,6 +26,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
 from docx import Document
 
+from reportgen.docx_sections import inspect_structural_marker
+
 _JINJA_VAR_RE = re.compile(r"\{\{\s*(?P<expr>.*?)\s*\}\}")
 _JINJA_FOR_RE = re.compile(
     r"\{%\s*(?:tr|tc|p|r)?\s*for\s+(?P<var>[a-zA-Z_][a-zA-Z0-9_]*)\s+in\s+"
@@ -68,6 +70,7 @@ class DeclaredTemplateContract:
 
     required_variables: Tuple[str, ...] = ()
     required_lists: Tuple[str, ...] = ()
+    required_markers: Tuple[str, ...] = ()
     table_structures: Tuple[TemplateTableExpectation, ...] = ()
 
 
@@ -87,6 +90,9 @@ class DeclaredContractValidation:
     ok: bool
     missing_required_variables: Tuple[str, ...]
     missing_required_lists: Tuple[str, ...]
+    missing_required_markers: Tuple[str, ...]
+    duplicate_required_markers: Tuple[str, ...]
+    marker_counts: Dict[str, int]
     missing_required_tables: Tuple[str, ...]
     table_errors: Dict[str, Tuple[str, ...]]
     table_matches: Dict[str, Dict[str, Any]]
@@ -258,10 +264,12 @@ def parse_declared_template_contract(spec: Any) -> DeclaredTemplateContract:
         or spec.get("lists")
         or []
     )
+    required_markers = spec.get("required_markers") or spec.get("markers") or []
 
     return DeclaredTemplateContract(
         required_variables=tuple(sorted(set(_str_list(required_variables)))),
         required_lists=tuple(sorted(set(_str_list(required_lists)))),
+        required_markers=tuple(sorted(set(_str_list(required_markers)))),
         table_structures=tuple(table_specs),
     )
 
@@ -285,6 +293,29 @@ def validate_declared_contract(
     )
     missing_lists = tuple(
         sorted(list_name for list_name in declared.required_lists if list_name not in actual_lists)
+    )
+
+    marker_document = Document(str(template_path))
+    marker_inspections = {
+        marker: inspect_structural_marker(marker_document, marker)
+        for marker in declared.required_markers
+    }
+    marker_counts = {
+        marker: total for marker, (_indices, total) in marker_inspections.items()
+    }
+    missing_markers = tuple(
+        sorted(
+            marker
+            for marker, (indices, _total) in marker_inspections.items()
+            if len(indices) == 0
+        )
+    )
+    duplicate_markers = tuple(
+        sorted(
+            marker
+            for marker, (_indices, total) in marker_inspections.items()
+            if total > 1
+        )
     )
 
     table_snapshots = _inspect_template_tables(
@@ -325,12 +356,20 @@ def validate_declared_contract(
             table_errors[expected.name] = tuple(errors)
 
     ok = not (
-        missing_variables or missing_lists or missing_tables or table_errors
+        missing_variables
+        or missing_lists
+        or missing_markers
+        or duplicate_markers
+        or missing_tables
+        or table_errors
     )
     return DeclaredContractValidation(
         ok=ok,
         missing_required_variables=missing_variables,
         missing_required_lists=missing_lists,
+        missing_required_markers=missing_markers,
+        duplicate_required_markers=duplicate_markers,
+        marker_counts=marker_counts,
         missing_required_tables=tuple(sorted(missing_tables)),
         table_errors=table_errors,
         table_matches=table_matches,
@@ -347,6 +386,7 @@ def declared_validation_to_dict(
         "ok": bool(validation.ok),
         "required_variables": list(declared.required_variables),
         "required_lists": list(declared.required_lists),
+        "required_markers": list(declared.required_markers),
         "required_table_structures": [
             {
                 "name": table.name,
@@ -360,6 +400,9 @@ def declared_validation_to_dict(
         ],
         "missing_required_variables": list(validation.missing_required_variables),
         "missing_required_lists": list(validation.missing_required_lists),
+        "missing_required_markers": list(validation.missing_required_markers),
+        "duplicate_required_markers": list(validation.duplicate_required_markers),
+        "marker_counts": dict(validation.marker_counts),
         "missing_required_tables": list(validation.missing_required_tables),
         "table_errors": {
             name: list(errors) for name, errors in validation.table_errors.items()

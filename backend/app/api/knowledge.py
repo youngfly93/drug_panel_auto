@@ -1,15 +1,78 @@
 """Knowledge base browsing endpoints."""
 
-from typing import Optional
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies import require_admin
+from app.dependencies import require_admin, require_user
 from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.services import knowledge_service as svc
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+
+
+@router.get("/panels", response_model=ApiResponse)
+def list_catalog_panels(_user: User = Depends(require_user)):
+    """List Panel packages and their reviewed-overlay availability."""
+    return ApiResponse(data=svc.get_catalog_panels())
+
+
+@router.get("/entries", response_model=ApiResponse)
+def list_catalog_entries(
+    panel_id: str = Query(..., min_length=1, max_length=80),
+    kind: Literal["gene", "drug", "targeted_drug"] = Query(...),
+    layer: Literal["all", "base", "reviewed_overlay"] = Query("all"),
+    search: str = Query("", max_length=100),
+    gene: str = Query("", max_length=40),
+    review_status: Literal[
+        "all", "approved_for_runtime", "needs_review", "not_recorded"
+    ] = Query("all"),
+    match_scope: Literal["all", "gene", "variant", "event"] = Query("all"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    _user: User = Depends(require_user),
+):
+    """Browse base and reviewed-overlay entries as separate, typed rows."""
+    try:
+        data = svc.get_catalog_entries(
+            panel_id=panel_id,
+            kind=kind,
+            layer=layer,
+            search=search,
+            gene=gene,
+            review_status=review_status,
+            match_scope=match_scope,
+            page=page,
+            page_size=page_size,
+        )
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown panel",
+        ) from None
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from None
+    return ApiResponse(data=data)
+
+
+@router.get("/coverage", response_model=ApiResponse)
+def catalog_coverage(
+    panel_id: str = Query(..., min_length=1, max_length=80),
+    _user: User = Depends(require_user),
+):
+    """Return layer counts and the exact declared coverage denominator."""
+    try:
+        data = svc.get_catalog_coverage(panel_id)
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown panel",
+        ) from None
+    return ApiResponse(data=data)
 
 
 @router.get("/genes", response_model=ApiResponse)

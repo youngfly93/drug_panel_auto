@@ -8,6 +8,7 @@ from reportgen.core.processors.base import (
 )
 from reportgen.core.processors.docx import build_default_docx_processors
 from reportgen.core.processors.registry import (
+    CRITICAL_DOCX_PROCESSOR_NAMES,
     build_docx_processors,
     default_docx_processor_names,
     known_docx_processor_names,
@@ -18,6 +19,7 @@ __all__ = [
     "ProcessorContext",
     "ProcessorResult",
     "RenderProcessor",
+    "CRITICAL_DOCX_PROCESSOR_NAMES",
     "build_default_docx_processors",
     "build_docx_processors",
     "default_docx_processor_names",

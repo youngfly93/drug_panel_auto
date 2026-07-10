@@ -24,6 +24,12 @@ PROCESSOR_DEPENDENCIES: Mapping[str, tuple[str, ...]] = {
     "underlines_and_styles": ("final_refresh_cleanup",),
 }
 
+# A report must not be returned as successfully rendered when either the
+# patient-specific Part 3 narrative or its citation list failed to materialize.
+CRITICAL_DOCX_PROCESSOR_NAMES = frozenset(
+    {"part3_formatted_sections", "rebuild_references"}
+)
+
 
 class ProcessorRegistry:
     """Ordered lookup for stateless DOCX processors."""
