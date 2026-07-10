@@ -209,7 +209,10 @@ class ReportGenBridge:
         if canonical_project_type and not project_name:
             project_name = self._project_name_for_type(canonical_project_type)
 
-        report_data = self.field_mapper.map(working)
+        report_data = self.field_mapper.map(
+            working,
+            panel_package=panel_package,
+        )
         if not str(report_data.get_field("report_date") or "").strip():
             self.generator._fill_missing_report_date(report_data)
         report_data = self.data_cleaner.validate_and_clean(report_data)

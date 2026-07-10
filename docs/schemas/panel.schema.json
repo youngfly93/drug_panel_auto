@@ -207,6 +207,11 @@
           "description": "List names referenced by {%tr for row in <list> %} loops.",
           "items": { "type": "string" }
         },
+        "required_markers": {
+          "type": "array",
+          "description": "Structural markers that must occur exactly once in the selected DOCX template.",
+          "items": { "type": "string" }
+        },
         "required_table_structures": {
           "type": "object",
           "description": "Per-table column count + required header row.",

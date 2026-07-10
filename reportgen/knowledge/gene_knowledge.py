@@ -262,6 +262,24 @@ class GeneKnowledgeProvider:
             row.get("gene"), row.get("cHGVS") or row.get("c_hgvs"), row.get("pHGVS") or row.get("p_hgvs")
         )
 
+    def variant_identity_key(self, row: Dict[str, Any]) -> str:
+        """Return the canonical gene+cHGVS+pHGVS key used for Part 3 dedupe."""
+        exact = self._variant_key_from_row(row)
+        if exact:
+            return exact
+        gene = self._hgvs_key(row.get("gene"))
+        if not gene:
+            return ""
+        c_hgvs = self._hgvs_key(row.get("cHGVS") or row.get("c_hgvs"))
+        p_hgvs = self._hgvs_key(row.get("pHGVS") or row.get("p_hgvs"))
+        event = self._hgvs_key(
+            row.get("event")
+            or row.get("mutation_type")
+            or row.get("variant_type")
+            or row.get("locus")
+        )
+        return f"{gene}|{c_hgvs or '<NO_C>'}|{p_hgvs}|{event}"
+
     def _load_gene_transcript_db(self, path: Path, config: Dict) -> None:
         """加载基因-转录本-染色体信息"""
         import logging
@@ -790,6 +808,16 @@ class GeneKnowledgeProvider:
             self.load()
         return self._drug_full_cache.get(gene.upper(), [])
 
+    def list_drug_narrative_entries(self) -> List[Dict[str, str]]:
+        """List base Part 3 drug-narrative rows with their owning gene."""
+        if not self._loaded:
+            self.load()
+        return [
+            {"gene": gene, **dict(row)}
+            for gene, rows in self._drug_full_cache.items()
+            for row in rows
+        ]
+
     def get_references(self, gene: str) -> List[str]:
         """
         获取基因的参考文献列表
@@ -990,7 +1018,7 @@ class GeneKnowledgeProvider:
             p_hgvs = v.get("pHGVS", "")
 
             # 去重
-            variant_key = f"{gene}:{c_hgvs}:{p_hgvs}"
+            variant_key = self.variant_identity_key(v)
             if variant_key in seen_variants:
                 continue
             seen_variants.add(variant_key)
@@ -1018,6 +1046,9 @@ class GeneKnowledgeProvider:
                 has_drug=has_drug,
                 cancer_type=cancer_type,
             )
+            section["c_hgvs"] = c_hgvs
+            section["p_hgvs"] = p_hgvs
+            section["source_variant_key"] = variant_key
             sections.append(section)
 
         return sections

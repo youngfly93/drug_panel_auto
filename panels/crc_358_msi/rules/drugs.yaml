@@ -17,6 +17,139 @@ drug_rules:
       - "C"
       - "D"
 
+# Request-scoped rules used by the Part 2 targeted-drug lookup. These rules are
+# resolved from the active panel package and never applied to another panel
+# unless that panel explicitly declares source_panel_id.
+targeted_drug_rules:
+  enabled: true
+  base_db_enabled: true
+  allowed_source_dbs: ["internal", "CGI", "CIVIC"]
+  allow_internal_rows: true
+  require_cancer_profile_match: false
+  approved_drug_rows_enabled: true
+  overrides:
+    SETD2:
+      benefit_drugs: "AZD1775（C）"
+      caution_drugs: "--"
+    ATM:
+      benefit_drugs: |-
+        奥拉帕利（C）
+        芦卡帕利（C）
+        尼拉帕利（C）
+        他拉唑帕利（C）
+        AZD6738+奥拉帕利（C）
+        阿维鲁单抗+他拉唑帕利（C）
+        LY2606368（C）
+        盐酸可泮利塞+奥拉帕利+度伐利尤单抗（C）
+        奥拉帕利+帕博利珠单抗（C）
+        帕米帕利+替雷利珠单抗（C）
+        芦卡帕利+阿替利珠单抗（C）
+        他拉唑帕利+阿替利珠单抗（C）
+      caution_drugs: "--"
+  applicability_rules:
+    - genes:
+        - EGFR
+        - ERBB2
+        - KRAS
+        - NRAS
+        - BRAF
+        - NTRK1
+        - NTRK2
+        - NTRK3
+        - TP53
+        - TSC1
+      sources:
+        - internal
+      reject_when_db_position_missing: true
+      note: "P0药物规则护栏：内部库只有基因、无位点/事件的泛化行不进入2.1靶向用药提示；已审核reviewed override仍优先生效。"
+  reviewed_variant_overrides:
+    - gene: FLT3
+      c_hgvs: "c.2537G>A"
+      variant_site: "c.2537G>A,\np.G846D"
+      benefit_drugs:
+        - "瑞戈非尼（C）"
+        - "索拉非尼（C）"
+        - "舒尼替尼（C）"
+    - gene: TP53
+      c_hgvs: "c.821T>A"
+      p_hgvs: "p.V274D"
+      variant_site: "c.821T>A,\np.V274D"
+      benefit_drugs:
+        - "AZD1775（C）"
+        - "AZD1775+奥拉帕利（C）"
+        - "Alisertib（C）"
+        - "Alisertib+AZD1775（C）"
+        - "Eprenetapopt（C）"
+    - gene: TSC1
+      applicability: "loss_of_function"
+      variant_level:
+        - "Ⅱ类"
+        - "II类"
+        - "2类"
+      benefit_drugs:
+        - "依维莫司（C）"
+        - "西罗莫司（C）"
+        - "替西罗莫司（C）"
+        - "依维莫司+Buparlisib（C）"
+        - "Sapanisertib（C）"
+    - gene: EGFR
+      c_hgvs: "c.2387G>A"
+      p_hgvs: "p.G796D"
+      variant_site: "c.2387G>A,\np.G796D"
+      benefit_drugs:
+        - "阿法替尼（C）"
+        - "TQB3804（C）"
+        - "EMB01（C）"
+        - "MCLA-129（C）"
+    - gene: KRAS
+      c_hgvs: "c.34G>A"
+      p_hgvs: "p.G12S"
+      variant_site: "c.34G>A,\np.G12S"
+      benefit_drugs:
+        - "司美替尼（C）"
+        - "曲美替尼+Navitoclax（C）"
+        - "帕尼单抗+曲美替尼（C）"
+        - "贝美替尼+哌柏西利（C）"
+        - "BI 1701963（C）"
+        - "BI 1701963+曲美替尼（C）"
+        - "PD0325901+哌柏西利（C）"
+        - "奈拉替尼+曲美替尼（C）"
+        - "福巴替尼+贝美替尼（C） Defactinib+Avutometinib（C）"
+        - "依维莫司+Avutometinib（C）"
+        - "RMC-6236（C）"
+        - "PD0325901（D）"
+      caution_drugs:
+        - "西妥昔单抗（A）"
+        - "帕尼单抗（A）"
+        - "依维莫司（C）"
+    - gene: ERBB2
+      c_hgvs: "c.1979G>A"
+      p_hgvs:
+        - "p.G660D"
+        - "p.Gly660Asp"
+      clinical_significance: "致病"
+      variant_site: "c.1979G>A,\np.G660D"
+      benefit_drugs:
+        - "阿法替尼（C）"
+        - "曲妥珠单抗（C）"
+        - "恩美曲妥珠单抗（C）"
+        - "曲妥珠单抗+帕妥珠单抗（C）"
+        - "吡咯替尼（C）"
+        - "德曲妥珠单抗（C）"
+        - "曲妥珠单抗+图卡替尼（C）"
+        - "奈拉替尼+依维莫司（C）"
+        - "奈拉替尼+哌柏西利（C）"
+        - "奈拉替尼+曲美替尼（C）"
+        - "波齐替尼（C）"
+        - "吡咯替尼+曲妥珠单抗（C）"
+        - "德曲妥珠单抗+奈拉替尼（C）"
+        - "奈拉替尼±曲妥珠单抗（C）"
+        - "拉帕替尼（D）"
+      caution_drugs:
+        - "西妥昔单抗（D）"
+        - "帕尼单抗（D）"
+        - "奈拉替尼（D）"
+
 approved_drug_rows:
   - drug:
       - "瑞戈非尼"

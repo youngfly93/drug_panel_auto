@@ -3,13 +3,30 @@ Knowledge base service: wraps upstream GeneKnowledgeProvider
 for web browsing of gene knowledge, drug mappings, and immune gene lists.
 """
 
+import hashlib
+import json
+import re
 import sys
+from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
+import yaml
 
 from app.config import settings
+from app.schemas.knowledge import KnowledgeEntry, PanelKnowledgeSummary
+
+_upstream = Path(str(settings.upstream_root)).resolve()
+if str(_upstream) not in sys.path:
+    sys.path.insert(0, str(_upstream))
+
+from reportgen.knowledge import GeneKnowledgeProvider  # noqa: E402
+from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
+from reportgen.rules.targeted_drugs import (  # noqa: E402
+    load_targeted_drug_rule_context,
+)
 
 # No hardcoded paths — upstream root comes from settings
 
@@ -20,6 +37,9 @@ _drug_db_df: Optional[pd.DataFrame] = None
 _drug_db_mtime: float = 0.0
 _immune_df: Optional[pd.DataFrame] = None
 _immune_mtime: float = 0.0
+_overlay_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_base_gene_provider: Optional[GeneKnowledgeProvider] = None
+_base_gene_provider_mtime: float = 0.0
 
 
 def _kb_base_path() -> Path:
@@ -57,6 +77,76 @@ def _load_gene_kb() -> dict[str, pd.DataFrame]:
     except Exception:
         _gene_kb_df = {}
     return _gene_kb_df
+
+
+def _gene_analysis_sheet() -> tuple[str, Optional[pd.DataFrame]]:
+    """Return only the runtime gene-analysis sheet, never staffing/meta sheets."""
+    kb = _load_gene_kb()
+    for sheet_name, df in kb.items():
+        if "基因变异解析" in sheet_name:
+            return sheet_name, df
+    for sheet_name, df in kb.items():
+        if "变异解析" in sheet_name or "gene" in sheet_name.lower():
+            return sheet_name, df
+    return "", None
+
+
+def _gene_column(df: Optional[pd.DataFrame]) -> Optional[str]:
+    if df is None:
+        return None
+    for column in df.columns:
+        text = str(column)
+        if text == "基因名称" or "gene" in text.lower():
+            return text
+    return None
+
+
+def _load_base_gene_provider() -> Optional[GeneKnowledgeProvider]:
+    """Load the same base Part 3 provider used by Word, without any overlay."""
+    global _base_gene_provider, _base_gene_provider_mtime
+
+    path = _kb_base_path() / "gene_knowledge_db.xlsx"
+    current_mtime = _file_mtime(path)
+    if (
+        _base_gene_provider is not None
+        and current_mtime == _base_gene_provider_mtime
+    ):
+        return _base_gene_provider
+    if not path.exists():
+        _base_gene_provider = None
+        _base_gene_provider_mtime = 0.0
+        return None
+
+    try:
+        relative_path = path.resolve().relative_to(_project_root())
+        provider = GeneKnowledgeProvider(
+            {
+                "enabled": True,
+                "gene_knowledge_db": {
+                    "enabled": True,
+                    "path": str(relative_path),
+                    "reviewed_part3_overlay_path": "",
+                    "sheets": {
+                        "gene_analysis": "基因变异解析",
+                        "drug_analysis": "用药提示解析",
+                        "references": "参考文献",
+                    },
+                    "columns": {
+                        "gene_name": "基因名称",
+                        "gene_intro": "基因简介",
+                        "mutation_analysis": "基因变异解析",
+                    },
+                },
+            }
+        )
+        provider.load(str(_project_root()))
+    except Exception:
+        _base_gene_provider = None
+        _base_gene_provider_mtime = 0.0
+        return None
+    _base_gene_provider = provider
+    _base_gene_provider_mtime = current_mtime
+    return provider
 
 
 def _load_drug_db() -> Optional[pd.DataFrame]:
@@ -102,7 +192,12 @@ def _load_immune_genes() -> Optional[pd.DataFrame]:
 def _df_to_records(df: pd.DataFrame, page: int = 1, page_size: int = 50, search: str = "") -> dict:
     """Convert DataFrame to paginated records with optional search."""
     if search:
-        mask = df.apply(lambda row: row.astype(str).str.contains(search, case=False, na=False).any(), axis=1)
+        mask = df.apply(
+            lambda row: row.astype(str)
+            .str.contains(search, case=False, na=False, regex=False)
+            .any(),
+            axis=1,
+        )
         df = df[mask]
 
     total = len(df)
@@ -121,16 +216,9 @@ def _df_to_records(df: pd.DataFrame, page: int = 1, page_size: int = 50, search:
 
 def get_gene_list(page: int = 1, page_size: int = 50, search: str = "") -> dict:
     """Get paginated gene knowledge list."""
-    kb = _load_gene_kb()
-    # Try to find the gene analysis sheet
-    for sheet_name in kb:
-        if "变异解析" in sheet_name or "gene" in sheet_name.lower():
-            return _df_to_records(kb[sheet_name], page, page_size, search)
-
-    # Fallback: use first sheet
-    if kb:
-        first_key = next(iter(kb))
-        return _df_to_records(kb[first_key], page, page_size, search)
+    _sheet_name, df = _gene_analysis_sheet()
+    if df is not None:
+        return _df_to_records(df, page, page_size, search)
 
     return {"columns": [], "rows": [], "total": 0, "page": page, "page_size": page_size}
 
@@ -178,23 +266,845 @@ def get_stats() -> dict:
     drug_df = _load_drug_db()
     immune_df = _load_immune_genes()
 
-    gene_count = 0
-    for df in kb.values():
-        gene_count = max(gene_count, len(df))
+    _sheet_name, gene_df = _gene_analysis_sheet()
+    gene_col = _gene_column(gene_df)
+    source_rows = len(gene_df) if gene_df is not None else 0
+    valid_genes: list[str] = []
+    if gene_df is not None and gene_col:
+        valid_genes = [
+            str(value).strip().upper()
+            for value in gene_df[gene_col].tolist()
+            if str(value).strip() and str(value).strip().upper() != "基因"
+        ]
 
     return {
-        "gene_knowledge": {"sheets": len(kb), "total_rows": gene_count},
+        "gene_knowledge": {
+            "sheets": len(kb),
+            "total_rows": len(valid_genes),
+            "source_rows": source_rows,
+            "unique_genes": len(set(valid_genes)),
+        },
         "drug_mappings": {"total_rows": len(drug_df) if drug_df is not None else 0},
         "immune_genes": {"total_rows": len(immune_df) if immune_df is not None else 0},
     }
 
 
+# ---------------------------------------------------------------------------
+# Panel Knowledge Catalog (new read-only API; legacy table endpoints above stay
+# available for backward compatibility).
+# ---------------------------------------------------------------------------
+
+
+def _project_root() -> Path:
+    return Path(settings.upstream_root).resolve()
+
+
+def _panel_packages() -> dict[str, Any]:
+    loader = PanelPackageLoader(project_root=_project_root())
+    packages: dict[str, Any] = {}
+    for panel_yaml in sorted(loader.panels_dir.glob("*/panel.yaml")):
+        try:
+            package = loader.load_file(panel_yaml)
+        except Exception:
+            continue
+        packages[package.panel_id] = package
+    return packages
+
+
+def _get_panel_package(panel_id: str) -> Any:
+    package = _panel_packages().get(str(panel_id or "").strip())
+    if package is None:
+        raise KeyError(f"Unknown panel: {panel_id}")
+    return package
+
+
+def _sha256_revision(path: Path) -> str:
+    try:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+    except OSError:
+        digest = "unavailable"
+    return f"sha256:{digest}"
+
+
+def _updated_at(path: Path) -> str:
+    try:
+        timestamp = path.stat().st_mtime
+    except OSError:
+        return ""
+    return datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
+
+
+def _load_overlay_file(path: Path) -> dict[str, Any]:
+    key = str(path.resolve())
+    mtime = _file_mtime(path)
+    cached = _overlay_cache.get(key)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise ValueError("reviewed overlay must be a mapping")
+    _overlay_cache[key] = (mtime, raw)
+    return raw
+
+
+def _resolve_overlay(package: Any) -> tuple[Optional[Path], Optional[dict], str]:
+    declared = (getattr(package, "raw", None) or {}).get(
+        "reviewed_part3_overlay"
+    )
+    if not declared:
+        return None, None, "Panel 未声明 reviewed overlay。"
+    try:
+        path = package._resolve_path(str(declared)).resolve()
+        panels_root = (_project_root() / "panels").resolve()
+        path.relative_to(panels_root)
+    except Exception:
+        return None, None, "Reviewed overlay 路径不在受控 panels 目录内。"
+    if not path.exists():
+        return path, None, "Reviewed overlay 文件不存在。"
+    try:
+        return path, _load_overlay_file(path), ""
+    except Exception:
+        # Parser and IO exceptions can contain absolute paths. Keep Web-facing
+        # warnings useful without exposing the host filesystem layout.
+        return path, None, "Reviewed overlay 文件格式无效或无法读取。"
+
+
+def _overlay_review_status(
+    data: Optional[dict[str, Any]],
+    revision: str = "",
+) -> tuple[str, str, str]:
+    if not data:
+        return "not_recorded", "overlay_file", "overlay_unavailable"
+    source = data.get("source") if isinstance(data.get("source"), dict) else {}
+    purpose = str(source.get("purpose") or "")
+    approved_revision = str(
+        source.get("approved_revision")
+        or source.get("approved_sha256")
+        or ""
+    ).lower().removeprefix("sha256:")
+    current_revision = str(revision or "").lower().removeprefix("sha256:")
+    if (
+        approved_revision
+        and current_revision
+        and (
+            current_revision.startswith(approved_revision)
+            or approved_revision.startswith(current_revision)
+        )
+    ):
+        return (
+            "approved_for_runtime",
+            "overlay_file",
+            "approved_current_revision",
+        )
+    if "NEEDS" in purpose.upper() or "需医学审核" in purpose:
+        return "needs_review", "overlay_file", "source_declares_review_needed"
+    if source.get("approved_review_policy") or source.get(
+        "approved_review_applied_at"
+    ):
+        return (
+            "not_recorded",
+            "overlay_file",
+            "current_revision_not_approved",
+        )
+    return "not_recorded", "overlay_file", "no_explicit_review_record"
+
+
+def _entry_review(
+    data: Optional[dict[str, Any]],
+    row: Optional[dict[str, Any]] = None,
+    revision: str = "",
+) -> dict[str, str]:
+    source_note = str((row or {}).get("source_note") or "")
+    if "需医学审核" in source_note or "NEEDS" in source_note.upper():
+        return {
+            "status": "needs_review",
+            "scope": "entry_note",
+            "basis": "entry_source_note_requires_review",
+        }
+    status, scope, basis = _overlay_review_status(data, revision)
+    return {"status": status, "scope": scope, "basis": basis}
+
+
+def _panel_summary(package: Any) -> dict[str, Any]:
+    path, data, warning = _resolve_overlay(package)
+    source = data.get("source") if data and isinstance(data.get("source"), dict) else {}
+    origin_panel_id = str(source.get("panel") or package.panel_id)
+    revision = _sha256_revision(path) if path and data else ""
+    review_status, _scope, _basis = _overlay_review_status(data, revision)
+    overlay_rows = (
+        list(data.get("gene_sections") or [])
+        + list(data.get("drug_sections") or [])
+        if data
+        else []
+    )
+    if any(
+        _entry_review(data, row, revision)["status"] == "needs_review"
+        for row in overlay_rows
+        if isinstance(row, dict)
+    ):
+        review_status = "needs_review"
+    return PanelKnowledgeSummary(
+        panel_id=package.panel_id,
+        display_name=package.display_name,
+        status=str((getattr(package, "raw", None) or {}).get("status") or ""),
+        overlay_available=bool(path and data),
+        overlay_origin_panel_id=origin_panel_id if data else None,
+        shared_overlay=bool(data and origin_panel_id != package.panel_id),
+        review_status=review_status,
+        warning=warning or None,
+    ).model_dump()
+
+
+def get_catalog_panels() -> dict[str, Any]:
+    panels = [
+        _panel_summary(package)
+        for package in sorted(_panel_packages().values(), key=lambda item: item.panel_id)
+    ]
+    return {"panels": panels, "total": len(panels)}
+
+
+def _stable_entry_id(*parts: Any) -> str:
+    payload = json.dumps(parts, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
+
+
+def _clean_value(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() == "nan" else text
+
+
+def _row_value(row: Any, *aliases: str) -> str:
+    for alias in aliases:
+        if alias in row:
+            return _clean_value(row.get(alias))
+    compact_aliases = {re.sub(r"\s+", "", alias) for alias in aliases}
+    for column in getattr(row, "index", []):
+        if re.sub(r"\s+", "", str(column)) in compact_aliases:
+            return _clean_value(row.get(column))
+    return ""
+
+
+def _safe_source_ref(source_db: str, raw: Any) -> str:
+    source = str(source_db or "").strip()
+    text = _clean_value(raw)
+    if source.lower() == "internal":
+        return "internal_curated_source"
+    if not text:
+        return ""
+    safe_parts: list[str] = []
+    for part in re.split(r"[;；]", text):
+        token = part.strip()
+        if not token:
+            continue
+        if re.search(r"(?:^|[/\\])[^/\\]+\.(?:xlsx?|csv|tsv|docx?)$", token, re.I):
+            continue
+        if (
+            re.match(r"^https?://", token, re.I)
+            or re.match(r"^(?:PMID|NCT|CTR|ChiCTR|DOI)[:\s]", token, re.I)
+            or token.upper() in {"FDA", "NCCN"}
+        ):
+            safe_parts.append(token[:500])
+    return ";".join(safe_parts)
+
+
+def _match_scope(c_hgvs: str, p_hgvs: str, event: str = "") -> str:
+    if c_hgvs or p_hgvs:
+        return "variant"
+    if event:
+        return "event"
+    return "gene"
+
+
+def _base_gene_entries(panel_id: str) -> list[dict[str, Any]]:
+    sheet, df = _gene_analysis_sheet()
+    gene_col = _gene_column(df)
+    if df is None or not gene_col:
+        return []
+    path = _kb_base_path() / "gene_knowledge_db.xlsx"
+    revision = _sha256_revision(path)
+    updated_at = _updated_at(path)
+    entries: list[dict[str, Any]] = []
+    for position, (_, row) in enumerate(df.iterrows(), start=2):
+        gene = _row_value(row, gene_col).upper()
+        if not gene or gene == "基因":
+            continue
+        entry = KnowledgeEntry(
+            entry_id=_stable_entry_id("base_gene", position, gene),
+            kind="gene",
+            layer="base",
+            panel_id=panel_id,
+            gene=gene,
+            match_scope="gene",
+            runtime_behavior="fallback_when_no_reviewed_match",
+            review={
+                "status": "not_recorded",
+                "scope": "source_row",
+                "basis": "base_excel_has_no_review_field",
+            },
+            provenance={
+                "source_id": "gene_knowledge_db",
+                "source_type": "base_excel",
+                "sheet": sheet,
+                "row_number": position,
+                "revision": revision,
+                "updated_at": updated_at,
+            },
+            content={
+                "intro": _row_value(row, "基因简介"),
+                "mutation_description": _row_value(row, "基因变异说明"),
+                "mutation_analysis": _row_value(row, "基因变异解析"),
+            },
+        )
+        entries.append(entry.model_dump())
+    return entries
+
+
+def _base_drug_narrative_entries(panel_id: str) -> list[dict[str, Any]]:
+    provider = _load_base_gene_provider()
+    if provider is None:
+        return []
+    path = _kb_base_path() / "gene_knowledge_db.xlsx"
+    revision = _sha256_revision(path)
+    updated_at = _updated_at(path)
+    entries: list[dict[str, Any]] = []
+    for row in provider.list_drug_narrative_entries():
+        gene = _clean_value(row.get("gene")).upper()
+        if not gene:
+            continue
+        c_hgvs = _clean_value(row.get("c_point"))
+        p_hgvs = _clean_value(row.get("p_point"))
+        drug_type = _clean_value(row.get("type")) or "benefit"
+        drug_name = _clean_value(row.get("drug"))
+        entry = KnowledgeEntry(
+            entry_id=_stable_entry_id(
+                "base_drug_narrative",
+                gene,
+                c_hgvs,
+                p_hgvs,
+                drug_type,
+                drug_name,
+                row.get("relation"),
+            ),
+            kind="drug",
+            layer="base",
+            panel_id=panel_id,
+            gene=gene,
+            c_hgvs=c_hgvs,
+            p_hgvs=p_hgvs,
+            match_scope=_match_scope(c_hgvs, p_hgvs),
+            runtime_behavior="base_part3_drug_narrative_fallback",
+            review={
+                "status": "not_recorded",
+                "scope": "source_row",
+                "basis": "base_excel_has_no_review_field",
+            },
+            provenance={
+                "source_id": "gene_knowledge_db_drug_narrative",
+                "source_type": "base_excel",
+                "sheet": "用药提示解析",
+                "revision": revision,
+                "updated_at": updated_at,
+            },
+            content={
+                "drug_type": drug_type,
+                "drug_name": drug_name,
+                "variant_level": _clean_value(row.get("level")),
+                "relation": _clean_value(row.get("relation")),
+                "clinical": _clean_value(row.get("clinical")),
+            },
+        )
+        entries.append(entry.model_dump())
+    return entries
+
+
+def _base_targeted_drug_entries(
+    panel_id: str,
+    targeted_drug_rules: Optional[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    df = _load_drug_db()
+    if df is None:
+        return []
+    path = _kb_base_path() / "targeted_drug_db_public.xlsx"
+    revision = _sha256_revision(path)
+    updated_at = _updated_at(path)
+    entries: list[dict[str, Any]] = []
+    for position, (_, row) in enumerate(df.iterrows(), start=2):
+        gene = _row_value(row, "基因名称").upper()
+        if not gene or gene == "基因":
+            continue
+        c_hgvs = _row_value(row, "c_point")
+        p_hgvs = _row_value(row, "p_point")
+        event = _row_value(row, "扩增/缺失/融合/胚系/未见突变")
+        source_db = _row_value(row, "source_db")
+        entry = KnowledgeEntry(
+            entry_id=_stable_entry_id(
+                "base_drug", position, gene, c_hgvs, p_hgvs, event
+            ),
+            kind="targeted_drug",
+            layer="base",
+            panel_id=panel_id,
+            gene=gene,
+            c_hgvs=c_hgvs,
+            p_hgvs=p_hgvs,
+            match_scope=_match_scope(c_hgvs, p_hgvs, event),
+            runtime_behavior=(
+                "candidate_filtered_by_panel_policy"
+                if targeted_drug_rules and targeted_drug_rules.get("enabled")
+                else "disabled_by_panel_policy"
+            ),
+            review={
+                "status": "not_recorded",
+                "scope": "source_row",
+                "basis": "base_excel_has_no_review_field",
+            },
+            provenance={
+                "source_id": "targeted_drug_db_public",
+                "source_type": "base_excel",
+                "source_db": source_db or None,
+                "source_ref": _safe_source_ref(
+                    source_db, _row_value(row, "source_ref")
+                )
+                or None,
+                "sheet": "targeted_drug_tips",
+                "row_number": position,
+                "revision": revision,
+                "updated_at": updated_at,
+            },
+            content={
+                "variant_level": _row_value(row, "变异等级"),
+                "event": event,
+                "benefit_drugs": _row_value(
+                    row, "潜在获益靶向药物（证据等级）"
+                ),
+                "caution_drugs": _row_value(
+                    row, "可能耐药或慎重药物（证据等级）"
+                ),
+                "cgi_evidence_level": _row_value(row, "cgi_evidence_level"),
+                "civic_amp_category": _row_value(row, "civic_amp_category"),
+                "cancer_context": _row_value(
+                    row,
+                    "cgi_primary_tumor_type_full_name",
+                    "civic_disease",
+                ),
+            },
+        )
+        entries.append(entry.model_dump())
+    return entries
+
+
+def _overlay_entries(package: Any, kind: str) -> tuple[list[dict[str, Any]], list[str]]:
+    path, data, warning = _resolve_overlay(package)
+    if not path or not data:
+        return [], [warning] if warning else []
+    source = data.get("source") if isinstance(data.get("source"), dict) else {}
+    origin_panel_id = str(source.get("panel") or package.panel_id)
+    shared = origin_panel_id != package.panel_id
+    revision = _sha256_revision(path)
+    updated_at = _updated_at(path)
+    source_type = str(source.get("source_type") or "panel_reviewed_overlay")
+    rows = data.get("gene_sections" if kind == "gene" else "drug_sections") or []
+    entries: list[dict[str, Any]] = []
+    for index, raw_row in enumerate(rows, start=1):
+        if not isinstance(raw_row, dict):
+            continue
+        gene = _clean_value(raw_row.get("gene")).upper()
+        if not gene:
+            continue
+        c_hgvs = _clean_value(raw_row.get("c_hgvs"))
+        p_hgvs = _clean_value(raw_row.get("p_hgvs"))
+        applicability = _clean_value(raw_row.get("applicability"))
+        content: dict[str, Any]
+        if kind == "gene":
+            content = {
+                "intro": _clean_value(raw_row.get("intro")),
+                "mutation_description": _clean_value(
+                    raw_row.get("mutation_description")
+                    or raw_row.get("mutation_desc")
+                ),
+                "mutation_analysis": _clean_value(
+                    raw_row.get("mutation_analysis")
+                ),
+                "refinement_note": _clean_value(raw_row.get("refinement_note")),
+            }
+        else:
+            content = {
+                "drug_type": _clean_value(raw_row.get("type")),
+                "drug_name": _clean_value(raw_row.get("drug_name")),
+                "header": _clean_value(raw_row.get("header")),
+                "relation": _clean_value(raw_row.get("relation")),
+                "clinical": _clean_value(raw_row.get("clinical")),
+                "applicability": applicability,
+            }
+        entry = KnowledgeEntry(
+            entry_id=_stable_entry_id(
+                "overlay",
+                origin_panel_id,
+                kind,
+                index,
+                gene,
+                c_hgvs,
+                p_hgvs,
+            ),
+            kind=kind,
+            layer="reviewed_overlay",
+            panel_id=package.panel_id,
+            gene=gene,
+            c_hgvs=c_hgvs,
+            p_hgvs=p_hgvs,
+            match_scope=_match_scope(c_hgvs, p_hgvs, applicability),
+            runtime_behavior="override_base_on_match",
+            review=_entry_review(data, raw_row, revision),
+            provenance={
+                "source_id": "panel_reviewed_part3_overlay",
+                "source_type": source_type,
+                "origin_panel_id": origin_panel_id,
+                "shared_overlay": shared,
+                "revision": revision,
+                "updated_at": updated_at,
+            },
+            content=content,
+        )
+        entries.append(entry.model_dump())
+    return entries, []
+
+
+def _targeted_drug_rule_entries(
+    package: Any,
+    context: Optional[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not context or not context.get("enabled"):
+        return []
+    origin_panel_id = str(context.get("source_panel_id") or package.panel_id)
+    origin_package = _get_panel_package(origin_panel_id)
+    path = origin_package.resolve_rule_file("drugs")
+    revision = _sha256_revision(path)
+    updated_at = _updated_at(path)
+    shared = origin_panel_id != package.panel_id
+    rows: list[dict[str, Any]] = []
+
+    def _rule_text(value: Any) -> str:
+        if isinstance(value, list):
+            return " / ".join(_clean_value(item) for item in value if _clean_value(item))
+        return _clean_value(value)
+
+    def _append(raw: dict[str, Any], *, source_key: str, position: int) -> None:
+        gene = _clean_value(raw.get("gene")).upper()
+        if not gene:
+            return
+        c_hgvs = _rule_text(raw.get("c_hgvs"))
+        p_hgvs = _rule_text(raw.get("p_hgvs"))
+        applicability = _clean_value(raw.get("applicability"))
+        entry = KnowledgeEntry(
+            entry_id=_stable_entry_id(
+                "targeted_drug_rule",
+                origin_panel_id,
+                source_key,
+                position,
+                gene,
+                c_hgvs,
+                p_hgvs,
+            ),
+            kind="targeted_drug",
+            layer="reviewed_overlay",
+            panel_id=package.panel_id,
+            gene=gene,
+            c_hgvs=c_hgvs,
+            p_hgvs=p_hgvs,
+            match_scope=_match_scope(c_hgvs, p_hgvs, applicability),
+            runtime_behavior="panel_targeted_drug_override",
+            review={
+                "status": "approved_for_runtime",
+                "scope": "panel_rule",
+                "basis": "enabled_panel_rule",
+            },
+            provenance={
+                "source_id": "panel_targeted_drug_rules",
+                "source_type": "panel_rule_yaml",
+                "origin_panel_id": origin_panel_id,
+                "shared_overlay": shared,
+                "revision": revision,
+                "updated_at": updated_at,
+            },
+            content={
+                "variant_level": raw.get("variant_level") or "",
+                "applicability": applicability,
+                "benefit_drugs": raw.get("benefit_drugs") or "",
+                "caution_drugs": raw.get("caution_drugs") or "",
+                "clinical_significance": raw.get("clinical_significance") or "",
+            },
+        )
+        rows.append(entry.model_dump())
+
+    for position, (gene, rule) in enumerate(
+        sorted((context.get("overrides") or {}).items()),
+        start=1,
+    ):
+        _append({"gene": gene, **dict(rule)}, source_key="gene_override", position=position)
+    for position, rule in enumerate(
+        context.get("reviewed_variant_overrides") or [],
+        start=1,
+    ):
+        if isinstance(rule, dict):
+            _append(rule, source_key="variant_override", position=position)
+    return rows
+
+
+def _entry_search_blob(entry: dict[str, Any]) -> str:
+    searchable = {
+        "gene": entry.get("gene"),
+        "c_hgvs": entry.get("c_hgvs"),
+        "p_hgvs": entry.get("p_hgvs"),
+        "content": entry.get("content"),
+        "source_db": (entry.get("provenance") or {}).get("source_db"),
+    }
+    return json.dumps(searchable, ensure_ascii=False, sort_keys=True).casefold()
+
+
+def get_catalog_entries(
+    *,
+    panel_id: str,
+    kind: str,
+    layer: str = "all",
+    search: str = "",
+    gene: str = "",
+    review_status: str = "all",
+    match_scope: str = "all",
+    page: int = 1,
+    page_size: int = 50,
+) -> dict[str, Any]:
+    if kind not in {"gene", "drug", "targeted_drug"}:
+        raise ValueError("kind must be gene, drug, or targeted_drug")
+    if layer not in {"all", "base", "reviewed_overlay"}:
+        raise ValueError("invalid knowledge layer")
+    if review_status not in {
+        "all",
+        "approved_for_runtime",
+        "needs_review",
+        "not_recorded",
+    }:
+        raise ValueError("invalid review status")
+    if match_scope not in {"all", "gene", "variant", "event"}:
+        raise ValueError("invalid match scope")
+    if page < 1 or not 1 <= page_size <= 100:
+        raise ValueError("page must be >= 1 and page_size must be between 1 and 100")
+    if len(search) > 100:
+        raise ValueError("search must be at most 100 characters")
+    package = _get_panel_package(panel_id)
+    targeted_context = load_targeted_drug_rule_context(package)
+    if kind == "gene":
+        base_entries = _base_gene_entries(package.panel_id)
+        overlay_entries, warnings = _overlay_entries(package, kind)
+    elif kind == "drug":
+        base_entries = _base_drug_narrative_entries(package.panel_id)
+        overlay_entries, warnings = _overlay_entries(package, kind)
+    else:
+        base_entries = _base_targeted_drug_entries(
+            package.panel_id,
+            targeted_context,
+        )
+        overlay_entries = _targeted_drug_rule_entries(
+            package,
+            targeted_context,
+        )
+        warnings = []
+    entries = base_entries + overlay_entries
+
+    gene_norm = gene.strip().upper()
+    needle = search.strip().casefold()
+    filtered: list[dict[str, Any]] = []
+    for entry in entries:
+        if layer != "all" and entry["layer"] != layer:
+            continue
+        if gene_norm and entry["gene"] != gene_norm:
+            continue
+        if review_status != "all" and entry["review"]["status"] != review_status:
+            continue
+        if match_scope != "all" and entry["match_scope"] != match_scope:
+            continue
+        if needle and needle not in _entry_search_blob(entry):
+            continue
+        filtered.append(entry)
+
+    layer_priority = {"reviewed_overlay": 0, "base": 1}
+    filtered.sort(
+        key=lambda entry: (
+            entry["gene"],
+            layer_priority.get(entry["layer"], 9),
+            entry.get("c_hgvs") or "",
+            entry.get("p_hgvs") or "",
+            entry["entry_id"],
+        )
+    )
+    total = len(filtered)
+    start = (page - 1) * page_size
+    page_rows = filtered[start : start + page_size]
+
+    return {
+        "panel": _panel_summary(package),
+        "kind": kind,
+        "rows": page_rows,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "facets": {
+            "layers": dict(Counter(row["layer"] for row in filtered)),
+            "review_statuses": dict(
+                Counter(row["review"]["status"] for row in filtered)
+            ),
+            "match_scopes": dict(
+                Counter(row["match_scope"] for row in filtered)
+            ),
+        },
+        "warnings": [warning for warning in warnings if warning],
+    }
+
+
+def _important_gene_denominator(package: Any) -> tuple[str, set[str]]:
+    try:
+        raw = yaml.safe_load(
+            package.resolve_rule_file("panel_rules").read_text(encoding="utf-8")
+        ) or {}
+    except Exception:
+        return "", set()
+    values = raw.get("crc_important_genes") if isinstance(raw, dict) else None
+    # Lung/endometrial pilots currently reuse a legacy CRC rule file for their
+    # renderer. That reuse is not a declaration of their Panel gene universe,
+    # so it must never become a misleading coverage denominator in the UI.
+    if str(package.panel_id).startswith("crc_") and isinstance(values, list):
+        return "crc_important_genes", {
+            str(value).strip().upper() for value in values if str(value).strip()
+        }
+    return "", set()
+
+
+def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
+    package = _get_panel_package(panel_id)
+    panel = _panel_summary(package)
+    _sheet, gene_df = _gene_analysis_sheet()
+    gene_col = _gene_column(gene_df)
+    base_gene_source_rows = len(gene_df) if gene_df is not None else 0
+    base_genes = {
+        str(value).strip().upper()
+        for value in (gene_df[gene_col].tolist() if gene_df is not None and gene_col else [])
+        if str(value).strip() and str(value).strip().upper() != "基因"
+    }
+    drug_df = _load_drug_db()
+    targeted_drug_genes = {
+        str(value).strip().upper()
+        for value in (
+            drug_df["基因名称"].tolist()
+            if drug_df is not None and "基因名称" in drug_df.columns
+            else []
+        )
+        if str(value).strip() and str(value).strip().upper() != "基因"
+    }
+    provider = _load_base_gene_provider()
+    base_drug_narratives = (
+        provider.list_drug_narrative_entries() if provider is not None else []
+    )
+    base_drug_narrative_genes = {
+        str(row.get("gene") or "").strip().upper()
+        for row in base_drug_narratives
+        if str(row.get("gene") or "").strip()
+    }
+    targeted_context = load_targeted_drug_rule_context(package)
+    targeted_rule_entries = _targeted_drug_rule_entries(
+        package,
+        targeted_context,
+    )
+
+    overlay_path, overlay, warning = _resolve_overlay(package)
+    overlay_revision = (
+        _sha256_revision(overlay_path) if overlay_path and overlay else ""
+    )
+    gene_rows = [
+        row
+        for row in ((overlay or {}).get("gene_sections") or [])
+        if isinstance(row, dict) and str(row.get("gene") or "").strip()
+    ]
+    drug_rows = [
+        row
+        for row in ((overlay or {}).get("drug_sections") or [])
+        if isinstance(row, dict) and str(row.get("gene") or "").strip()
+    ]
+    overlay_genes = {str(row["gene"]).strip().upper() for row in gene_rows}
+    overlay_drug_genes = {str(row["gene"]).strip().upper() for row in drug_rows}
+    gene_level_rows = sum(
+        not (_clean_value(row.get("c_hgvs")) or _clean_value(row.get("p_hgvs")))
+        for row in gene_rows
+    )
+    variant_level_rows = len(gene_rows) - gene_level_rows
+    denominator_name, denominator = _important_gene_denominator(package)
+    either = base_genes | overlay_genes
+    covered = len(denominator & either) if denominator else 0
+    review_counts = Counter(
+        _entry_review(overlay, row, overlay_revision)["status"]
+        for row in gene_rows + drug_rows
+    )
+
+    return {
+        "panel": panel,
+        "base": {
+            "gene_source_rows": base_gene_source_rows,
+            "gene_entries": len(base_genes),
+            "unique_genes": len(base_genes),
+            "drug_rows": len(base_drug_narratives),
+            "drug_unique_genes": len(base_drug_narrative_genes),
+            "targeted_drug_rows": len(drug_df) if drug_df is not None else 0,
+            "targeted_drug_unique_genes": len(targeted_drug_genes),
+        },
+        "reviewed_overlay": {
+            "available": bool(overlay),
+            "gene_rows": len(gene_rows),
+            "unique_genes": len(overlay_genes),
+            "gene_level_rows": gene_level_rows,
+            "variant_level_rows": variant_level_rows,
+            "drug_rows": len(drug_rows),
+            "drug_unique_genes": len(overlay_drug_genes),
+            "targeted_drug_rule_rows": len(targeted_rule_entries),
+            "targeted_drug_rule_unique_genes": len(
+                {row["gene"] for row in targeted_rule_entries}
+            ),
+            "targeted_drug_applicability_rule_rows": len(
+                (targeted_context or {}).get("applicability_rules") or []
+            ),
+            "extra_reference_rows": len((overlay or {}).get("extra_references") or []),
+            "review_status_counts": dict(review_counts),
+        },
+        "overlap": {
+            "genes_in_both": len(base_genes & overlay_genes),
+            "overlay_only_genes": len(overlay_genes - base_genes),
+        },
+        "declared_gene_coverage": {
+            "denominator_name": denominator_name,
+            "total": len(denominator),
+            "base_covered": len(denominator & base_genes),
+            "overlay_covered": len(denominator & overlay_genes),
+            "either_covered": covered,
+            "percent": round(100.0 * covered / len(denominator), 2)
+            if denominator
+            else None,
+            "label": (
+                f"{denominator_name} 覆盖率" if denominator_name else "未声明覆盖分母"
+            ),
+        },
+        "warnings": [warning] if warning else [],
+    }
+
+
 def reload_all() -> None:
     """Force invalidate all caches so next access re-reads from disk."""
-    global _gene_kb_df, _gene_kb_mtime, _drug_db_df, _drug_db_mtime, _immune_df, _immune_mtime
+    global _gene_kb_df, _gene_kb_mtime, _drug_db_df, _drug_db_mtime
+    global _immune_df, _immune_mtime, _overlay_cache
+    global _base_gene_provider, _base_gene_provider_mtime
     _gene_kb_df = None
     _gene_kb_mtime = 0.0
     _drug_db_df = None
     _drug_db_mtime = 0.0
     _immune_df = None
     _immune_mtime = 0.0
+    _overlay_cache = {}
+    _base_gene_provider = None
+    _base_gene_provider_mtime = 0.0

@@ -127,6 +127,8 @@ template_contract:
     - "immune_positive_results"
     - "immune_negative_results"
     - "immune_hyperprogression_results"
+  required_markers:
+    - "__PART3_MARKER__"
 
 processors:
   - "empty_table_rows"

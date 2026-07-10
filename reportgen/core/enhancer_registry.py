@@ -88,6 +88,7 @@ class CRC358Enhancer:
             base_path=base_path,
             panel_id=project_type,
             panel_config_path=panel_config_path,
+            panel_package=panel_package,
         )
 
 

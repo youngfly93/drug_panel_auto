@@ -16,6 +16,7 @@ from reportgen.core._field_mapper_targeted_drugs import TargetedDrugMixin
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.mapping import FieldMapping, TableMapping
 from reportgen.models.report_data import ReportData
+from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 from reportgen.core.validation import (
     TMB_TABLE_IMMUNO_TIPS,
     build_msi_fields,
@@ -136,7 +137,12 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         self.logger.debug("构建表格映射", count=len(mappings))
         return mappings
 
-    def map(self, excel_data: ExcelDataSource) -> ReportData:
+    def map(
+        self,
+        excel_data: ExcelDataSource,
+        *,
+        panel_package: Any = None,
+    ) -> ReportData:
         """
         映射Excel数据到报告数据
 
@@ -171,8 +177,17 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         self._map_single_values(excel_data, report_data)
         self._apply_identifier_defaults(report_data)
 
+        # Resolve targeted-drug rules once per request. The context is passed
+        # down explicitly so a shared FieldMapper cannot leak one panel's rules
+        # into another concurrent request.
+        targeted_drug_rules = load_targeted_drug_rule_context(panel_package)
+
         # 映射表格数据
-        self._map_tables(excel_data, report_data)
+        self._map_tables(
+            excel_data,
+            report_data,
+            targeted_drug_rules=targeted_drug_rules,
+        )
 
         # 兼容性别名：为历史模板提供 TMB / MSI状态 字段
         # 每个逻辑块独立 try/except，避免单点故障导致所有衍生字段丢失
@@ -400,7 +415,13 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
             return ""
         return text
 
-    def _map_tables(self, excel_data: ExcelDataSource, report_data: ReportData) -> None:
+    def _map_tables(
+        self,
+        excel_data: ExcelDataSource,
+        report_data: ReportData,
+        *,
+        targeted_drug_rules: Optional[dict[str, Any]] = None,
+    ) -> None:
         """
         映射表格数据
 
@@ -411,14 +432,22 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         for table_name, table_mapping in self.table_mappings.items():
             # 2.1 专用九列表：由 Variations + CtDrug 聚合生成
             if table_name == "variants_2_1":
-                rows = self._build_variants_2_1(excel_data, report_data)
+                rows = self._build_variants_2_1(
+                    excel_data,
+                    report_data,
+                    targeted_drug_rules=targeted_drug_rules,
+                )
                 report_data.set_table(table_name, rows)
                 self.logger.debug("映射表格(聚合)", table=table_name, rows=len(rows))
                 continue
             # Special handling: build targeted_drug_tips by joining Variations
             # with CtDrug.
             if table_name == "targeted_drug_tips":
-                rows = self._build_targeted_drug_tips(excel_data, report_data)
+                rows = self._build_targeted_drug_tips(
+                    excel_data,
+                    report_data,
+                    targeted_drug_rules=targeted_drug_rules,
+                )
                 report_data.set_table(table_name, rows)
                 self.logger.debug("映射表格(聚合)", table=table_name, rows=len(rows))
                 continue
@@ -958,7 +987,11 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         return msi
 
     def _build_variants_2_1(
-        self, excel_data: ExcelDataSource, report_data: ReportData
+        self,
+        excel_data: ExcelDataSource,
+        report_data: ReportData,
+        *,
+        targeted_drug_rules: Optional[dict[str, Any]] = None,
     ) -> list[dict]:
         """
         生成"2.1 基因变异检测结果及相关靶向药物信息"九列表数据。
@@ -1046,6 +1079,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                     p_point=p,
                     variant_level=level,
                     cancer_type=report_cancer_type,
+                    targeted_drug_rules=targeted_drug_rules,
                 )
             else:
                 benefit, caution = "--", "--"

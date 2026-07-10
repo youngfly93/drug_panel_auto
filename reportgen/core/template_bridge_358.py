@@ -26,6 +26,7 @@ from reportgen.knowledge import GeneKnowledgeProvider
 from reportgen.core.validation import build_msi_fields, build_tmb_fields
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
+from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 from reportgen.utils.hgvs_utils import infer_variant_type_cn
 from reportgen.utils.text_utils import norm_text as _norm_text
 
@@ -675,6 +676,7 @@ def load_panel_config(
     base_path: Optional[str] = None,
     panel_id: Optional[str] = None,
     config_path: Optional[str] = None,
+    panel_package: Any = None,
 ) -> PanelConfig:
     """Load a PanelConfig instance from the panel package or legacy config.
 
@@ -745,6 +747,26 @@ def load_panel_config(
         config_path=cfg_path,
     )
     approved_drug_rows = _normalize_approved_drug_rows(drugs_rule)
+    targeted_drug_rules = load_targeted_drug_rule_context(panel_package)
+    reviewed_variant_overrides = as_dict_list("reviewed_variant_overrides")
+    if targeted_drug_rules is not None:
+        reviewed_variant_overrides = (
+            [
+                dict(row)
+                for row in targeted_drug_rules.get(
+                    "reviewed_variant_overrides", []
+                )
+                if isinstance(row, dict)
+            ]
+            if targeted_drug_rules.get("enabled")
+            else []
+        )
+        if not targeted_drug_rules.get("approved_drug_rows_enabled", False):
+            approved_drug_rows = []
+        elif not (
+            isinstance(drugs_rule, dict) and "approved_drug_rows" in drugs_rule
+        ):
+            approved_drug_rows = as_dict_list("crc_approved_drugs")
     biomarkers_rule = _load_biomarkers_rule(
         base_path=base_path,
         panel_id=panel_id,
@@ -778,8 +800,12 @@ def load_panel_config(
         or [dict(x) for x in _DEFAULT_IMMUNE_NEGATIVE_ROWS],
         immune_hyperprogression_rows=immune_hyperprogression_rows
         or [dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS],
-        reviewed_variant_overrides=as_dict_list("reviewed_variant_overrides"),
-        approved_drug_rows=approved_drug_rows or as_dict_list("crc_approved_drugs"),
+        reviewed_variant_overrides=reviewed_variant_overrides,
+        approved_drug_rows=(
+            approved_drug_rows
+            if targeted_drug_rules is not None
+            else approved_drug_rows or as_dict_list("crc_approved_drugs")
+        ),
         nccn_result_rows=nccn_rows or [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS],
     )
     if panel_display is not None:
@@ -1136,16 +1162,16 @@ def _compact_drug_display_tables(report_data: ReportData) -> None:
             continue
         changed = False
         for row in rows:
-            for field in ("benefit_drugs", "caution_drugs"):
-                value = row.get(field)
+            for field_name in ("benefit_drugs", "caution_drugs"):
+                value = row.get(field_name)
                 if value is None:
                     continue
-                full_field = f"{field}_full"
+                full_field = f"{field_name}_full"
                 if full_field not in row:
                     row[full_field] = value
                 compacted = _compact_drug_display_value(value)
                 if compacted != value:
-                    row[field] = compacted
+                    row[field_name] = compacted
                     changed = True
         if changed:
             report_data.set_table(table_name, rows)
@@ -2326,6 +2352,7 @@ def enhance_report_data(
     base_path: Optional[str] = None,
     panel_id: Optional[str] = None,
     panel_config_path: Optional[str] = None,
+    panel_package: Any = None,
 ) -> ReportData:
     """
     Enhance ReportData with template-specific fields for 358-gene panel.
@@ -2357,12 +2384,15 @@ def enhance_report_data(
         base_path=base_path,
         panel_id=panel_id,
         config_path=panel_config_path,
+        panel_package=panel_package,
     )
     # Also sync globals for backward compatibility
     _sync_globals_from_config(pc)
 
     # Optional: leverage FieldMapper's knowledge base (targeted_drug_db) for drug tips
     drug_lookup: Optional[Callable[[str, str, str, str], Tuple[str, str]]] = None
+    targeted_drug_rules = load_targeted_drug_rule_context(panel_package)
+    report_cancer_type = _norm_text(report_data.get_field("cancer_type"))
     if field_mapper is not None:
         try:
             lookup_fn = getattr(
@@ -2377,9 +2407,15 @@ def enhance_report_data(
                 gene: str, c_hgvs: str, p_hgvs: str, gene_class: str
             ) -> Tuple[str, str]:
                 try:
-                    benefit, caution, _ = lookup_fn(
-                        gene, c_point=c_hgvs, p_point=p_hgvs, variant_level=gene_class
-                    )
+                    lookup_kwargs = {
+                        "c_point": c_hgvs,
+                        "p_point": p_hgvs,
+                        "variant_level": gene_class,
+                        "cancer_type": report_cancer_type,
+                    }
+                    if targeted_drug_rules is not None:
+                        lookup_kwargs["targeted_drug_rules"] = targeted_drug_rules
+                    benefit, caution, _ = lookup_fn(gene, **lookup_kwargs)
                     return (benefit or "--", caution or "--")
                 except Exception:
                     return ("--", "--")
@@ -2592,12 +2628,96 @@ def enhance_report_data(
                 ),
                 part3_variants,
             )
+            expected_variant_keys: List[str] = []
+            seen_expected_keys: Set[str] = set()
+            provider_identity = getattr(
+                gene_knowledge_provider,
+                "variant_identity_key",
+                None,
+            )
+
+            def _part3_identity(variant: Dict[str, Any]) -> str:
+                if callable(provider_identity):
+                    key = str(provider_identity(variant) or "").strip()
+                    if key:
+                        return key
+                gene = re.sub(
+                    r"\s+",
+                    "",
+                    _norm_text(variant.get("gene")),
+                ).upper()
+                c_hgvs = re.sub(
+                    r"\s+",
+                    "",
+                    _norm_text(
+                        variant.get("cHGVS") or variant.get("c_hgvs")
+                    ),
+                ).upper()
+                p_hgvs = re.sub(
+                    r"\s+",
+                    "",
+                    _norm_text(
+                        variant.get("pHGVS") or variant.get("p_hgvs")
+                    ),
+                ).upper()
+                event = re.sub(
+                    r"\s+",
+                    "",
+                    _norm_text(
+                        variant.get("event")
+                        or variant.get("mutation_type")
+                        or variant.get("variant_type")
+                        or variant.get("locus")
+                    ),
+                ).upper()
+                if not gene:
+                    return ""
+                return f"{gene}|{c_hgvs or '<NO_C>'}|{p_hgvs}|{event}"
+
+            for variant in part3_variants:
+                variant_key = _part3_identity(variant)
+                if variant_key and variant_key not in seen_expected_keys:
+                    seen_expected_keys.add(variant_key)
+                    expected_variant_keys.append(variant_key)
+            report_data.set_field(
+                "part3_expected_variant_keys",
+                expected_variant_keys,
+            )
+            report_data.set_field(
+                "part3_expected_variant_count",
+                len(expected_variant_keys),
+            )
+            knowledge_cancer_type = report_cancer_type or (
+                "结直肠癌" if str(panel_id or "").startswith("crc_") else ""
+            )
             gene_knowledge_sections = (
                 gene_knowledge_provider.build_all_gene_knowledge_sections(
-                    variants=part3_variants, cancer_type="结直肠癌"
+                    variants=part3_variants,
+                    cancer_type=knowledge_cancer_type,
                 )
             )
             report_data.set_table("gene_knowledge_sections", gene_knowledge_sections)
+            rendered_variant_keys: List[str] = []
+            for index, section in enumerate(gene_knowledge_sections):
+                rendered_key = str(
+                    section.get("source_variant_key") or ""
+                ).strip()
+                if not rendered_key:
+                    rendered_key = _part3_identity(section)
+                if not rendered_key and index < len(expected_variant_keys):
+                    # Compatibility for small duck-typed test/custom providers
+                    # that return ordered sections without source metadata.
+                    rendered_key = expected_variant_keys[index]
+                if rendered_key:
+                    rendered_variant_keys.append(rendered_key)
+            report_data.set_field(
+                "part3_rendered_variant_keys",
+                rendered_variant_keys,
+            )
+            report_data.set_field(
+                "part3_rendered_variant_count",
+                len(rendered_variant_keys),
+            )
 
             # Build drug analysis sections (用药提示解析)
             # Follow the configured Part 3 scope so drug text stays aligned with

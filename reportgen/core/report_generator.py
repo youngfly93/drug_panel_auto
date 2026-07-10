@@ -524,7 +524,10 @@ class ReportGenerator:
             raise RuntimeError("Excel data is unavailable before field resolution.")
 
         self.logger.log_event("field_mapping_started")
-        state.report_data = self.field_mapper.map(state.excel_data)
+        state.report_data = self.field_mapper.map(
+            state.excel_data,
+            panel_package=state.panel_package,
+        )
         rd = state.report_data.get_field("report_date")
         if rd is None or (isinstance(rd, str) and rd.strip() == ""):
             self._fill_missing_report_date(state.report_data)
@@ -838,7 +841,17 @@ class ReportGenerator:
             )
 
         state.template_contract_report = None
-        if state.template_contract_mode == "none":
+        required_markers = (
+            list(template_contract_spec.get("required_markers") or [])
+            if isinstance(template_contract_spec, dict)
+            else []
+        )
+        state.template_context["required_structural_markers"] = required_markers
+        state.report_data.set_field(
+            "required_structural_markers",
+            required_markers,
+        )
+        if state.template_contract_mode == "none" and not required_markers:
             stage.skip(message="Template contract validation is disabled.")
             return None
 
@@ -848,13 +861,123 @@ class ReportGenerator:
             contract_spec=template_contract_spec,
         )
         stage.metrics["ok"] = bool(state.template_contract_report.get("ok", False))
+        declared_contract = state.template_contract_report.get("declared_contract") or {}
+
+        # Structural Part 3 requirements are safety gates, not advisory template
+        # warnings. They remain blocking even when the caller selected the
+        # historical "warn" contract mode.
+        structural_errors: list[str] = []
+        missing_markers = list(
+            declared_contract.get("missing_required_markers") or []
+        )
+        duplicate_markers = list(
+            declared_contract.get("duplicate_required_markers") or []
+        )
+        if missing_markers:
+            structural_errors.append(f"missing markers: {missing_markers}")
+        if duplicate_markers:
+            structural_errors.append(f"duplicate markers: {duplicate_markers}")
+
+        if "__PART3_MARKER__" in required_markers:
+            processor_names = self._get_template_processor_names(
+                state.panel_package,
+                state.template_file,
+            )
+            if "part3_formatted_sections" not in (processor_names or ()):
+                structural_errors.append(
+                    "required Part 3 processor is not declared"
+                )
+            try:
+                total_variants = int(
+                    float(state.template_context.get("total_variants_count") or 0)
+                )
+            except (TypeError, ValueError):
+                total_variants = 0
+            gene_sections = state.template_context.get("gene_knowledge_sections")
+            expected_variant_keys = [
+                str(value).strip()
+                for value in (
+                    state.template_context.get("part3_expected_variant_keys") or []
+                )
+                if str(value).strip()
+            ]
+            rendered_variant_keys = [
+                str(value).strip()
+                for value in (
+                    state.template_context.get("part3_rendered_variant_keys") or []
+                )
+                if str(value).strip()
+            ]
+            if expected_variant_keys:
+                missing_variant_keys = sorted(
+                    set(expected_variant_keys) - set(rendered_variant_keys)
+                )
+                unexpected_variant_keys = sorted(
+                    set(rendered_variant_keys) - set(expected_variant_keys)
+                )
+                if (
+                    missing_variant_keys
+                    or unexpected_variant_keys
+                    or len(rendered_variant_keys) != len(expected_variant_keys)
+                ):
+                    structural_errors.append(
+                        "Part 3 variant coverage mismatch: "
+                        f"expected={len(expected_variant_keys)}, "
+                        f"rendered={len(rendered_variant_keys)}, "
+                        f"missing={missing_variant_keys}, "
+                        f"unexpected={unexpected_variant_keys}"
+                    )
+            elif total_variants > 0 and not gene_sections:
+                structural_errors.append(
+                    "variants are present but gene_knowledge_sections is empty"
+                )
+
+        if structural_errors:
+            duration = time.time() - start_time
+            msg = "Part 3 结构契约校验失败，已阻断生成：" + "; ".join(
+                structural_errors
+            )
+            details = {
+                "required_markers": required_markers,
+                "missing_required_markers": missing_markers,
+                "duplicate_required_markers": duplicate_markers,
+                "structural_errors": structural_errors,
+                "part3_expected_variant_keys": state.template_context.get(
+                    "part3_expected_variant_keys"
+                ),
+                "part3_rendered_variant_keys": state.template_context.get(
+                    "part3_rendered_variant_keys"
+                ),
+            }
+            stage.fail("PART3_CONTRACT_FAILED", msg, details=details)
+            self.logger.error(msg)
+            return {
+                "success": False,
+                "output_file": None,
+                "duration": duration,
+                "errors": [msg],
+                "warnings": state.report_data.validation_errors,
+                "panel_package_validation": state.panel_package_validation,
+                "template_contract": state.template_contract_report,
+                **(
+                    {"context": state.template_context}
+                    if state.return_context
+                    else {}
+                ),
+            }
+
+        if state.template_contract_mode == "none":
+            stage.skip(
+                message="General template contract validation is disabled; required structural markers passed."
+            )
+            return None
+
         if state.template_contract_report.get("ok", False):
             return None
 
         missing_paths = state.template_contract_report.get("missing_paths")
         missing_lists = state.template_contract_report.get("missing_lists")
         missing_row_fields = state.template_contract_report.get("missing_row_fields")
-        declared_contract = state.template_contract_report.get("declared_contract") or {}
         msg = (
             "模板契约校验失败：模板引用或声明式结构不满足要求。"
             f" missing_paths={missing_paths},"

@@ -154,13 +154,26 @@ class TargetedDrugMixin:
         if xl is not None:
             xl.close()
 
-    def _get_targeted_drug_overrides(self) -> dict[str, dict[str, str]]:
-        cfg = (
-            self.config_loader.get_setting(
-                "knowledge_bases.targeted_drug_db.overrides", {}
+    def _get_targeted_drug_overrides(
+        self,
+        targeted_drug_rules: Optional[dict[str, Any]] = None,
+    ) -> dict[str, dict[str, str]]:
+        if targeted_drug_rules is not None:
+            cfg = (
+                targeted_drug_rules.get("overrides", {})
+                if targeted_drug_rules.get("enabled")
+                else {}
             )
-            or {}
-        )
+        else:
+            # Backward compatibility for direct FieldMapper callers that do not
+            # resolve a panel package. Production ReportGenerator/Web paths pass
+            # an explicit request-scoped rule context.
+            cfg = (
+                self.config_loader.get_setting(
+                    "knowledge_bases.targeted_drug_db.overrides", {}
+                )
+                or {}
+            )
         if not isinstance(cfg, dict):
             return {}
         out: dict[str, dict[str, str]] = {}
@@ -171,8 +184,18 @@ class TargetedDrugMixin:
             out[key] = {str(kk): str(vv) for kk, vv in v.items() if vv is not None}
         return out
 
-    def _get_reviewed_variant_overrides(self) -> list[dict[str, Any]]:
-        """Load reviewed per-variant overrides from CRC panel package rules."""
+    def _get_reviewed_variant_overrides(
+        self,
+        targeted_drug_rules: Optional[dict[str, Any]] = None,
+    ) -> list[dict[str, Any]]:
+        """Load reviewed per-variant overrides for this request's panel."""
+        if targeted_drug_rules is not None:
+            if not targeted_drug_rules.get("enabled"):
+                return []
+            rows = targeted_drug_rules.get("reviewed_variant_overrides", [])
+            return [dict(row) for row in rows if isinstance(row, dict)]
+
+        # Backward compatibility for direct callers without a panel package.
         project_root = Path(getattr(self.config_loader, "project_root", "."))
         candidates = [
             project_root / "panels" / "crc_358_msi" / "rules" / "crc.yaml",
@@ -191,7 +214,10 @@ class TargetedDrugMixin:
             return []
         return [dict(row) for row in rows if isinstance(row, dict)]
 
-    def _get_targeted_drug_applicability_rules(self) -> list[dict[str, Any]]:
+    def _get_targeted_drug_applicability_rules(
+        self,
+        targeted_drug_rules: Optional[dict[str, Any]] = None,
+    ) -> list[dict[str, Any]]:
         """Load guardrails for broad targeted-drug DB rows.
 
         These rules are intentionally narrower than reviewed_variant_overrides:
@@ -199,6 +225,13 @@ class TargetedDrugMixin:
         such as internal gene-level rows for genes whose drug interpretation must
         be variant-/event-specific.
         """
+        if targeted_drug_rules is not None:
+            if not targeted_drug_rules.get("enabled"):
+                return []
+            rows = targeted_drug_rules.get("applicability_rules", [])
+            return [dict(row) for row in rows if isinstance(row, dict)]
+
+        # Backward compatibility for direct callers without a panel package.
         project_root = Path(getattr(self.config_loader, "project_root", "."))
         candidates = [
             project_root / "panels" / "crc_358_msi" / "rules" / "crc.yaml",
@@ -236,12 +269,19 @@ class TargetedDrugMixin:
         c_point: str,
         p_point: str,
         variant_level: str = "",
+        *,
+        targeted_drug_rules: Optional[dict[str, Any]] = None,
     ) -> Optional[tuple[str, str]]:
         gene_norm = str(gene or "").strip().upper()
         c_norm = self._norm_text(c_point)
         p_norm = self._norm_text(p_point)
         level_norm = self._norm_text(variant_level)
-        for override in self._get_reviewed_variant_overrides():
+        overrides = (
+            self._get_reviewed_variant_overrides()
+            if targeted_drug_rules is None
+            else self._get_reviewed_variant_overrides(targeted_drug_rules)
+        )
+        for override in overrides:
             genes = {
                 item.upper()
                 for item in self._as_text_list(
@@ -351,6 +391,7 @@ class TargetedDrugMixin:
         db_c: str,
         db_p: str,
         db_variant_type: str,
+        targeted_drug_rules: Optional[dict[str, Any]] = None,
     ) -> bool:
         """Return whether a DB row may be used for this patient variant.
 
@@ -362,7 +403,12 @@ class TargetedDrugMixin:
         source_norm = str(source_db or "").strip().upper()
         variant_type_norm = str(db_variant_type or "").strip().upper()
 
-        for rule in self._get_targeted_drug_applicability_rules():
+        rules = (
+            self._get_targeted_drug_applicability_rules()
+            if targeted_drug_rules is None
+            else self._get_targeted_drug_applicability_rules(targeted_drug_rules)
+        )
+        for rule in rules:
             genes = {
                 item.upper()
                 for item in self._as_text_list(rule.get("gene") or rule.get("genes"))
@@ -578,28 +624,43 @@ class TargetedDrugMixin:
         p_point: str,
         variant_level: str = "",
         cancer_type: str = "",
+        targeted_drug_rules: Optional[dict[str, Any]] = None,
     ) -> tuple[str, str, float]:
         """查询单个变异对应的药物提示（获益/慎重）并返回匹配分数。"""
         gene_norm = str(gene).strip().upper()
         c_norm = self._norm_text(c_point)
         p_norm = self._norm_text(p_point)
 
+        # An explicit disabled Panel policy is fail-closed: no override, base
+        # database row, or legacy CtDrug decision may leak in from another
+        # cancer Panel. Only no-panel legacy callers retain historical behavior.
+        if targeted_drug_rules is not None and not targeted_drug_rules.get(
+            "enabled", False
+        ):
+            return "--", "--", 0.0
+
         reviewed_override = self._lookup_reviewed_variant_override_drugs(
             gene_norm,
             c_norm,
             p_norm,
             variant_level=variant_level,
+            targeted_drug_rules=targeted_drug_rules,
         )
         if reviewed_override:
             benefit, caution = reviewed_override
             return benefit, caution, 100.0
 
-        overrides = self._get_targeted_drug_overrides()
+        overrides = self._get_targeted_drug_overrides(targeted_drug_rules)
         if gene_norm in overrides:
             ov = overrides[gene_norm]
             benefit = str(ov.get("benefit_drugs", "")).strip() or "--"
             caution = str(ov.get("caution_drugs", "")).strip() or "--"
             return benefit, caution, 100.0
+
+        if targeted_drug_rules is not None and not targeted_drug_rules.get(
+            "base_db_enabled", False
+        ):
+            return "--", "--", 0.0
 
         self._load_targeted_drug_db()
         if self._targeted_drug_db is None:
@@ -659,6 +720,28 @@ class TargetedDrugMixin:
             .strip()
             .lower()
         )
+        if targeted_drug_rules is not None and targeted_drug_rules.get(
+            "require_cancer_profile_match", False
+        ):
+            if (
+                not cancer_type
+                or str(cancer_type).strip() in {"-", "--"}
+                or not cancer_matches
+            ):
+                return "--", "--", 0.0
+
+        allowed_source_dbs = (
+            {
+                str(source).strip().upper()
+                for source in targeted_drug_rules.get("allowed_source_dbs", [])
+                if str(source).strip()
+            }
+            if targeted_drug_rules is not None
+            else set()
+        )
+        allow_internal_rows = bool(
+            targeted_drug_rules.get("allow_internal_rows", False)
+        ) if targeted_drug_rules is not None else True
 
         evidence_cfg = filters_cfg.get("evidence", {}) or {}
         evidence_filter_enabled = (
@@ -710,12 +793,18 @@ class TargetedDrugMixin:
                     continue
 
             source_db = self._norm_text(row.get("source_db")).strip().upper()
+            if targeted_drug_rules is not None:
+                if source_db not in allowed_source_dbs:
+                    continue
+                if source_db == "INTERNAL" and not allow_internal_rows:
+                    continue
             if not self._targeted_drug_db_row_applicable(
                 gene=gene_norm,
                 source_db=source_db,
                 db_c=db_c,
                 db_p=db_p,
                 db_variant_type=db_variant_type,
+                targeted_drug_rules=targeted_drug_rules,
             ):
                 continue
             should_filter = filters_enabled and (source_db in apply_sources)
@@ -792,7 +881,11 @@ class TargetedDrugMixin:
         return best_benefit, best_caution, best_score
 
     def _build_targeted_drug_tips(
-        self, excel_data: ExcelDataSource, report_data: ReportData
+        self,
+        excel_data: ExcelDataSource,
+        report_data: ReportData,
+        *,
+        targeted_drug_rules: Optional[dict[str, Any]] = None,
     ) -> list[dict]:
         """
         靶向药物提示（四列表）。
@@ -802,6 +895,11 @@ class TargetedDrugMixin:
 
         输出列：gene, variant_site, benefit_drugs, caution_drugs
         """
+
+        if targeted_drug_rules is not None and not targeted_drug_rules.get(
+            "enabled", False
+        ):
+            return []
 
         def get_gene_from_row(row: dict) -> Optional[str]:
             for k in ("Gene_Symbol", "基因", "Gene", "检测基因"):
@@ -854,7 +952,7 @@ class TargetedDrugMixin:
         if not gene_to_sites:
             return []
 
-        overrides = self._get_targeted_drug_overrides()
+        overrides = self._get_targeted_drug_overrides(targeted_drug_rules)
         self._load_targeted_drug_db()
         has_kb = self._targeted_drug_db is not None
         allow_ctdrug_fallback = not has_kb
@@ -960,6 +1058,7 @@ class TargetedDrugMixin:
                         p_point=s["p"],
                         variant_level=s["level"],
                         cancer_type=report_cancer_type,
+                        targeted_drug_rules=targeted_drug_rules,
                     )
                     if score > 0:
                         b = kb_b or "--"

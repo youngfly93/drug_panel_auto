@@ -16,6 +16,8 @@ from zipfile import ZipFile
 from docx import Document
 from docx.oxml.ns import qn
 
+from reportgen.docx_sections import find_reference_section_bounds
+
 # 关键表：表头特征子串（全部命中即认定该表）。取首个匹配。
 _TABLE_SIGNATURES: dict[str, tuple[str, ...]] = {
     "variant_detail": ("基因名称", "频率"),
@@ -115,13 +117,10 @@ def _signature_fingerprint(doc) -> dict[str, Any]:
 
 def _references_fingerprint(doc) -> dict[str, Any]:
     texts = [(p.text or "").strip() for p in doc.paragraphs]
-    start = None
-    for i, t in enumerate(texts):
-        if re.fullmatch(r"5\s*[\.\．、]?\s*参考文献", t) or t == "参考文献":
-            start = i
+    start, end = find_reference_section_bounds(texts)
     if start is None:
         return {"count": 0, "titleless": 0}
-    refs = [t for t in texts[start + 1:] if t]
+    refs = [t for t in texts[start + 1 : end] if t]
     titleless = [t for t in refs if re.fullmatch(r"PMID:\d+", t)]
     return {"count": len(refs), "titleless": len(titleless)}
 

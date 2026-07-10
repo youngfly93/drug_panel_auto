@@ -17,6 +17,13 @@ drug_rules:
       - "C"
       - "D"
 
+# CRC301 intentionally shares the reviewed CRC358 targeted-drug policy. The
+# relationship is explicit and request-scoped; no renderer/global fallback is
+# involved.
+targeted_drug_rules:
+  enabled: true
+  source_panel_id: "crc_358_msi"
+
 approved_drug_rows:
   - drug:
       - "瑞戈非尼"

@@ -575,8 +575,10 @@ knowledge_bases:
         # 1: Tier III
         # 0: Tier IV
         civic_min_rank: 4
-    # 可选：当数据库缺失某些基因/位点时，可用此处做最小覆盖（优先级高于数据库）
-    # 仅建议放"已审阅/已验证"的规则，避免生成不可靠的医学结论。
+    # Legacy fallback only: direct FieldMapper callers that do not resolve a
+    # panel package still use this block for backward compatibility. Production
+    # generation and Web preview use panels/<panel>/rules/drugs.yaml instead,
+    # so these CRC rules cannot leak into another explicit panel request.
     overrides:
       # 示例：SETD2 在示例数据库中缺失，但终版报告里有固定写法
       SETD2:
