@@ -24,13 +24,27 @@ export type KnowledgeLayer = 'base' | 'reviewed_overlay'
 export type KnowledgeLayerFilter = 'all' | KnowledgeLayer
 export type KnowledgeMatchScope = 'gene' | 'variant' | 'event'
 export type KnowledgeMatchScopeFilter = 'all' | KnowledgeMatchScope
-export type KnowledgeReviewStatus = 'approved_for_runtime' | 'needs_review' | 'not_recorded'
+export type KnowledgeReviewStatus =
+  | 'approved_for_runtime'
+  | 'provisional_runtime'
+  | 'legacy_runtime'
+  | 'needs_review'
+  | 'rejected'
+  | 'superseded'
+  | 'not_recorded'
 export type KnowledgeReviewStatusFilter = 'all' | KnowledgeReviewStatus
 
 export interface KnowledgeReview {
   status: KnowledgeReviewStatus
   scope: string
   basis: string
+  runtime_eligible: boolean
+  reviewer: string
+  reviewer_type: string
+  reviewed_at: string
+  evidence_as_of: string
+  secondary_review_status: string
+  risk_level: string
 }
 
 export interface KnowledgeProvenance {
@@ -38,6 +52,7 @@ export interface KnowledgeProvenance {
   source_type: string
   source_db?: string | null
   source_ref?: string | null
+  source_refs: Array<{ type: string; id: string; url?: string }>
   sheet?: string | null
   row_number?: number | null
   origin_panel_id?: string | null
@@ -152,6 +167,41 @@ export interface KnowledgeCoverage {
     gene_explanation_missing_genes: string[]
     runtime_drug_genes: number
     explicitly_approved_drug_genes: number
+    multidimensional_coverage: {
+      gene_explanation: {
+        total: number
+        covered: number
+        percent: number | null
+      }
+      review_governance: {
+        total_overlay_rows: number
+        status_counts: Record<string, number>
+        standardized_rows: number
+        standardized_percent: number
+        secondary_review_complete_rows: number
+        secondary_review_complete_percent: number
+        pending_secondary_review_genes: string[]
+      }
+      source_provenance: {
+        structured_source_rows: number
+        structured_source_percent: number
+        evidence_level_rows: number
+        evidence_level_percent: number
+        cancer_scope_rows: number
+        cancer_scope_percent: number
+      }
+      specificity: {
+        gene_level_rows: number
+        variant_level_rows: number
+        event_scoped_drug_rows: number
+      }
+      drug_actionability: {
+        runtime_drug_genes: number
+        panel_rule_genes: number
+        runtime_database_genes: number
+        filtered_database_genes: number
+      }
+    }
     drug_candidate_disposition: {
       database_candidate_genes: number
       runtime_eligible_database_genes: number

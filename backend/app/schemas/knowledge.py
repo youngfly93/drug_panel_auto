@@ -11,7 +11,11 @@ KnowledgeLayer = Literal["base", "reviewed_overlay"]
 KnowledgeMatchScope = Literal["gene", "variant", "event"]
 KnowledgeReviewStatus = Literal[
     "approved_for_runtime",
+    "provisional_runtime",
+    "legacy_runtime",
     "needs_review",
+    "rejected",
+    "superseded",
     "not_recorded",
 ]
 
@@ -20,6 +24,13 @@ class KnowledgeReview(BaseModel):
     status: KnowledgeReviewStatus
     scope: str
     basis: str
+    runtime_eligible: bool = False
+    reviewer: str = ""
+    reviewer_type: str = ""
+    reviewed_at: str = ""
+    evidence_as_of: str = ""
+    secondary_review_status: str = ""
+    risk_level: str = ""
 
 
 class KnowledgeProvenance(BaseModel):
@@ -27,6 +38,7 @@ class KnowledgeProvenance(BaseModel):
     source_type: str
     source_db: Optional[str] = None
     source_ref: Optional[str] = None
+    source_refs: list[dict[str, str]] = Field(default_factory=list)
     sheet: Optional[str] = None
     row_number: Optional[int] = None
     origin_panel_id: Optional[str] = None

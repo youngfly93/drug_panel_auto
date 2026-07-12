@@ -1,10 +1,37 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 rule_id: "drugs"
-version: "0.2.0"
-updated: "2026-05-21"
+version: "0.3.0"
+updated: "2026-07-12"
 status: "active"
 description: "CRC drug-display rule declarations used by the generator."
+
+governance:
+  schema_version: "1.0"
+  policy_id: crc_targeted_drug_governance_v1
+  defaults:
+    targeted_drug:
+      review_status: legacy_runtime
+      runtime_eligible: true
+      review_basis: historical_panel_rule_migration
+      evidence_level: legacy_curated_rule
+      evidence_as_of: "2026-06-14"
+      cancer_scope: colorectal_report_context
+      secondary_review_status: historical_not_row_bound
+      source_refs:
+        - type: panel_rule
+          id: crc358_targeted_drug_rules_legacy_migration
+    approved_drug:
+      review_status: legacy_runtime
+      runtime_eligible: true
+      review_basis: historical_guideline_table_migration
+      evidence_level: guideline_and_regulatory_summary
+      evidence_as_of: "2022-12-31"
+      cancer_scope: colorectal_cancer
+      secondary_review_status: historical_not_row_bound
+      source_refs:
+        - type: guideline_summary
+          id: legacy_crc_approved_drug_table
 
 drug_rules:
   show_all_in_part2: true
@@ -73,6 +100,21 @@ targeted_drug_rules:
       benefit_drugs:
         - "奥拉帕利（D）"
       review_basis: "PMID:26510020; cross-cancer phase II DDR cohort; CRC off-label evidence only"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      evidence_level: cross_cancer_level_d
+      evidence_as_of: "2026-07-12"
+      cancer_scope: prostate_ddr_cohort_not_crc_independent_efficacy
+      secondary_review_status: pending_report_group_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_evidence_review
+        reviewed_at: "2026-07-12"
+        evidence_as_of: "2026-07-12"
+        risk_level: high
+        secondary_review_status: pending_report_group_review
+        references:
+          - https://pubmed.ncbi.nlm.nih.gov/26510020/
     - gene: FLT3
       c_hgvs: "c.2537G>A"
       variant_site: "c.2537G>A,\np.G846D"

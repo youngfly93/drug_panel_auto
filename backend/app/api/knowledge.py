@@ -26,7 +26,14 @@ def list_catalog_entries(
     search: str = Query("", max_length=100),
     gene: str = Query("", max_length=40),
     review_status: Literal[
-        "all", "approved_for_runtime", "needs_review", "not_recorded"
+        "all",
+        "approved_for_runtime",
+        "provisional_runtime",
+        "legacy_runtime",
+        "needs_review",
+        "rejected",
+        "superseded",
+        "not_recorded",
     ] = Query("all"),
     match_scope: Literal["all", "gene", "variant", "event"] = Query("all"),
     page: int = Query(1, ge=1),

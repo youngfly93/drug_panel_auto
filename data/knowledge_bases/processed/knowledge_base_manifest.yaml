@@ -1,0 +1,44 @@
+schema_version: '1.0'
+manifest_id: reportgen_base_knowledge_manifest_v1
+updated: '2026-07-12'
+policy:
+  description: 基础 Excel 保留历史运行行为，但必须绑定文件哈希、来源类型和审核边界；逐条现代医学审批完成前不得显示为 approved_for_runtime。
+  review_status: legacy_runtime
+  runtime_eligible: true
+  review_basis: base_excel_legacy_runtime_with_file_integrity
+  secondary_review_status: historical_not_row_bound
+artifacts:
+  gene_knowledge_db:
+    path: data/knowledge_bases/processed/gene_knowledge_db.xlsx
+    sha256: 2fdd229a8a1d961dedc84f54e7e0433a1324e3e5da235d68e1d4f3e24daba635
+    source_type: curated_workbook
+    content_types:
+    - gene_background
+    - variant_narrative
+    - drug_narrative
+    - references
+    evidence_as_of: unknown_legacy
+    source_refs:
+    - type: workbook
+      id: gene_knowledge_db.xlsx
+  targeted_drug_db_public:
+    path: data/knowledge_bases/processed/targeted_drug_db_public.xlsx
+    sha256: a278eb423aa580b18f0a2e6fe32b4f03202bd669210099d2d1b5fdfb35157aa7
+    source_type: normalized_public_and_internal_candidates
+    content_types:
+    - targeted_drug_candidate
+    evidence_as_of: unknown_legacy
+    runtime_policy: position_cancer_evidence_and_source_filters
+    source_refs:
+    - type: workbook
+      id: targeted_drug_db_public.xlsx
+  immune_gene_list_public:
+    path: data/knowledge_bases/processed/immune_gene_list_public.xlsx
+    sha256: 4d1380059219a0011ff92892f2dd65c5b2a4e278a65cd6694fa76ff94e6a598b
+    source_type: curated_workbook
+    content_types:
+    - immune_gene_list
+    evidence_as_of: unknown_legacy
+    source_refs:
+    - type: workbook
+      id: immune_gene_list_public.xlsx

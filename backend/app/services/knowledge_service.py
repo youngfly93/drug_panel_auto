@@ -23,6 +23,11 @@ if str(_upstream) not in sys.path:
     sys.path.insert(0, str(_upstream))
 
 from reportgen.knowledge import GeneKnowledgeProvider  # noqa: E402
+from reportgen.knowledge.governance import (  # noqa: E402
+    effective_governance,
+    governance_defaults,
+    structured_source_refs,
+)
 from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
 from reportgen.rules.targeted_drugs import (  # noqa: E402
     load_targeted_drug_rule_context,
@@ -377,6 +382,8 @@ def _resolve_overlay(package: Any) -> tuple[Optional[Path], Optional[dict], str]
         origin_panel_id = str(source.get("panel") or package.panel_id)
         revision = _sha256_revision(source_path)
         for section in ("gene_sections", "drug_sections"):
+            kind = "gene" if section == "gene_sections" else "drug"
+            defaults = governance_defaults(data, kind)
             for row in data.get(section) or []:
                 if not isinstance(row, dict):
                     continue
@@ -387,6 +394,7 @@ def _resolve_overlay(package: Any) -> tuple[Optional[Path], Optional[dict], str]
                 tagged["_source_type"] = str(
                     source.get("source_type") or "panel_reviewed_overlay"
                 )
+                tagged["_governance_defaults"] = defaults
                 combined[section].append(tagged)
 
     append_rows(primary, path)
@@ -452,7 +460,24 @@ def _entry_review(
     data: Optional[dict[str, Any]],
     row: Optional[dict[str, Any]] = None,
     revision: str = "",
-) -> dict[str, str]:
+) -> dict[str, Any]:
+    kind = "drug" if (row or {}).get("drug_name") else "gene"
+    if isinstance((data or {}).get("governance"), dict) or isinstance(
+        (row or {}).get("_governance_defaults"), dict
+    ):
+        governance = effective_governance(data, row or {}, kind)
+        return {
+            "status": governance["status"],
+            "scope": "entry_governance",
+            "basis": governance["review_basis"] or "structured_governance",
+            "runtime_eligible": governance["runtime_eligible"],
+            "reviewer": governance["reviewer"],
+            "reviewer_type": governance["reviewer_type"],
+            "reviewed_at": governance["reviewed_at"],
+            "evidence_as_of": governance["evidence_as_of"],
+            "secondary_review_status": governance["secondary_review_status"],
+            "risk_level": governance["risk_level"],
+        }
     explicit_status = str((row or {}).get("review_status") or "").strip().lower()
     first_pass = (row or {}).get("first_pass_review")
     if explicit_status in {"approved_for_runtime", "needs_review", "not_recorded"}:
@@ -465,11 +490,14 @@ def _entry_review(
                 "status": "needs_review",
                 "scope": "entry_note",
                 "basis": "first_pass_complete_pending_secondary_review",
+                "runtime_eligible": False,
             }
         return {
             "status": explicit_status,
             "scope": "entry_note",
             "basis": "explicit_entry_review_status",
+            "runtime_eligible": (row or {}).get("runtime_eligible") is not False
+            and explicit_status == "approved_for_runtime",
         }
     source_note = str((row or {}).get("source_note") or "")
     if "需医学审核" in source_note or "NEEDS" in source_note.upper():
@@ -477,9 +505,15 @@ def _entry_review(
             "status": "needs_review",
             "scope": "entry_note",
             "basis": "entry_source_note_requires_review",
+            "runtime_eligible": False,
         }
     status, scope, basis = _overlay_review_status(data, revision)
-    return {"status": status, "scope": scope, "basis": basis}
+    return {
+        "status": status,
+        "scope": scope,
+        "basis": basis,
+        "runtime_eligible": status == "approved_for_runtime",
+    }
 
 
 def _panel_summary(package: Any) -> dict[str, Any]:
@@ -494,12 +528,21 @@ def _panel_summary(package: Any) -> dict[str, Any]:
         if data
         else []
     )
-    if any(
-        _entry_review(data, row, revision)["status"] == "needs_review"
+    row_statuses = {
+        _entry_review(data, row, revision)["status"]
         for row in overlay_rows
         if isinstance(row, dict)
+    }
+    for candidate in (
+        "needs_review",
+        "rejected",
+        "provisional_runtime",
+        "legacy_runtime",
+        "approved_for_runtime",
     ):
-        review_status = "needs_review"
+        if candidate in row_statuses:
+            review_status = candidate
+            break
     return PanelKnowledgeSummary(
         panel_id=package.panel_id,
         display_name=package.display_name,
@@ -596,15 +639,23 @@ def _base_gene_entries(panel_id: str) -> list[dict[str, Any]]:
             match_scope="gene",
             runtime_behavior="fallback_when_no_reviewed_match",
             review={
-                "status": "not_recorded",
+                "status": "legacy_runtime",
                 "scope": "source_row",
-                "basis": "base_excel_has_no_review_field",
+                "basis": "base_excel_legacy_runtime_source_row",
+                "runtime_eligible": True,
+                "secondary_review_status": "historical_not_row_bound",
             },
             provenance={
                 "source_id": "gene_knowledge_db",
                 "source_type": "base_excel",
                 "sheet": sheet,
                 "row_number": position,
+                "source_refs": [
+                    {
+                        "type": "workbook_row",
+                        "id": f"gene_knowledge_db:{sheet}:{position}",
+                    }
+                ],
                 "revision": revision,
                 "updated_at": updated_at,
             },
@@ -653,14 +704,22 @@ def _base_drug_narrative_entries(panel_id: str) -> list[dict[str, Any]]:
             match_scope=_match_scope(c_hgvs, p_hgvs),
             runtime_behavior="base_part3_drug_narrative_fallback",
             review={
-                "status": "not_recorded",
+                "status": "legacy_runtime",
                 "scope": "source_row",
-                "basis": "base_excel_has_no_review_field",
+                "basis": "base_excel_legacy_runtime_source_row",
+                "runtime_eligible": True,
+                "secondary_review_status": "historical_not_row_bound",
             },
             provenance={
                 "source_id": "gene_knowledge_db_drug_narrative",
                 "source_type": "base_excel",
                 "sheet": "用药提示解析",
+                "source_refs": [
+                    {
+                        "type": "workbook_sheet",
+                        "id": "gene_knowledge_db:用药提示解析",
+                    }
+                ],
                 "revision": revision,
                 "updated_at": updated_at,
             },
@@ -712,9 +771,11 @@ def _base_targeted_drug_entries(
                 else "disabled_by_panel_policy"
             ),
             review={
-                "status": "not_recorded",
+                "status": "legacy_runtime",
                 "scope": "source_row",
-                "basis": "base_excel_has_no_review_field",
+                "basis": "base_excel_legacy_runtime_candidate",
+                "runtime_eligible": True,
+                "secondary_review_status": "governed_by_runtime_filters",
             },
             provenance={
                 "source_id": "targeted_drug_db_public",
@@ -726,6 +787,12 @@ def _base_targeted_drug_entries(
                 or None,
                 "sheet": "targeted_drug_tips",
                 "row_number": position,
+                "source_refs": [
+                    {
+                        "type": "workbook_row",
+                        "id": f"targeted_drug_db_public:targeted_drug_tips:{position}",
+                    }
+                ],
                 "revision": revision,
                 "updated_at": updated_at,
             },
@@ -757,9 +824,7 @@ def _overlay_entries(package: Any, kind: str) -> tuple[list[dict[str, Any]], lis
         return [], [warning] if warning else []
     source = data.get("source") if isinstance(data.get("source"), dict) else {}
     origin_panel_id = str(source.get("panel") or package.panel_id)
-    shared = origin_panel_id != package.panel_id
     revision = _sha256_revision(path)
-    updated_at = _updated_at(path)
     source_type = str(source.get("source_type") or "panel_reviewed_overlay")
     rows = data.get("gene_sections" if kind == "gene" else "drug_sections") or []
     entries: list[dict[str, Any]] = []
@@ -823,9 +888,18 @@ def _overlay_entries(package: Any, kind: str) -> tuple[list[dict[str, Any]], lis
         row_source_path = Path(_clean_value(raw_row.get("_source_path")) or str(path))
         row_revision = _clean_value(raw_row.get("_source_revision")) or revision
         review = _entry_review(data, raw_row, row_revision)
-        runtime_eligible = raw_row.get("runtime_eligible") is not False and review[
-            "status"
-        ] != "needs_review"
+        effective = effective_governance(data, raw_row, kind)
+        runtime_eligible = bool(effective["runtime_eligible"])
+        content.update(
+            {
+                "evidence_level": effective["evidence_level"],
+                "cancer_scope": effective["cancer_scope"],
+                "runtime_eligible": runtime_eligible,
+                "secondary_review_status": effective[
+                    "secondary_review_status"
+                ],
+            }
+        )
         entry = KnowledgeEntry(
             entry_id=_stable_entry_id(
                 "overlay",
@@ -852,6 +926,7 @@ def _overlay_entries(package: Any, kind: str) -> tuple[list[dict[str, Any]], lis
             provenance={
                 "source_id": "panel_reviewed_part3_overlay",
                 "source_type": _clean_value(raw_row.get("_source_type")) or source_type,
+                "source_refs": structured_source_refs(data, raw_row, kind),
                 "origin_panel_id": row_origin_panel_id,
                 "shared_overlay": row_origin_panel_id != package.panel_id,
                 "revision": row_revision,
@@ -872,6 +947,10 @@ def _targeted_drug_rule_entries(
     origin_panel_id = str(context.get("source_panel_id") or package.panel_id)
     origin_package = _get_panel_package(origin_panel_id)
     path = origin_package.resolve_rule_file("drugs")
+    try:
+        rule_data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        rule_data = {}
     revision = _sha256_revision(path)
     updated_at = _updated_at(path)
     shared = origin_panel_id != package.panel_id
@@ -889,6 +968,7 @@ def _targeted_drug_rule_entries(
         c_hgvs = _rule_text(raw.get("c_hgvs"))
         p_hgvs = _rule_text(raw.get("p_hgvs"))
         applicability = _clean_value(raw.get("applicability"))
+        governance = effective_governance(rule_data, raw, "targeted_drug")
         entry = KnowledgeEntry(
             entry_id=_stable_entry_id(
                 "targeted_drug_rule",
@@ -906,17 +986,31 @@ def _targeted_drug_rule_entries(
             c_hgvs=c_hgvs,
             p_hgvs=p_hgvs,
             match_scope=_match_scope(c_hgvs, p_hgvs, applicability),
-            runtime_behavior="panel_targeted_drug_override",
+            runtime_behavior=(
+                "panel_targeted_drug_override"
+                if governance["runtime_eligible"]
+                else "governance_blocked_not_loaded"
+            ),
             review={
-                "status": "approved_for_runtime",
-                "scope": "panel_rule",
-                "basis": "enabled_panel_rule",
+                "status": governance["status"],
+                "scope": "panel_rule_governance",
+                "basis": governance["review_basis"],
+                "runtime_eligible": governance["runtime_eligible"],
+                "reviewer": governance["reviewer"],
+                "reviewer_type": governance["reviewer_type"],
+                "reviewed_at": governance["reviewed_at"],
+                "evidence_as_of": governance["evidence_as_of"],
+                "secondary_review_status": governance[
+                    "secondary_review_status"
+                ],
+                "risk_level": governance["risk_level"],
             },
             provenance={
                 "source_id": "panel_targeted_drug_rules",
                 "source_type": "panel_rule_yaml",
                 "origin_panel_id": origin_panel_id,
                 "shared_overlay": shared,
+                "source_refs": governance["source_refs"],
                 "revision": revision,
                 "updated_at": updated_at,
             },
@@ -926,6 +1020,12 @@ def _targeted_drug_rule_entries(
                 "benefit_drugs": raw.get("benefit_drugs") or "",
                 "caution_drugs": raw.get("caution_drugs") or "",
                 "clinical_significance": raw.get("clinical_significance") or "",
+                "evidence_level": governance["evidence_level"],
+                "cancer_scope": governance["cancer_scope"],
+                "runtime_eligible": governance["runtime_eligible"],
+                "secondary_review_status": governance[
+                    "secondary_review_status"
+                ],
             },
         )
         rows.append(entry.model_dump())
@@ -974,7 +1074,11 @@ def get_catalog_entries(
     if review_status not in {
         "all",
         "approved_for_runtime",
+        "provisional_runtime",
+        "legacy_runtime",
         "needs_review",
+        "rejected",
+        "superseded",
         "not_recorded",
     }:
         raise ValueError("invalid review status")
@@ -1103,9 +1207,9 @@ def _drug_candidate_disposition(
     settings_path = _project_root() / "config" / "settings.yaml"
     try:
         raw_settings = yaml.safe_load(settings_path.read_text(encoding="utf-8")) or {}
-        filters = (
-            (((raw_settings.get("knowledge_bases") or {}).get("targeted_drug_db") or {}).get("filters") or {})
-        )
+        knowledge_bases = raw_settings.get("knowledge_bases") or {}
+        targeted_drug_db = knowledge_bases.get("targeted_drug_db") or {}
+        filters = targeted_drug_db.get("filters") or {}
     except Exception:
         filters = {}
     evidence = filters.get("evidence") or {}
@@ -1142,7 +1246,11 @@ def _drug_candidate_disposition(
     }
 
     def cgi_rank(value: Any) -> int:
-        parts = [part.strip().lower() for part in re.split(r"[;,]", str(value or "")) if part.strip()]
+        parts = [
+            part.strip().lower()
+            for part in re.split(r"[;,]", str(value or ""))
+            if part.strip()
+        ]
         return max((cgi_rank_map.get(part, -1) for part in parts), default=-1)
 
     def civic_rank(value: Any) -> int:
@@ -1278,25 +1386,66 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
     ]
     overlay_genes = {str(row["gene"]).strip().upper() for row in gene_rows}
     overlay_drug_genes = {str(row["gene"]).strip().upper() for row in drug_rows}
+    gene_governance = [
+        effective_governance(overlay, row, "gene") for row in gene_rows
+    ]
+    drug_governance = [
+        effective_governance(overlay, row, "drug") for row in drug_rows
+    ]
+    runtime_overlay_genes = {
+        str(row["gene"]).strip().upper()
+        for row, governance in zip(gene_rows, gene_governance)
+        if governance["runtime_eligible"]
+    }
     gene_level_rows = sum(
         not (_clean_value(row.get("c_hgvs")) or _clean_value(row.get("p_hgvs")))
         for row in gene_rows
     )
     variant_level_rows = len(gene_rows) - gene_level_rows
     denominator_name, denominator = _important_gene_denominator(package)
-    either = base_genes | overlay_genes
+    either = base_genes | runtime_overlay_genes
     covered = len(denominator & either) if denominator else 0
     review_counts = Counter(
         _entry_review(overlay, row, overlay_revision)["status"]
         for row in gene_rows + drug_rows
     )
+    all_governance = gene_governance + drug_governance
+    structured_source_rows = sum(
+        bool(item["source_refs"]) for item in all_governance
+    )
+    evidence_level_rows = sum(
+        bool(item["evidence_level"]) for item in all_governance
+    )
+    cancer_scope_rows = sum(
+        bool(item["cancer_scope"]) for item in all_governance
+    )
+    secondary_complete_rows = sum(
+        item["secondary_review_status"]
+        in {"completed", "approved", "report_group_approved"}
+        for item in all_governance
+    )
+    runtime_overlay_drug_genes = {
+        str(row["gene"]).strip().upper()
+        for row, governance in zip(drug_rows, drug_governance)
+        if governance["runtime_eligible"]
+    }
+    pending_review_genes = {
+        str(row["gene"]).strip().upper()
+        for row, governance in zip(
+            gene_rows + drug_rows,
+            all_governance,
+        )
+        if governance["status"] in {"provisional_runtime", "needs_review"}
+    }
     reviewed_drug_rule_genes = {
         str(row.get("gene") or "").strip().upper()
         for row in targeted_rule_entries
         if str(row.get("gene") or "").strip()
     }
     runtime_drug_genes = (
-        overlay_drug_genes | reviewed_drug_rule_genes | base_drug_narrative_genes
+        runtime_overlay_drug_genes
+        | reviewed_drug_rule_genes
+        | base_drug_narrative_genes
     )
     candidate_disposition = _drug_candidate_disposition(
         package,
@@ -1343,7 +1492,7 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
             "denominator_name": denominator_name,
             "total": len(denominator),
             "base_covered": len(denominator & base_genes),
-            "overlay_covered": len(denominator & overlay_genes),
+            "overlay_covered": len(denominator & runtime_overlay_genes),
             "either_covered": covered,
             "percent": round(100.0 * covered / len(denominator), 2)
             if denominator
@@ -1362,10 +1511,96 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
             "explicitly_approved_drug_genes": len(
                 denominator & reviewed_drug_rule_genes
             ),
+            "multidimensional_coverage": {
+                "gene_explanation": {
+                    "total": len(denominator),
+                    "covered": covered,
+                    "percent": round(100.0 * covered / len(denominator), 2)
+                    if denominator
+                    else None,
+                },
+                "review_governance": {
+                    "total_overlay_rows": len(all_governance),
+                    "status_counts": dict(review_counts),
+                    "standardized_rows": len(all_governance)
+                    - review_counts.get("not_recorded", 0),
+                    "standardized_percent": round(
+                        100.0
+                        * (
+                            len(all_governance)
+                            - review_counts.get("not_recorded", 0)
+                        )
+                        / len(all_governance),
+                        2,
+                    )
+                    if all_governance
+                    else 100.0,
+                    "secondary_review_complete_rows": secondary_complete_rows,
+                    "secondary_review_complete_percent": round(
+                        100.0 * secondary_complete_rows / len(all_governance), 2
+                    )
+                    if all_governance
+                    else 100.0,
+                    "pending_secondary_review_genes": sorted(
+                        pending_review_genes
+                    ),
+                },
+                "source_provenance": {
+                    "structured_source_rows": structured_source_rows,
+                    "structured_source_percent": round(
+                        100.0 * structured_source_rows / len(all_governance), 2
+                    )
+                    if all_governance
+                    else 100.0,
+                    "evidence_level_rows": evidence_level_rows,
+                    "evidence_level_percent": round(
+                        100.0 * evidence_level_rows / len(all_governance), 2
+                    )
+                    if all_governance
+                    else 100.0,
+                    "cancer_scope_rows": cancer_scope_rows,
+                    "cancer_scope_percent": round(
+                        100.0 * cancer_scope_rows / len(all_governance), 2
+                    )
+                    if all_governance
+                    else 100.0,
+                },
+                "specificity": {
+                    "gene_level_rows": gene_level_rows,
+                    "variant_level_rows": variant_level_rows,
+                    "event_scoped_drug_rows": sum(
+                        bool(_clean_value(row.get("applicability")))
+                        for row in drug_rows
+                    ),
+                },
+                "drug_actionability": {
+                    "runtime_drug_genes": len(
+                        denominator & runtime_drug_genes
+                    ),
+                    "panel_rule_genes": len(
+                        denominator & reviewed_drug_rule_genes
+                    ),
+                    "runtime_database_genes": int(
+                        candidate_disposition.get(
+                            "runtime_eligible_database_genes", 0
+                        )
+                        or 0
+                    ),
+                    "filtered_database_genes": int(
+                        candidate_disposition.get(
+                            "database_only_filtered_genes", 0
+                        )
+                        or 0
+                    ),
+                },
+            },
             "drug_candidate_disposition": candidate_disposition,
             "status_definitions": {
                 "runtime_drug": "生成器可使用基础库药物解析、Panel drug section 或 variant rule",
-                "runtime_eligible_database": "公共/内部库行满足生产位点、癌种、证据与来源门槛；仅在实际变异匹配时输出",
+                "runtime_eligible_database": (
+                    "公共/内部库行满足生产位点、癌种、证据与来源门槛；"
+                    "仅在实际变异匹配时输出"
+                ),
                 "database_only_filtered": "候选行全部被生产安全规则排除，不是待迁移用药结论",
                 "no_candidate_evidence": "当前候选库未提供药物关联；不等同于知识迁移失败",
             },

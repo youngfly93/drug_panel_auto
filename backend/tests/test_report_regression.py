@@ -417,7 +417,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
     rule = engine.get("drugs")
     rows = rule["approved_drug_rows"]
 
-    assert rule["version"] == "0.2.0"
+    assert rule["version"] == "0.3.0"
     assert rule["status"] == "active"
     assert len(rows) == 7
     assert "瑞戈非尼" in rows[0]["drug"]
@@ -1412,7 +1412,7 @@ def test_crc301_additional_overlay_is_loaded_after_shared_crc_overlay():
     assert "任意体细胞变异不能直接解释为化疗耐药" in sections[0]["mutation_analysis"]
 
 
-def test_pending_secondary_review_gene_rows_do_not_override_runtime_knowledge():
+def test_provisional_runtime_gene_rows_use_first_pass_conservative_wording():
     package = load_panel_package("crc_358_msi", project_root=ROOT)
     provider = GeneKnowledgeProvider(
         {
@@ -1428,6 +1428,17 @@ def test_pending_secondary_review_gene_rows_do_not_override_runtime_knowledge():
     )
     provider.load(base_path=str(ROOT))
 
+    overlay = yaml.safe_load(
+        (ROOT / "panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected = {
+        row["gene"]: row
+        for row in overlay["gene_sections"]
+        if row.get("review_status") == "provisional_runtime"
+    }
+
     for gene in ("CHD2", "HIST1H3B", "HLA-DPA1", "WDR90", "ZNF703"):
         sections = provider.build_all_gene_knowledge_sections(
             [
@@ -1440,9 +1451,8 @@ def test_pending_secondary_review_gene_rows_do_not_override_runtime_knowledge():
             ]
         )
         assert len(sections) == 1
-        assert "一级证据审核完成" not in sections[0]["intro"]
-        assert "中心粒中央核心区" not in sections[0]["intro"]
-        assert "不单独形成治疗结论" not in sections[0]["mutation_analysis"]
+        assert sections[0]["intro"] == expected[gene]["intro"]
+        assert sections[0]["mutation_analysis"] == expected[gene]["mutation_analysis"]
 
 
 def test_excel_reader_resolves_msi_sheet_alias_reordered_columns_and_tumor_row(tmp_path):
@@ -6621,6 +6631,8 @@ def test_quality_gate_can_run_panel_validation_only(tmp_path):
     assert result["status"] == "PASS"
     assert result["summary"]["failed"] == 0
     assert result["steps"][0]["name"] == "panel_validate"
+    assert result["steps"][1]["name"] == "knowledge_release_gate"
+    assert result["steps"][1]["status"] == "PASS"
     assert Path(result["report_file"]).exists()
 
 

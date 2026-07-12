@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from .governance import effective_governance
 from .mutation_description import MutationDescriptionGenerator
 
 
@@ -180,7 +181,9 @@ class GeneKnowledgeProvider:
             for row in data.get("gene_sections") or []:
                 if not isinstance(row, dict):
                     continue
-                if not self._reviewed_row_runtime_enabled(row):
+                if not self._reviewed_row_runtime_enabled(
+                    row, data=data, kind="gene"
+                ):
                     continue
                 section = {
                     k: self._norm_text(v)
@@ -208,7 +211,9 @@ class GeneKnowledgeProvider:
             for row in data.get("drug_sections") or []:
                 if not isinstance(row, dict):
                     continue
-                if not self._reviewed_row_runtime_enabled(row):
+                if not self._reviewed_row_runtime_enabled(
+                    row, data=data, kind="drug"
+                ):
                     continue
                 variant_key = self._variant_key(
                     row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs")
@@ -251,7 +256,12 @@ class GeneKnowledgeProvider:
                     self._extra_references.append(ref_text)
 
     @staticmethod
-    def _reviewed_row_runtime_enabled(row: Dict[str, Any]) -> bool:
+    def _reviewed_row_runtime_enabled(
+        row: Dict[str, Any],
+        *,
+        data: Optional[Dict[str, Any]] = None,
+        kind: str = "gene",
+    ) -> bool:
         """Fail closed for entries awaiting secondary medical review.
 
         Legacy overlay rows without explicit governance fields remain compatible.
@@ -259,6 +269,9 @@ class GeneKnowledgeProvider:
         must explicitly be runtime-eligible and no longer carry a pending/rejected
         review status before it may override the production base knowledge.
         """
+        if data and isinstance(data.get("governance"), dict):
+            governance = effective_governance(data, row, kind)
+            return bool(governance["runtime_eligible"])
         if row.get("runtime_eligible") is False:
             return False
         status = str(row.get("review_status") or "").strip().lower()
