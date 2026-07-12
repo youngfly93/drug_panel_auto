@@ -991,3 +991,28 @@ batch7 最新待审规模：
 - 本轮候选知识库已完成“合入或不入库”的最终处置闭环；
 - 当前 CRC358 Part3 reviewed 知识库可按生产安全口径使用；
 - 后续如要扩展药物知识，应先补肿瘤类型/applicability/HRD 等结构化适用条件，再重新走候选审核与 release gate。
+
+## 2026-07-12 五个后补基因一级证据审核
+
+状态：完成 AI 辅助一级证据审核，等待报告组二审；二审前不允许这些后补条目覆盖生产基础知识。
+
+口径说明：
+
+- batch15 的“待医学审核 0”仅指当时 101 条候选的最终处置；2026-06-30 后补的 CHD2、HIST1H3B、HLA-DPA1、WDR90、ZNF703 不在 batch15 分母内。
+- 本轮审核执行者记录为 `codex / ai_assisted_evidence_review`，不得表述为报告组或执业医师终审。
+- 一级审核只确认基因功能事实、CRC语境边界和是否存在治疗外推；最终生产批准权保留给报告组二审。
+
+| 基因 | 一级审核结论 | 证据范围 | 风险 | 二审状态 |
+|---|---|---|---|---|
+| CHD2 | 接受保守改写 | NCBI Gene/RefSeq；染色质可及性研究 PMID:25621013；无充分CRC位点级用药证据 | 低 | 待报告组二审 |
+| HIST1H3B/H3C2 | 接受保守改写并注明现行符号H3C2 | NCBI Gene 8358/RefSeq；功能背景证据 | 低 | 待报告组二审 |
+| HLA-DPA1 | 接受保守改写，强化“单个体细胞变异不等于免疫疗效标志” | NCBI Gene 3113/RefSeq；CRC HLA证据主要涉及表达、缺失和等位基因背景 | 中 | 待报告组二审 |
+| WDR90 | 接受保守改写 | NCBI Gene 197335；中心粒结构研究 PMID:32946374；无充分CRC临床证据 | 低 | 待报告组二审 |
+| ZNF703 | 修改后接受 | NCBI Gene 80139；CRC表达/细胞功能研究 PMID:25017610；表达证据不得外推至任意序列变异 | 中 | 待报告组二审 |
+
+结构化处置：
+
+- 五条均写入 `review_status: needs_review`、`runtime_eligible: false` 和完整 `first_pass_review` 元数据。
+- Web 知识目录展示一级审核执行者、审核类型、证据截至日期、风险、结论和二审状态。
+- `GeneKnowledgeProvider` 对 `runtime_eligible: false` 或待审核条目 fail-closed；报告组二审前使用基础库回退文本，不加载一级审核候选文本。
+- 报告组二审通过后，应把条目改为 `review_status: approved_for_runtime`、`runtime_eligible: true`，并记录二审人、日期和批准修订 SHA。

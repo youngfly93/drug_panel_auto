@@ -101,7 +101,7 @@ def _part3_bullet_color(doc) -> str | None:
 def _signature_fingerprint(doc) -> dict[str, Any]:
     for idx, paragraph in enumerate(doc.paragraphs):
         text = paragraph.text or ""
-        if "检测者" in text and "审核者" in text and "报告日期" not in text:
+        if "检测者" in text and "审核者" in text:
             inline = paragraph._p.findall(".//" + qn("w:drawing") + "/" + qn("wp:inline"))
             anchor = paragraph._p.findall(".//" + qn("wp:anchor"))
             prev_anchor = 0

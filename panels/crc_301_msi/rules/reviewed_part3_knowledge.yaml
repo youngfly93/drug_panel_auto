@@ -1,0 +1,190 @@
+schema_version: 1
+source:
+  panel: crc_301_msi
+  purpose: CRC301-specific conservative gene-level additions for reportable genes absent from the shared CRC overlay/base KB.
+  scope: gene_level_reviewed_coverage
+  source_type: ncbi_refseq_curated_paraphrase
+  curated_at: '2026-07-12'
+  policy: Gene function is sourced from NCBI Gene/RefSeq; pharmacogenomic conclusions require a validated allele, drug, population and guideline. No patient-specific content.
+gene_sections:
+- gene: ABCB1
+  intro: "ABCB1编码P-糖蛋白，是ATP依赖性跨膜外排转运体，可转运多种外源化合物和药物，并参与多药耐药表型。"
+  mutation_analysis: "ABCB1变异的临床意义取决于具体胚系等位基因、单倍型、药物底物及证据等级；任意体细胞变异不能直接解释为化疗耐药。"
+  source_note: "NCBI Gene 5243 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/5243"
+- gene: ALDH1A1
+  intro: "ALDH1A1编码胞质醛脱氢酶，参与醛类氧化和视黄醛代谢，并与细胞氧化还原及分化状态相关。"
+  mutation_analysis: "ALDH1A1表达或功能变化可能影响醛类代谢，但单个位点在结直肠癌中的治疗意义通常不明确，需结合变异类型和功能证据。"
+  source_note: "NCBI Gene 216 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/216"
+- gene: AREG
+  intro: "AREG编码双调蛋白，是表皮生长因子家族配体，可与EGFR结合并调节上皮细胞生长及组织修复。"
+  mutation_analysis: "AREG通路活性可能影响EGFR信号背景；DNA序列变异不能替代表达水平或配体水平检测，也不能单独预测抗EGFR药物疗效。"
+  source_note: "NCBI Gene 374 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/374"
+- gene: C8ORF34
+  intro: "C8ORF34编码与cAMP依赖性蛋白激酶调节相关的蛋白，公开资料提示部分遗传变异与化疗相关腹泻或中性粒细胞减少风险有关。"
+  mutation_analysis: "仅对已有明确药物、等位基因和人群证据的胚系位点进行药物基因组学解释；其他变异不直接形成毒性或剂量结论。"
+  source_note: "NCBI Gene 116328 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/116328"
+- gene: CBR3
+  intro: "CBR3编码NADPH依赖性羰基还原酶，可将多种内源性及药理活性羰基化合物还原为相应醇类。"
+  mutation_analysis: "CBR3变异可能影响特定药物代谢，但必须按具体等位基因和药物证据解释，不能由任意变异推导疗效或毒性。"
+  source_note: "NCBI Gene 874 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/874"
+- gene: CDA
+  intro: "CDA编码胞苷脱氨酶，参与嘧啶补救途径，将胞苷和脱氧胞苷脱氨形成尿苷类产物。"
+  mutation_analysis: "CDA功能可能影响胞嘧啶核苷类似物代谢；只有经验证的功能等位基因及对应药物证据可用于药物提示。"
+  source_note: "NCBI Gene 978 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/978"
+- gene: CEP72
+  intro: "CEP72编码定位于中心体的富亮氨酸重复蛋白，中心体是细胞微管组织的重要结构。"
+  mutation_analysis: "CEP72部分胚系位点曾被研究用于评估微管相关药物毒性，但证据具有人群和药物特异性；其他变异不作同等外推。"
+  source_note: "NCBI Gene 55722 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/55722"
+- gene: CTLA4
+  intro: "CTLA4编码T细胞抑制性免疫检查点受体，可向T细胞传递负调控信号并限制免疫激活。"
+  mutation_analysis: "CTLA4基因变异、表达和免疫治疗反应并非等价指标；报告应结合具体变异功能、肿瘤免疫背景及已验证临床证据。"
+  source_note: "NCBI Gene 1493 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/1493"
+- gene: CXCL12
+  intro: "CXCL12编码趋化因子，是CXCR4等受体的配体，参与免疫细胞迁移、组织稳态以及肿瘤生长和转移相关过程。"
+  mutation_analysis: "CXCL12变异通常不足以单独形成治疗结论，需结合通路状态、表达、变异功能及癌种证据综合评估。"
+  source_note: "NCBI Gene 6387 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/6387"
+- gene: CYP19A1
+  intro: "CYP19A1编码芳香化酶，属于细胞色素P450家族，催化雌激素生物合成的末端步骤。"
+  mutation_analysis: "CYP19A1药物相关解释依赖具体胚系变异、芳香化酶活性、用药及适应证；结直肠癌体细胞变异不自动提示内分泌治疗。"
+  source_note: "NCBI Gene 1588 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/1588"
+- gene: CYP2D6
+  intro: "CYP2D6编码重要的药物代谢酶，可代谢多类常用药物；该基因高度多态，拷贝数和单倍型共同决定代谢表型。"
+  mutation_analysis: "CYP2D6必须基于规范星号等位基因、拷贝数和表型翻译进行药物基因组学解释，单个未分相变异不能直接判定代谢型。"
+  source_note: "NCBI Gene 1565 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/1565"
+- gene: CYP2E1
+  intro: "CYP2E1编码内质网上的细胞色素P450酶，可代谢乙醇及多种内外源小分子和前致癌物。"
+  mutation_analysis: "CYP2E1变异的药物意义具有底物和人群特异性；无明确指南关联的位点不形成剂量或疗效建议。"
+  source_note: "NCBI Gene 1571 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/1571"
+- gene: DCK
+  intro: "DCK编码脱氧胞苷激酶，负责多种脱氧核苷及核苷类似物的磷酸化和活化。"
+  mutation_analysis: "DCK活性可能影响核苷类似物敏感性，但基因变异需有具体功能和临床药物证据后才能形成用药结论。"
+  source_note: "NCBI Gene 1633 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/1633"
+- gene: DOK5
+  intro: "DOK5编码膜相关衔接蛋白，可与磷酸化受体酪氨酸激酶相互作用并参与MAPK等信号传导。"
+  mutation_analysis: "DOK5在结直肠癌中的位点级临床证据有限，检出变异时以通路背景解释，不单独给出药物结论。"
+  source_note: "NCBI Gene 55816 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/55816"
+- gene: DPYD
+  intro: "DPYD编码二氢嘧啶脱氢酶，是尿嘧啶和胸腺嘧啶分解的起始及限速酶，对氟嘧啶类药物清除十分重要。"
+  mutation_analysis: "DPYD解释必须依据已验证胚系等位基因、活性评分和适用指南；高风险等位基因可关联氟嘧啶严重毒性，但任意体细胞变异不能直接套用。"
+  source_note: "NCBI Gene 1806 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/1806"
+- gene: DYNC2H1
+  intro: "DYNC2H1编码细胞质动力蛋白2重链，参与纤毛内逆向运输和初级纤毛结构维持。"
+  mutation_analysis: "DYNC2H1体细胞变异在结直肠癌中的直接临床意义通常有限，需结合变异致病性和功能证据谨慎解释。"
+  source_note: "NCBI Gene 79659 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/79659"
+- gene: ERCC1
+  intro: "ERCC1与ERCC4/XPF形成核酸内切酶复合物，参与核苷酸切除修复、链间交联修复和部分重组修复过程。"
+  mutation_analysis: "ERCC1表达与DNA序列变异不是同一标志物；单个变异不能直接预测铂类敏感性，需结合功能、双等位状态及临床证据。"
+  source_note: "NCBI Gene 2067 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/2067"
+- gene: GALNT14
+  intro: "GALNT14编码高尔基体多肽N-乙酰半乳糖胺转移酶，参与蛋白O-糖基化，相关异常曾被研究用于肿瘤进展及药物反应。"
+  mutation_analysis: "GALNT14药物相关结论需限定到具体胚系位点、方案和研究人群；其他变异仅作功能背景说明。"
+  source_note: "NCBI Gene 79623 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/79623"
+- gene: GGH
+  intro: "GGH编码γ-谷氨酰水解酶，可去除叶酸及抗叶酸化合物的多聚谷氨酸链，参与细胞内叶酸稳态。"
+  mutation_analysis: "GGH变异可能影响叶酸/抗叶酸代谢，但临床解释必须结合具体等位基因和药物证据，不能由任意变异推断疗效。"
+  source_note: "NCBI Gene 8836 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/8836"
+- gene: GSTM1
+  intro: "GSTM1编码μ类谷胱甘肽S-转移酶，参与致癌物、药物、环境毒物和氧化应激产物的谷胱甘肽结合解毒。"
+  mutation_analysis: "GSTM1常见缺失及其他胚系变异的效应具有人群和暴露依赖性；不以单一体细胞变异直接判断化疗反应。"
+  source_note: "NCBI Gene 2944 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/2944"
+- gene: GSTP1
+  intro: "GSTP1编码π类谷胱甘肽S-转移酶，参与亲电子化合物与谷胱甘肽结合及外源物代谢。"
+  mutation_analysis: "GSTP1药物相关证据需限定具体等位基因、药物和人群；其他变异不直接形成耐药或毒性结论。"
+  source_note: "NCBI Gene 2950 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/2950"
+- gene: MTHFR
+  intro: "MTHFR编码亚甲基四氢叶酸还原酶，生成参与同型半胱氨酸再甲基化的5-甲基四氢叶酸。"
+  mutation_analysis: "MTHFR常见胚系多态性可影响叶酸代谢，但不能脱离基因型组合、叶酸状态和具体药物证据推导剂量或疗效。"
+  source_note: "NCBI Gene 4524 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/4524"
+- gene: MTRR
+  intro: "MTRR编码甲硫氨酸合酶还原酶，负责再生具有活性的甲硫氨酸合酶，参与叶酸循环和细胞甲基化。"
+  mutation_analysis: "MTRR变异的临床影响需结合胚系致病性、代谢表型及具体药物证据；普通体细胞变异通常不形成用药结论。"
+  source_note: "NCBI Gene 4552 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/4552"
+- gene: NQO1
+  intro: "NQO1编码FAD依赖性醌还原酶，可将醌类双电子还原并减少自由基形成，参与氧化应激和外源物代谢。"
+  mutation_analysis: "NQO1变异与药物或毒性关联具有底物和人群特异性，仅解释经验证的功能等位基因。"
+  source_note: "NCBI Gene 1728 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/1728"
+- gene: NT5C3A
+  intro: "NT5C3A编码胞质嘧啶5'-核苷酸酶，可催化嘧啶核苷酸单磷酸去磷酸化。"
+  mutation_analysis: "NT5C3A功能可能影响嘧啶核苷酸代谢，但变异需有明确功能和药物证据后才可用于临床提示。"
+  source_note: "NCBI Gene 51251 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/51251"
+- gene: RRM1
+  intro: "RRM1编码核糖核苷酸还原酶的大催化亚基，为DNA复制和修复提供脱氧核苷酸。"
+  mutation_analysis: "RRM1表达水平与基因序列变异不能混同；单个变异不足以直接预测吉西他滨等药物疗效。"
+  source_note: "NCBI Gene 6240 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/6240"
+- gene: SEMA3C
+  intro: "SEMA3C编码分泌型Semaphorin 3家族蛋白，参与细胞导向，其表达升高与部分肿瘤细胞侵袭和黏附相关。"
+  mutation_analysis: "SEMA3C位点级临床证据有限，检出变异时以功能和通路背景解释，不直接形成治疗建议。"
+  source_note: "NCBI Gene 10512 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/10512"
+- gene: SLC19A1
+  intro: "SLC19A1编码还原型叶酸转运体，参与叶酸进入细胞并调节细胞内叶酸浓度。"
+  mutation_analysis: "SLC19A1变异可能影响叶酸或抗叶酸药物转运，但需限定具体等位基因、药物和临床证据。"
+  source_note: "NCBI Gene 6573 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/6573"
+- gene: SLC22A12
+  intro: "SLC22A12编码肾近端小管有机阴离子/尿酸转运体，参与血尿酸稳态。"
+  mutation_analysis: "SLC22A12主要与尿酸代谢相关；在肿瘤用药中的意义需有特定药物和等位基因证据，不能由任意变异外推。"
+  source_note: "NCBI Gene 116085 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/116085"
+- gene: SLC28A3
+  intro: "SLC28A3编码广谱浓缩型核苷转运体，可转运嘌呤、嘧啶核苷及部分核苷类药物。"
+  mutation_analysis: "SLC28A3药物解释依赖具体胚系位点、药物底物和人群证据；其他变异不直接提示疗效或毒性。"
+  source_note: "NCBI Gene 64078 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/64078"
+- gene: SLC29A1
+  intro: "SLC29A1编码平衡型核苷转运体ENT1，介导核苷及部分细胞毒性核苷类似物跨膜摄取。"
+  mutation_analysis: "SLC29A1表达、蛋白功能和序列变异应分别解释；单个变异不能直接预测核苷类似物疗效。"
+  source_note: "NCBI Gene 2030 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/2030"
+- gene: SOD2
+  intro: "SOD2编码线粒体锰超氧化物歧化酶，将氧化磷酸化产生的超氧阴离子转化为过氧化氢和氧。"
+  mutation_analysis: "SOD2变异可能影响氧化应激能力，但其药物或预后意义需限定具体位点、人群和功能证据。"
+  source_note: "NCBI Gene 6648 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/6648"
+- gene: UGT1A1
+  intro: "UGT1A1编码UDP-葡萄糖醛酸转移酶，参与胆红素和多种药物的葡萄糖醛酸化及排泄。"
+  mutation_analysis: "UGT1A1必须依据规范星号等位基因解释；低活性等位基因可关联伊立替康毒性，但单个未分相变异或体细胞变异不能直接判定风险。"
+  source_note: "NCBI Gene 54658 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/54658"
+- gene: UMPS
+  intro: "UMPS编码尿苷单磷酸合成酶，是嘧啶从头合成末端两步反应的双功能酶。"
+  mutation_analysis: "UMPS功能与嘧啶代谢相关，但序列变异用于药物解释前需具备具体功能和临床证据。"
+  source_note: "NCBI Gene 7372 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/7372"
+- gene: XRCC1
+  intro: "XRCC1编码DNA修复支架蛋白，与DNA连接酶III、聚合酶β和PARP等协同参与碱基切除修复及单链断裂修复。"
+  mutation_analysis: "XRCC1常见多态性的治疗关联结果并不一致；单个变异不能直接预测放疗或DNA损伤药物敏感性。"
+  source_note: "NCBI Gene 7515 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/7515"
+- gene: XRCC3
+  intro: "XRCC3属于RAD51相关蛋白家族，参与同源重组修复、染色体稳定性维持和DNA损伤修复。"
+  mutation_analysis: "XRCC3变异需结合致病性、双等位状态和同源重组缺陷背景评估，不能由任意错义变异直接推导PARP抑制剂获益。"
+  source_note: "NCBI Gene 7517 / RefSeq gene summary；CRC301保守基因级覆盖。"
+  source_url: "https://www.ncbi.nlm.nih.gov/gene/7517"
+drug_sections: []

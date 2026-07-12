@@ -310,6 +310,10 @@ _DEFAULT_NCCN_RESULT_ROWS = [
     {"key": "IDH12_MUT", "genes": ["IDH1", "IDH2"], "match": "突变"},
 ]
 
+# Part-2 drug list display default. Individual Panel packages may opt into full
+# display without changing the global behavior of legacy callers.
+DRUG_DISPLAY_MAX_ITEMS = 5
+
 # ---------------------------------------------------------------------------
 # PanelConfig: immutable, instance-based gene classification container
 # ---------------------------------------------------------------------------
@@ -356,6 +360,9 @@ class PanelConfig:
     )
     reviewed_variant_overrides: List[Dict[str, Any]] = field(default_factory=list)
     approved_drug_rows: List[Dict[str, str]] = field(default_factory=list)
+    # None means render every reviewed drug in Part 2. A positive integer keeps
+    # the historical compact summary behavior for panels that explicitly opt in.
+    drug_display_max_items: Optional[int] = DRUG_DISPLAY_MAX_ITEMS
     nccn_result_rows: List[Dict[str, Any]] = field(
         default_factory=lambda: [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS]
     )
@@ -801,6 +808,11 @@ def load_panel_config(
         immune_hyperprogression_rows=immune_hyperprogression_rows
         or [dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS],
         reviewed_variant_overrides=reviewed_variant_overrides,
+        drug_display_max_items=(
+            None
+            if bool((drugs_rule.get("drug_rules") or {}).get("show_all_in_part2", False))
+            else int((drugs_rule.get("drug_rules") or {}).get("max_items_in_part2", 5))
+        ),
         approved_drug_rows=(
             approved_drug_rows
             if targeted_drug_rules is not None
@@ -1100,6 +1112,17 @@ def _variant_override_matches(
     if p_values and p_norm not in p_values and not any(p in locus_norm for p in p_values):
         return False
 
+    applicability = _norm_text(
+        override.get("applicability") or override.get("applies_to")
+    ).lower()
+    if applicability in {"loss_of_function", "lof", "truncating"}:
+        is_lof = bool(
+            re.search(r"(?:\*|fs)", p_norm, re.I)
+            or re.search(r"c\.\d+[+-]\d+", c_norm)
+        )
+        if not is_lof:
+            return False
+
     return bool(c_values or p_values or override_genes)
 
 
@@ -1128,10 +1151,9 @@ def _drugs_from_override(override: Optional[Dict[str, Any]]) -> Tuple[str, str]:
     )
 
 
-DRUG_DISPLAY_MAX_ITEMS = 5
-
-
-def _compact_drug_display_value(value: Any, *, max_items: int = DRUG_DISPLAY_MAX_ITEMS) -> str:
+def _compact_drug_display_value(
+    value: Any, *, max_items: Optional[int] = DRUG_DISPLAY_MAX_ITEMS
+) -> str:
     """Return a report-table friendly drug list while preserving full data elsewhere."""
     if value is None:
         return ""
@@ -1142,13 +1164,15 @@ def _compact_drug_display_value(value: Any, *, max_items: int = DRUG_DISPLAY_MAX
         if not text or text in {"-", "--"}:
             return text
         items = [line.strip() for line in text.splitlines() if line.strip()]
-    if len(items) <= max_items:
+    if max_items is None or max_items <= 0 or len(items) <= max_items:
         return "\n".join(items)
     omitted = len(items) - max_items
     return "\n".join([*items[:max_items], f"另{omitted}项详见第三部分"])
 
 
-def _compact_drug_display_tables(report_data: ReportData) -> None:
+def _compact_drug_display_tables(
+    report_data: ReportData, *, max_items: Optional[int] = DRUG_DISPLAY_MAX_ITEMS
+) -> None:
     """Compact long drug lists in Word summary tables without losing full values.
 
     The generated Word tables in Part 2 have narrow drug columns. Very long
@@ -1169,7 +1193,7 @@ def _compact_drug_display_tables(report_data: ReportData) -> None:
                 full_field = f"{field_name}_full"
                 if full_field not in row:
                     row[full_field] = value
-                compacted = _compact_drug_display_value(value)
+                compacted = _compact_drug_display_value(value, max_items=max_items)
                 if compacted != value:
                     row[field_name] = compacted
                     changed = True
@@ -2589,7 +2613,10 @@ def enhance_report_data(
             "靶向药物提示回填失败: %s", e
         )
 
-    _compact_drug_display_tables(report_data)
+    _compact_drug_display_tables(
+        report_data,
+        max_items=pc.drug_display_max_items,
+    )
 
     report_content_cfg = report_data.get_field("report_content")
     report_content_cfg = report_content_cfg if isinstance(report_content_cfg, dict) else {}

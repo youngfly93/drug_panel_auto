@@ -111,36 +111,56 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
         "targeted_drug_rows": 835,
         "targeted_drug_unique_genes": 151,
     }
-    assert payload["reviewed_overlay"] == {
+    overlay_expected = {
         "available": True,
         "gene_rows": 304,
         "unique_genes": 235,
         "gene_level_rows": 233,
         "variant_level_rows": 71,
-        "drug_rows": 17,
-        "drug_unique_genes": 7,
-        "targeted_drug_rule_rows": 8,
-        "targeted_drug_rule_unique_genes": 8,
+        "drug_rows": 18,
+        "drug_unique_genes": 8,
+        "targeted_drug_rule_rows": 9,
+        "targeted_drug_rule_unique_genes": 9,
         "targeted_drug_applicability_rule_rows": 1,
-        "extra_reference_rows": 11,
+        "extra_reference_rows": 12,
         "review_status_counts": {
-            "not_recorded": 316,
+            "not_recorded": 317,
             "needs_review": 5,
         },
     }
+    if panel_id == "crc_301_msi":
+        overlay_expected.update(
+            gene_rows=340,
+            unique_genes=271,
+            gene_level_rows=269,
+            review_status_counts={"not_recorded": 353, "needs_review": 5},
+        )
+    assert payload["reviewed_overlay"] == overlay_expected
     assert payload["overlap"] == {
         "genes_in_both": 215,
-        "overlay_only_genes": 20,
+        "overlay_only_genes": 56 if panel_id == "crc_301_msi" else 20,
     }
+    expected = {
+        "crc_358_msi": (358, 350, 218, 358, 100.0),
+        "crc_301_msi": (301, 256, 230, 301, 100.0),
+    }[panel_id]
+    total, base_covered, overlay_covered, either_covered, percent = expected
     assert payload["declared_gene_coverage"] == {
-        "denominator_name": "crc_important_genes",
-        "total": 37,
-        "base_covered": 37,
-        "overlay_covered": 36,
-        "either_covered": 37,
-        "percent": 100.0,
-        "label": "crc_important_genes 覆盖率",
+        "denominator_name": "reportable_genes",
+        "total": total,
+        "base_covered": base_covered,
+        "overlay_covered": overlay_covered,
+        "either_covered": either_covered,
+        "percent": percent,
+        "label": "reportable_genes 覆盖率",
     }
+    contract = payload["knowledge_coverage_contract"]
+    assert contract["total_genes"] == total
+    disposition = contract["drug_candidate_disposition"]
+    assert disposition["pending_medical_review_rows"] == 0
+    assert disposition["database_candidate_genes"] in {115, 116}
+    assert contract["gene_explanation_complete"] is True
+    assert contract["gene_explanation_missing_count"] == 0
     assert payload["warnings"] == []
 
 
@@ -156,6 +176,47 @@ def test_non_crc_pilot_does_not_inherit_crc_coverage_denominator():
         "percent": None,
         "label": "未声明覆盖分母",
     }
+    assert payload["knowledge_coverage_contract"]["total_genes"] == 0
+
+
+def test_crc301_specific_overlay_closes_gene_gap_without_leaking_to_crc358():
+    crc301 = service.get_catalog_entries(
+        panel_id="crc_301_msi",
+        kind="gene",
+        layer="reviewed_overlay",
+        gene="ABCB1",
+        page=1,
+        page_size=10,
+    )
+    crc358 = service.get_catalog_entries(
+        panel_id="crc_358_msi",
+        kind="gene",
+        layer="reviewed_overlay",
+        gene="ABCB1",
+        page=1,
+        page_size=10,
+    )
+
+    assert crc301["total"] == 1
+    assert crc301["rows"][0]["provenance"]["origin_panel_id"] == "crc_301_msi"
+    assert crc301["rows"][0]["provenance"]["shared_overlay"] is False
+    assert crc301["rows"][0]["provenance"]["source_type"] == "ncbi_refseq_curated_paraphrase"
+    assert crc358["total"] == 0
+
+
+def test_drug_candidate_disposition_is_complete_and_not_a_migration_backlog():
+    contract = service.get_catalog_coverage("crc_358_msi")[
+        "knowledge_coverage_contract"
+    ]
+    disposition = contract["drug_candidate_disposition"]
+
+    assert disposition["database_candidate_genes"] == 116
+    assert disposition["runtime_eligible_database_genes"] == 26
+    assert disposition["database_only_filtered_genes"] == 90
+    assert disposition["pending_medical_review_rows"] == 0
+    assert disposition["historical_review"]["approved_rows"] == 95
+    assert disposition["historical_review"]["rejected_rows"] == 6
+    assert disposition["filter_reason_row_counts"]["filtered_missing_position"] > 0
 
 
 def test_catalog_entry_counts_and_match_scopes_are_explicit():
@@ -175,24 +236,24 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     drugs = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="drug", page=1, page_size=1
     )
-    assert drugs["total"] == 98
+    assert drugs["total"] == 99
     assert drugs["facets"] == {
-        "layers": {"base": 81, "reviewed_overlay": 17},
-        "review_statuses": {"not_recorded": 98},
-        "match_scopes": {"gene": 48, "variant": 49, "event": 1},
+        "layers": {"base": 81, "reviewed_overlay": 18},
+        "review_statuses": {"not_recorded": 99},
+        "match_scopes": {"gene": 48, "variant": 49, "event": 2},
     }
 
     targeted = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="targeted_drug", page=1, page_size=1
     )
-    assert targeted["total"] == 843
+    assert targeted["total"] == 844
     assert targeted["facets"] == {
-        "layers": {"base": 835, "reviewed_overlay": 8},
+        "layers": {"base": 835, "reviewed_overlay": 9},
         "review_statuses": {
             "not_recorded": 835,
-            "approved_for_runtime": 8,
+            "approved_for_runtime": 9,
         },
-        "match_scopes": {"event": 632, "variant": 150, "gene": 61},
+        "match_scopes": {"event": 633, "variant": 150, "gene": 61},
     }
 
     variant_rows = service.get_catalog_entries(
@@ -297,8 +358,18 @@ def test_review_status_filters_distinguish_runtime_approval_and_pending_review()
         == {
             "status": "needs_review",
             "scope": "entry_note",
-            "basis": "entry_source_note_requires_review",
+            "basis": "first_pass_complete_pending_secondary_review",
         }
+        for row in needs_review["rows"]
+    )
+    assert all(
+        row["runtime_behavior"] == "pending_secondary_review_not_loaded"
+        and row["content"]["first_pass_status"] == "completed"
+        and row["content"]["first_pass_reviewer_type"]
+        == "ai_assisted_evidence_review"
+        and row["content"]["secondary_review_status"]
+        == "pending_report_group_review"
+        and row["content"]["runtime_eligible"] is False
         for row in needs_review["rows"]
     )
 
@@ -310,7 +381,7 @@ def test_review_status_filters_distinguish_runtime_approval_and_pending_review()
         page=1,
         page_size=100,
     )
-    assert unbound_drug_narratives["total"] == 17
+    assert unbound_drug_narratives["total"] == 18
     assert all(
         row["review"]["basis"] == "current_revision_not_approved"
         for row in unbound_drug_narratives["rows"]
@@ -324,7 +395,7 @@ def test_review_status_filters_distinguish_runtime_approval_and_pending_review()
         page=1,
         page_size=100,
     )
-    assert approved_targeted_rules["total"] == 8
+    assert approved_targeted_rules["total"] == 9
     assert all(
         row["review"]["basis"] == "enabled_panel_rule"
         for row in approved_targeted_rules["rows"]

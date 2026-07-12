@@ -180,6 +180,8 @@ class GeneKnowledgeProvider:
             for row in data.get("gene_sections") or []:
                 if not isinstance(row, dict):
                     continue
+                if not self._reviewed_row_runtime_enabled(row):
+                    continue
                 section = {
                     k: self._norm_text(v)
                     for k, v in row.items()
@@ -205,6 +207,8 @@ class GeneKnowledgeProvider:
 
             for row in data.get("drug_sections") or []:
                 if not isinstance(row, dict):
+                    continue
+                if not self._reviewed_row_runtime_enabled(row):
                     continue
                 variant_key = self._variant_key(
                     row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs")
@@ -245,6 +249,25 @@ class GeneKnowledgeProvider:
                 ref_text = self._norm_text(ref)
                 if ref_text and ref_text not in self._extra_references:
                     self._extra_references.append(ref_text)
+
+    @staticmethod
+    def _reviewed_row_runtime_enabled(row: Dict[str, Any]) -> bool:
+        """Fail closed for entries awaiting secondary medical review.
+
+        Legacy overlay rows without explicit governance fields remain compatible.
+        Once a row participates in the structured review workflow, however, it
+        must explicitly be runtime-eligible and no longer carry a pending/rejected
+        review status before it may override the production base knowledge.
+        """
+        if row.get("runtime_eligible") is False:
+            return False
+        status = str(row.get("review_status") or "").strip().lower()
+        return status not in {
+            "needs_review",
+            "pending_review",
+            "pending_report_group_review",
+            "rejected",
+        }
 
     def _hgvs_key(self, value: Any) -> str:
         return re.sub(r"\s+", "", self._norm_text(value)).upper()

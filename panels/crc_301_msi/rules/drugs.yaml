@@ -7,6 +7,7 @@ status: "active"
 description: "CRC drug-display rule declarations used by the generator."
 
 drug_rules:
+  show_all_in_part2: true
   approved_drug_rows_source: "drugs.yaml:approved_drug_rows"
   brand_lookup_source: "config/drug_brands.yaml"
   immunotherapy_brand_list_source: "config/drug_brands.yaml"

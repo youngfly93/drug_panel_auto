@@ -42,10 +42,44 @@ from scripts.apply_crc358_pending_review_decisions import (
 )
 from scripts.check_crc358_knowledge_release_ready import (
     build_report as build_release_readiness_report,
+    overlay_stats,
 )
 from scripts.triage_crc358_pending_medical_review import triage_rows
 from scripts.prepare_crc358_triage_subset_release import release_row, workbook_row
 from openpyxl import Workbook
+import yaml
+
+
+def test_release_checker_allows_gene_level_analysis_but_rejects_orphan_protein_hgvs(tmp_path):
+    overlay = tmp_path / "reviewed_part3_knowledge.yaml"
+    overlay.write_text(
+        yaml.safe_dump(
+            {
+                "gene_sections": [
+                    {
+                        "gene": "ABCB1",
+                        "mutation_analysis": "仅提供保守的基因级解释。",
+                    },
+                    {
+                        "gene": "TP53",
+                        "p_hgvs": "p.R175H",
+                        "mutation_analysis": "这是缺少c.HGVS的变异级记录。",
+                    },
+                ],
+                "drug_sections": [],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    stats = overlay_stats(overlay)
+
+    assert stats["mutation_analysis_without_c_hgvs"] == 1
+    assert stats["details"]["mutation_analysis_without_c_hgvs"] == [
+        {"gene": "TP53", "p_hgvs": "p.R175H"}
+    ]
 
 
 def test_classify_crc358_msi_final_report_name():

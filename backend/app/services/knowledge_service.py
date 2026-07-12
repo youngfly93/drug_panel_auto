@@ -362,11 +362,50 @@ def _resolve_overlay(package: Any) -> tuple[Optional[Path], Optional[dict], str]
     if not path.exists():
         return path, None, "Reviewed overlay 文件不存在。"
     try:
-        return path, _load_overlay_file(path), ""
+        primary = _load_overlay_file(path)
     except Exception:
         # Parser and IO exceptions can contain absolute paths. Keep Web-facing
         # warnings useful without exposing the host filesystem layout.
         return path, None, "Reviewed overlay 文件格式无效或无法读取。"
+
+    combined = dict(primary)
+    combined["gene_sections"] = []
+    combined["drug_sections"] = []
+
+    def append_rows(data: dict[str, Any], source_path: Path) -> None:
+        source = data.get("source") if isinstance(data.get("source"), dict) else {}
+        origin_panel_id = str(source.get("panel") or package.panel_id)
+        revision = _sha256_revision(source_path)
+        for section in ("gene_sections", "drug_sections"):
+            for row in data.get(section) or []:
+                if not isinstance(row, dict):
+                    continue
+                tagged = dict(row)
+                tagged["_origin_panel_id"] = origin_panel_id
+                tagged["_source_path"] = str(source_path)
+                tagged["_source_revision"] = revision
+                tagged["_source_type"] = str(
+                    source.get("source_type") or "panel_reviewed_overlay"
+                )
+                combined[section].append(tagged)
+
+    append_rows(primary, path)
+    additions = (getattr(package, "raw", None) or {}).get(
+        "reviewed_part3_overlay_additions"
+    ) or []
+    if isinstance(additions, str):
+        additions = [additions]
+    try:
+        panels_root = (_project_root() / "panels").resolve()
+        for declared_addition in additions if isinstance(additions, list) else []:
+            addition_path = package._resolve_path(str(declared_addition)).resolve()
+            addition_path.relative_to(panels_root)
+            if not addition_path.exists():
+                return path, None, "Panel 附加 reviewed overlay 文件不存在。"
+            append_rows(_load_overlay_file(addition_path), addition_path)
+    except Exception:
+        return path, None, "Panel 附加 reviewed overlay 格式无效或路径不受控。"
+    return path, combined, ""
 
 
 def _overlay_review_status(
@@ -414,6 +453,24 @@ def _entry_review(
     row: Optional[dict[str, Any]] = None,
     revision: str = "",
 ) -> dict[str, str]:
+    explicit_status = str((row or {}).get("review_status") or "").strip().lower()
+    first_pass = (row or {}).get("first_pass_review")
+    if explicit_status in {"approved_for_runtime", "needs_review", "not_recorded"}:
+        if (
+            explicit_status == "needs_review"
+            and isinstance(first_pass, dict)
+            and str(first_pass.get("status") or "").strip().lower() == "completed"
+        ):
+            return {
+                "status": "needs_review",
+                "scope": "entry_note",
+                "basis": "first_pass_complete_pending_secondary_review",
+            }
+        return {
+            "status": explicit_status,
+            "scope": "entry_note",
+            "basis": "explicit_entry_review_status",
+        }
     source_note = str((row or {}).get("source_note") or "")
     if "需医学审核" in source_note or "NEEDS" in source_note.upper():
         return {
@@ -717,6 +774,8 @@ def _overlay_entries(package: Any, kind: str) -> tuple[list[dict[str, Any]], lis
         applicability = _clean_value(raw_row.get("applicability"))
         content: dict[str, Any]
         if kind == "gene":
+            first_pass = raw_row.get("first_pass_review")
+            first_pass = first_pass if isinstance(first_pass, dict) else {}
             content = {
                 "intro": _clean_value(raw_row.get("intro")),
                 "mutation_description": _clean_value(
@@ -727,6 +786,29 @@ def _overlay_entries(package: Any, kind: str) -> tuple[list[dict[str, Any]], lis
                     raw_row.get("mutation_analysis")
                 ),
                 "refinement_note": _clean_value(raw_row.get("refinement_note")),
+                "source_note": _clean_value(raw_row.get("source_note")),
+                "source_url": _clean_value(raw_row.get("source_url")),
+                "evidence_level": _clean_value(raw_row.get("evidence_level")),
+                "cancer_scope": _clean_value(raw_row.get("cancer_scope")),
+                "runtime_eligible": raw_row.get("runtime_eligible"),
+                "first_pass_status": _clean_value(first_pass.get("status")),
+                "first_pass_reviewer": _clean_value(first_pass.get("reviewer")),
+                "first_pass_reviewer_type": _clean_value(
+                    first_pass.get("reviewer_type")
+                ),
+                "first_pass_reviewed_at": _clean_value(
+                    first_pass.get("reviewed_at")
+                ),
+                "first_pass_evidence_as_of": _clean_value(
+                    first_pass.get("evidence_as_of")
+                ),
+                "first_pass_decision": _clean_value(first_pass.get("decision")),
+                "first_pass_risk_level": _clean_value(
+                    first_pass.get("risk_level")
+                ),
+                "secondary_review_status": _clean_value(
+                    first_pass.get("secondary_review_status")
+                ),
             }
         else:
             content = {
@@ -737,10 +819,17 @@ def _overlay_entries(package: Any, kind: str) -> tuple[list[dict[str, Any]], lis
                 "clinical": _clean_value(raw_row.get("clinical")),
                 "applicability": applicability,
             }
+        row_origin_panel_id = _clean_value(raw_row.get("_origin_panel_id")) or origin_panel_id
+        row_source_path = Path(_clean_value(raw_row.get("_source_path")) or str(path))
+        row_revision = _clean_value(raw_row.get("_source_revision")) or revision
+        review = _entry_review(data, raw_row, row_revision)
+        runtime_eligible = raw_row.get("runtime_eligible") is not False and review[
+            "status"
+        ] != "needs_review"
         entry = KnowledgeEntry(
             entry_id=_stable_entry_id(
                 "overlay",
-                origin_panel_id,
+                row_origin_panel_id,
                 kind,
                 index,
                 gene,
@@ -754,15 +843,19 @@ def _overlay_entries(package: Any, kind: str) -> tuple[list[dict[str, Any]], lis
             c_hgvs=c_hgvs,
             p_hgvs=p_hgvs,
             match_scope=_match_scope(c_hgvs, p_hgvs, applicability),
-            runtime_behavior="override_base_on_match",
-            review=_entry_review(data, raw_row, revision),
+            runtime_behavior=(
+                "override_base_on_match"
+                if runtime_eligible
+                else "pending_secondary_review_not_loaded"
+            ),
+            review=review,
             provenance={
                 "source_id": "panel_reviewed_part3_overlay",
-                "source_type": source_type,
-                "origin_panel_id": origin_panel_id,
-                "shared_overlay": shared,
-                "revision": revision,
-                "updated_at": updated_at,
+                "source_type": _clean_value(raw_row.get("_source_type")) or source_type,
+                "origin_panel_id": row_origin_panel_id,
+                "shared_overlay": row_origin_panel_id != package.panel_id,
+                "revision": row_revision,
+                "updated_at": _updated_at(row_source_path),
             },
             content=content,
         )
@@ -963,6 +1056,20 @@ def get_catalog_entries(
 
 def _important_gene_denominator(package: Any) -> tuple[str, set[str]]:
     try:
+        coverage_path = package.resolve_rule_file("knowledge_coverage")
+        coverage_raw = yaml.safe_load(coverage_path.read_text(encoding="utf-8")) or {}
+        reportable = coverage_raw.get("reportable_genes")
+        if isinstance(reportable, list):
+            genes = {
+                str(value).strip().upper()
+                for value in reportable
+                if str(value).strip()
+            }
+            if genes:
+                return "reportable_genes", genes
+    except Exception:
+        pass
+    try:
         raw = yaml.safe_load(
             package.resolve_rule_file("panel_rules").read_text(encoding="utf-8")
         ) or {}
@@ -977,6 +1084,146 @@ def _important_gene_denominator(package: Any) -> tuple[str, set[str]]:
             str(value).strip().upper() for value in values if str(value).strip()
         }
     return "", set()
+
+
+def _drug_candidate_disposition(
+    package: Any,
+    drug_df: Optional[pd.DataFrame],
+    targeted_context: Optional[dict[str, Any]],
+    denominator: set[str],
+) -> dict[str, Any]:
+    """Classify DB candidates by the same production safety dimensions.
+
+    This is a catalog/audit view, not a second drug decision engine. It makes
+    clear that a public DB gene absent from a curated override is usually
+    governed by position/cancer/evidence filters, rather than "not migrated".
+    """
+    if drug_df is None:
+        return {}
+    settings_path = _project_root() / "config" / "settings.yaml"
+    try:
+        raw_settings = yaml.safe_load(settings_path.read_text(encoding="utf-8")) or {}
+        filters = (
+            (((raw_settings.get("knowledge_bases") or {}).get("targeted_drug_db") or {}).get("filters") or {})
+        )
+    except Exception:
+        filters = {}
+    evidence = filters.get("evidence") or {}
+    cgi_min = int(evidence.get("cgi_min_rank", 0) or 0)
+    civic_min = int(evidence.get("civic_min_rank", 0) or 0)
+    require_position = bool(filters.get("require_position_match", False))
+    allowed_sources = {
+        str(value).strip().upper()
+        for value in ((targeted_context or {}).get("allowed_source_dbs") or [])
+        if str(value).strip()
+    }
+    allow_internal = bool((targeted_context or {}).get("allow_internal_rows", False))
+    generic_internal_reject: set[str] = set()
+    for rule in (targeted_context or {}).get("applicability_rules") or []:
+        if not isinstance(rule, dict) or not rule.get("reject_when_db_position_missing"):
+            continue
+        sources = {str(value).strip().upper() for value in rule.get("sources") or []}
+        if "INTERNAL" in sources:
+            generic_internal_reject.update(
+                str(value).strip().upper() for value in rule.get("genes") or []
+            )
+
+    cgi_rank_map = {
+        "fda guidelines": 5,
+        "nccn guidelines": 5,
+        "nccn/cap guidelines": 5,
+        "cpic guidelines": 5,
+        "european leukemianet guidelines": 5,
+        "late trials": 4,
+        "clinical trials": 3,
+        "early trials": 2,
+        "case report": 1,
+        "pre-clinical": 0,
+    }
+
+    def cgi_rank(value: Any) -> int:
+        parts = [part.strip().lower() for part in re.split(r"[;,]", str(value or "")) if part.strip()]
+        return max((cgi_rank_map.get(part, -1) for part in parts), default=-1)
+
+    def civic_rank(value: Any) -> int:
+        text = str(value or "").strip().lower()
+        if "tier i" in text:
+            return 5 if "level a" in text else 4
+        if "tier ii" in text:
+            return 3 if "level c" in text else 2
+        if "tier iii" in text:
+            return 1
+        if "tier iv" in text:
+            return 0
+        return -1
+
+    row_counts: Counter[str] = Counter()
+    genes_by_status: dict[str, set[str]] = {}
+    all_genes: set[str] = set()
+    for _, row in drug_df.iterrows():
+        gene = _clean_value(row.get("基因名称")).upper()
+        if not gene or (denominator and gene not in denominator):
+            continue
+        all_genes.add(gene)
+        source = _clean_value(row.get("source_db")).upper()
+        c_hgvs = _clean_value(row.get("c_point"))
+        p_hgvs = _clean_value(row.get("p_point"))
+        status = "runtime_eligible"
+        if allowed_sources and source not in allowed_sources:
+            status = "filtered_source"
+        elif source == "INTERNAL":
+            if not allow_internal:
+                status = "filtered_source"
+            elif gene in generic_internal_reject and not (c_hgvs or p_hgvs):
+                status = "filtered_internal_generic"
+        elif source in {"CGI", "CIVIC"}:
+            if require_position and not (c_hgvs or p_hgvs):
+                status = "filtered_missing_position"
+            elif source == "CGI":
+                tumor_types = {
+                    value.strip().upper()
+                    for value in _clean_value(row.get("cgi_primary_tumor_type")).split(";")
+                    if value.strip()
+                }
+                if tumor_types and "COREAD" not in tumor_types:
+                    status = "filtered_cancer_mismatch"
+                else:
+                    rank = cgi_rank(row.get("cgi_evidence_level"))
+                    if rank >= 0 and rank < cgi_min:
+                        status = "filtered_low_evidence"
+            else:
+                disease = _clean_value(row.get("civic_disease")).lower()
+                if disease and not any(
+                    keyword in disease for keyword in ("colorectal", "colon", "rectal")
+                ):
+                    status = "filtered_cancer_mismatch"
+                else:
+                    rank = civic_rank(row.get("civic_amp_category"))
+                    if rank >= 0 and rank < civic_min:
+                        status = "filtered_low_evidence"
+        row_counts[status] += 1
+        genes_by_status.setdefault(status, set()).add(gene)
+
+    eligible_genes = genes_by_status.get("runtime_eligible", set())
+    filtered_only = all_genes - eligible_genes
+    try:
+        coverage_rule = yaml.safe_load(
+            package.resolve_rule_file("knowledge_coverage").read_text(encoding="utf-8")
+        ) or {}
+    except Exception:
+        coverage_rule = {}
+    review_disposition = coverage_rule.get("drug_review_disposition") or {}
+    return {
+        "database_candidate_genes": len(all_genes),
+        "runtime_eligible_database_genes": len(eligible_genes),
+        "runtime_eligible_database_gene_list": sorted(eligible_genes),
+        "database_only_filtered_genes": len(filtered_only),
+        "database_only_filtered_gene_list": sorted(filtered_only),
+        "filter_reason_row_counts": dict(row_counts),
+        "historical_review": dict(review_disposition),
+        "pending_medical_review_rows": int(review_disposition.get("pending_rows", 0) or 0),
+        "pending_medical_review_genes": [],
+    }
 
 
 def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
@@ -1043,6 +1290,21 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
         _entry_review(overlay, row, overlay_revision)["status"]
         for row in gene_rows + drug_rows
     )
+    reviewed_drug_rule_genes = {
+        str(row.get("gene") or "").strip().upper()
+        for row in targeted_rule_entries
+        if str(row.get("gene") or "").strip()
+    }
+    runtime_drug_genes = (
+        overlay_drug_genes | reviewed_drug_rule_genes | base_drug_narrative_genes
+    )
+    candidate_disposition = _drug_candidate_disposition(
+        package,
+        drug_df,
+        targeted_context,
+        denominator,
+    )
+    gene_explanation_missing = denominator - either if denominator else set()
 
     return {
         "panel": panel,
@@ -1089,6 +1351,24 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
             "label": (
                 f"{denominator_name} 覆盖率" if denominator_name else "未声明覆盖分母"
             ),
+        },
+        "knowledge_coverage_contract": {
+            "denominator_name": denominator_name,
+            "total_genes": len(denominator),
+            "gene_explanation_complete": not gene_explanation_missing,
+            "gene_explanation_missing_count": len(gene_explanation_missing),
+            "gene_explanation_missing_genes": sorted(gene_explanation_missing),
+            "runtime_drug_genes": len(denominator & runtime_drug_genes),
+            "explicitly_approved_drug_genes": len(
+                denominator & reviewed_drug_rule_genes
+            ),
+            "drug_candidate_disposition": candidate_disposition,
+            "status_definitions": {
+                "runtime_drug": "生成器可使用基础库药物解析、Panel drug section 或 variant rule",
+                "runtime_eligible_database": "公共/内部库行满足生产位点、癌种、证据与来源门槛；仅在实际变异匹配时输出",
+                "database_only_filtered": "候选行全部被生产安全规则排除，不是待迁移用药结论",
+                "no_candidate_evidence": "当前候选库未提供药物关联；不等同于知识迁移失败",
+            },
         },
         "warnings": [warning] if warning else [],
     }

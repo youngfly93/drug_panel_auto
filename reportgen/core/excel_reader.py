@@ -5,6 +5,7 @@ Excel读取器
 """
 
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -118,6 +119,99 @@ class ExcelReader:
 
         sheet_cache[cache_key] = df
         return df
+
+    @staticmethod
+    def _normalized_sheet_name(value: Any) -> str:
+        """Normalize workbook sheet labels without making them globally fuzzy."""
+        return re.sub(r"[\s_\-]+", "", str(value or "")).casefold()
+
+    def _find_msi_sheet(self, sheet_names: List[str]) -> Optional[str]:
+        aliases = {"msisensor", "msisensorpro", "msi"}
+        for sheet_name in sheet_names:
+            if self._normalized_sheet_name(sheet_name) in aliases:
+                return sheet_name
+        return None
+
+    @staticmethod
+    def _normalized_header(value: Any) -> str:
+        return re.sub(r"[\s_\-()%（）]+", "", str(value or "")).casefold()
+
+    def _extract_msi_result(self, msi_df: pd.DataFrame) -> tuple[Any, Any]:
+        """Extract tumor MSI percentage/status by semantic headers.
+
+        Legacy workbooks used fixed columns and placed the tumor row second.
+        Newer exports vary column order and capitalization, so prefer named
+        columns and a labeled tumor row, then retain the legacy coordinates as
+        a narrow compatibility fallback.
+        """
+        if msi_df is None or msi_df.empty:
+            return None, None
+
+        normalized = {
+            self._normalized_header(column): column for column in msi_df.columns
+        }
+
+        def find_column(aliases: set[str]) -> Any:
+            for key, original in normalized.items():
+                if key in aliases:
+                    return original
+            return None
+
+        sample_col = find_column(
+            {"sample", "samplename", "sampleid", "样本", "样本名称", "样本编号"}
+        )
+        percent_col = find_column(
+            {
+                "percent",
+                "percentage",
+                "msipercent",
+                "msipercentage",
+                "msiscore",
+                "微卫星不稳定比例",
+                "不稳定比例",
+            }
+        )
+        status_col = find_column(
+            {"status", "msistatus", "result", "conclusion", "状态", "结果", "结论"}
+        )
+
+        row_index = None
+        if sample_col is not None:
+            tumor_labels = {"tumor", "tumour", "case", "肿瘤", "肿瘤样本"}
+            for idx, value in msi_df[sample_col].items():
+                label = self._normalized_header(value)
+                if label in tumor_labels or label.startswith("tumor"):
+                    row_index = idx
+                    break
+        if row_index is None:
+            # Historical Msisensor exports put normal/control first and tumor
+            # second. Single-row exports are also accepted.
+            row_index = msi_df.index[1] if len(msi_df.index) > 1 else msi_df.index[0]
+
+        percentage = (
+            msi_df.at[row_index, percent_col] if percent_col is not None else None
+        )
+        status = msi_df.at[row_index, status_col] if status_col is not None else None
+        if self._is_missing_cell(percentage) and len(msi_df.columns) > 3:
+            percentage = msi_df.iloc[msi_df.index.get_loc(row_index), 3]
+        if self._is_missing_cell(status) and len(msi_df.columns) > 4:
+            status = msi_df.iloc[msi_df.index.get_loc(row_index), 4]
+        return (
+            None if self._is_missing_cell(percentage) else percentage,
+            None if self._is_missing_cell(status) else status,
+        )
+
+    @staticmethod
+    def _is_missing_cell(value: Any) -> bool:
+        try:
+            return value is None or bool(pd.isna(value))
+        except (TypeError, ValueError):
+            return value is None
+
+    @staticmethod
+    def _parse_percentage(value: Any) -> float:
+        text = str(value).strip().rstrip("%").strip()
+        return float(text)
 
     def _get_df_cell_value(self, df: pd.DataFrame, row: int, col: int) -> Optional[Any]:
         if df is None or df.empty:
@@ -359,23 +453,23 @@ class ExcelReader:
                     data_source.single_values["TMB"] = tmb_value
                     self.logger.info("提取TMB值成功", tmb_value=tmb_value)
 
-            # ✅ 提取MSI状态（如果Msisensor sheet存在）
-            if "Msisensor" in sheet_names:
+            # 提取 MSI：兼容大小写/空格别名，并按表头定位 tumor 结果。
+            msi_sheet = self._find_msi_sheet(sheet_names)
+            if msi_sheet:
                 msi_df = self._parse_sheet(
-                    excel_file, "Msisensor", sheet_cache, skip_rows=0, header=0
+                    excel_file, msi_sheet, sheet_cache, skip_rows=0, header=0
                 )
-                msi_status = self._get_df_cell_value(msi_df, row=1, col=4)
-                msi_percentage = self._get_df_cell_value(msi_df, row=1, col=3)
+                msi_percentage, msi_status = self._extract_msi_result(msi_df)
                 if msi_percentage is not None:
                     data_source.single_values["MSI百分比"] = msi_percentage
                 if msi_status is not None:
-                    data_source.single_values["MSI状态"] = msi_status
+                    data_source.single_values["MSI状态"] = str(msi_status).strip()
                     self.logger.info("提取MSI状态成功", msi_status=msi_status)
                 else:
                     # 如果第5列没有状态，尝试从百分比判定
                     if msi_percentage is not None:
                         try:
-                            pct = float(msi_percentage)
+                            pct = self._parse_percentage(msi_percentage)
                             # 阈值由 settings.yaml data.msi.thresholds 配置
                             if pct >= self._msi_h_threshold:
                                 status = "MSI-H"

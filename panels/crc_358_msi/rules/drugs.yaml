@@ -7,6 +7,7 @@ status: "active"
 description: "CRC drug-display rule declarations used by the generator."
 
 drug_rules:
+  show_all_in_part2: true
   approved_drug_rows_source: "drugs.yaml:approved_drug_rows"
   brand_lookup_source: "config/drug_brands.yaml"
   immunotherapy_brand_list_source: "config/drug_brands.yaml"
@@ -63,6 +64,15 @@ targeted_drug_rules:
       reject_when_db_position_missing: true
       note: "P0药物规则护栏：内部库只有基因、无位点/事件的泛化行不进入2.1靶向用药提示；已审核reviewed override仍优先生效。"
   reviewed_variant_overrides:
+    - gene: FANCA
+      applicability: "loss_of_function"
+      variant_level:
+        - "Ⅱ类"
+        - "II类"
+        - "2类"
+      benefit_drugs:
+        - "奥拉帕利（D）"
+      review_basis: "PMID:26510020; cross-cancer phase II DDR cohort; CRC off-label evidence only"
     - gene: FLT3
       c_hgvs: "c.2537G>A"
       variant_site: "c.2537G>A,\np.G846D"
