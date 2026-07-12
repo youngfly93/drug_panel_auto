@@ -627,6 +627,28 @@ class ReportGenerator:
         except Exception:
             return None
 
+    @classmethod
+    def _resolve_panel_reviewed_part3_overlays(cls, panel_package: Any) -> list[str]:
+        """Resolve the base overlay plus optional panel-specific additions."""
+        if panel_package is None:
+            return []
+        paths: list[str] = []
+        primary = cls._resolve_panel_reviewed_part3_overlay(panel_package)
+        if primary:
+            paths.append(primary)
+        raw = getattr(panel_package, "raw", None) or {}
+        additions = raw.get("reviewed_part3_overlay_additions") or []
+        if isinstance(additions, str):
+            additions = [additions]
+        for declared in additions if isinstance(additions, list) else []:
+            try:
+                path = panel_package._resolve_path(str(declared))
+            except Exception:
+                continue
+            if path is not None and path.exists() and str(path) not in paths:
+                paths.append(str(path))
+        return paths
+
     def _stage_panel_rule_execution(
         self,
         stage: StageHandle,
@@ -656,9 +678,9 @@ class ReportGenerator:
                 # inheriting the global CRC file — so non-CRC panels
                 # (lung/endometrial) no longer pick up colorectal wording.
                 gene_kb_cfg = dict(kb_cfg.get("gene_knowledge_db", {}) or {})
-                gene_kb_cfg["reviewed_part3_overlay_path"] = (
-                    self._resolve_panel_reviewed_part3_overlay(state.panel_package)
-                    or ""
+                gene_kb_cfg["reviewed_part3_overlay_path"] = ""
+                gene_kb_cfg["reviewed_part3_overlay_paths"] = (
+                    self._resolve_panel_reviewed_part3_overlays(state.panel_package)
                 )
                 provider_cfg = {
                     "enabled": True,
@@ -747,6 +769,69 @@ class ReportGenerator:
                 "Report data has validation warnings.",
                 details={"warnings": list(state.report_data.validation_errors)},
             )
+
+        # Panel-declared biomarkers are production input requirements, not
+        # optional QA hints. Enforce them even when the caller uses the legacy
+        # non-strict mode, otherwise a parser miss can silently become
+        # “未检测” in two separate report sections.
+        panel_contract = (
+            state.panel_package.input_contract
+            if state.panel_package is not None
+            else {}
+        )
+        biomarker_contracts = (
+            panel_contract.get("biomarkers")
+            if isinstance(panel_contract, dict)
+            else {}
+        ) or {}
+        biomarker_failures: list[dict[str, Any]] = []
+        field_aliases = {
+            "msi_status": ("msi_status", "MSI状态"),
+            "tmb_value": ("tmb_value", "TMB"),
+        }
+        for field_name, spec in biomarker_contracts.items():
+            if not isinstance(spec, dict) or not spec.get("required", False):
+                continue
+            aliases = field_aliases.get(str(field_name), (str(field_name),))
+            value = next(
+                (
+                    state.report_data.get_field(alias)
+                    for alias in aliases
+                    if state.report_data.get_field(alias) not in (None, "")
+                ),
+                None,
+            )
+            text_value = str(value or "").strip()
+            allowed = [str(item).strip() for item in spec.get("allowed_values") or []]
+            missing_values = {
+                str(item).strip()
+                for item in spec.get("missing_values") or ["", "未检测", "--"]
+            }
+            if text_value in missing_values or (allowed and text_value not in allowed):
+                biomarker_failures.append(
+                    {
+                        "field": str(field_name),
+                        "value": text_value,
+                        "allowed_values": allowed,
+                    }
+                )
+        if biomarker_failures:
+            duration = time.time() - start_time
+            error_msg = "Panel 必检生物标志物缺失或无法解析，阻断报告生成"
+            stage.fail(
+                "PANEL_REQUIRED_BIOMARKER_MISSING",
+                error_msg,
+                details={"failures": biomarker_failures},
+            )
+            self.logger.error(error_msg, failures=biomarker_failures)
+            return {
+                "success": False,
+                "output_file": None,
+                "duration": duration,
+                "errors": [error_msg],
+                "warnings": state.report_data.validation_errors,
+                "panel_package_validation": state.panel_package_validation,
+            }
 
         if state.strict_mode:
             missing_critical = self._check_critical_fields(state.report_data)

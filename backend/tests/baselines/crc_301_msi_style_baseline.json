@@ -2,7 +2,7 @@
   "markers": {
     "integrity": {
       "drug_count_text": 1,
-      "part_section_markers": 16,
+      "part_section_markers": 14,
       "unrendered_placeholders": 0,
       "variant_count_text": 2
     },
@@ -14,7 +14,7 @@
     "signature": {
       "floating_anchors_here_and_prev": 0,
       "inline_images": 2,
-      "label": "检测者：                审核者："
+      "label": "检测者：        审核者：        报告日期：2026.01.15"
     }
   },
   "tables": {
@@ -1455,7 +1455,7 @@
           "c=000000"
         ],
         [
-          "阿法替尼（C）\n曲妥珠单抗（C）\n恩美曲妥珠单抗（C）\n曲妥珠单抗+帕妥珠单抗（C）\n吡咯替尼（C）\n另10项详见第三部分",
+          "阿法替尼（C）\n曲妥珠单抗（C）\n恩美曲妥珠单抗（C）\n曲妥珠单抗+帕妥珠单抗（C）\n吡咯替尼（C）\n德曲妥珠单抗（C）\n曲妥珠单抗+图卡替尼（C）\n奈拉替尼+依维莫司（C）\n奈拉替尼+哌柏西利（C）\n奈拉替尼+曲美替尼（C）\n波齐替尼（C）\n吡咯替尼+曲妥珠单抗（C）\n德曲妥珠单抗+奈拉替尼（C）\n奈拉替尼±曲妥珠单抗（C）\n拉帕替尼（D）",
           "c=000000"
         ],
         [

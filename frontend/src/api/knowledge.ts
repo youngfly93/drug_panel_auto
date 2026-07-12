@@ -144,6 +144,27 @@ export interface KnowledgeCoverage {
     percent: number | null
     label: string
   }
+  knowledge_coverage_contract: {
+    denominator_name: string
+    total_genes: number
+    gene_explanation_complete: boolean
+    gene_explanation_missing_count: number
+    gene_explanation_missing_genes: string[]
+    runtime_drug_genes: number
+    explicitly_approved_drug_genes: number
+    drug_candidate_disposition: {
+      database_candidate_genes: number
+      runtime_eligible_database_genes: number
+      runtime_eligible_database_gene_list: string[]
+      database_only_filtered_genes: number
+      database_only_filtered_gene_list: string[]
+      filter_reason_row_counts: Record<string, number>
+      historical_review: Record<string, string | number>
+      pending_medical_review_rows: number
+      pending_medical_review_genes: string[]
+    }
+    status_definitions: Record<string, string>
+  }
   warnings: string[]
 }
 

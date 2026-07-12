@@ -72,6 +72,7 @@ rules:
   biomarkers: "rules/biomarkers.yaml"
   guideline_tables: "rules/guideline_tables.yaml"
   drugs: "rules/drugs.yaml"
+  knowledge_coverage: "rules/knowledge_coverage.yaml"
   style: "rules/style.yaml"
   filtering: "config/filtering.yaml"
   drug_brands: "config/drug_brands.yaml"
@@ -79,6 +80,8 @@ rules:
 # Reviewed Part-3 wording overlay (panel-scoped). CRC-301 reuses CRC-358's
 # reviewed wording (same cancer family). Top-level, not under `rules:`.
 reviewed_part3_overlay: "panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml"
+reviewed_part3_overlay_additions:
+  - "rules/reviewed_part3_knowledge.yaml"
 
 input_contract:
   required_tables:

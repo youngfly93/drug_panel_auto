@@ -58,6 +58,7 @@ rules:
   biomarkers: "rules/biomarkers.yaml"
   guideline_tables: "rules/guideline_tables.yaml"
   drugs: "rules/drugs.yaml"
+  knowledge_coverage: "rules/knowledge_coverage.yaml"
   style: "rules/style.yaml"
   filtering: "config/filtering.yaml"
   drug_brands: "config/drug_brands.yaml"

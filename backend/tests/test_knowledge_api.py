@@ -95,19 +95,24 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
 
     assert entries_response.status_code == 200
     entries = entries_response.json()["data"]
-    assert entries["total"] == 304
+    assert entries["total"] == 340
     assert len(entries["rows"]) == 2
     assert all(row["layer"] == "reviewed_overlay" for row in entries["rows"])
-    assert all(row["provenance"]["shared_overlay"] for row in entries["rows"])
+    assert {row["provenance"]["origin_panel_id"] for row in entries["rows"]} == {
+        "crc_301_msi",
+        "crc_358_msi",
+    }
 
     assert coverage_response.status_code == 200
     coverage = coverage_response.json()["data"]
-    assert coverage["declared_gene_coverage"]["denominator_name"] == "crc_important_genes"
-    assert coverage["declared_gene_coverage"]["total"] == 37
+    assert coverage["declared_gene_coverage"]["denominator_name"] == "reportable_genes"
+    assert coverage["declared_gene_coverage"]["total"] == 301
+    assert coverage["knowledge_coverage_contract"]["gene_explanation_missing_count"] == 0
+    assert coverage["knowledge_coverage_contract"]["drug_candidate_disposition"]["pending_medical_review_rows"] == 0
 
     assert targeted_response.status_code == 200
     targeted = targeted_response.json()["data"]
-    assert targeted["total"] == 8
+    assert targeted["total"] == 9
     assert all(row["kind"] == "targeted_drug" for row in targeted["rows"])
 
     serialized = json.dumps(

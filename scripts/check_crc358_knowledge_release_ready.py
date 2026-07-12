@@ -155,7 +155,13 @@ def overlay_stats(path: Path) -> dict[str, Any]:
     mutation_without_c = [
         {"gene": clean(row.get("gene")).upper(), "p_hgvs": clean(row.get("p_hgvs"))}
         for row in gene_rows
-        if clean(row.get("mutation_analysis")) and not clean(row.get("c_hgvs"))
+        # Gene-level mutation_analysis is a supported conservative fallback and
+        # intentionally has no HGVS coordinates. Only a row that claims a
+        # protein-level variant without its c.HGVS coordinate is structurally
+        # incomplete.
+        if clean(row.get("mutation_analysis"))
+        and clean(row.get("p_hgvs"))
+        and not clean(row.get("c_hgvs"))
     ]
     gene_context_mismatches = [
         {"gene": clean(row.get("gene")).upper(), "key": list(gene_key(row)), "hits": gene_context_mismatch(row)}

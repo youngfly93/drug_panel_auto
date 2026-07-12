@@ -59,6 +59,7 @@ from reportgen.core.template_bridge_358 import (
     PanelConfig,
     _build_nccn_and_immune_fields,
     _compact_drug_display_tables,
+    _variant_override_matches,
     _patch_reviewed_variant_override_rows,
     build_targeted_drug_brand_summary,
     build_tmb_summary,
@@ -1350,6 +1351,135 @@ def test_long_drug_lists_are_compacted_for_word_tables_but_kept_full_in_summary(
     assert summary["drugs"]["targeted_rows"][0]["benefit_drugs"] == long_list
 
 
+def test_crc_panel_can_show_all_drugs_in_part2():
+    long_list = "\n".join(f"药物{i}（C）" for i in range(1, 8))
+    report_data = ReportData(
+        context={"variants_2_1": [{"benefit_drugs": long_list, "caution_drugs": "--"}]}
+    )
+
+    _compact_drug_display_tables(report_data, max_items=None)
+
+    assert report_data.get_table("variants_2_1")[0]["benefit_drugs"] == long_list
+    assert "另" not in report_data.get_table("variants_2_1")[0]["benefit_drugs"]
+
+
+def test_fanca_reviewed_rule_only_matches_class_ii_loss_of_function():
+    rule = {
+        "gene": "FANCA",
+        "variant_level": ["Ⅱ类"],
+        "applicability": "loss_of_function",
+    }
+    assert _variant_override_matches(
+        rule, "FANCA", "c.100_101del", "p.K34Rfs*5", gene_class="Ⅱ类"
+    )
+    assert not _variant_override_matches(
+        rule, "FANCA", "c.100A>G", "p.K34R", gene_class="Ⅱ类"
+    )
+    assert not _variant_override_matches(
+        rule, "FANCA", "c.100_101del", "p.K34Rfs*5", gene_class="Ⅲ类"
+    )
+
+
+def test_crc301_additional_overlay_is_loaded_after_shared_crc_overlay():
+    package = load_panel_package("crc_301_msi", project_root=ROOT)
+    paths = ReportGenerator._resolve_panel_reviewed_part3_overlays(package)
+    provider = GeneKnowledgeProvider(
+        {
+            "enabled": True,
+            "gene_knowledge_db": {
+                "enabled": True,
+                "path": "missing.xlsx",
+                "reviewed_part3_overlay_paths": paths,
+            },
+        }
+    )
+    provider.load(base_path=str(ROOT))
+
+    sections = provider.build_all_gene_knowledge_sections(
+        [
+            {
+                "gene": "ABCB1",
+                "cHGVS": "c.1A>G",
+                "pHGVS": "p.M1V",
+                "frequency": "1%",
+            }
+        ]
+    )
+
+    assert len(paths) == 2
+    assert len(sections) == 1
+    assert "P-糖蛋白" in sections[0]["intro"]
+    assert "任意体细胞变异不能直接解释为化疗耐药" in sections[0]["mutation_analysis"]
+
+
+def test_pending_secondary_review_gene_rows_do_not_override_runtime_knowledge():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    provider = GeneKnowledgeProvider(
+        {
+            "enabled": True,
+            "gene_knowledge_db": {
+                "enabled": True,
+                "path": "missing.xlsx",
+                "reviewed_part3_overlay_paths": (
+                    ReportGenerator._resolve_panel_reviewed_part3_overlays(package)
+                ),
+            },
+        }
+    )
+    provider.load(base_path=str(ROOT))
+
+    for gene in ("CHD2", "HIST1H3B", "HLA-DPA1", "WDR90", "ZNF703"):
+        sections = provider.build_all_gene_knowledge_sections(
+            [
+                {
+                    "gene": gene,
+                    "cHGVS": "c.999A>G",
+                    "pHGVS": "p.X333Y",
+                    "frequency": "1%",
+                }
+            ]
+        )
+        assert len(sections) == 1
+        assert "一级证据审核完成" not in sections[0]["intro"]
+        assert "中心粒中央核心区" not in sections[0]["intro"]
+        assert "不单独形成治疗结论" not in sections[0]["mutation_analysis"]
+
+
+def test_excel_reader_resolves_msi_sheet_alias_reordered_columns_and_tumor_row(tmp_path):
+    import pandas as pd
+
+    path = tmp_path / "msi_alias.xlsx"
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        pd.DataFrame({"A": [1]}).to_excel(writer, index=False, sheet_name="Meta")
+        pd.DataFrame(
+            {
+                "Status": ["MSS", "MSI-H"],
+                "Sample": ["normal", "tumor"],
+                "Percent": [1.1, 45.2],
+            }
+        ).to_excel(writer, index=False, sheet_name="MSI sensor")
+
+    result = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(str(path))
+
+    assert result.single_values["MSI状态"] == "MSI-H"
+    assert float(result.single_values["MSI百分比"]) == 45.2
+
+
+def test_excel_reader_infers_msi_status_from_percent_when_status_missing(tmp_path):
+    import pandas as pd
+
+    path = tmp_path / "msi_percent_only.xlsx"
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        pd.DataFrame({"A": [1]}).to_excel(writer, index=False, sheet_name="Meta")
+        pd.DataFrame(
+            {"Sample": ["normal", "tumor"], "MSI Percentage": [1.1, "45.2%"]}
+        ).to_excel(writer, index=False, sheet_name="MSIsensor")
+
+    result = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(str(path))
+
+    assert result.single_values["MSI状态"] == "MSI-H"
+
+
 def test_part3_variant_scope_can_follow_summary_variants(tmp_path):
     report_data = ReportData()
     report_data.set_field(
@@ -2430,6 +2560,7 @@ def test_report_generator_fails_bad_panel_template_before_rendering(tmp_path):
                 "患者姓名": "张三",
                 "样本编号": "LZ000001",
                 "报告日期": "2026.05.17",
+                "MSI状态": "MSS",
             },
             variations=[],
         ),
@@ -2469,6 +2600,7 @@ def test_report_generator_blocks_missing_part3_marker_even_in_warn_mode(tmp_path
                 "患者姓名": "测试患者",
                 "样本编号": "TEST-PART3",
                 "报告日期": "2026.07.10",
+                "MSI状态": "MSS",
             },
             variations=[],
         ),
@@ -2518,6 +2650,7 @@ def test_report_generator_blocks_partial_part3_variant_coverage(
                 "样本编号": "TEST-PART3-COVERAGE",
                 "报告日期": "2026.07.10",
                 "癌种": "结直肠癌",
+                "MSI状态": "MSS",
             },
             variations=[
                 {
@@ -2964,7 +3097,7 @@ def test_signature_placeholder_is_removed_without_image(tmp_path):
     assert "__SIG_IMG__" not in "\n".join(p.text for p in Document(docx_path).paragraphs)
 
 
-def test_signature_layout_moves_report_date_to_separate_line(tmp_path):
+def test_signature_layout_keeps_report_date_on_signature_line(tmp_path):
     from shutil import copyfile
 
     source = ROOT / "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
@@ -2979,8 +3112,12 @@ def test_signature_layout_moves_report_date_to_separate_line(tmp_path):
     paragraphs = [p.text.strip() for p in Document(docx_path).paragraphs if p.text.strip()]
     signature_lines = [p for p in paragraphs if p.startswith("检测者：")]
     assert signature_lines
-    assert all("报告日期" not in p for p in signature_lines)
-    assert "报告日期：2026.04.26" in paragraphs
+    assert any("报告日期：2026.04.26" in p for p in signature_lines)
+    assert "报告日期：2026.04.26" not in paragraphs
+    signature_para = next(
+        p for p in Document(docx_path).paragraphs if p.text.strip().startswith("检测者：")
+    )
+    assert "w:keepLines" in signature_para._p.xml
 
 
 def test_detector_and_reviewer_signature_images_are_context_driven(tmp_path):
@@ -5247,6 +5384,12 @@ def test_part3_drug_analysis_labels_do_not_emit_keepnext_marker(tmp_path):
         if paragraph.text.strip() == "潜在获益靶向/免疫药物解析"
     )
     assert "w:keepNext" in subheading._p.xml
+    main_heading = next(
+        paragraph
+        for paragraph in rendered.paragraphs
+        if paragraph.text.strip() == "靶向药物/免疫用药提示解析"
+    )
+    assert "w:keepNext" in main_heading._p.xml
 
 
 def test_pdf_footer_page_number_scans_bottom_lines():
@@ -5763,6 +5906,30 @@ def test_crc358_golden_excel_fixture_is_synthetic_and_parseable(tmp_path):
         "ERBB2",
         "FBXW7",
     }
+
+
+def test_crc358_missing_required_msi_blocks_generation_even_without_strict_mode(tmp_path):
+    from openpyxl import load_workbook
+
+    xlsx_path = build_crc_358_msi_golden_excel(tmp_path / "LZ999002_missing_msi.xlsx")
+    workbook = load_workbook(xlsx_path)
+    del workbook["Msisensor"]
+    workbook.save(xlsx_path)
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+
+    result = ReportGenerator(
+        config_dir=str(ROOT / "config"), log_level="ERROR"
+    ).generate(
+        excel_file=str(xlsx_path),
+        template_file=str(package.resolve_template_file()),
+        output_dir=str(tmp_path / "out"),
+        strict_mode=False,
+        project_type="crc_358_msi",
+    )
+
+    assert result["success"] is False
+    assert any("必检生物标志物" in error for error in result["errors"])
+    assert not list((tmp_path / "out").glob("*.docx"))
 
 
 def test_crc301_panel_package_basic_generation_passes(tmp_path):

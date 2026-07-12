@@ -1116,28 +1116,119 @@ gene_sections:
   refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
     wording only.
 - gene: CHD2
-  intro: CHD2基因编码染色质结构调控相关的ATP依赖性染色质重塑蛋白，属于CHD家族，含有chromodomain和SNF2相关ATPase/helicase结构域，参与染色质开放状态、转录调控和基因组稳定性维持。
-  mutation_analysis: CHD2变异可能影响染色质重塑和转录调控过程。当前CHD2在结直肠癌中的位点级用药或预后证据有限，建议作为染色质重塑相关长尾基因谨慎解释；若检出无义、移码、剪接等可能功能缺失型变异，应结合变异等级、等位基因频率、共突变背景和临床资料综合判断。
-  source_note: NCBI Gene 1106；MedlinePlus Genetics CHD2；候选中文表述需医学审核。
+  intro: CHD2编码ATP依赖性染色质重塑蛋白，属于CHD家族，含chromodomain及SNF2相关helicase/ATPase结构域，可通过调节染色质可及性参与转录调控。
+  mutation_analysis: 当前缺少将CHD2普通体细胞变异作为结直肠癌位点级用药或预后标志的充分证据。检出变异时仅作染色质重塑相关背景说明，并结合变异类型、分级、共突变和临床资料综合判断，不单独形成治疗结论。
+  source_note: NCBI Gene 1106/RefSeq；CHD2染色质可及性研究PMID:25621013；一级证据审核完成，待报告组二审。
+  source_url: https://www.ncbi.nlm.nih.gov/gene/1106
+  evidence_level: functional_background_only
+  cancer_scope: colorectal_cancer_background_only
+  review_status: needs_review
+  runtime_eligible: false
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accept_conservative_wording_pending_secondary_review
+    risk_level: low
+    secondary_review_status: pending_report_group_review
+    references:
+    - https://www.ncbi.nlm.nih.gov/gene/1106
+    - https://pubmed.ncbi.nlm.nih.gov/25621013/
 - gene: HIST1H3B
-  intro: HIST1H3B（现行命名中常对应H3C2）编码复制依赖性组蛋白H3家族成员，是核小体核心组分，参与DNA包装为染色质，并影响转录、DNA复制、DNA修复和染色体稳定性。
-  mutation_analysis: HIST1H3B变异可能影响组蛋白H3相关染色质结构和表观遗传调控。当前该基因在结直肠癌中的明确位点级临床证据有限，需结合变异是否位于已知组蛋白功能位点、变异等级及肿瘤分子背景综合判断。
-  source_note: NCBI Gene 8358/H3C2；Human Protein Atlas/UniProt function summary；候选中文表述需医学审核。
+  intro: HIST1H3B现行HGNC符号为H3C2，编码复制依赖性组蛋白H3家族成员，是核小体核心组分，参与DNA包装及染色质结构维持。
+  mutation_analysis: 当前缺少将H3C2/HIST1H3B普通体细胞变异作为结直肠癌位点级用药或预后标志的充分证据。检出变异时应结合具体氨基酸位点、变异分级和肿瘤分子背景谨慎解释，不单独形成治疗结论。
+  source_note: NCBI Gene 8358/H3C2与RefSeq功能摘要；一级证据审核完成，待报告组二审。
+  source_url: https://www.ncbi.nlm.nih.gov/gene/8358
+  evidence_level: functional_background_only
+  cancer_scope: colorectal_cancer_background_only
+  review_status: needs_review
+  runtime_eligible: false
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accept_conservative_wording_pending_secondary_review
+    risk_level: low
+    secondary_review_status: pending_report_group_review
+    references:
+    - https://www.ncbi.nlm.nih.gov/gene/8358
 - gene: HLA-DPA1
   intro: HLA-DPA1编码MHC II类DP分子的α链，与DPβ链形成膜结合异二聚体，主要在抗原递呈细胞中表达，参与外源性抗原肽递呈和CD4+T细胞免疫应答。
-  mutation_analysis: HLA-DPA1异常可能与抗原递呈能力和肿瘤免疫微环境相关。单个HLA-DPA1体细胞变异通常不足以直接给出用药结论，建议结合MSI/TMB、HLA表达或缺失、免疫相关共变异及证据等级综合评估。
-  source_note: NCBI Gene/Datasets 3113；RefSeq/HLA class II function summary；候选中文表述需医学审核。
+  mutation_analysis: HLA-DPA1参与抗原递呈，但单个HLA-DPA1体细胞变异不能等同于抗原递呈缺陷或免疫治疗疗效标志。检出时应结合变异功能、HLA表达或缺失、MSI/TMB及肿瘤免疫背景综合评估，不单独形成用药结论。
+  source_note: NCBI Gene 3113/RefSeq HLA II类功能摘要；CRC中HLA相关证据主要针对等位基因多样性、表达或缺失，不能直接外推至任意HLA-DPA1体细胞变异；一级证据审核完成，待报告组二审。
+  source_url: https://www.ncbi.nlm.nih.gov/gene/3113
+  evidence_level: functional_background_only
+  cancer_scope: colorectal_cancer_background_only
+  review_status: needs_review
+  runtime_eligible: false
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accept_conservative_wording_pending_secondary_review
+    risk_level: medium
+    secondary_review_status: pending_report_group_review
+    references:
+    - https://www.ncbi.nlm.nih.gov/gene/3113
+    - https://pubmed.ncbi.nlm.nih.gov/33473191/
 - gene: WDR90
-  intro: WDR90编码WD重复结构域蛋白，公开资料提示其与中心粒结构、纤毛发生和微管相关结构维持有关。WD重复蛋白常作为蛋白复合体装配或信号调控的支架蛋白。
-  mutation_analysis: WDR90在结直肠癌中的明确临床证据有限。检出WDR90变异时，建议以长尾基因谨慎解释，重点结合变异类型、证据等级、是否影响关键结构域，以及是否存在其他明确驱动或用药相关变异综合判断。
-  source_note: UniProt Q96KV7；GeneCards/Harmonizome function summaries；候选中文表述需医学审核。
+  intro: WDR90编码WD重复结构域蛋白，是中心粒中央核心区微管壁相关组分，参与中心粒结构完整性和纤毛形成。
+  mutation_analysis: 当前缺少将WDR90体细胞变异作为结直肠癌用药或预后标志的临床证据。检出变异时仅作中心粒/纤毛相关功能背景说明，并结合变异类型、分级和其他明确驱动变异综合判断，不单独形成治疗结论。
+  source_note: NCBI Gene 197335；WDR90中心粒结构研究PMID:32946374；一级证据审核完成，待报告组二审。
+  source_url: https://www.ncbi.nlm.nih.gov/gene/197335
+  evidence_level: functional_background_only
+  cancer_scope: colorectal_cancer_background_only
+  review_status: needs_review
+  runtime_eligible: false
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accept_conservative_wording_pending_secondary_review
+    risk_level: low
+    secondary_review_status: pending_report_group_review
+    references:
+    - https://www.ncbi.nlm.nih.gov/gene/197335
+    - https://pubmed.ncbi.nlm.nih.gov/32946374/
 - gene: ZNF703
-  intro: ZNF703编码锌指蛋白703，属于转录调控相关蛋白，公开资料提示其与细胞黏附、迁移和增殖调控有关，并在部分肿瘤中作为扩增或过表达相关基因受到关注。
-  mutation_analysis: ZNF703编码锌指蛋白703，属于转录调控相关蛋白，在部分肿瘤中以扩增或过表达事件受到关注。若检出ZNF703变异，报告中应区分扩增、截短和普通错义改变；在CRC场景下主要作为转录调控/增殖迁移相关长尾基因解释，不单独给出治疗结论。
-  source_note: UniProt Q9H7S9；ZNF703 cancer review；候选中文表述需医学审核。
+  intro: ZNF703编码锌指转录调控相关蛋白。研究在结直肠癌组织中观察到ZNF703表达升高，并在细胞模型中提示其与增殖和侵袭相关，但该类表达证据不等同于序列变异的临床效应。
+  mutation_analysis: 检出ZNF703变异时应区分扩增或表达升高、截短变异和普通错义变异。当前缺少将任意ZNF703体细胞序列变异作为结直肠癌用药标志的充分证据，因此仅作转录调控相关背景说明，不单独形成治疗结论。
+  source_note: NCBI Gene 80139；CRC表达及细胞功能研究PMID:25017610；一级证据审核完成，待报告组二审。
+  source_url: https://www.ncbi.nlm.nih.gov/gene/80139
+  evidence_level: exploratory_crc_expression_evidence
+  cancer_scope: colorectal_cancer_background_only
+  review_status: needs_review
+  runtime_eligible: false
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accept_with_revision_pending_secondary_review
+    risk_level: medium
+    secondary_review_status: pending_report_group_review
+    references:
+    - https://www.ncbi.nlm.nih.gov/gene/80139
+    - https://pubmed.ncbi.nlm.nih.gov/25017610/
   refinement_note: 2026-06-30 low-information wording refinement; conservative pathway/domain
     wording only.
 drug_sections:
+- gene: FANCA
+  type: benefit
+  applicability: loss_of_function
+  header: FANCA功能缺失型变异相应潜在获益药物
+  drug_name: 奥拉帕利（Olaparib）
+  relation: FANCA是Fanconi贫血DNA交联修复通路核心成员。无义、移码或关键剪接等功能缺失型变异可提示DNA损伤修复缺陷，并为PARP抑制剂相关研究提供生物学依据；该关联不能外推至普通错义变异，也不代表奥拉帕利已获批用于FANCA变异结直肠癌。
+  clinical: 一项转移性去势抵抗性前列腺癌Ⅱ期研究纳入50例患者；可评估的49例中，16例检出DNA修复基因纯合缺失或有害变异，包括BRCA1/2、ATM、Fanconi贫血相关基因及CHEK2，其中14例对奥拉帕利产生研究定义的应答。该证据来自前列腺癌DDR联合分组，并非FANCA变异结直肠癌的独立疗效结论，报告中按D级跨癌种研究证据提示[26510020]。
 - gene: TP53
   c_hgvs: c.844C>T
   p_hgvs: p.R282W
@@ -1330,6 +1421,7 @@ drug_sections:
   relation: 该样本检出PIK3CA基因c.3140A>G，p.H1047R错义突变，研究表明，该突变会引起下游信号通路的激活，从而使细胞过度生长、增殖及侵袭[17376864，26627007，16432179，16322248，31996845]。具有PI3K通路激活突变的人类肿瘤细胞，无论在体内还是体外试验中，均表现出对于依维莫司用药的敏感性，因此PIK3CA基因可以作为选择使用mTOR抑制剂治疗的患者的一个靶标基因[20664172]。
   clinical: FDA已批准依维莫司用于治疗肾细胞癌、乳腺癌等，同时NMPA批准用于治疗肾细胞癌、室管膜下巨细胞型星形细胞瘤；FDA已批准西罗莫司用于治疗淋巴管肌瘤病等，同时NMPA批准用于治疗器官排异；FDA批准替西罗莫司用于治疗肾细胞癌；阿培利司是PI3K的抑制剂，FDA批准阿培利司联合氟维司群用于治疗HR阳性、HER2阴性、PIK3CA突变的晚期或转移性乳腺癌的绝经后女性患者和男性患者。培唑帕尼是一种多靶点的酪氨酸激酶抑制剂，FDA批准培唑帕尼用于治疗肾细胞癌、软组织肉瘤，NMPA批准培唑帕尼用于治疗肾细胞癌。Capivasertib是一种口服的AKT通路高效抑制剂，可抑制所有三种AKT异构体（AKT1/2/3）。FDA批准Capivasertib联合氟维司群用于治疗激素受体(HR)阳性、人表皮生长因子受体2（HER2）阴性、伴有一种或多种生物标志物改变（PIK3CA、AKT1或PTEN）的局部晚期或转移性乳腺癌患者曾接受至少一种内分泌治疗后出现病情进展，或在完成辅助治疗后12个月内复发。
 extra_references:
+- 'PMID: 26510020 DNA-Repair Defects and Olaparib in Metastatic Prostate Cancer.'
 - 'PMID: 28351930 Hyperprogressors after Immunotherapy: Analysis of Genomic Alterations
   Associated with Accelerated Growth Rate.'
 - 'PMID: 28976787 Negative predictive biomarkers of checkpoint inhibitors in hyper-progressive

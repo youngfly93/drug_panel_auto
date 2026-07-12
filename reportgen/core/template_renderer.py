@@ -899,16 +899,13 @@ class TemplateRenderer:
                     fmt0 is not None
                     and fmt0.get(w_val) == "decimal"
                     and text0 is not None
-                    and "%1" in (text0.get(w_val) or "")
-                    and (
-                        level1 is None
-                        or (
-                            fmt1 is not None
-                            and fmt1.get(w_val) == "decimal"
-                            and text1 is not None
-                            and "%1.%2" in (text1.get(w_val) or "")
-                        )
-                    )
+                    and (text0.get(w_val) or "").strip() in {"%1.", "%1．"}
+                    and level1 is not None
+                    and fmt1 is not None
+                    and fmt1.get(w_val) == "decimal"
+                    and text1 is not None
+                    and (text1.get(w_val) or "").strip()
+                    in {"%1.%2", "%1.%2.", "%1．%2"}
                 ):
                     try:
                         candidates.append(int(num_id))
@@ -1036,7 +1033,7 @@ class TemplateRenderer:
                 set_ind_xml(paragraph)
                 set_outline_level(paragraph, 0)
                 set_spacing(paragraph, before=0, after=0)
-                set_keep_next(paragraph, text == "基因变异解析")
+                set_keep_next(paragraph, True)
                 style_runs(paragraph, bold=True, underline=False, size=12)
                 changed = True
                 continue
@@ -4162,6 +4159,7 @@ class TemplateRenderer:
         run at the very end, after the LibreOffice field refreshes.
         """
         import copy as _copy
+        import re
         from pathlib import Path
 
         from docx.oxml.ns import qn
@@ -4180,7 +4178,7 @@ class TemplateRenderer:
         label_idx = None
         for idx, paragraph in enumerate(doc.paragraphs):
             text = paragraph.text or ""
-            if "检测者" in text and "审核者" in text and "报告日期" not in text:
+            if "检测者" in text and "审核者" in text:
                 label_idx = idx
                 break
         if label_idx is None:
@@ -4227,8 +4225,15 @@ class TemplateRenderer:
 
         add_text("检测者：")
         add_image(detector)
-        add_text("                审核者：")
+        add_text("        审核者：")
         add_image(reviewer)
+        report_date = str(
+            context.get("report_date_dot") or context.get("report_date") or ""
+        ).strip()
+        report_date = re.sub(
+            r"\b(\d{4})-(\d{2})-(\d{2})\b", r"\1.\2.\3", report_date
+        )
+        add_text(f"        报告日期：{report_date}")
 
         doc.save(file_path)
 
@@ -4239,8 +4244,8 @@ class TemplateRenderer:
         anchors in the blank paragraph immediately before the text line:
         "检测者：...审核者：...报告日期：...". Different renderers position those
         anchors slightly differently, so they can overlap the report date. Keep
-        the signatures on their own label line and move the date to a separate
-        right-aligned paragraph, which is stable across Word/WPS/LibreOffice.
+        detector, reviewer and report date in one non-splitting paragraph; the
+        final inline-signature pass replaces the legacy anchors.
         """
         import os
         import re
@@ -4340,7 +4345,18 @@ class TemplateRenderer:
                 report_date = str(context.get("report_date") or "").strip()
             report_date = re.sub(r"\b(\d{4})-(\d{2})-(\d{2})\b", r"\1.\2.\3", report_date)
 
-            replace_para_text(elem, "检测者：                    审核者：")
+            date_text = f"报告日期：{report_date}" if report_date else "报告日期："
+            replace_para_text(
+                elem,
+                f"检测者：        审核者：        {date_text}",
+            )
+            ppr = elem.find(w_ppr)
+            if ppr is None:
+                ppr = ET.Element(w_ppr)
+                elem.insert(0, ppr)
+            keep_lines = f"{{{ns_w}}}keepLines"
+            if ppr.find(keep_lines) is None:
+                ET.SubElement(ppr, keep_lines)
             changed = True
 
             # Keep the two legacy floating signatures on the label line, but
@@ -4363,12 +4379,9 @@ class TemplateRenderer:
                     anchor.set("allowOverlap", "0")
                     changed = True
 
-            date_text = f"报告日期：{report_date}" if report_date else "报告日期："
             next_elem = children[idx + 1] if idx + 1 < len(children) else None
             if next_elem is not None and next_elem.tag == w_p and para_text(next_elem).startswith("报告日期："):
-                replace_para_text(next_elem, date_text)
-            else:
-                body.insert(idx + 1, make_date_para(date_text))
+                body.remove(next_elem)
             changed = True
             break
 

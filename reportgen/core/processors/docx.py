@@ -198,6 +198,9 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
     ctx.renderer._remove_blank_page_breaks_before_headings(
         ctx.output_path,
         (
+            "基因变异解析",
+            "靶向药物/免疫用药提示解析",
+            "3. 阅读说明",
             "2. 结直肠癌诊疗知识",
             "3. 癌症相关信号通路",
             "4. 基因检测列表",

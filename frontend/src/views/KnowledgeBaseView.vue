@@ -94,7 +94,31 @@
         </small>
         <small v-else>只展示层级规模，不推断全 Panel 覆盖率</small>
       </el-card>
+      <el-card shadow="never" class="metric-card">
+        <span>运行时药物覆盖</span>
+        <strong>{{ coverage.knowledge_coverage_contract.runtime_drug_genes }}</strong>
+        <small>其中 {{ coverage.knowledge_coverage_contract.explicitly_approved_drug_genes }} 个基因有显式 approved runtime 规则</small>
+      </el-card>
+      <el-card shadow="never" class="metric-card" :class="{ 'metric-card--warning': coverage.knowledge_coverage_contract.drug_candidate_disposition.pending_medical_review_rows > 0 }">
+        <span>药物候选裁决</span>
+        <strong>{{ coverage.knowledge_coverage_contract.drug_candidate_disposition.pending_medical_review_rows }}</strong>
+        <small>
+          待医学审核；数据库 {{ coverage.knowledge_coverage_contract.drug_candidate_disposition.database_candidate_genes }} 个基因中，
+          {{ coverage.knowledge_coverage_contract.drug_candidate_disposition.runtime_eligible_database_genes }} 个受动态匹配，
+          {{ coverage.knowledge_coverage_contract.drug_candidate_disposition.database_only_filtered_genes }} 个仅有被安全规则排除的行
+        </small>
+      </el-card>
     </div>
+
+    <el-alert
+      v-if="coverage && coverage.knowledge_coverage_contract.gene_explanation_missing_count > 0"
+      type="error"
+      show-icon
+      :closable="false"
+      class="context-alert"
+      :title="`发现 ${coverage.knowledge_coverage_contract.gene_explanation_missing_count} 个报告基因缺少基因解释，不能标记为迁移完成`"
+      :description="coverage.knowledge_coverage_contract.gene_explanation_missing_genes.join('、')"
+    />
 
     <el-empty
       v-else-if="!panelsLoading && catalogPanels.length === 0"
@@ -457,6 +481,19 @@ const contentLabelMap: Record<string, string> = {
   mutation_description: '基因变异说明',
   mutation_analysis: '基因变异解析',
   refinement_note: '策展备注',
+  source_note: '来源说明',
+  source_url: '来源链接',
+  evidence_level: '证据层级',
+  cancer_scope: '癌种适用范围',
+  runtime_eligible: '可进入生产运行',
+  first_pass_status: '一级审核状态',
+  first_pass_reviewer: '一级审核执行者',
+  first_pass_reviewer_type: '一级审核类型',
+  first_pass_reviewed_at: '一级审核日期',
+  first_pass_evidence_as_of: '证据检索截至',
+  first_pass_decision: '一级审核结论',
+  first_pass_risk_level: '一级审核风险',
+  secondary_review_status: '报告组二审状态',
   variant_level: '变异等级',
   event: '变异事件',
   benefit_drugs: '潜在获益药物',
@@ -522,6 +559,8 @@ function reviewBasisLabel(basis: string): string {
     enabled_panel_rule: '当前 Panel 包显式启用的运行规则',
     base_excel_has_no_review_field: '基础 Excel 无逐条审核字段',
     entry_source_note_requires_review: '条目备注明确标记需要审核',
+    first_pass_complete_pending_secondary_review: '一级证据审核完成，等待报告组二审',
+    explicit_entry_review_status: '条目记录了明确审核状态',
     source_declares_review_needed: 'Overlay 源文件声明需要审核',
     no_explicit_review_record: '未找到明确审核记录',
     overlay_unavailable: 'Overlay 不可用',
@@ -537,6 +576,7 @@ function runtimeBehaviorLabel(value: string): string {
     candidate_filtered_by_panel_policy: '第二部分候选条目，仍需经当前 Panel 政策过滤',
     disabled_by_panel_policy: '当前 Panel 未启用此候选决策库',
     panel_targeted_drug_override: '当前 Panel 运行时靶向药物 override',
+    pending_secondary_review_not_loaded: '一级审核完成但二审未完成，不覆盖生产基础知识',
   }[value] || value || '—'
 }
 
@@ -767,9 +807,13 @@ onMounted(async () => {
 
 .coverage-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.metric-card--warning strong {
+  color: #b54708;
 }
 
 .metric-card :deep(.el-card__body) {
