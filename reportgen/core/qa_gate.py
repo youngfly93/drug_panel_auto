@@ -22,6 +22,7 @@ from reportgen.core.legacy_reference import (
     snapshot_docx_report,
 )
 from reportgen.core.report_diff import ReportDiffOptions, compare_reports
+from reportgen.knowledge.release_gate import run_knowledge_release_gate
 from reportgen.panels.loader import PanelPackage, PanelPackageLoader
 from reportgen.panels.validation import validate_panel_registry
 from reportgen.utils.artifacts import write_json
@@ -31,6 +32,7 @@ DEFAULT_GATE_PANELS = ("crc_358_msi", "crc_301_msi", "lung_methylation")
 LEGACY_REFERENCE_ROOT_ENV = "REPORTGEN_LEGACY_REPORTS_ROOT"
 DEFAULT_PYTEST_ARGS = (
     "backend/tests/test_report_regression.py",
+    "backend/tests/test_knowledge_governance.py",
     # 金标样式基线回归（慢，端到端生成对比）——后处理改动若弄坏关键表样式/
     # ❖颜色/签名/参考文献，qa-gate 即红。上生产前必跑。
     "backend/tests/test_style_baseline.py",
@@ -42,6 +44,9 @@ DEFAULT_RUFF_PATHS = (
     "reportgen/core/golden_case.py",
     "reportgen/core/legacy_reference.py",
     "reportgen/core/report_diff.py",
+    "reportgen/knowledge/governance.py",
+    "reportgen/knowledge/release_gate.py",
+    "scripts/check_knowledge_release_ready.py",
     "reportgen/panels/loader.py",
     "reportgen/panels/validation.py",
 )
@@ -83,6 +88,7 @@ def run_quality_gate(options: Optional[QualityGateOptions] = None) -> dict[str, 
     steps: list[dict[str, Any]] = []
     started = time.perf_counter()
     steps.append(_run_panel_validation(project_root, fail_on_warn=opts.fail_on_warn))
+    steps.append(_run_knowledge_validation(project_root, output_root=output_root))
 
     if opts.run_lint:
         steps.append(
@@ -208,6 +214,27 @@ def _run_panel_validation(project_root: Path, *, fail_on_warn: bool) -> dict[str
         }
     except Exception as exc:
         return _exception_step("panel_validate", started, exc)
+
+
+def _run_knowledge_validation(
+    project_root: Path, *, output_root: Path
+) -> dict[str, Any]:
+    started = time.perf_counter()
+    try:
+        result = run_knowledge_release_gate(
+            project_root,
+            output_path=output_root / "knowledge_release_gate.json",
+        )
+        return {
+            "name": "knowledge_release_gate",
+            "status": result["status"],
+            "duration_seconds": round(time.perf_counter() - started, 3),
+            "summary": result.get("summary") or {},
+            "issues": result.get("issues") or [],
+            "report_file": result.get("report_file"),
+        }
+    except Exception as exc:
+        return _exception_step("knowledge_release_gate", started, exc)
 
 
 def _run_golden_steps(

@@ -53,6 +53,16 @@
     />
 
     <el-alert
+      v-if="selectedPanel?.review_status === 'provisional_runtime'"
+      type="warning"
+      show-icon
+      :closable="false"
+      class="context-alert"
+      title="当前 Overlay 含一级审核后暂允许运行、等待报告组二审的条目"
+      description="这些条目已限定为保守适用范围，但不能表述为报告组二审已通过。"
+    />
+
+    <el-alert
       v-for="warning in catalogWarnings"
       :key="warning"
       type="warning"
@@ -108,6 +118,29 @@
           {{ coverage.knowledge_coverage_contract.drug_candidate_disposition.database_only_filtered_genes }} 个仅有被安全规则排除的行
         </small>
       </el-card>
+      <el-card shadow="never" class="metric-card">
+        <span>审核状态标准化</span>
+        <strong>{{ coverage.knowledge_coverage_contract.multidimensional_coverage.review_governance.standardized_percent }}%</strong>
+        <small>
+          暂运行 {{ coverage.knowledge_coverage_contract.multidimensional_coverage.review_governance.status_counts.provisional_runtime || 0 }} 条；
+          历史迁移 {{ coverage.knowledge_coverage_contract.multidimensional_coverage.review_governance.status_counts.legacy_runtime || 0 }} 条
+        </small>
+      </el-card>
+      <el-card shadow="never" class="metric-card">
+        <span>结构化来源</span>
+        <strong>{{ coverage.knowledge_coverage_contract.multidimensional_coverage.source_provenance.structured_source_percent }}%</strong>
+        <small>
+          证据等级 {{ coverage.knowledge_coverage_contract.multidimensional_coverage.source_provenance.evidence_level_percent }}%；
+          癌种范围 {{ coverage.knowledge_coverage_contract.multidimensional_coverage.source_provenance.cancer_scope_percent }}%
+        </small>
+      </el-card>
+      <el-card shadow="never" class="metric-card" :class="{ 'metric-card--warning': coverage.knowledge_coverage_contract.multidimensional_coverage.review_governance.pending_secondary_review_genes.length > 0 }">
+        <span>报告组二审</span>
+        <strong>{{ coverage.knowledge_coverage_contract.multidimensional_coverage.review_governance.secondary_review_complete_percent }}%</strong>
+        <small>
+          待二审基因 {{ coverage.knowledge_coverage_contract.multidimensional_coverage.review_governance.pending_secondary_review_genes.length }} 个
+        </small>
+      </el-card>
     </div>
 
     <el-alert
@@ -147,8 +180,12 @@
           </el-select>
           <el-select v-model="selectedReview" style="width: 170px" @change="handleFilterChange">
             <el-option label="全部审核状态" value="all" />
-            <el-option label="生产已启用" value="approved_for_runtime" />
+            <el-option label="二审批准运行" value="approved_for_runtime" />
+            <el-option label="一级审核暂运行" value="provisional_runtime" />
+            <el-option label="历史迁移运行" value="legacy_runtime" />
             <el-option label="需审核" value="needs_review" />
+            <el-option label="已拒绝" value="rejected" />
+            <el-option label="已替代" value="superseded" />
             <el-option label="未记录" value="not_recorded" />
           </el-select>
           <el-select v-model="selectedScope" style="width: 150px" @change="handleFilterChange">
@@ -187,8 +224,15 @@
                     <dt>更新</dt><dd>{{ formatUpdatedAt(row.provenance.updated_at) }}</dd>
                     <dt>运行口径</dt><dd>{{ runtimeBehaviorLabel(row.runtime_behavior) }}</dd>
                     <dt>审核依据</dt><dd>{{ reviewBasisLabel(row.review.basis) }}</dd>
+                    <dt>审核执行者</dt><dd>{{ row.review.reviewer || '—' }}</dd>
+                    <dt>审核日期</dt><dd>{{ row.review.reviewed_at || '—' }}</dd>
+                    <dt>证据截至</dt><dd>{{ row.review.evidence_as_of || '—' }}</dd>
+                    <dt>二审状态</dt><dd>{{ row.review.secondary_review_status || '—' }}</dd>
                     <template v-if="row.provenance.source_ref">
                       <dt>证据索引</dt><dd>{{ row.provenance.source_ref }}</dd>
+                    </template>
+                    <template v-if="row.provenance.source_refs.length">
+                      <dt>结构化来源</dt><dd>{{ sourceRefsLabel(row) }}</dd>
                     </template>
                   </dl>
                 </div>
@@ -286,8 +330,12 @@
           </el-select>
           <el-select v-model="selectedReview" style="width: 170px" @change="handleFilterChange">
             <el-option label="全部审核状态" value="all" />
-            <el-option label="生产已启用" value="approved_for_runtime" />
+            <el-option label="二审批准运行" value="approved_for_runtime" />
+            <el-option label="一级审核暂运行" value="provisional_runtime" />
+            <el-option label="历史迁移运行" value="legacy_runtime" />
             <el-option label="需审核" value="needs_review" />
+            <el-option label="已拒绝" value="rejected" />
+            <el-option label="已替代" value="superseded" />
             <el-option label="未记录" value="not_recorded" />
           </el-select>
           <el-select v-model="selectedScope" style="width: 150px" @change="handleFilterChange">
@@ -326,8 +374,15 @@
                     <dt>更新</dt><dd>{{ formatUpdatedAt(row.provenance.updated_at) }}</dd>
                     <dt>运行口径</dt><dd>{{ runtimeBehaviorLabel(row.runtime_behavior) }}</dd>
                     <dt>审核依据</dt><dd>{{ reviewBasisLabel(row.review.basis) }}</dd>
+                    <dt>审核执行者</dt><dd>{{ row.review.reviewer || '—' }}</dd>
+                    <dt>审核日期</dt><dd>{{ row.review.reviewed_at || '—' }}</dd>
+                    <dt>证据截至</dt><dd>{{ row.review.evidence_as_of || '—' }}</dd>
+                    <dt>二审状态</dt><dd>{{ row.review.secondary_review_status || '—' }}</dd>
                     <template v-if="row.provenance.source_ref">
                       <dt>证据索引</dt><dd>{{ row.provenance.source_ref }}</dd>
+                    </template>
+                    <template v-if="row.provenance.source_refs.length">
+                      <dt>结构化来源</dt><dd>{{ sourceRefsLabel(row) }}</dd>
                     </template>
                   </dl>
                 </div>
@@ -526,15 +581,20 @@ function layerTagType(layer: KnowledgeLayer): 'success' | 'info' {
 
 function reviewLabel(status: KnowledgeReviewStatus): string {
   return {
-    approved_for_runtime: '生产已启用',
+    approved_for_runtime: '二审批准运行',
+    provisional_runtime: '一级审核暂运行',
+    legacy_runtime: '历史迁移运行',
     needs_review: '需审核',
+    rejected: '已拒绝',
+    superseded: '已替代',
     not_recorded: '未记录',
   }[status]
 }
 
-function reviewTagType(status: KnowledgeReviewStatus): 'success' | 'warning' | 'info' {
+function reviewTagType(status: KnowledgeReviewStatus): 'success' | 'warning' | 'info' | 'danger' {
   if (status === 'approved_for_runtime') return 'success'
-  if (status === 'needs_review') return 'warning'
+  if (status === 'provisional_runtime' || status === 'needs_review') return 'warning'
+  if (status === 'rejected') return 'danger'
   return 'info'
 }
 
@@ -547,7 +607,9 @@ function reviewScopeLabel(scope: string): string {
     overlay_file: '文件级发布状态',
     source_row: '源数据行',
     entry_note: '条目备注',
+    entry_governance: '结构化条目治理',
     panel_rule: 'Panel 运行规则',
+    panel_rule_governance: 'Panel 规则治理',
   }[scope] || scope || '未记录审核范围'
 }
 
@@ -558,6 +620,12 @@ function reviewBasisLabel(basis: string): string {
     current_revision_not_approved: '有历史审核策略，但未记录与当前 SHA 绑定的审批',
     enabled_panel_rule: '当前 Panel 包显式启用的运行规则',
     base_excel_has_no_review_field: '基础 Excel 无逐条审核字段',
+    base_excel_legacy_runtime_source_row: '基础 Excel 历史运行条目，已绑定源行',
+    base_excel_legacy_runtime_candidate: '基础候选库历史运行条目，受 Panel 安全规则过滤',
+    historical_final_report_migration: '历史审核终版迁移，等待逐条现代审核记录',
+    historical_panel_rule_migration: '历史 Panel 运行规则迁移',
+    ai_assisted_first_pass_conservative_gene_level_batch: '保守基因级知识已完成一级审核，等待报告组二审',
+    ai_assisted_first_pass_conservative_cross_cancer_scope: '跨癌种限定结论已完成一级审核，等待报告组二审',
     entry_source_note_requires_review: '条目备注明确标记需要审核',
     first_pass_complete_pending_secondary_review: '一级证据审核完成，等待报告组二审',
     explicit_entry_review_status: '条目记录了明确审核状态',
@@ -577,7 +645,14 @@ function runtimeBehaviorLabel(value: string): string {
     disabled_by_panel_policy: '当前 Panel 未启用此候选决策库',
     panel_targeted_drug_override: '当前 Panel 运行时靶向药物 override',
     pending_secondary_review_not_loaded: '一级审核完成但二审未完成，不覆盖生产基础知识',
+    governance_blocked_not_loaded: '治理状态禁止进入运行时',
   }[value] || value || '—'
+}
+
+function sourceRefsLabel(entry: KnowledgeEntry): string {
+  return entry.provenance.source_refs
+    .map((item) => `${item.type}:${item.id}`)
+    .join('；') || '—'
 }
 
 function formatContent(value: unknown): string {

@@ -994,7 +994,7 @@ batch7 最新待审规模：
 
 ## 2026-07-12 五个后补基因一级证据审核
 
-状态：完成 AI 辅助一级证据审核，等待报告组二审；二审前不允许这些后补条目覆盖生产基础知识。
+状态：完成 AI 辅助一级证据审核，等待报告组二审；按用户授权的一级审核口径以保守范围暂允许运行，不得表述为报告组二审已通过。
 
 口径说明：
 
@@ -1012,7 +1012,41 @@ batch7 最新待审规模：
 
 结构化处置：
 
-- 五条均写入 `review_status: needs_review`、`runtime_eligible: false` 和完整 `first_pass_review` 元数据。
+- 五条均写入 `review_status: provisional_runtime`、`runtime_eligible: true` 和完整 `first_pass_review` 元数据。
 - Web 知识目录展示一级审核执行者、审核类型、证据截至日期、风险、结论和二审状态。
-- `GeneKnowledgeProvider` 对 `runtime_eligible: false` 或待审核条目 fail-closed；报告组二审前使用基础库回退文本，不加载一级审核候选文本。
+- `GeneKnowledgeProvider` 仅加载 `approved_for_runtime`、`provisional_runtime` 或 `legacy_runtime`；`needs_review/rejected/superseded` 继续 fail-closed。
 - 报告组二审通过后，应把条目改为 `review_status: approved_for_runtime`、`runtime_eligible: true`，并记录二审人、日期和批准修订 SHA。
+
+## 2026-07-12 知识治理、来源与发布门禁标准化
+
+状态：完成审核状态标准化、结构化来源、生产知识发布门禁和多维覆盖率第一版。
+
+审核状态模型：
+
+- `approved_for_runtime`：完成与当前条目/修订绑定的二审批准；
+- `provisional_runtime`：一级审核通过、限定保守适用范围、等待报告组二审，暂允许运行；
+- `legacy_runtime`：来自历史审核终版或基础 Excel 的既有运行条目，保留兼容行为，但不伪装成现代逐条二审；
+- `needs_review/rejected/superseded`：运行时禁用；
+- `not_recorded`：知识发布门禁直接判失败，不再默认放行。
+
+本轮处置：
+
+- CRC358 Overlay：316 条 `legacy_runtime`，6 条 `provisional_runtime`（5 条基因解释 + FANCA 用药解析），`not_recorded=0`；
+- CRC301 叠加视图：316 条 `legacy_runtime`，42 条 `provisional_runtime`（共享 6 条 + CRC301 保守基因级补库 36 条），`not_recorded=0`；
+- 每条 Overlay 知识运行时均可解析出结构化 `source_refs`、证据层级、癌种范围和二审状态；
+- 基础 Excel 新增 `knowledge_base_manifest.yaml`，固定文件 SHA-256、来源类型、证据边界和 `legacy_runtime` 口径；
+- `drugs.yaml` 升级到 `0.3.0`，FANCA 规则记录 PMID:26510020、D 级跨癌种边界、一级审核人和待二审状态。
+
+发布门禁：
+
+- 新增 `scripts/check_knowledge_release_ready.py`，只依赖 Git 中的生产 Overlay、药物规则、覆盖分母、基础库 manifest 和知识 Excel；
+- 不再依赖 `tmp/knowledge_buildout_after_batch9...` 等被忽略的历史审核附件；
+- 检查文件哈希、审核状态、运行资格、结构化来源、证据层级、癌种范围、重复 selector、PII/章节串漏和运行时基因解释覆盖；
+- 门禁已接入 `reportgen qa gate`，因此 GitHub `qa-gate` 与部署前检查会强制执行。
+
+当前多维覆盖率：
+
+- CRC301/CRC358 运行时基因解释覆盖：100%；
+- Overlay 审核状态标准化：100%；
+- Overlay 结构化来源、证据层级、癌种范围：100%；
+- 报告组二审完成率仍为 0%，这是明确披露的治理边界，不影响一级审核暂运行与历史兼容状态的区分。

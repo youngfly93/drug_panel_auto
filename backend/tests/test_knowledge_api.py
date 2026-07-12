@@ -86,6 +86,16 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
                 "page_size": 10,
             },
         )
+        provisional_response = client.get(
+            "/api/v1/knowledge/entries",
+            params={
+                "panel_id": "crc_358_msi",
+                "kind": "gene",
+                "layer": "reviewed_overlay",
+                "review_status": "provisional_runtime",
+                "page_size": 10,
+            },
+        )
 
     assert panels_response.status_code == 200
     panels = panels_response.json()["data"]["panels"]
@@ -108,12 +118,31 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
     assert coverage["declared_gene_coverage"]["denominator_name"] == "reportable_genes"
     assert coverage["declared_gene_coverage"]["total"] == 301
     assert coverage["knowledge_coverage_contract"]["gene_explanation_missing_count"] == 0
-    assert coverage["knowledge_coverage_contract"]["drug_candidate_disposition"]["pending_medical_review_rows"] == 0
+    assert (
+        coverage["knowledge_coverage_contract"]["drug_candidate_disposition"][
+            "pending_medical_review_rows"
+        ]
+        == 0
+    )
+    multidimensional = coverage["knowledge_coverage_contract"][
+        "multidimensional_coverage"
+    ]
+    assert multidimensional["review_governance"]["standardized_percent"] == 100.0
+    assert multidimensional["source_provenance"]["structured_source_percent"] == 100.0
 
     assert targeted_response.status_code == 200
     targeted = targeted_response.json()["data"]
     assert targeted["total"] == 9
     assert all(row["kind"] == "targeted_drug" for row in targeted["rows"])
+
+    assert provisional_response.status_code == 200
+    provisional = provisional_response.json()["data"]
+    assert provisional["total"] == 5
+    assert all(
+        row["review"]["runtime_eligible"] is True
+        and row["provenance"]["source_refs"]
+        for row in provisional["rows"]
+    )
 
     serialized = json.dumps(
         {

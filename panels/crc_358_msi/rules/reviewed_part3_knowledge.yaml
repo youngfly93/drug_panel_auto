@@ -27,6 +27,39 @@ source:
   low_information_refinement_applied_at: '2026-06-30T12:09:34.669033+00:00'
   low_information_refinement_policy: Replace generic mutation_analysis wording with
     pathway/domain-oriented conservative text; no new drug conclusions are added.
+governance:
+  schema_version: '1.0'
+  policy_id: crc_reviewed_overlay_governance_v1
+  status_definitions:
+    approved_for_runtime: 完成当前条目与修订绑定的医学审批，可进入运行时。
+    provisional_runtime: 一级审核通过且限定为保守范围，等待报告组二审，暂允许运行。
+    legacy_runtime: 来源于历史审核终版迁移，保留现有运行行为，等待逐条补齐现代审核记录。
+    needs_review: 待审核且运行时禁用。
+    rejected: 审核不通过且运行时禁用。
+    superseded: 已被新条目替代且运行时禁用。
+  defaults:
+    gene:
+      review_status: legacy_runtime
+      runtime_eligible: true
+      review_basis: historical_final_report_migration
+      evidence_level: legacy_curated_narrative
+      evidence_as_of: '2026-06-14'
+      cancer_scope: mixed_legacy_evidence_in_crc_report_context
+      secondary_review_status: historical_not_row_bound
+      source_refs:
+      - type: historical_report_corpus
+        id: crc_reviewed_final_reports_migration_20260614
+    drug:
+      review_status: legacy_runtime
+      runtime_eligible: true
+      review_basis: historical_final_report_migration
+      evidence_level: legacy_curated_drug_narrative
+      evidence_as_of: '2026-06-14'
+      cancer_scope: mixed_legacy_evidence_in_crc_report_context
+      secondary_review_status: historical_not_row_bound
+      source_refs:
+      - type: historical_report_corpus
+        id: crc_reviewed_final_reports_migration_20260614
 gene_sections:
 - gene: TP53
   c_hgvs: c.844C>T
@@ -1122,8 +1155,8 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/1106
   evidence_level: functional_background_only
   cancer_scope: colorectal_cancer_background_only
-  review_status: needs_review
-  runtime_eligible: false
+  review_status: provisional_runtime
+  runtime_eligible: true
   first_pass_review:
     status: completed
     reviewer: codex
@@ -1143,8 +1176,8 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/8358
   evidence_level: functional_background_only
   cancer_scope: colorectal_cancer_background_only
-  review_status: needs_review
-  runtime_eligible: false
+  review_status: provisional_runtime
+  runtime_eligible: true
   first_pass_review:
     status: completed
     reviewer: codex
@@ -1163,8 +1196,8 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/3113
   evidence_level: functional_background_only
   cancer_scope: colorectal_cancer_background_only
-  review_status: needs_review
-  runtime_eligible: false
+  review_status: provisional_runtime
+  runtime_eligible: true
   first_pass_review:
     status: completed
     reviewer: codex
@@ -1184,8 +1217,8 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/197335
   evidence_level: functional_background_only
   cancer_scope: colorectal_cancer_background_only
-  review_status: needs_review
-  runtime_eligible: false
+  review_status: provisional_runtime
+  runtime_eligible: true
   first_pass_review:
     status: completed
     reviewer: codex
@@ -1205,8 +1238,8 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/80139
   evidence_level: exploratory_crc_expression_evidence
   cancer_scope: colorectal_cancer_background_only
-  review_status: needs_review
-  runtime_eligible: false
+  review_status: provisional_runtime
+  runtime_eligible: true
   first_pass_review:
     status: completed
     reviewer: codex
@@ -1229,6 +1262,22 @@ drug_sections:
   drug_name: 奥拉帕利（Olaparib）
   relation: FANCA是Fanconi贫血DNA交联修复通路核心成员。无义、移码或关键剪接等功能缺失型变异可提示DNA损伤修复缺陷，并为PARP抑制剂相关研究提供生物学依据；该关联不能外推至普通错义变异，也不代表奥拉帕利已获批用于FANCA变异结直肠癌。
   clinical: 一项转移性去势抵抗性前列腺癌Ⅱ期研究纳入50例患者；可评估的49例中，16例检出DNA修复基因纯合缺失或有害变异，包括BRCA1/2、ATM、Fanconi贫血相关基因及CHEK2，其中14例对奥拉帕利产生研究定义的应答。该证据来自前列腺癌DDR联合分组，并非FANCA变异结直肠癌的独立疗效结论，报告中按D级跨癌种研究证据提示[26510020]。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: ai_assisted_first_pass_conservative_cross_cancer_scope
+  evidence_level: cross_cancer_level_d
+  evidence_as_of: '2026-07-12'
+  cancer_scope: prostate_ddr_cohort_not_crc_independent_efficacy
+  secondary_review_status: pending_report_group_review
+  review_metadata:
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    risk_level: high
+    secondary_review_status: pending_report_group_review
+    references:
+    - https://pubmed.ncbi.nlm.nih.gov/26510020/
 - gene: TP53
   c_hgvs: c.844C>T
   p_hgvs: p.R282W

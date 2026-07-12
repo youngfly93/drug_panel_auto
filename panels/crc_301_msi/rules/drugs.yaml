@@ -1,10 +1,26 @@
 schema_version: "1.0"
 panel_id: "crc_301_msi"
 rule_id: "drugs"
-version: "0.2.0"
-updated: "2026-05-21"
+version: "0.3.0"
+updated: "2026-07-12"
 status: "active"
 description: "CRC drug-display rule declarations used by the generator."
+
+governance:
+  schema_version: "1.0"
+  policy_id: crc301_drug_display_governance_v1
+  defaults:
+    approved_drug:
+      review_status: legacy_runtime
+      runtime_eligible: true
+      review_basis: historical_guideline_table_migration
+      evidence_level: guideline_and_regulatory_summary
+      evidence_as_of: "2022-12-31"
+      cancer_scope: colorectal_cancer
+      secondary_review_status: historical_not_row_bound
+      source_refs:
+        - type: guideline_summary
+          id: legacy_crc_approved_drug_table
 
 drug_rules:
   show_all_in_part2: true

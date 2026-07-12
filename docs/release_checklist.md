@@ -38,6 +38,19 @@ This runs the local QA gate and checks that GitHub `main` requires the `qa-gate`
 status check. If the current branch has not been pushed yet, push it first and
 wait for GitHub Actions to finish, then rerun:
 
+The QA gate includes `knowledge_release_gate`. It verifies the versioned base
+knowledge manifest, review-status/runtime consistency, structured provenance,
+duplicate selectors, PII/section leaks, and runtime gene-explanation coverage
+for CRC301/358. A `not_recorded` production Overlay entry or a knowledge file
+hash mismatch blocks release.
+
+The knowledge gate can also be run directly:
+
+```bash
+python scripts/check_knowledge_release_ready.py --strict \
+  --output .work/knowledge_release/knowledge_release_gate.json
+```
+
 ```bash
 git push origin "$(git branch --show-current)"
 make release-check

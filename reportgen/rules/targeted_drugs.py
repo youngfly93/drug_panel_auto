@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from reportgen.panels.loader import PanelPackageLoader
+from reportgen.knowledge.governance import effective_governance
 from reportgen.rules.schema import load_rule_yaml
 
 
@@ -26,6 +27,33 @@ def _gene_overrides(value: Any) -> dict[str, dict[str, Any]]:
         str(gene).strip().upper(): dict(rule)
         for gene, rule in value.items()
         if str(gene).strip() and isinstance(rule, Mapping)
+    }
+
+
+def _governed_rows(
+    raw: Mapping[str, Any], rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    if not isinstance(raw.get("governance"), Mapping):
+        return rows
+    return [
+        row
+        for row in rows
+        if effective_governance(raw, row, "targeted_drug")["runtime_eligible"]
+    ]
+
+
+def _governed_gene_overrides(
+    raw: Mapping[str, Any], value: Any
+) -> dict[str, dict[str, Any]]:
+    rows = _gene_overrides(value)
+    if not isinstance(raw.get("governance"), Mapping):
+        return rows
+    return {
+        gene: rule
+        for gene, rule in rows.items()
+        if effective_governance(
+            raw, {"gene": gene, **rule}, "targeted_drug"
+        )["runtime_eligible"]
     }
 
 
@@ -130,11 +158,13 @@ def load_targeted_drug_rule_context(
         "source_panel_id": panel_id,
         "shared": False,
         "reason": "",
-        "overrides": _gene_overrides(
+        "overrides": _governed_gene_overrides(
+            raw,
             policy.get("overrides") or policy.get("gene_overrides")
         ),
-        "reviewed_variant_overrides": _dict_rows(
-            policy.get("reviewed_variant_overrides")
+        "reviewed_variant_overrides": _governed_rows(
+            raw,
+            _dict_rows(policy.get("reviewed_variant_overrides")),
         ),
         "applicability_rules": _dict_rows(
             policy.get("applicability_rules")
