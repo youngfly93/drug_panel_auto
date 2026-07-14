@@ -25,6 +25,7 @@ from app.database import get_db
 from app.models.task import Task, TaskResult
 from app.schemas.common import ApiResponse
 from app.services.generation_queue import queue_stats
+from app.services.runtime_instance_lock import runtime_instance_lock_status
 from app.services.task_recovery import last_recovery_summary
 
 router = APIRouter(prefix="/admin/ops", tags=["ops"])
@@ -1235,6 +1236,7 @@ def ops_status(
         "deployment": _read_current_release(runtime_dir),
         "runtime": {
             "runtime_dir_present": runtime_dir.exists(),
+            "instance_lock": runtime_instance_lock_status(),
             "libreoffice_listener": _libreoffice_listener_status(),
             "generation_queue": queue_stats(),
             "generation_limits": {

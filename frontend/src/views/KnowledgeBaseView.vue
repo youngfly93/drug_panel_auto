@@ -107,7 +107,35 @@
       <el-card shadow="never" class="metric-card">
         <span>运行时药物覆盖</span>
         <strong>{{ coverage.knowledge_coverage_contract.runtime_drug_genes }}</strong>
-        <small>其中 {{ coverage.knowledge_coverage_contract.explicitly_approved_drug_genes }} 个基因有显式 approved runtime 规则</small>
+        <small>
+          显式 Panel 规则 {{ coverage.knowledge_coverage_contract.explicit_panel_rule_genes }} 个基因；
+          其中二审批准 {{ coverage.knowledge_coverage_contract.explicitly_approved_drug_genes }} 个
+        </small>
+      </el-card>
+      <el-card
+        v-if="coverage.knowledge_coverage_contract.runtime_content_quality"
+        shadow="never"
+        class="metric-card"
+        :class="{ 'metric-card--warning': coverage.knowledge_coverage_contract.runtime_content_quality.generic_fallback_count > 0 }"
+      >
+        <span>基因解释深度</span>
+        <strong>{{ coverage.knowledge_coverage_contract.runtime_content_quality.specific_explanation_percent }}%</strong>
+        <small>
+          特异解释 {{ coverage.knowledge_coverage_contract.runtime_content_quality.specific_explanation_genes }}/{{ coverage.knowledge_coverage_contract.runtime_content_quality.total_genes }}；
+          通用回退 {{ coverage.knowledge_coverage_contract.runtime_content_quality.generic_fallback_count }} 个
+        </small>
+      </el-card>
+      <el-card
+        v-if="coverage.knowledge_coverage_contract.runtime_content_quality"
+        shadow="never"
+        class="metric-card"
+        :class="{ 'metric-card--warning': coverage.knowledge_coverage_contract.runtime_content_quality.citation_integrity.unresolved_pmids.length > 0 }"
+      >
+        <span>参考文献完整性</span>
+        <strong>{{ coverage.knowledge_coverage_contract.runtime_content_quality.citation_integrity.unresolved_pmids.length }}</strong>
+        <small>
+          未解析 PMID；本 Panel 正文共引用 {{ coverage.knowledge_coverage_contract.runtime_content_quality.citation_integrity.cited_pmids }} 个 PMID
+        </small>
       </el-card>
       <el-card shadow="never" class="metric-card" :class="{ 'metric-card--warning': coverage.knowledge_coverage_contract.drug_candidate_disposition.pending_medical_review_rows > 0 }">
         <span>药物候选裁决</span>
@@ -139,6 +167,22 @@
         <strong>{{ coverage.knowledge_coverage_contract.multidimensional_coverage.review_governance.secondary_review_complete_percent }}%</strong>
         <small>
           待二审基因 {{ coverage.knowledge_coverage_contract.multidimensional_coverage.review_governance.pending_secondary_review_genes.length }} 个
+        </small>
+      </el-card>
+      <el-card
+        shadow="never"
+        class="metric-card"
+        :class="{ 'metric-card--warning': coverage.knowledge_coverage_contract.clinical_release_readiness.status !== 'READY' }"
+      >
+        <span>真实报告 UAT</span>
+        <strong>
+          {{ coverage.knowledge_coverage_contract.clinical_release_readiness.uat.pass_rate_percent === null
+            ? '待执行'
+            : `${coverage.knowledge_coverage_contract.clinical_release_readiness.uat.pass_rate_percent}%` }}
+        </strong>
+        <small>
+          {{ coverage.knowledge_coverage_contract.clinical_release_readiness.uat.passed_reports }}/{{ coverage.knowledge_coverage_contract.clinical_release_readiness.uat.reviewed_reports }} 通过；
+          要求至少 {{ coverage.knowledge_coverage_contract.clinical_release_readiness.uat.minimum_reviewed_reports }} 份且通过率 ≥ {{ coverage.knowledge_coverage_contract.clinical_release_readiness.uat.required_pass_rate_percent }}%
         </small>
       </el-card>
     </div>
@@ -532,6 +576,7 @@ const catalogWarnings = computed(() => {
 })
 
 const contentLabelMap: Record<string, string> = {
+  content_profile: '内容口径',
   intro: '基因简介',
   mutation_description: '基因变异说明',
   mutation_analysis: '基因变异解析',

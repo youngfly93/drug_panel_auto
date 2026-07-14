@@ -420,6 +420,27 @@ gene_sections:
     BTF2/TFIIH 复合体的一个不可或缺的部分，进而参与基础转录。ERCC2 基因产物具有 ATP 依赖性的 DNA 解旋酶的活性，属于解旋酶 RAD3/XPD
     亚家族。研究表明，ERCC2 基因缺陷可能导致三种不同疾病，分别为癌症倾向综合征着色性干皮互补D组、毛发低硫营养不良和科凯恩综合征[NCBI]。同时，ERCC2
     基因多态性与多种癌症的易感性相关，如肺癌、乳腺癌、前列腺癌、胃癌等。
+  mutation_analysis: ERCC2/XPD是TFIIH复合物和核苷酸切除修复通路的关键解旋酶。体细胞变异的临床意义取决于位点致病性、等位基因状态及是否造成修复功能缺陷；不能仅因检出ERCC2变异就在结直肠癌中外推铂类或其他DNA损伤药物敏感性。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: ai_assisted_first_pass_conservative_gene_level_batch
+  evidence_level: functional_background_only
+  evidence_as_of: '2026-07-12'
+  cancer_scope: colorectal_report_background_no_automatic_drug_claim
+  secondary_review_status: pending_report_group_review
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accepted_with_conservative_scope
+    risk_level: medium
+    secondary_review_status: pending_report_group_review
+  source_refs:
+  - type: ncbi_gene
+    id: GeneID:2068
+    url: https://www.ncbi.nlm.nih.gov/gene/2068
 - gene: ESR1
   intro: ESR1基因编码一种雌激素受体，属于被雌激素激活的转录因子，同DNA结合、转录活性调节等分子生物学过程有关。ESR1的主要功能是促进性别和生殖功能发育，同时它也参与人体多种生理过程，包括乳腺癌、子宫内膜癌和骨质疏松症[NCBI]。有研究报道，在乳腺癌中，ESR1基因K303R突变可能通过激活IGF-1R/IRS-1/Akt通路，从而对内分泌治疗耐药[26183887]。
 - gene: FANCD2
@@ -449,6 +470,27 @@ gene_sections:
 - gene: HLA-C
   intro: HLA-C基因属于HLA I类重链旁系同源物。该I类分子是由重链和轻链（β-2微球蛋白）组成的异二聚体，其通过呈递来自内质网腔的肽在免疫系统中发挥核心作用。I类分子几乎在所有细胞中表达，其中，重链锚定在膜中。重链大约45kDa，其基因含有8个外显子。外显子1编码前导肽，外显子2和3编码α1和α2结构域，它们都结合肽，外显子4编码α3结构域，外显子5编码跨膜区，外显子6和7编码细胞质尾。外显子2和外显子3内的多态性负责肽结合特异性。
     对于这些多态性的分型通常用于骨髓和肾移植[NCBI]。研究表明，在结直肠癌中，HLA-C表达缺失，与分化程度呈负相关[2417962]。
+  mutation_analysis: HLA-C参与HLA I类抗原呈递和免疫识别。单个HLA-C体细胞变异的影响取决于位点、等位基因状态、表达及是否导致抗原呈递缺陷，不能单独作为免疫治疗获益或耐药标志；需结合HLA表达或缺失、MSI/TMB和癌种证据。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: ai_assisted_first_pass_conservative_gene_level_batch
+  evidence_level: functional_background_only
+  evidence_as_of: '2026-07-12'
+  cancer_scope: colorectal_report_background_no_automatic_drug_claim
+  secondary_review_status: pending_report_group_review
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accepted_with_conservative_scope
+    risk_level: medium
+    secondary_review_status: pending_report_group_review
+  source_refs:
+  - type: ncbi_gene
+    id: GeneID:3107
+    url: https://www.ncbi.nlm.nih.gov/gene/3107
 - gene: HNF1A
   intro: HNF1A基因编码肝细胞核因子1α，该蛋白是一个转录因子，可调控多个基因组织特异性地表达，尤其是在胰岛细胞和肝细胞中发挥作用。该蛋白在葡萄糖代谢中发挥作用，可调控胰岛β细胞中葡萄糖转运蛋白GLUT1、GLUT2的表达，以及胰岛细胞中血管紧张素转化酶2的表达。此外，该蛋白在其他器官的代谢途径中也发挥作用，如调控肠道和肾脏中胆汁酸转运蛋白的表达。HNF1A基因突变会引起糖尿病和肝细胞腺瘤[NCBI]。
 - gene: HRAS
@@ -584,6 +626,27 @@ gene_sections:
   intro: EPHA3基因编码的蛋白属于蛋白质酪氨酸激酶家族的受体蛋白亚家族。EPHA3编码的蛋白能够结合ephrin-A配体[NCBI]。EPHA3被认为是一种肿瘤抑制因子，与多种肿瘤的发生、发展以及预后相关。野生型EPHA3的过表达可抑制下游AKT信号转导通路，诱导细胞凋亡，抑制肿瘤细胞生成；EPHA3基因突变后影响对AKT途径的抑制，从而促进细胞生长；在肺癌组织中发现，EPHA3基因的拷贝数和（或）表达水平降低[22829656]。过表达EPHA3可以通过抑制PI3K/BMX/STAT3通路来促进细胞凋亡，从而降低小细胞肺癌（SCLC）细胞对化疗药物的抗性[27101199]。前列腺相关基因PC-1诱导的EPHA3表达可以通过激活AKT信号通路来促进前列腺癌的肿瘤发展[25231727]。研究已发现EPHA3突变存在于恶性胶质瘤[25256166]、转移性黑色素瘤[25393105]和前列腺癌肿瘤细胞中[26552734]。EPHA3作为肿瘤治疗药物设计的分子靶点备受关注[25391995]。
 - gene: ESR2
   intro: ESR2基因编码蛋白为雌激素受体和核受体转录因子超家族的成员。ESR2蛋白由N-末端DNA结合域和C末端配体结合结构域组成，并位于细胞核、细胞质和线粒体中。当结合17-β-雌二醇或相关配位体后，该蛋白质形成同源或异源二聚体，与特定的DNA序列相互作用以激活转录。一些异构体显著抑制其他雌激素受体家族成员的活性。有研究报道，ESR2基因多态性与乳腺癌、结直肠癌以及前列腺癌的发生相关[15604249]。
+  mutation_analysis: ESR2编码雌激素受体β并参与配体依赖的转录调控。ESR2序列变异与受体表达、激素通路活性或内分泌治疗敏感性并非等价；结直肠癌中的单个位点需结合功能证据和变异分级，不能独立形成治疗结论。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: ai_assisted_first_pass_conservative_gene_level_batch
+  evidence_level: functional_background_only
+  evidence_as_of: '2026-07-12'
+  cancer_scope: colorectal_report_background_no_automatic_drug_claim
+  secondary_review_status: pending_report_group_review
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accepted_with_conservative_scope
+    risk_level: medium
+    secondary_review_status: pending_report_group_review
+  source_refs:
+  - type: ncbi_gene
+    id: GeneID:2100
+    url: https://www.ncbi.nlm.nih.gov/gene/2100
 - gene: FANCE
   intro: FANCE，即范可尼贫血补体组E，是范可尼贫血互补组成员之一。FANCE基因编码的蛋白在一种隐性疾病范可尼贫血中起作用，导致细胞遗传学不稳定，对DNA交联剂过敏，增加染色体断裂和缺陷DNA修复。与FANCE基因相关的信号途径有DNA损伤修复途径。在癌症如子宫内膜癌、肠癌和皮肤癌中观察到FANCE基因的错义突变、无义突变、沉默突变、移码插入和整码缺失。
 - gene: FAT1
@@ -608,6 +671,27 @@ gene_sections:
   intro: MPL基因编码促血小板生成素受体，是位于造血干细胞、巨核细胞、血小板表面的跨膜蛋白，其表达专一而保守，属于造血因子受体超家族，保守的造血功能区决定结合促血小板生成素（TPO）的能力，可激活JAK/STAT信号通路。MPL突变与造血系统疾病相关，此外MPL的异常表达存在于结直肠癌、肝癌和肺癌等多种实体瘤中。
 - gene: PIK3C2G
   intro: PIK3C2G基因编码的蛋白属于磷酸肌醇3-激酶（PI3K）家族。PI3K在细胞增殖、致癌转化、细胞存活、细胞迁移和细胞内蛋白运输的信号通路中起作用。该蛋白含有脂质激酶催化结构域以及C端C2结构域，这是II型PI3K的特征。C2结构域作为钙依赖性磷脂结合基序，其介导蛋白向膜的移位，并且还可介导蛋白之间的相互作用[NCBI]。有研究表明，PIK3C2G低拷贝数是III期结直肠癌预后的重要且独立的预测因子[25785104]。
+  mutation_analysis: PIK3C2G编码II类磷脂酰肌醇3-激酶家族成员，参与膜运输和细胞信号调控。当前缺乏充分证据将结直肠癌中的任意PIK3C2G序列变异解释为明确驱动或PI3K抑制剂用药标志；具体意义需结合位点功能、拷贝数和变异分级。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: ai_assisted_first_pass_conservative_gene_level_batch
+  evidence_level: functional_background_only
+  evidence_as_of: '2026-07-12'
+  cancer_scope: colorectal_report_background_no_automatic_drug_claim
+  secondary_review_status: pending_report_group_review
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accepted_with_conservative_scope
+    risk_level: low
+    secondary_review_status: pending_report_group_review
+  source_refs:
+  - type: ncbi_gene
+    id: GeneID:5288
+    url: https://www.ncbi.nlm.nih.gov/gene/5288
 - gene: RAD51C
   intro: RAD51C基因编码的蛋白质属于是高度保守的RAD51重组酶的五个旁系同源物（RAD51B、RAD51C、RAD51D、XRCC2、XRCC3）之一。其在哺乳动物细胞中DNA双链断裂（DSB）的同源修复（HR）中起重要作用，介导同源DNA配对和链交换[8929543]。RAD51C被认为是遗传性乳腺癌和卵巢恶性肿瘤的人类癌症易感基因[20400964]。
   mutation_analysis: RAD51C属于RAD51旁系同源重组修复基因，参与DNA双链断裂修复和复制叉保护。RAD51C功能缺失型变异可提示HRR缺陷；在CRC报告中应区分胚系/体细胞来源、致病性分级、HRD背景和药物适应证，避免把任意错义变异直接解释为明确获益证据。
@@ -655,6 +739,27 @@ gene_sections:
     PD-1 结合一方面会抑制 T 细胞受体组成蛋白 ZAP70 的磷酸化，阻止 PD-1 与 CD3ζ的结合，从而抑制 NF- κB 和 AP-1 等转录因子激活[15358536]。另一方面
     PD-L1 会通过诱导 E3 泛素连接酶CBL-b 的表达上调，在抗原呈递过程中下调 T 细胞受体，从而起到抑制 T 细胞激活和细胞因子产生的作用[21739608]。在孕期、组织的同种异体移植、自身免疫疾病以及肝炎等情况下，PD-L1
     在维持免疫反应稳态以抑制自身免疫的过程中发挥重要作用[12847137，18650228]。目前，CD274抑制剂是肿瘤免疫治疗药物的研究热点，并且在临床案例中取得了较好的效果[24217091]。
+  mutation_analysis: CD274编码PD-L1并参与PD-1/PD-L1免疫检查点调控。单个CD274体细胞序列变异不能等同于PD-L1蛋白表达升高，也不能单独预测免疫检查点抑制剂疗效；报告解读需结合PD-L1 IHC、MSI/TMB、变异分级及癌种证据。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: ai_assisted_first_pass_conservative_gene_level_batch
+  evidence_level: functional_background_only
+  evidence_as_of: '2026-07-12'
+  cancer_scope: colorectal_report_background_no_automatic_drug_claim
+  secondary_review_status: pending_report_group_review
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accepted_with_conservative_scope
+    risk_level: medium
+    secondary_review_status: pending_report_group_review
+  source_refs:
+  - type: ncbi_gene
+    id: GeneID:29126
+    url: https://www.ncbi.nlm.nih.gov/gene/29126
 - gene: CIC
   intro: CIC编码的蛋白是一个转录抑制因子，在中枢神经系统的发育中发挥作用。CIC基因突变可促进少突神经胶质瘤的发生[21817013]。此外，CIC蛋白表达缺失在少突神经胶质瘤中也频繁发生，CIC蛋白表达缺失与CIC基因突变有明显的关联。CIC蛋白表达缺失与更短的PFS相关[24030748]。
 - gene: EPHA2
@@ -1015,11 +1120,53 @@ gene_sections:
 - gene: SLCO1B1
   intro: SLCO1B1基因编码的蛋白是有机阴离子转运蛋白家族中肝特异性组件之一，是一种跨膜受体，介导许多钠离子依赖性的内源性化合物（包括胆红素，17-β-葡萄糖醛酸雌二醇和白三烯C4）的摄取，也参与除去药物化合物（如他汀类药物，四溴酚酞磺酸钠和利福平）从血液进入肝细胞。该基因编码蛋白过程中的多态性与转运体功能受损有关[NCBI]。SLCO1B1基因多态性对黄酮类抗肿瘤药的临床用药疗效相关联[21072184]。SLCO1B1*15/15*基因型肺癌患者伊立替康的化疗后表现出严重毒性癌[17898662]。SLCO1B1
     rs4149081，rs11045879 突变型的急性淋巴细胞白血病儿童可以不进行甲氨蝶呤（MTX）治疗来避免其带来的毒副作用[21387541]。
+  mutation_analysis: SLCO1B1编码肝细胞有机阴离子转运体，其临床药物基因组学证据主要来自胚系单倍型对药物暴露和毒性的影响。肿瘤组织检出的单个体细胞变异不能直接替代胚系分型或预测全身药代动力学；需结合样本来源、胚系确认及相应药物指南。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: ai_assisted_first_pass_conservative_gene_level_batch
+  evidence_level: functional_background_only
+  evidence_as_of: '2026-07-12'
+  cancer_scope: colorectal_report_background_no_automatic_drug_claim
+  secondary_review_status: pending_report_group_review
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accepted_with_conservative_scope
+    risk_level: high
+    secondary_review_status: pending_report_group_review
+  source_refs:
+  - type: ncbi_gene
+    id: GeneID:10599
+    url: https://www.ncbi.nlm.nih.gov/gene/10599
 - gene: TGFBR2
   intro: TGFBR2基因编码具有蛋白激酶结构域的跨膜蛋白质，由富含半胱氨酸的胞外区、跨膜区和丝氨酸/苏氨酸结构域的胞内区组成。TGFBR2的胞内区高度保守，有许多自身磷酸化位点，具有自身磷酸化的功能，可以直接与TGF-β结合。该受体/配体复合物调节与细胞增殖、细胞周期停滞、伤口愈合、免疫抑制和肿瘤发生有关的基因的转录。TGFBR2可与TGFBR1结合，形成异二聚复合物TGFBR2基因的突变与Marfan综合征、Loeys-Dietz主动脉瘤综合征以及各种类型肿瘤的发展有关[NCBI]。TGFBR2是TGF-β信号的直接受体,
     TGF-β首先与细胞膜上的TGFBR2结合，以启动下游通路，该受体在调控TGF-β诱导的细胞捕获和凋亡中发挥重要作用。
 - gene: XPC
   intro: XPC基因编码的蛋白是核苷酸切除修复途径（NER）中的一种作用蛋白。XPC在全基因组早期核苷酸切除修复，特别是损伤识别、开放复合物的形成、修复蛋白复合物的形成过程中起重要作用。XPC基因或其他NER组件突变导致着色性干皮病的发生，这是一种罕见的常染色体隐性遗传病，多见于幼年时期，表现为对阳光的敏感度增加，并伴随有癌变的发生[NCBI]。
+  mutation_analysis: XPC参与全基因组核苷酸切除修复的损伤识别。单个XPC体细胞变异是否造成修复缺陷取决于位点致病性、等位基因状态和功能证据；在结直肠癌中不能据此单独推断DNA损伤药物敏感性或免疫治疗获益。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: ai_assisted_first_pass_conservative_gene_level_batch
+  evidence_level: functional_background_only
+  evidence_as_of: '2026-07-12'
+  cancer_scope: colorectal_report_background_no_automatic_drug_claim
+  secondary_review_status: pending_report_group_review
+  first_pass_review:
+    status: completed
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_review
+    reviewed_at: '2026-07-12'
+    evidence_as_of: '2026-07-12'
+    decision: accepted_with_conservative_scope
+    risk_level: medium
+    secondary_review_status: pending_report_group_review
+  source_refs:
+  - type: ncbi_gene
+    id: GeneID:7508
+    url: https://www.ncbi.nlm.nih.gov/gene/7508
 - gene: FGFR1
   c_hgvs: c.1648G>T
   p_hgvs: p.A550S

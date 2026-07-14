@@ -613,7 +613,10 @@ class TemplateRenderer:
         for paragraph in doc.element.xpath(".//w:p"):
             paragraph_text = "".join(node.text or "" for node in paragraph.xpath(".//w:t"))
             if not (
-                ("尊敬的" in paragraph_text and "先生" in paragraph_text)
+                (
+                    "尊敬的" in paragraph_text
+                    and ("先生" in paragraph_text or "女士" in paragraph_text)
+                )
                 or ("感谢您选择本机构" in paragraph_text and "检测项目" in paragraph_text)
             ):
                 continue
@@ -636,7 +639,7 @@ class TemplateRenderer:
                     in_name_fill = True
                     set_underline(run, False)
                     continue
-                if "先生" in text and in_name_fill:
+                if ("先生" in text or "女士" in text) and in_name_fill:
                     in_name_fill = False
                     set_underline(run, False)
                     continue
@@ -662,6 +665,65 @@ class TemplateRenderer:
 
         if changed:
             doc.save(file_path)
+
+    def _render_patient_salutation(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
+        """Render the patient-letter honorific from mapped report data.
+
+        The active CRC golden template still contains a legacy literal
+        honorific in visible and fallback text-box paragraphs. Replace only the
+        greeting paragraphs after template rendering, keeping the operation
+        data-driven and independent of any patient identifier.
+        """
+        context = context or {}
+        salutation = str(context.get("patient_salutation") or "").strip()
+        if salutation not in {"先生", "女士"}:
+            gender = str(context.get("gender") or "").strip()
+            if not gender:
+                return
+            salutation = "女士" if "女" in gender else "先生"
+
+        doc = Document(file_path)
+        changed = False
+        for paragraph in doc.element.xpath(".//w:p"):
+            paragraph_text = "".join(
+                node.text or "" for node in paragraph.xpath(".//w:t")
+            )
+            if "尊敬的" not in paragraph_text or not (
+                "先生" in paragraph_text or "女士" in paragraph_text
+            ):
+                continue
+            for text_node in paragraph.xpath(".//w:t"):
+                current = text_node.text or ""
+                rendered = current.replace("先生", salutation).replace(
+                    "女士", salutation
+                )
+                if rendered != current:
+                    text_node.text = rendered
+                    changed = True
+
+        if changed:
+            doc.save(file_path)
+            self.logger.debug("已按性别渲染患者称呼", salutation=salutation)
+
+    def _normalize_repeated_terminal_punctuation(self, file_path: str) -> None:
+        """Remove accidental duplicated full stops inherited from templates."""
+        doc = Document(file_path)
+        changed = False
+        for text_node in doc.element.xpath(".//w:t"):
+            current = text_node.text or ""
+            rendered = current
+            while "。。" in rendered:
+                rendered = rendered.replace("。。", "。")
+            while "．．" in rendered:
+                rendered = rendered.replace("．．", "．")
+            if rendered != current:
+                text_node.text = rendered
+                changed = True
+        if changed:
+            doc.save(file_path)
+            self.logger.debug("已清理重复句号")
 
     def _restore_msi_result_emphasis(
         self, file_path: str, context: dict | None = None
@@ -1062,7 +1124,10 @@ class TemplateRenderer:
             if variant_header_re.match(text):
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 set_spacing(paragraph, before=200, after=0)
-                set_keep_next(paragraph, False)
+                # A variant heading must travel with at least the following
+                # "基因简介" label. Otherwise Word/LibreOffice can leave the
+                # heading alone at the bottom of a page.
+                set_keep_next(paragraph, True)
                 style_runs(
                     paragraph,
                     bold=True,
@@ -2960,6 +3025,134 @@ class TemplateRenderer:
 
         self.logger.debug("已移除标题前空白分页段落", removed=removed)
 
+    def _remove_standalone_page_breaks_before_pathway_tables(
+        self, file_path: str
+    ) -> None:
+        """Remove template-only page-break paragraphs before pathway tables.
+
+        The reviewed CRC template contains a few empty paragraphs whose only
+        content is ``w:br type=page`` immediately before a pathway table. When
+        the previous pathway references have already spilled onto a new page,
+        the redundant break leaves almost the entire page empty. Natural Word
+        pagination is sufficient here; page breaks embedded in non-empty
+        reference paragraphs and all section breaks are deliberately preserved.
+        """
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        doc = Document(file_path)
+        body = doc.element.body
+        children = list(body)
+        removed = 0
+        compacted_spacers = 0
+        compacted_reference_paragraphs = 0
+        labels_kept = 0
+
+        def element_text(element) -> str:
+            return "".join(
+                node.text or "" for node in element.iter(qn("w:t"))
+            ).strip()
+
+        def is_pathway_table(element) -> bool:
+            if element.tag != qn("w:tbl"):
+                return False
+            text = element_text(element)
+            lowered = text.lower()
+            return "通路名称" in text and (
+                "signaling pathway" in lowered or "信号通路" in text
+            )
+
+        def is_standalone_page_break(element) -> bool:
+            if element.tag != qn("w:p") or element_text(element):
+                return False
+            if any(element.iter(qn("w:drawing"))) or any(
+                element.iter(qn("w:pict"))
+            ):
+                return False
+            if any(element.iter(qn("w:sectPr"))):
+                return False
+            if any(element.iter(qn("w:pageBreakBefore"))):
+                return True
+            if any(element.iter(qn("w:lastRenderedPageBreak"))):
+                return True
+            return any(
+                (br.get(qn("w:type")) or br.get("type")) == "page"
+                for br in element.iter(qn("w:br"))
+            )
+
+        def is_empty_pathway_spacer(element) -> bool:
+            """Return true for an empty body paragraph safe to drop.
+
+            Reviewed templates contain clusters of one or two empty paragraphs
+            immediately before every pathway table.  When the preceding
+            reference list is one line too long, those spacers push only the
+            final citation onto an otherwise empty page.  Section properties,
+            drawings and non-empty paragraphs remain protected.
+            """
+            if element.tag != qn("w:p") or element_text(element):
+                return False
+            if any(element.iter(qn("w:drawing"))) or any(
+                element.iter(qn("w:pict"))
+            ):
+                return False
+            return not any(element.iter(qn("w:sectPr")))
+
+        pathway_reference_block = False
+        pathway_since_reference = False
+        for idx, element in enumerate(children):
+            if is_pathway_table(element):
+                pathway_since_reference = True
+                pathway_reference_block = False
+            if element.tag == qn("w:p") and element_text(element) == "参考文献：":
+                ppr = element.get_or_add_pPr()
+                if ppr.find(qn("w:keepNext")) is None:
+                    ppr.append(OxmlElement("w:keepNext"))
+                    labels_kept += 1
+                if pathway_since_reference:
+                    pathway_reference_block = True
+                    pathway_since_reference = False
+            if pathway_reference_block and element.tag == qn("w:p"):
+                text = element_text(element)
+                if text:
+                    ppr = element.get_or_add_pPr()
+                    spacing = ppr.find(qn("w:spacing"))
+                    if spacing is None:
+                        spacing = OxmlElement("w:spacing")
+                        ppr.append(spacing)
+                    if spacing.get(qn("w:after")) != "0":
+                        spacing.set(qn("w:after"), "0")
+                        compacted_reference_paragraphs += 1
+            if not is_pathway_table(element) or idx == 0:
+                continue
+            previous_idx = idx - 1
+            while previous_idx >= 0:
+                previous = children[previous_idx]
+                if not is_empty_pathway_spacer(previous):
+                    break
+                parent = previous.getparent()
+                if parent is not None:
+                    if is_standalone_page_break(previous):
+                        removed += 1
+                    else:
+                        compacted_spacers += 1
+                    parent.remove(previous)
+                previous_idx -= 1
+
+        if (
+            removed
+            or compacted_spacers
+            or compacted_reference_paragraphs
+            or labels_kept
+        ):
+            doc.save(file_path)
+            self.logger.debug(
+                "已规范通路参考文献与分页",
+                removed=removed,
+                compacted_spacers=compacted_spacers,
+                compacted_reference_paragraphs=compacted_reference_paragraphs,
+                labels_kept=labels_kept,
+            )
+
     def _normalize_front_matter_spacing(self, file_path: str) -> None:
         """Restore the reviewed report-guide offset in front matter.
 
@@ -3117,7 +3310,11 @@ class TemplateRenderer:
             inserted_spacers=guide_spacer_count,
         )
 
-    def _cleanup_section_spacing(self, file_path: str) -> None:
+    def _cleanup_section_spacing(
+        self,
+        file_path: str,
+        section_titles: tuple[str, ...] | None = None,
+    ) -> None:
         """删除章节标题前的空白段落。
 
         仅删除与章节标题同一父节点、且紧邻标题前的完全空白段落，
@@ -3137,7 +3334,7 @@ class TemplateRenderer:
         w_ppr = f"{{{ns_w}}}pPr"
         w_sectpr = f"{{{ns_w}}}sectPr"
 
-        section_titles = (
+        section_titles = section_titles or (
             "报告导读",
             "致您的一封信",
             "第一部分：基本信息",
@@ -3507,6 +3704,7 @@ class TemplateRenderer:
                 underline=True,
                 justify=True,
                 spacing_before=200,
+                keep_next=True,
             )
 
             # 基因简介（紧跟标题，无多余空行）
@@ -4270,6 +4468,7 @@ class TemplateRenderer:
         w_p = f"{{{ns_w}}}p"
         w_ppr = f"{{{ns_w}}}pPr"
         w_jc = f"{{{ns_w}}}jc"
+        w_keep_next = f"{{{ns_w}}}keepNext"
         w_r = f"{{{ns_w}}}r"
         w_t = f"{{{ns_w}}}t"
         wp_anchor = f"{{{ns_wp}}}anchor"
@@ -4292,6 +4491,14 @@ class TemplateRenderer:
                 if child is not ppr:
                     paragraph.remove(child)
             append_run(paragraph, text)
+
+        def keep_with_next(paragraph: ET.Element) -> None:
+            ppr = paragraph.find(w_ppr)
+            if ppr is None:
+                ppr = ET.Element(w_ppr)
+                paragraph.insert(0, ppr)
+            if ppr.find(w_keep_next) is None:
+                ET.SubElement(ppr, w_keep_next)
 
         def make_date_para(text: str) -> ET.Element:
             paragraph = ET.Element(w_p)
@@ -4358,6 +4565,28 @@ class TemplateRenderer:
             if ppr.find(keep_lines) is None:
                 ET.SubElement(ppr, keep_lines)
             changed = True
+
+            # Treat the complete “检测结果说明” block and its signature line as
+            # one semantic unit.  Without keepNext, Word/LibreOffice can leave
+            # the four disclaimer paragraphs on the preceding page and push
+            # only the signatures to a low-content page.  Binding the existing
+            # paragraphs lets the renderer move the whole block naturally; it
+            # does not hard-code a page number or a case-specific page break.
+            explanation_start = None
+            for lookback in range(idx - 1, max(-1, idx - 13), -1):
+                candidate = children[lookback]
+                if candidate.tag != w_p:
+                    break
+                normalized = re.sub(r"\s+", "", para_text(candidate))
+                if re.fullmatch(r"(?:[45][.\uff0e、])?检测结果说明", normalized):
+                    explanation_start = lookback
+                    break
+            if explanation_start is not None:
+                for block_elem in children[explanation_start:idx]:
+                    if block_elem.tag != w_p:
+                        break
+                    keep_with_next(block_elem)
+                changed = True
 
             # Keep the two legacy floating signatures on the label line, but
             # away from the report date. Values are relative to the text column.
@@ -4690,6 +4919,142 @@ class TemplateRenderer:
             doc.save(file_path)
             self.logger.debug("已优化2.1变异表布局")
 
+    def _restore_reviewed_vertical_cell_merges(self, file_path: str) -> None:
+        """Restore data-driven vertical merges lost by docxtpl row expansion.
+
+        The reviewed CRC layout merges repeated gene identity cells in the
+        2.1 variant table and repeated gene labels in the NCCN result table.
+        Merges are derived only from adjacent rendered values, so the method is
+        case-agnostic and safe for variable row counts.
+        """
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+        import re
+
+        doc = Document(file_path)
+        changed = False
+
+        def compact(value: str) -> str:
+            return re.sub(r"\s+", "", str(value or ""))
+
+        def cell_text(tc) -> str:
+            return compact(
+                "".join(
+                    node.text or ""
+                    for node in tc.findall(
+                        ".//w:t",
+                        {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"},
+                    )
+                )
+            )
+
+        def vmerge_state(tc) -> str:
+            tc_pr = tc.get_or_add_tcPr()
+            node = tc_pr.find(qn("w:vMerge"))
+            if node is None:
+                return ""
+            return str(node.get(qn("w:val")) or "continue")
+
+        def effective_values(cells: list[Any]) -> list[str]:
+            values: list[str] = []
+            current = ""
+            for tc in cells:
+                value = cell_text(tc)
+                state = vmerge_state(tc)
+                if value:
+                    current = value
+                elif state == "continue":
+                    value = current
+                else:
+                    current = ""
+                values.append(value)
+            return values
+
+        def set_vmerge(tc, *, restart: bool) -> None:
+            nonlocal changed
+            tc_pr = tc.get_or_add_tcPr()
+            node = tc_pr.find(qn("w:vMerge"))
+            if node is None:
+                node = OxmlElement("w:vMerge")
+                tc_pr.append(node)
+            desired = "restart" if restart else "continue"
+            if node.get(qn("w:val")) != desired:
+                node.set(qn("w:val"), desired)
+                changed = True
+            valign = tc_pr.find(qn("w:vAlign"))
+            if valign is None:
+                valign = OxmlElement("w:vAlign")
+                tc_pr.append(valign)
+            valign.set(qn("w:val"), "center")
+
+        def remove_vmerge(tc) -> None:
+            nonlocal changed
+            tc_pr = tc.get_or_add_tcPr()
+            node = tc_pr.find(qn("w:vMerge"))
+            if node is not None:
+                tc_pr.remove(node)
+                changed = True
+
+        def clear_continuation_text(tc) -> None:
+            nonlocal changed
+            for text_node in tc.findall(
+                ".//w:t",
+                {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"},
+            ):
+                if text_node.text:
+                    text_node.text = ""
+                    changed = True
+
+        def merge_runs(table, *, start_row: int, columns: tuple[int, ...]) -> None:
+            if len(table.rows) <= start_row:
+                return
+            physical_rows = [
+                row._tr.tc_lst for row in table.rows[start_row:]
+            ]
+            if any(
+                len(row_cells) <= max(columns) for row_cells in physical_rows
+            ):
+                return
+            cells_by_column = {
+                column: [row_cells[column] for row_cells in physical_rows]
+                for column in columns
+            }
+            values = effective_values(cells_by_column[columns[0]])
+            offset = 0
+            while offset < len(values):
+                value = values[offset]
+                end = offset + 1
+                while end < len(values) and value and values[end] == value:
+                    end += 1
+                if value and end - offset > 1:
+                    for column in columns:
+                        set_vmerge(cells_by_column[column][offset], restart=True)
+                        for relative_index in range(offset + 1, end):
+                            tc = cells_by_column[column][relative_index]
+                            set_vmerge(tc, restart=False)
+                            clear_continuation_text(tc)
+                else:
+                    for column in columns:
+                        remove_vmerge(cells_by_column[column][offset])
+                offset = end
+
+        for table in doc.tables:
+            if not table.rows:
+                continue
+            header = " ".join(cell.text for row in table.rows[:2] for cell in row.cells)
+            if all(
+                term in header for term in ("基因名称", "转录本号", "染色体")
+            ):
+                merge_runs(table, start_row=2, columns=(0, 1, 2))
+            elif all(
+                term in header for term in ("检测基因", "检测内容", "检测结果")
+            ):
+                merge_runs(table, start_row=1, columns=(0,))
+
+        if changed:
+            doc.save(file_path)
+            self.logger.debug("已恢复报告组终版纵向合并单元格")
+
     def _normalize_final_section_layout(self, file_path: str) -> None:
         """统一所有 section 的版心，避免正文后半段页面宽度异常。"""
         doc = Document(file_path)
@@ -4844,7 +5209,7 @@ class TemplateRenderer:
 
         The template keeps the cyan TOC line as a floating shape anchored to the
         "目    录" paragraph. Word/WPS/LibreOffice can lay out refreshed TOC text
-        slightly differently, so after static TOC rewriting we restore the
+        slightly differently, so after TOC rewriting we restore the
         reviewed report's line and circle offsets. We only touch the line and
         small circle anchored to the TOC title.
         """
@@ -5015,12 +5380,12 @@ class TemplateRenderer:
     def _populate_static_toc_page_numbers(
         self, file_path: str, context: dict | None = None
     ) -> None:
-        """Write visible TOC page numbers from the final rendered PDF layout.
+        """Write cached TOC numbers plus reader-refreshable page fields.
 
-        LibreOffice can refresh the PAGEREF fields but may leave the tab run
-        hidden, and in some environments it also preserves stale page numbers.
-        Rendering the final docx to PDF gives us the authoritative pagination
-        without requiring Microsoft Word UI permissions.
+        The PDF probe supplies a useful cached value for previewers that do not
+        refresh fields. Dedicated ReportGen bookmarks and dirty ``PAGEREF``
+        fields let Word/WPS replace that cache with their own actual pagination
+        when the report opens.
         """
         import os
         import shutil
@@ -5041,14 +5406,14 @@ class TemplateRenderer:
             except Exception:
                 pass
             self.logger.info(
-                "已跳过静态目录页码写回",
+                "已跳过目录页码构建",
                 output=file_path,
                 reason="REPORTGEN_FAST_TOC",
             )
             return
 
         if not self._document_contains_toc_or_static_toc(file_path):
-            self.logger.debug("文档不包含目录域/静态目录，跳过静态目录页码写回", output=file_path)
+            self.logger.debug("文档不包含目录，跳过目录页码构建", output=file_path)
             return
 
         soffice = shutil.which("soffice") or shutil.which("libreoffice")
@@ -5056,61 +5421,71 @@ class TemplateRenderer:
         pdfinfo = shutil.which("pdfinfo")
         if not soffice or not pdftotext or not pdfinfo:
             self.logger.debug(
-                "缺少 PDF 布局工具，跳过静态目录页码写回",
+                "缺少 PDF 布局工具，跳过目录缓存页码构建",
                 soffice=bool(soffice),
                 pdftotext=bool(pdftotext),
                 pdfinfo=bool(pdfinfo),
             )
             return
 
-        # Make LibreOffice paginate like Word/WPS *before* detecting page
-        # numbers, so the static numbers we write track the pages a Word/WPS
-        # reader actually sees (LibreOffice otherwise packs content into fewer
-        # pages, drifting the later sections up by several pages).
+        # Keep the cached preview reasonably close to Word/WPS. Exact cross-reader
+        # agreement is provided by the PAGEREF fields, not by this PDF probe.
         self._set_word_compat_pagination(file_path)
 
-        page_numbers = self._detect_toc_page_numbers_from_pdf_layout(
+        # Rebuilding the TOC itself can change pagination (for example when an
+        # old one-page TOC becomes two pages).  Page numbers detected before
+        # that rebuild are therefore only a first estimate.  Iterate until the
+        # visible cached PAGEREF values match the *rebuilt final document*.
+        # A non-converging TOC is a report defect, not a harmless warning: let
+        # the processor error flow into QA so production release gates block it.
+        detected_numbers = self._detect_toc_page_numbers_from_pdf_layout(
             file_path=file_path,
             soffice=soffice,
             pdftotext=pdftotext,
             pdfinfo=pdfinfo,
         )
-        if not page_numbers:
+        if not detected_numbers:
             return
 
-        stable_numbers = page_numbers
-        for attempt in range(1, 5):
-            if not self._write_static_toc_page_numbers(file_path, stable_numbers, context):
+        max_passes = 3
+        for pass_index in range(1, max_passes + 1):
+            if not self._write_static_toc_page_numbers(
+                file_path, detected_numbers, context
+            ):
                 return
 
             visible_numbers = self._read_static_toc_page_numbers(file_path)
-            detected_numbers = self._detect_toc_page_numbers_from_pdf_layout(
+            final_numbers = self._detect_toc_page_numbers_from_pdf_layout(
                 file_path=file_path,
                 soffice=soffice,
                 pdftotext=pdftotext,
                 pdfinfo=pdfinfo,
             )
-            if self._toc_page_numbers_match(visible_numbers, detected_numbers):
+            if not final_numbers:
+                raise RuntimeError("目录重建后无法复核最终页码")
+            if self._toc_page_numbers_match(visible_numbers, final_numbers):
                 self.logger.info(
-                    "已按最终 PDF 版式写回目录页码",
+                    "已写入并复核可自动刷新的目录页码",
                     output=file_path,
-                    page_numbers=visible_numbers,
-                    attempts=attempt,
+                    cached_page_numbers=visible_numbers,
+                    mode="PAGEREF",
+                    convergence_pass=pass_index,
                 )
                 return
-            if not detected_numbers:
-                break
-            stable_numbers = detected_numbers
+            detected_numbers = final_numbers
 
-        self.logger.info(
-            "已按最终 PDF 版式写回目录页码",
-            output=file_path,
-            page_numbers=stable_numbers,
-            attempts="unstable",
+        visible_numbers = self._read_static_toc_page_numbers(file_path)
+        mismatches = {
+            label: (visible_numbers.get(label), number)
+            for label, number in detected_numbers.items()
+            if label in visible_numbers and visible_numbers.get(label) != number
+        }
+        raise RuntimeError(
+            f"目录页码在 {max_passes} 轮后仍未收敛: {mismatches}"
         )
 
     def _read_static_toc_page_numbers(self, file_path: str) -> dict[str, int]:
-        """Read visible static TOC numbers from DOCX XML."""
+        """Read the visible cached TOC numbers from DOCX XML."""
         import re
         from zipfile import ZipFile
 
@@ -5142,8 +5517,16 @@ class TemplateRenderer:
         except Exception:
             return {}
 
+        toc_roots = [
+            sdt
+            for sdt in root.xpath(".//w:sdt", namespaces=ns)
+            if "第一部分" in "".join(sdt.xpath(".//w:t/text()", namespaces=ns))
+            and "参考文献" in "".join(sdt.xpath(".//w:t/text()", namespaces=ns))
+        ]
+        search_root = toc_roots[0] if toc_roots else root
+
         result: dict[str, int] = {}
-        for paragraph in root.xpath(".//w:p", namespaces=ns):
+        for paragraph in search_root.xpath(".//w:p", namespaces=ns):
             text = "".join(paragraph.xpath(".//w:t/text()", namespaces=ns))
             compact = re.sub(r"\s+", "", text or "")
             if not compact:
@@ -5163,14 +5546,12 @@ class TemplateRenderer:
         detected_numbers: dict[str, int],
     ) -> bool:
         """Return true when written TOC numbers match rendered target pages."""
-        common = [
-            label
-            for label in detected_numbers
-            if label in visible_numbers
-        ]
-        if not common:
+        if not visible_numbers:
             return False
-        return all(visible_numbers[label] == detected_numbers[label] for label in common)
+        return all(
+            label in detected_numbers and detected_numbers[label] == number
+            for label, number in visible_numbers.items()
+        )
 
     def _write_static_toc_page_numbers(
         self,
@@ -5178,15 +5559,18 @@ class TemplateRenderer:
         page_numbers: dict[str, int],
         context: dict | None = None,
     ) -> bool:
-        """Rebuild the TOC as pure static text: labels + static page numbers.
+        """Rebuild the TOC with cached numbers and refreshable ``PAGEREF`` fields.
 
-        The TOC carries NO fields — no ``HYPERLINK`` jump and no ``PAGEREF``
-        page number. Live fields let Word/WPS re-resolve numbers on open, which
-        on this template's malformed bookmark structure collapsed every entry to
-        page 1. A field-free block can only display the static number written
-        here (derived from the final PDF layout, with Word-compat pagination —
-        see ``_set_word_compat_pagination``), so it is identical in every
-        reader. Click-to-jump is intentionally dropped for that guarantee.
+        LibreOffice, Word and WPS can paginate the same report differently, so
+        no server-side static number is universally correct. Each item therefore
+        gets a dedicated bookmark on its exact body heading, and its page number
+        is emitted as ``PAGEREF`` with the detected number as a cached fallback.
+        Word/WPS refresh the field against their own layout on open.
+
+        Existing template ``_Toc*`` bookmarks are deliberately not reused: the
+        reviewed template contains malformed/stale bookmark ranges that once
+        collapsed every entry to page 1. Only bookmarks created by ReportGen
+        under the ``_ReportGenToc_`` prefix are trusted and reused.
         """
         import copy
         import os
@@ -5198,7 +5582,7 @@ class TemplateRenderer:
         try:
             from lxml import etree
         except Exception as exc:
-            self.logger.debug("缺少 lxml，跳过静态目录页码写回", error=str(exc))
+            self.logger.debug("缺少 lxml，跳过目录页码写回", error=str(exc))
             return False
 
         ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
@@ -5292,6 +5676,8 @@ class TemplateRenderer:
                 "阅读说明": ["阅读说明"],
             }
             toc_target_rules = {
+                "患者及样本信息": {"needles": ["第一部分：基本信息"]},
+                "检测内容": {"exact": ["检测内容"]},
                 "检测结果小结": {"needles": ["1.检测结果小结"]},
                 "靶向药物相关检测结果": {"needles": ["2.靶向药物相关检测结果"]},
                 "免疫治疗疗效评估": {"needles": ["3.免疫治疗疗效评估"]},
@@ -5345,11 +5731,10 @@ class TemplateRenderer:
                 ]
 
             def preferred_bookmark(names: list[str]) -> str | None:
-                for prefix in ("_Toc", "__RefHeading"):
-                    for name in names:
-                        if name.startswith(prefix):
-                            return name
-                return names[0] if names else None
+                for name in names:
+                    if name.startswith("_ReportGenToc_"):
+                        return name
+                return None
 
             def compact_target(text: str) -> str:
                 text = re.sub(r"\s+", "", text or "")
@@ -5370,7 +5755,7 @@ class TemplateRenderer:
             def make_auto_bookmark_name(label: str) -> str:
                 safe = re.sub(r"[^A-Za-z0-9_]+", "_", label)
                 safe = safe.strip("_")[:24] or "toc"
-                return f"_TocAuto_{safe}_{next_bookmark_id}"
+                return f"_ReportGenToc_{safe}_{next_bookmark_id}"
 
             def add_bookmark_to_paragraph(elem: Any, label: str) -> str:
                 nonlocal next_bookmark_id
@@ -5403,6 +5788,11 @@ class TemplateRenderer:
 
                 rule = toc_target_rules.get(label)
                 if rule:
+                    exact = [
+                        compact_target(str(value))
+                        for value in rule.get("exact", [])
+                        if compact_target(str(value))
+                    ]
                     needles = [
                         compact_target(str(needle))
                         for needle in rule.get("needles", [])
@@ -5411,7 +5801,10 @@ class TemplateRenderer:
                     matches = [
                         paragraph
                         for paragraph, _text_norm, text_compact in paragraph_entries
-                        if any(needle in text_compact for needle in needles)
+                        if (
+                            (exact and text_compact in exact)
+                            or any(needle in text_compact for needle in needles)
+                        )
                     ]
                     if not matches and rule.get("fallback"):
                         fallback_norms = [
@@ -5486,11 +5879,14 @@ class TemplateRenderer:
                 *,
                 field_char_type: str | None = None,
                 instruction: str | None = None,
+                dirty: bool = False,
             ) -> Any:
                 run = etree.Element(qn("r"))
                 if field_char_type:
                     field_char = etree.SubElement(run, qn("fldChar"))
                     field_char.set(qn("fldCharType"), field_char_type)
+                    if dirty:
+                        field_char.set(qn("dirty"), "true")
                 if instruction is not None:
                     instr = etree.SubElement(run, qn("instrText"))
                     instr.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
@@ -5547,16 +5943,22 @@ class TemplateRenderer:
             ) -> Any:
                 para = etree.Element(qn("p"))
                 para.append(make_toc_ppr(section, before_twips=before_twips))
-                # Pure static-text TOC: no HYPERLINK field (no click-to-jump).
-                # Live fields let Word/WPS re-resolve numbers on open — which on
-                # malformed-bookmark docs collapses every entry to page 1. A
-                # field-free block can only ever display the static number we
-                # write, so it is bulletproof across every reader. Click-to-jump
-                # is intentionally dropped in favour of that guarantee.
+                anchor = None if section else find_or_create_target_bookmark(label)
                 para.append(make_run(label, section=section))
                 if number is not None:
                     para.append(make_run(tab=True))
-                    para.append(make_run(number))
+                    if anchor:
+                        para.append(
+                            make_field_run(field_char_type="begin", dirty=True)
+                        )
+                        para.append(
+                            make_field_run(instruction=f" PAGEREF {anchor} \\h ")
+                        )
+                        para.append(make_field_run(field_char_type="separate"))
+                        para.append(make_run(number))
+                        para.append(make_field_run(field_char_type="end"))
+                    else:
+                        para.append(make_run(number))
                 return para
 
             def make_page_break_paragraph() -> Any:
@@ -5717,16 +6119,22 @@ class TemplateRenderer:
             tmp_dir_path = Path(tmp_dir)
             input_dir = tmp_dir_path / "input"
             output_dir = tmp_dir_path / "output"
+            profile_dir = tmp_dir_path / "lo_profile"
             input_dir.mkdir(parents=True, exist_ok=True)
             output_dir.mkdir(parents=True, exist_ok=True)
+            profile_dir.mkdir(parents=True, exist_ok=True)
             tmp_input = input_dir / "input.docx"
             shutil.copy2(file_path, tmp_input)
 
             cmd = [
                 soffice,
+                f"-env:UserInstallation={profile_dir.as_uri()}",
                 "--headless",
                 "--nologo",
+                "--nodefault",
                 "--nolockcheck",
+                "--nofirststartwizard",
+                "--norestore",
                 "--convert-to",
                 "pdf",
                 "--outdir",
@@ -5833,7 +6241,6 @@ class TemplateRenderer:
                 )
 
         return page_numbers
-
     @staticmethod
     def _extract_pdf_footer_page_number(page_text: str) -> int | None:
         """Return the visible report-page footer number from one PDF text page."""
@@ -5952,12 +6359,11 @@ class TemplateRenderer:
     def _set_word_compat_pagination(self, file_path: str) -> None:
         """写入 Word 兼容分页标志，使 LibreOffice 的分页贴近 Word/WPS。
 
-        LibreOffice 默认把内容压进比 Word 更少的页里，导致从 LibreOffice PDF
-        版式探测出的静态目录页码，与读者在 Word/WPS 里实际看到的页相差数页
-        （尤以靠后的章节明显）。开启 ``usePrinterMetrics`` 与
+        LibreOffice 默认把内容压进比 Word 更少的页里。开启
+        ``usePrinterMetrics`` 与
         ``doNotUseHTMLParagraphAutoSpacing`` 这两个 Word 兼容标志后，
-        LibreOffice 的排版（以及据此探测/写入的页码）会大幅贴近 Word，
-        临床关键段基本对齐。这两个标志在 Word 中本就是默认行为（等同空操作），
+        LibreOffice 的缓存排版会更接近 Word；打开文档后的精确页码仍由
+        ``PAGEREF`` 按读者当前版式重算。这两个标志在 Word 中本就是默认行为，
         因此保留在交付的 docx 里是安全的。
         """
         from docx.oxml.ns import qn
@@ -6027,7 +6433,7 @@ class TemplateRenderer:
         return "TOC" in document_xml
 
     def _document_contains_toc_or_static_toc(self, file_path: str) -> bool:
-        """Check whether a docx has a Word TOC field or our static TOC rows."""
+        """Check whether a docx has a Word TOC field or ReportGen TOC rows."""
         from zipfile import ZipFile
 
         try:
@@ -6038,9 +6444,8 @@ class TemplateRenderer:
 
         if "TOC" in document_xml:
             return True
-        # Our static TOC carries no fields (no HYPERLINK/TOC code) — detect it by
-        # the reviewed part-section markers instead, so static page-number
-        # writing still triggers for the pure-static-text layout.
+        # ReportGen rebuilds individual PAGEREF rows rather than a monolithic TOC
+        # field, so retain the reviewed part-section marker fallback.
         return (
             "第一部分" in document_xml
             and "第四部分" in document_xml

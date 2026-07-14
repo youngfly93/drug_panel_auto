@@ -7,6 +7,7 @@ and reads/writes patient_info.yaml for patient management.
 
 import base64
 import json
+import os
 import shutil
 import subprocess
 import threading
@@ -18,6 +19,7 @@ from urllib import parse, request
 
 import yaml
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from reportgen.core.signature_library import signature_options
 
 from app.config import settings
 from app.schemas.clinical_info import (
@@ -25,12 +27,11 @@ from app.schemas.clinical_info import (
     FieldGroup,
     FieldSchema,
     FieldUiHints,
-    PatientEnrichment,
     PatientDefaults,
+    PatientEnrichment,
     PatientInfo,
     ProjectInfo,
 )
-from reportgen.core.signature_library import signature_options
 
 # File lock for concurrent YAML writes
 _yaml_lock = threading.Lock()
@@ -272,7 +273,6 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
     # Apply project-type overrides
     overrides = PROJECT_FIELD_OVERRIDES.get(project_type, {}) if project_type else {}
     hide_fields = set(overrides.get("hide", []))
-    show_fields = set(overrides.get("show", []))
     require_fields = set(overrides.get("require", []))
     for key in require_fields:
         if key in all_fields:
@@ -314,6 +314,13 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
 # ---- patient_info.yaml CRUD ----
 
 def _patient_info_path() -> Path:
+    # Patient data is runtime state and must not be written into an immutable
+    # release checkout.  The start script points this at
+    # ``$STORAGE_DIR/patient_info.yaml`` in production; the repository config
+    # remains a development/default fallback only.
+    override = str(os.environ.get("REPORTGEN_PATIENT_INFO_PATH") or "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
     return Path(settings.upstream_config_dir) / "patient_info.yaml"
 
 
@@ -328,8 +335,13 @@ def _load_patient_info() -> dict:
 def _save_patient_info(data: dict) -> None:
     with _yaml_lock:
         path = _patient_info_path()
-        with open(path, "w", encoding="utf-8") as f:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
 
 
 def list_patients() -> list[PatientInfo]:
@@ -337,7 +349,12 @@ def list_patients() -> list[PatientInfo]:
     patients = data.get("patients", {})
     result = []
     for sample_id, info in patients.items():
-        result.append(PatientInfo(sample_id=str(sample_id), **{k: str(v) if v else None for k, v in info.items()}))
+        result.append(
+            PatientInfo(
+                sample_id=str(sample_id),
+                **{key: str(value) if value else None for key, value in info.items()},
+            )
+        )
     return result
 
 

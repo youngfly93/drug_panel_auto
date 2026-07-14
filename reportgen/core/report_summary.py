@@ -144,7 +144,11 @@ def build_report_summary(
             "summary_rows": [_normalize_variant_row(row) for row in summary_variants[:8]],
         },
         "drugs": {
-            "targeted_count": len(targeted_drugs),
+            # targeted_drug_tips may be configured as an all-variant display
+            # table. Keep the medical count tied to rows with an actual drug
+            # conclusion and expose the display count separately.
+            "targeted_count": _count_drug_related_rows(targeted_drugs),
+            "displayed_variant_count": len(targeted_drugs),
             "chemotherapy_count": len(chemotherapy),
             "targeted_rows": [_normalize_drug_row(row) for row in targeted_drugs[:8]],
             "chemotherapy_rows": [_normalize_chemo_row(row) for row in chemotherapy[:8]],
@@ -228,11 +232,11 @@ def _normalize_drug_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "gene": _safe_text(_pick(row, ("gene", "Gene", "基因"))),
         "variant_site": _safe_text(_pick(row, ("variant_site", "locus", "site", "变异位点"))),
-        "benefit_drugs": _safe_text(
-            _pick(row, ("benefit_drugs_full", "benefit_drugs", "潜在获益药物"))
+        "benefit_drugs": _drug_display_text(
+            row, ("benefit_drugs_full", "benefit_drugs", "潜在获益药物")
         ),
-        "caution_drugs": _safe_text(
-            _pick(row, ("caution_drugs_full", "caution_drugs", "潜在耐药药物"))
+        "caution_drugs": _drug_display_text(
+            row, ("caution_drugs_full", "caution_drugs", "潜在耐药药物")
         ),
     }
 
@@ -260,6 +264,23 @@ def _safe_text(value: Any) -> str:
         return "\n".join(_safe_text(item) for item in value if not _is_empty(item))
     text = str(value).strip()
     return "" if text.lower() in EMPTY_VALUES else text
+
+
+def _drug_display_text(row: dict[str, Any], keys: Iterable[str]) -> str:
+    """Preserve the explicit no-conclusion marker used by report drug tables."""
+
+    placeholder = ""
+    for key in keys:
+        if key not in row:
+            continue
+        value = row.get(key)
+        if isinstance(value, str) and value.strip() in {"-", "--", "—"}:
+            placeholder = "--"
+            continue
+        text = _safe_text(value)
+        if text:
+            return text
+    return placeholder
 
 
 def _nullable_text(value: Any) -> Optional[str]:

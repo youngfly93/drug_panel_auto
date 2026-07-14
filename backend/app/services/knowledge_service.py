@@ -28,6 +28,11 @@ from reportgen.knowledge.governance import (  # noqa: E402
     governance_defaults,
     structured_source_refs,
 )
+from reportgen.knowledge.quality import profile_panel_runtime_content  # noqa: E402
+from reportgen.knowledge.release_gate import (  # noqa: E402
+    _clinical_readiness,
+    _clinical_release_registry,
+)
 from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
 from reportgen.rules.targeted_drugs import (  # noqa: E402
     load_targeted_drug_rule_context,
@@ -167,7 +172,15 @@ def _load_drug_db() -> Optional[pd.DataFrame]:
         return None
 
     try:
-        _drug_db_df = pd.read_excel(path, dtype=str).fillna("")
+        # The legacy workbook contains exact duplicate candidate rows.  Keep the
+        # binary source immutable in this runtime, but expose and count each
+        # semantic candidate once in the Web catalog.
+        _drug_db_df = (
+            pd.read_excel(path, dtype=str)
+            .fillna("")
+            .drop_duplicates()
+            .reset_index(drop=True)
+        )
         _drug_db_mtime = current_mtime
     except Exception:
         pass
@@ -625,11 +638,24 @@ def _base_gene_entries(panel_id: str) -> list[dict[str, Any]]:
     path = _kb_base_path() / "gene_knowledge_db.xlsx"
     revision = _sha256_revision(path)
     updated_at = _updated_at(path)
+    provider = _load_base_gene_provider()
     entries: list[dict[str, Any]] = []
     for position, (_, row) in enumerate(df.iterrows(), start=2):
         gene = _row_value(row, gene_col).upper()
         if not gene or gene == "基因":
             continue
+        effective_section = (
+            provider.build_gene_knowledge_section(
+                gene=gene,
+                c_hgvs="c.999999A>G",
+                p_hgvs="p.X999999Y",
+                frequency=10.0,
+                mutation_type="Missense",
+                has_drug=False,
+            )
+            if provider is not None
+            else {}
+        )
         entry = KnowledgeEntry(
             entry_id=_stable_entry_id("base_gene", position, gene),
             kind="gene",
@@ -660,9 +686,15 @@ def _base_gene_entries(panel_id: str) -> list[dict[str, Any]]:
                 "updated_at": updated_at,
             },
             content={
-                "intro": _row_value(row, "基因简介"),
-                "mutation_description": _row_value(row, "基因变异说明"),
-                "mutation_analysis": _row_value(row, "基因变异解析"),
+                # Show the same normalized fallback content the generator uses,
+                # rather than raw instruction columns or malformed legacy tails.
+                "content_profile": "此前未见位点的基础回退预览",
+                "intro": _clean_value(effective_section.get("intro"))
+                or _row_value(row, "基因简介"),
+                "mutation_analysis": _clean_value(
+                    effective_section.get("mutation_analysis")
+                )
+                or _row_value(row, "基因变异解析"),
             },
         )
         entries.append(entry.model_dump())
@@ -1437,14 +1469,24 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
         )
         if governance["status"] in {"provisional_runtime", "needs_review"}
     }
-    reviewed_drug_rule_genes = {
+    panel_rule_genes = {
         str(row.get("gene") or "").strip().upper()
         for row in targeted_rule_entries
         if str(row.get("gene") or "").strip()
     }
+    approved_panel_rule_genes = {
+        str(row.get("gene") or "").strip().upper()
+        for row in targeted_rule_entries
+        if str(row.get("gene") or "").strip()
+        and (row.get("review") or {}).get("status") == "approved_for_runtime"
+    }
+    panel_rule_status_counts = Counter(
+        str((row.get("review") or {}).get("status") or "not_recorded")
+        for row in targeted_rule_entries
+    )
     runtime_drug_genes = (
         runtime_overlay_drug_genes
-        | reviewed_drug_rule_genes
+        | panel_rule_genes
         | base_drug_narrative_genes
     )
     candidate_disposition = _drug_candidate_disposition(
@@ -1454,6 +1496,31 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
         denominator,
     )
     gene_explanation_missing = denominator - either if denominator else set()
+    runtime_content_quality = (
+        profile_panel_runtime_content(_project_root(), package, denominator)
+        if denominator
+        else None
+    )
+    clinical_status_counts = Counter(review_counts)
+    clinical_status_counts.update(panel_rule_status_counts)
+    clinical_release_readiness = _clinical_readiness(
+        _clinical_release_registry(_project_root()),
+        panel_id,
+        clinical_status_counts,
+    )
+    if runtime_content_quality and runtime_content_quality["generic_fallback_count"]:
+        clinical_release_readiness["status"] = "BLOCKED"
+        clinical_release_readiness["blocking_reasons"].append(
+            "generic_gene_fallback_requires_content_review"
+        )
+        clinical_release_readiness["content_depth"] = {
+            "generic_fallback_count": runtime_content_quality[
+                "generic_fallback_count"
+            ],
+            "specific_explanation_percent": runtime_content_quality[
+                "specific_explanation_percent"
+            ],
+        }
 
     return {
         "panel": panel,
@@ -1509,8 +1576,12 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
             "gene_explanation_missing_genes": sorted(gene_explanation_missing),
             "runtime_drug_genes": len(denominator & runtime_drug_genes),
             "explicitly_approved_drug_genes": len(
-                denominator & reviewed_drug_rule_genes
+                denominator & approved_panel_rule_genes
             ),
+            "explicit_panel_rule_genes": len(denominator & panel_rule_genes),
+            "panel_rule_status_counts": dict(panel_rule_status_counts),
+            "runtime_content_quality": runtime_content_quality,
+            "clinical_release_readiness": clinical_release_readiness,
             "multidimensional_coverage": {
                 "gene_explanation": {
                     "total": len(denominator),
@@ -1578,7 +1649,7 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
                         denominator & runtime_drug_genes
                     ),
                     "panel_rule_genes": len(
-                        denominator & reviewed_drug_rule_genes
+                        denominator & panel_rule_genes
                     ),
                     "runtime_database_genes": int(
                         candidate_disposition.get(

@@ -1,20 +1,33 @@
 #!/usr/bin/env bash
-# Start reportgen-web on iyun62 from a clean release directory.
+# Start reportgen-web from an immutable release directory.
 #
-# This script is intended to run on iyun62 as the iyun6208 user. It avoids
-# touching the legacy dirty worktree and keeps runtime state outside releases.
+# The filename is kept for backward compatibility with the former iyun62
+# deployment. Runtime coordinates are loaded from deployment.env, so the same
+# implementation can safely serve iyun129 without hardcoded release paths.
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUNTIME_DIR="${RUNTIME_DIR:-$SCRIPT_DIR}"
+DEPLOYMENT_ENV="${DEPLOYMENT_ENV:-$RUNTIME_DIR/deployment.env}"
+if [ -f "$DEPLOYMENT_ENV" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$DEPLOYMENT_ENV"
+    set +a
+fi
+
 APP_ROOT="${APP_ROOT:-/media/desk16/iyun6208/apps}"
-RELEASE_DIR="${RELEASE_DIR:?RELEASE_DIR is required}"
+RELEASES_DIR="${RELEASES_DIR:-$APP_ROOT/reportgen-web-releases}"
+RUNTIME_DIR="${RUNTIME_DIR:-$SCRIPT_DIR}"
 STORAGE_DIR="${STORAGE_DIR:?STORAGE_DIR is required}"
 VENV_DIR="${VENV_DIR:?VENV_DIR is required}"
-RUNTIME_DIR="${RUNTIME_DIR:?RUNTIME_DIR is required}"
 BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 PORT="${PORT:-8000}"
 HOST="${HOST:-0.0.0.0}"
 APP_MODULE="${APP_MODULE:-app.main:app}"
+HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-60}"
+HEALTH_STABLE_CHECKS="${HEALTH_STABLE_CHECKS:-2}"
 
 LOG_DIR="$RUNTIME_DIR/logs"
 ENV_FILE="$RUNTIME_DIR/.env.prod"
@@ -24,9 +37,57 @@ CURRENT_RELEASE_FILE="$RUNTIME_DIR/current_release"
 
 mkdir -p "$LOG_DIR" "$STORAGE_DIR"/{uploads,reports,previews,db,signatures,reference_reports}
 
+if [ -z "${RELEASE_DIR:-}" ] && [ -f "$CURRENT_RELEASE_FILE" ]; then
+    read -r RELEASE_DIR < "$CURRENT_RELEASE_FILE"
+fi
+RELEASE_DIR="${RELEASE_DIR:?RELEASE_DIR is required (or current_release must exist)}"
+
+canonical_dir() {
+    "$VENV_DIR/bin/python" - "$1" <<'PY'
+import os
+import sys
+
+print(os.path.realpath(sys.argv[1]))
+PY
+}
+
+validate_release() {
+    local release releases_root revision
+    release="$(canonical_dir "$1")"
+    releases_root="$(canonical_dir "$RELEASES_DIR")"
+    case "$release" in
+        "$releases_root"/*) ;;
+        *)
+            echo "Release is outside RELEASES_DIR: $release" >&2
+            return 1
+            ;;
+    esac
+    if [ ! -d "$release" ] || [ ! -f "$release/REVISION" ]; then
+        echo "Release directory or REVISION is missing: $release" >&2
+        return 1
+    fi
+    revision="$(head -n 1 "$release/REVISION")"
+    if [[ ! "$revision" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+        echo "Invalid REVISION in $release" >&2
+        return 1
+    fi
+    printf '%s\n' "$release"
+}
+
 if [ ! -x "$VENV_DIR/bin/python" ] || [ ! -x "$VENV_DIR/bin/uvicorn" ]; then
     echo "Missing Python runtime in $VENV_DIR" >&2
     exit 1
+fi
+
+RELEASE_DIR="$(validate_release "$RELEASE_DIR")"
+previous_release=""
+if [ -f "$CURRENT_RELEASE_FILE" ]; then
+    read -r previous_release < "$CURRENT_RELEASE_FILE" || true
+    if [ -n "$previous_release" ] && [ -d "$previous_release" ]; then
+        previous_release="$(canonical_dir "$previous_release")"
+    else
+        previous_release=""
+    fi
 fi
 
 if [ ! -f "$ENV_FILE" ]; then
@@ -90,43 +151,103 @@ if targets:
 PY
 }
 
-stop_existing
-
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
 
-export RG_WEB_UPSTREAM_ROOT="$RELEASE_DIR"
 export RG_WEB_STORAGE_ROOT="$STORAGE_DIR"
 export RG_WEB_RUNTIME_DIR="$RUNTIME_DIR"
 export RG_WEB_BACKUP_DIR="$BACKUP_DIR"
+# Clinical metadata is runtime/PII state.  Keep both the Web enrichment layer
+# and the report generator on the same external registry instead of reading or
+# mutating config/patient_info.yaml inside an immutable release.
+export REPORTGEN_PATIENT_INFO_PATH="${REPORTGEN_PATIENT_INFO_PATH:-$STORAGE_DIR/patient_info.yaml}"
 
-cd "$RELEASE_DIR"
-nohup "$VENV_DIR/bin/python" "$VENV_DIR/bin/uvicorn" "$APP_MODULE" \
-    --host "$HOST" \
-    --port "$PORT" \
-    --app-dir backend \
-    >> "$LOG_FILE" 2>&1 &
+STARTED_PID=""
+LAST_HEALTH_CODE="000"
 
-pid=$!
-echo "$pid" > "$PID_FILE"
-printf '%s\n' "$RELEASE_DIR" > "$CURRENT_RELEASE_FILE"
+start_release() {
+    local release="$1" expected_cwd actual_cwd process_state process_cmdline attempt stable_checks
+    expected_cwd="$(canonical_dir "$release")"
+    export RG_WEB_UPSTREAM_ROOT="$expected_cwd"
+    cd "$expected_cwd"
+    nohup "$VENV_DIR/bin/python" "$VENV_DIR/bin/uvicorn" "$APP_MODULE" \
+        --host "$HOST" \
+        --port "$PORT" \
+        --app-dir backend \
+        >> "$LOG_FILE" 2>&1 &
 
-sleep 5
-if ! kill -0 "$pid" 2>/dev/null; then
-    echo "uvicorn failed to stay running; recent log follows:" >&2
-    tail -n 80 "$LOG_FILE" >&2 || true
-    exit 1
+    STARTED_PID=$!
+    echo "$STARTED_PID" > "$PID_FILE"
+    LAST_HEALTH_CODE="000"
+    stable_checks=0
+
+    for attempt in $(seq 1 "$HEALTH_TIMEOUT_SECONDS"); do
+        if ! kill -0 "$STARTED_PID" 2>/dev/null; then
+            return 1
+        fi
+        process_state="$(awk '/^State:/ {print $2}' "/proc/$STARTED_PID/status" 2>/dev/null || true)"
+        if [ -z "$process_state" ] || [ "$process_state" = "Z" ]; then
+            return 1
+        fi
+        LAST_HEALTH_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+            "http://127.0.0.1:$PORT/api/v1/tasks/stats" || true)"
+        if [ "$LAST_HEALTH_CODE" = "200" ]; then
+            actual_cwd="$(readlink "/proc/$STARTED_PID/cwd" 2>/dev/null || true)"
+            process_state="$(awk '/^State:/ {print $2}' "/proc/$STARTED_PID/status" 2>/dev/null || true)"
+            process_cmdline="$(tr '\000' ' ' < "/proc/$STARTED_PID/cmdline" 2>/dev/null || true)"
+            if [ -n "$process_state" ] && [ "$process_state" != "Z" ] && \
+                    [ "$(canonical_dir "${actual_cwd:-/nonexistent}")" = "$expected_cwd" ] && \
+                    [[ "$process_cmdline" == *uvicorn* ]] && \
+                    [[ "$process_cmdline" == *"--port $PORT"* ]]; then
+                stable_checks=$((stable_checks + 1))
+                if [ "$stable_checks" -ge "$HEALTH_STABLE_CHECKS" ]; then
+                    return 0
+                fi
+            else
+                stable_checks=0
+            fi
+        else
+            stable_checks=0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+write_current_release() {
+    local release="$1" tmp
+    tmp="$(mktemp "$RUNTIME_DIR/.current_release.XXXXXX")"
+    printf '%s\n' "$release" > "$tmp"
+    mv -f "$tmp" "$CURRENT_RELEASE_FILE"
+}
+
+stop_existing
+if start_release "$RELEASE_DIR"; then
+    write_current_release "$RELEASE_DIR"
+    echo "reportgen-web running from $RELEASE_DIR"
+    echo "revision=$(head -n 1 "$RELEASE_DIR/REVISION")"
+    echo "pid=$STARTED_PID"
+    echo "health=HTTP $LAST_HEALTH_CODE"
+    exit 0
 fi
 
-code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/v1/tasks/stats" || true)"
-if [ "$code" != "200" ]; then
-    echo "Health check failed: HTTP $code" >&2
+echo "Target release failed health/cwd validation: $RELEASE_DIR (HTTP $LAST_HEALTH_CODE)" >&2
+tail -n 80 "$LOG_FILE" >&2 || true
+stop_existing
+
+if [ -n "$previous_release" ] && [ "$previous_release" != "$RELEASE_DIR" ] && \
+        previous_release="$(validate_release "$previous_release")"; then
+    echo "Attempting automatic rollback to $previous_release" >&2
+    if start_release "$previous_release"; then
+        write_current_release "$previous_release"
+        echo "rollback_release=$previous_release" >&2
+        echo "rollback_health=HTTP $LAST_HEALTH_CODE" >&2
+        exit 1
+    fi
+    echo "Automatic rollback also failed: $previous_release" >&2
     tail -n 80 "$LOG_FILE" >&2 || true
-    exit 1
 fi
 
-echo "reportgen-web running from $RELEASE_DIR"
-echo "pid=$pid"
-echo "health=HTTP $code"
+exit 1

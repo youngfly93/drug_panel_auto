@@ -1033,6 +1033,19 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                 return ""
             return re.sub(r"(?i)^chr", "", s).strip()
 
+        def frequency_display(value: Any) -> str:
+            """Keep reviewed report precision while avoiding integer .00 noise."""
+            text = self._norm_text(value).replace("%", "").strip()
+            if not text:
+                return ""
+            try:
+                number = float(text)
+            except (TypeError, ValueError):
+                return text
+            if number.is_integer():
+                return str(int(number))
+            return f"{number:.2f}"
+
         variations = excel_data.get_table_data("Variations") or []
         report_cancer_type = self._norm_text(report_data.get_field("cancer_type"))
         out: list[dict] = []
@@ -1092,7 +1105,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                 "locus": locus or "",
                 # 批注：变异类型依据 c.HGVS 关键字 del/dup/ins/delins
                 "var_type_cn": variant_type_cn(c),
-                "af_pct": self._norm_text(r.get("Freq(%)") or r.get("AF")),
+                "af_pct": frequency_display(r.get("Freq(%)") or r.get("AF")),
                 "gene_class": level,
                 "benefit_drugs": benefit or "--",
                 "caution_drugs": caution or "--",

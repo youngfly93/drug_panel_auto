@@ -7,7 +7,7 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 import yaml
 from openpyxl import load_workbook
@@ -17,10 +17,74 @@ from reportgen.knowledge.governance import (
     load_and_validate_overlay,
     validate_knowledge_rows,
 )
+from reportgen.knowledge.quality import profile_panel_runtime_content
 from reportgen.panels.loader import PanelPackageLoader
 
 
 DEFAULT_PANELS = ("crc_301_msi", "crc_358_msi")
+
+
+def _discover_panel_statuses(project_root: Path) -> dict[str, str]:
+    statuses: dict[str, str] = {}
+    for path in sorted((project_root / "panels").glob("*/panel.yaml")):
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        panel_id = str(raw.get("panel_id") or path.parent.name)
+        statuses[panel_id] = str(raw.get("status") or "unknown")
+    return statuses
+
+
+def _clinical_release_registry(project_root: Path) -> dict[str, Any]:
+    path = project_root / "data/knowledge_bases/review/clinical_release_registry.yaml"
+    if not path.exists():
+        return {"path": str(path.relative_to(project_root)), "policy": {}, "panels": {}}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return {
+        "path": str(path.relative_to(project_root)),
+        "policy": raw.get("policy") or {},
+        "panels": raw.get("panels") or {},
+    }
+
+
+def _clinical_readiness(
+    registry: Mapping[str, Any], panel_id: str, status_counts: Counter[str]
+) -> dict[str, Any]:
+    policy = registry.get("policy") or {}
+    record = (registry.get("panels") or {}).get(panel_id) or {}
+    uat = record.get("uat") or {}
+    reviewed = int(uat.get("reviewed_reports", 0) or 0)
+    passed = int(uat.get("passed_reports", 0) or 0)
+    observed_rate = round(100.0 * passed / reviewed, 2) if reviewed else None
+    declared_rate = uat.get("pass_rate_percent")
+    rate = observed_rate if observed_rate is not None else declared_rate
+    threshold = float(policy.get("uat_pass_rate_threshold_percent", 90.0) or 90.0)
+    minimum = int(policy.get("minimum_reviewed_reports", 10) or 10)
+    pending_rows = status_counts.get("provisional_runtime", 0) + status_counts.get(
+        "needs_review", 0
+    )
+    reasons: list[str] = []
+    if pending_rows:
+        reasons.append("pending_report_group_secondary_review")
+    if reviewed < minimum:
+        reasons.append("insufficient_uat_reports")
+    if rate is None or float(rate) < threshold:
+        reasons.append("uat_pass_rate_below_threshold_or_unknown")
+    return {
+        "status": "READY" if not reasons else "BLOCKED",
+        "secondary_review": {
+            "owner": str(record.get("secondary_review_owner") or "report_group"),
+            "status": str(record.get("secondary_review_status") or "not_recorded"),
+            "pending_runtime_rows": pending_rows,
+        },
+        "uat": {
+            "status": str(uat.get("status") or "not_recorded"),
+            "reviewed_reports": reviewed,
+            "passed_reports": passed,
+            "pass_rate_percent": rate,
+            "required_pass_rate_percent": threshold,
+            "minimum_reviewed_reports": minimum,
+        },
+        "blocking_reasons": reasons,
+    }
 
 
 def _sha256(path: Path) -> str:
@@ -235,6 +299,7 @@ def _validate_drug_rules(package: Any) -> dict[str, Any]:
         "status": "PASS" if not issues else "FAIL",
         "version": str(raw.get("version") or ""),
         "updated": str(raw.get("updated") or ""),
+        "source_panel_id": source_panel_id,
         "targeted_rules": targeted,
         "approved_drug_rows": {
             "total_rows": len(approved_rows),
@@ -248,7 +313,12 @@ def _validate_drug_rules(package: Any) -> dict[str, Any]:
     }
 
 
-def _panel_report(project_root: Path, panel_id: str, base_genes: set[str]) -> dict[str, Any]:
+def _panel_report(
+    project_root: Path,
+    panel_id: str,
+    base_genes: set[str],
+    clinical_registry: Mapping[str, Any],
+) -> dict[str, Any]:
     package = PanelPackageLoader(project_root=project_root).load(panel_id)
     declared = _declared_genes(package)
     paths = _overlay_paths(package)
@@ -299,14 +369,74 @@ def _panel_report(project_root: Path, panel_id: str, base_genes: set[str]) -> di
 
     runtime_gene_union = base_genes | runtime_overlay_genes
     missing = declared - runtime_gene_union
+    runtime_content = profile_panel_runtime_content(project_root, package, declared)
     drug_rules = _validate_drug_rules(package)
     issues.extend(drug_rules["issues"])
+    clinical_status_counts = Counter(status_counts)
+    targeted_status_counts = (
+        drug_rules.get("targeted_rules", {}).get("status_counts") or {}
+    )
+    if drug_rules.get("source_panel_id") and not targeted_status_counts:
+        source_package = PanelPackageLoader(project_root=project_root).load(
+            drug_rules["source_panel_id"]
+        )
+        targeted_status_counts = (
+            _validate_drug_rules(source_package)
+            .get("targeted_rules", {})
+            .get("status_counts", {})
+        )
+    clinical_status_counts.update(targeted_status_counts)
     if missing:
         issues.append(
             {
                 "code": "RUNTIME_GENE_COVERAGE_GAP",
                 "message": f"{len(missing)} declared genes have no runtime explanation",
                 "genes": sorted(missing),
+            }
+        )
+    if runtime_content["missing_intro_genes"]:
+        issues.append(
+            {
+                "code": "RUNTIME_GENE_INTRO_GAP",
+                "message": (
+                    f"{len(runtime_content['missing_intro_genes'])} declared genes "
+                    "render an empty gene introduction"
+                ),
+                "genes": runtime_content["missing_intro_genes"],
+            }
+        )
+    if runtime_content["missing_analysis_genes"]:
+        issues.append(
+            {
+                "code": "RUNTIME_MUTATION_ANALYSIS_GAP",
+                "message": (
+                    f"{len(runtime_content['missing_analysis_genes'])} declared genes "
+                    "render an empty mutation analysis for a previously unseen variant"
+                ),
+                "genes": runtime_content["missing_analysis_genes"],
+            }
+        )
+    citation_integrity = runtime_content["citation_integrity"]
+    if citation_integrity["unresolved_pmids"]:
+        issues.append(
+            {
+                "code": "UNRESOLVED_RUNTIME_PMID",
+                "message": (
+                    f"{len(citation_integrity['unresolved_pmids'])} cited PMIDs "
+                    "have no structured reference title"
+                ),
+                "identifiers": citation_integrity["unresolved_pmids"],
+            }
+        )
+    if citation_integrity["unresolved_trials"]:
+        issues.append(
+            {
+                "code": "UNRESOLVED_RUNTIME_TRIAL_REFERENCE",
+                "message": (
+                    f"{len(citation_integrity['unresolved_trials'])} cited trials "
+                    "have no structured reference record"
+                ),
+                "identifiers": citation_integrity["unresolved_trials"],
             }
         )
     if status_counts.get("not_recorded", 0):
@@ -324,11 +454,27 @@ def _panel_report(project_root: Path, panel_id: str, base_genes: set[str]) -> di
         + status_counts.get("rejected", 0)
         + status_counts.get("superseded", 0)
     )
+    clinical_readiness = _clinical_readiness(
+        clinical_registry, panel_id, clinical_status_counts
+    )
+    if runtime_content["generic_fallback_count"]:
+        clinical_readiness["status"] = "BLOCKED"
+        clinical_readiness["blocking_reasons"].append(
+            "generic_gene_fallback_requires_content_review"
+        )
+        clinical_readiness["content_depth"] = {
+            "generic_fallback_count": runtime_content["generic_fallback_count"],
+            "specific_explanation_percent": runtime_content[
+                "specific_explanation_percent"
+            ],
+        }
     return {
         "panel_id": panel_id,
         "status": "PASS" if not issues else "FAIL",
         "overlay_files": overlay_reports,
         "drug_rules": drug_rules,
+        "runtime_content_quality": runtime_content,
+        "clinical_release_readiness": clinical_readiness,
         "multidimensional_coverage": {
             "gene_explanation": {
                 "total_genes": len(declared),
@@ -378,13 +524,23 @@ def _panel_report(project_root: Path, panel_id: str, base_genes: set[str]) -> di
 def run_knowledge_release_gate(
     project_root: str | Path,
     *,
-    panel_ids: Sequence[str] = DEFAULT_PANELS,
+    panel_ids: Optional[Sequence[str]] = None,
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
     root = Path(project_root).resolve()
     manifest = _validate_manifest(root)
     base_genes = _base_genes(root)
-    panels = [_panel_report(root, panel_id, base_genes) for panel_id in panel_ids]
+    panel_statuses = _discover_panel_statuses(root)
+    selected_panel_ids = tuple(panel_ids or ()) or tuple(
+        panel_id
+        for panel_id, status in panel_statuses.items()
+        if status == "active"
+    )
+    clinical_registry = _clinical_release_registry(root)
+    panels = [
+        _panel_report(root, panel_id, base_genes, clinical_registry)
+        for panel_id in selected_panel_ids
+    ]
     issues = list(manifest["issues"])
     for panel in panels:
         issues.extend(panel["issues"])
@@ -394,6 +550,25 @@ def run_knowledge_release_gate(
         "status": "PASS" if not issues else "FAIL",
         "base_manifest": manifest,
         "panels": panels,
+        "clinical_release_registry": {
+            "path": clinical_registry["path"],
+            "policy": clinical_registry["policy"],
+        },
+        "non_blocking_panel_readiness": [
+            {
+                "panel_id": panel_id,
+                "status": status,
+                "release_blocking": False,
+                "readiness": "NOT_PRODUCTION_ACTIVE",
+                "warning": (
+                    "draft/pilot panel is excluded from the production knowledge gate; "
+                    "declare a panel-specific coverage denominator and reviewed overlay "
+                    "before activation"
+                ),
+            }
+            for panel_id, status in panel_statuses.items()
+            if status != "active"
+        ],
         "summary": {
             "panels_checked": len(panels),
             "panels_passed": sum(panel["status"] == "PASS" for panel in panels),

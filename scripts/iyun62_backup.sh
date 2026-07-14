@@ -190,7 +190,14 @@ if release:
     except OSError:
         revision = None
 
-included = ["db", "uploads", "reports", "signatures", "reference_reports"]
+included = [
+    "db",
+    "uploads",
+    "reports",
+    "signatures",
+    "reference_reports",
+    "patient_info.yaml",
+]
 manifest = {
     "schema_version": "1.0",
     "created_at": os.environ["CREATED_AT"],
@@ -289,7 +296,7 @@ create_backup() {
     if [ -f "$db_copy" ]; then
         tar_args+=(-C "$staging" db/reportgen_web.sqlite)
     fi
-    for name in uploads reports signatures reference_reports; do
+    for name in uploads reports signatures reference_reports patient_info.yaml; do
         if [ -e "$STORAGE_DIR/$name" ]; then
             tar_args+=(-C "$STORAGE_DIR" "$name")
         fi

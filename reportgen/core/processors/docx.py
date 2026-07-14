@@ -164,6 +164,7 @@ def _run_gene_list_and_qc(ctx: ProcessorContext) -> None:
 def _run_variant_tables(ctx: ProcessorContext) -> None:
     ctx.renderer._fit_tables_to_page_width(ctx.output_path)
     ctx.renderer._optimize_variant_table_layout(ctx.output_path)
+    ctx.renderer._restore_reviewed_vertical_cell_merges(ctx.output_path)
 
 
 def _run_toc_refresh(ctx: ProcessorContext) -> None:
@@ -190,22 +191,35 @@ def _run_toc_refresh(ctx: ProcessorContext) -> None:
 
 
 def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
+    heading_cleanup_targets = (
+        "基因变异解析",
+        "靶向药物/免疫用药提示解析",
+        "3. 阅读说明",
+        "2.3 NCCN 推荐临床常规靶向药物相关基因检测结果（不限于本癌种）",
+        "2. 结直肠癌诊疗知识",
+        "3. 癌症相关信号通路",
+        "4. 基因检测列表",
+        "5. 参考文献",
+        "本次检测质控结果",
+    )
     ctx.renderer._normalize_final_section_layout(ctx.output_path)
+    # The golden template-specific processor list does not run the broad
+    # section-spacing pass. Compact only the Part 3 boundary here so the report
+    # guide's intentional spacer block remains untouched.
+    ctx.renderer._cleanup_section_spacing(
+        ctx.output_path,
+        ("第三部分：基因变异及相应靶向/免疫药物解析",),
+    )
+    ctx.renderer._remove_standalone_page_breaks_before_pathway_tables(
+        ctx.output_path
+    )
     ctx.renderer._compact_gene_list_tables(ctx.output_path, ctx.template_context)
     ctx.renderer._normalize_quality_control_tables(ctx.output_path)
     ctx.renderer._optimize_variant_table_layout(ctx.output_path)
     ctx.renderer._cleanup_trailing_blank_page(ctx.output_path)
     ctx.renderer._remove_blank_page_breaks_before_headings(
         ctx.output_path,
-        (
-            "基因变异解析",
-            "靶向药物/免疫用药提示解析",
-            "3. 阅读说明",
-            "2. 结直肠癌诊疗知识",
-            "3. 癌症相关信号通路",
-            "4. 基因检测列表",
-            "5. 参考文献",
-        ),
+        heading_cleanup_targets,
     )
     if _env_truthy("REPORTGEN_FAST_TOC") or _env_truthy(
         "REPORTGEN_SKIP_FINAL_LO_REFRESH"
@@ -228,12 +242,19 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
             ctx.renderer._set_update_fields(ctx.output_path)
         except Exception as refresh_err:
             ctx.logger.warning("最终目录页码刷新失败", error=str(refresh_err))
+    # LibreOffice can recreate template-owned blank page-break paragraphs while
+    # refreshing TOC fields. Re-run the narrow exact-heading cleanup after the
+    # refresh, before the final TOC fallback pagination is detected.
+    ctx.renderer._remove_blank_page_breaks_before_headings(
+        ctx.output_path,
+        heading_cleanup_targets,
+    )
     ctx.renderer._normalize_toc_decoration_layout(ctx.output_path)
     ctx.renderer._restore_reviewed_body_headers(ctx.output_path)
     # 注：此处不再 _populate_static_toc_page_numbers。该操作要 LibreOffice 把整份
-    # 文档转 PDF 分页（最贵的一步），原先在这里和 underlines_and_styles 末尾各跑一次，
-    # 而本步写的页码会被后者完全覆盖——纯冗余。只保留 underlines 末尾那一次（反映
-    # 最终文档状态、权威），省掉这次冷启动的全文档渲染。
+    # 文档转 PDF，为可刷新 PAGEREF 提供一份缓存页码。原先在这里和
+    # underlines_and_styles 末尾各跑一次，而本步结果会被后者覆盖。只保留最后
+    # 一次，省掉重复的全文档渲染。
 
 
 def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
@@ -249,6 +270,8 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
         ctx.output_path, ctx.template_context
     )
     ctx.renderer._restore_detection_content_underlines(ctx.output_path)
+    ctx.renderer._render_patient_salutation(ctx.output_path, ctx.template_context)
+    ctx.renderer._normalize_repeated_terminal_punctuation(ctx.output_path)
     ctx.renderer._restore_patient_letter_fill_underlines(ctx.output_path)
     ctx.renderer._restore_msi_result_emphasis(ctx.output_path, ctx.template_context)
     ctx.renderer._restore_part3_dynamic_styles(ctx.output_path, ctx.template_context)

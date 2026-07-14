@@ -992,7 +992,11 @@ def qa_legacy_snapshot(
 )
 @click.option(
     "--pytest-args",
-    default="backend/tests/test_report_regression.py -q",
+    default=(
+        "backend/tests/test_report_regression.py "
+        "backend/tests/test_knowledge_governance.py "
+        "backend/tests/test_style_baseline.py -q"
+    ),
     show_default=True,
     help="pytest 参数字符串",
 )

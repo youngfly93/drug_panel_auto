@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any
 
@@ -113,6 +114,10 @@ def _resolve_path(path: str, base_dirs: list[Path]) -> str:
     p = Path(path).expanduser()
     if p.is_absolute():
         return str(p)
+    storage_root = str(os.environ.get("RG_WEB_STORAGE_ROOT") or "").strip()
+    if storage_root and p.parts and p.parts[0] == "storage":
+        runtime_candidate = Path(storage_root).expanduser().joinpath(*p.parts[1:])
+        return str(runtime_candidate.resolve())
     for base in base_dirs:
         candidate = (base / p).resolve()
         if candidate.exists():

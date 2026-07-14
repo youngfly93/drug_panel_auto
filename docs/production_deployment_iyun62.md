@@ -1,7 +1,12 @@
 # iyun62 Production Deployment
 
-This server currently runs `panel.mailuo-report.com.cn` through the `iyun-server`
-SSH alias.
+> **Historical topology only.** iyun62 is no longer the production target.
+> Current iyun129 deployment and rollback commands are maintained exclusively in
+> [`release_checklist.md`](release_checklist.md). Do not copy the paths or port
+> below into an iyun129 operation.
+
+This document described the former `panel.mailuo-report.com.cn` deployment
+through the `iyun-server` SSH alias.
 
 ## Current Layout
 

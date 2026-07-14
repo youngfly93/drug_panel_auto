@@ -19,3 +19,9 @@ reviewer:
   TEST审核者: storage/signatures/registry/test_reviewer.png
   李医生: storage/signatures/registry/test_reviewer.png
   默认审核者: storage/signatures/registry/default_reviewer_lz258792.png
+
+# Production deploy preflight validates only these runtime assets. Test-only
+# entries above remain optional and must never cause a production false block.
+production_required:
+  detector: ["李晓媛"]
+  reviewer: ["默认审核者"]

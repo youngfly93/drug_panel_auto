@@ -183,6 +183,29 @@ class ExcelReader:
                 if label in tumor_labels or label.startswith("tumor"):
                     row_index = idx
                     break
+        if row_index is None and len(msi_df.columns) > 3:
+            # Older msisensor exports are summary-first rather than
+            # normal/tumor row tables:
+            # SOFT | Total_Number_of_Sites | Number_of_Somatic_Sites | %
+            # msisensor | 18 | 0 | 0
+            # The following row may be completely empty before locus details.
+            # Prefer an explicitly labelled software summary so the legacy
+            # second-row fallback cannot silently select an empty separator.
+            # Some combined exports contain both a legacy ``msisensor`` row
+            # and a newer ``msisensor2``/``msisensorpro`` result. The newer
+            # caller is authoritative; use the legacy row only as a fallback.
+            first_col = msi_df.columns[0]
+            summary_candidates = []
+            for idx, value in msi_df[first_col].items():
+                label = self._normalized_header(value)
+                legacy_percentage = msi_df.iloc[msi_df.index.get_loc(idx), 3]
+                if label in {"msisensor", "msisensor2", "msisensorpro"} and not self._is_missing_cell(
+                    legacy_percentage
+                ):
+                    priority = 0 if label in {"msisensor2", "msisensorpro"} else 1
+                    summary_candidates.append((priority, msi_df.index.get_loc(idx), idx))
+            if summary_candidates:
+                row_index = min(summary_candidates)[2]
         if row_index is None:
             # Historical Msisensor exports put normal/control first and tumor
             # second. Single-row exports are also accepted.

@@ -36,17 +36,21 @@ def test_targeted_drug_rule_context_matrix():
     assert set(crc358["allowed_source_dbs"]) == {"INTERNAL", "CGI", "CIVIC"}
     assert crc358["allow_internal_rows"] is True
     assert crc358["approved_drug_rows_enabled"] is True
+    assert crc358["summary_display_scope"] == "drug_matched_variants"
+    assert crc358["summary_display_variant_levels"] == ["Ⅰ类", "Ⅱ类"]
     assert crc358["source_panel_id"] == "crc_358_msi"
-    assert len(crc358["reviewed_variant_overrides"]) == 7
+    assert len(crc358["reviewed_variant_overrides"]) == 11
     assert len(crc358["applicability_rules"]) == 1
     assert set(crc358["overrides"]) == {"ATM", "SETD2"}
 
     assert crc301["enabled"] is True
     assert crc301["source_panel_id"] == "crc_358_msi"
     assert crc301["shared"] is True
-    assert crc301["reviewed_variant_overrides"] == crc358[
-        "reviewed_variant_overrides"
-    ]
+    assert len(crc301["reviewed_variant_overrides"]) == 7
+    assert not any(
+        row.get("c_hgvs") in {"c.499C>T", "c.1291delA", "c.34G>T"}
+        for row in crc301["reviewed_variant_overrides"]
+    )
 
     for context in (lung, endometrial):
         assert context["enabled"] is False
@@ -54,6 +58,8 @@ def test_targeted_drug_rule_context_matrix():
         assert context["allowed_source_dbs"] == []
         assert context["allow_internal_rows"] is False
         assert context["approved_drug_rows_enabled"] is False
+        assert context["summary_display_scope"] == "drug_matched_variants"
+        assert context["summary_display_variant_levels"] == ["Ⅰ类", "Ⅱ类"]
         assert context["reviewed_variant_overrides"] == []
         assert context["applicability_rules"] == []
         assert context["overrides"] == {}
@@ -162,12 +168,13 @@ def test_real_targeted_db_and_fixed_table_are_disabled_for_non_crc_panels():
             (lookup, len(panel_config.approved_drug_rows))
         )
 
+    expected_approved_counts = {"crc_358_msi": 6, "crc_301_msi": 7}
     for panel_id in ("crc_358_msi", "crc_301_msi"):
         for (benefit, caution, score), approved_count in observed[panel_id]:
             assert score > 0
             assert "康奈非尼" in benefit
             assert "西妥昔单抗" in caution
-            assert approved_count == 7
+            assert approved_count == expected_approved_counts[panel_id]
 
     for panel_id in ("lung_329_pdl1", "endometrial_29"):
         for lookup, approved_count in observed[panel_id]:

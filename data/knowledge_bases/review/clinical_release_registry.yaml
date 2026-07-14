@@ -1,0 +1,23 @@
+schema_version: '1.0'
+registry_id: knowledge_clinical_release_registry_v1
+policy:
+  uat_pass_rate_threshold_percent: 90.0
+  minimum_reviewed_reports: 10
+  description: 工程发布状态与医学发布就绪度分开记录；一级审核不能替代报告组二审或真实报告 UAT。
+panels:
+  crc_301_msi:
+    secondary_review_owner: report_group
+    secondary_review_status: pending
+    uat:
+      reviewed_reports: 0
+      passed_reports: 0
+      pass_rate_percent: null
+      status: pending
+  crc_358_msi:
+    secondary_review_owner: report_group
+    secondary_review_status: pending
+    uat:
+      reviewed_reports: 0
+      passed_reports: 0
+      pass_rate_percent: null
+      status: pending

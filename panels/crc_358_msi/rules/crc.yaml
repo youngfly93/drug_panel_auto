@@ -164,11 +164,84 @@ reviewed_variant_overrides:
   # CRC 相关多激酶 TKI（C级）。此处按终版口径固定，使 2.1 表与脚注计数一致。
   - gene: FLT3
     c_hgvs: "c.2537G>A"
+    p_hgvs: "p.G846D"
     variant_site: "c.2537G>A,\np.G846D"
     benefit_drugs:
       - "瑞戈非尼（C）"
       - "索拉非尼（C）"
       - "舒尼替尼（C）"
+  # 历史报告组终版迁移：PIK3CA E542K 精确位点及报告用药顺序。
+  - gene: PIK3CA
+    panels: [crc_358_msi]
+    c_hgvs: "c.1624G>A"
+    p_hgvs: "p.E542K"
+    variant_site: "c.1624G>A,\np.E542K"
+    benefit_drugs:
+      - "依维莫司（C）"
+      - "西罗莫司（C）"
+      - "替西罗莫司（C）"
+      - "阿培利司（C）"
+      - "盐酸可泮利塞（C）"
+      - "培唑帕尼+依维莫司（C）"
+      - "卡匹色替（C）"
+      - "Buparlisib（C）"
+      - "Taselisib（C）"
+      - "Serabelisib（C）"
+      - "伊那利塞（C）"
+      - "伊那利塞+哌柏西利（C）"
+      - "RLY-2608（C）"
+      - "WX390（C）"
+      - "Dactolisib（D）"
+    caution_drugs:
+      - "西妥昔单抗（C）"
+      - "帕尼单抗（C）"
+    review_status: legacy_runtime
+    runtime_eligible: true
+    review_basis: historical_final_report_migration
+    evidence_as_of: "2026-07-14"
+    secondary_review_status: pending_report_group_reconfirmation
+    source_ref: crc358_reviewed_case_a
+  # 历史报告组终版迁移：仅匹配 TP53 c.499C>T (p.Q167*)，不外推到
+  # TP53 其它错义/截短变异。来源标识脱敏，待报告组逐条二次确认。
+  - gene: TP53
+    panels: [crc_358_msi]
+    c_hgvs: "c.499C>T"
+    p_hgvs: "p.Q167*"
+    variant_site: "c.499C>T,\np.Q167*"
+    benefit_drugs:
+      - "AZD1775（C）"
+      - "AZD1775+奥拉帕利（C）"
+      - "Alisertib（C）"
+      - "Alisertib+AZD1775（C）"
+      - "Eprenetapopt（C）"
+    review_status: legacy_runtime
+    runtime_eligible: true
+    review_basis: historical_final_report_migration
+    evidence_as_of: "2026-07-14"
+    secondary_review_status: pending_report_group_reconfirmation
+    source_ref: crc358_reviewed_case_a
+  # 历史报告组终版迁移：ATR 移码位点的用药列表。匹配保留输入 HGVS
+  # c.1291delA；报告展示层再统一为规范化简写 c.1291del。
+  - gene: ATR
+    panels: [crc_358_msi]
+    c_hgvs: "c.1291delA"
+    p_hgvs: "p.R431Gfs*8"
+    variant_site: "c.1291del,\np.R431Gfs*8"
+    benefit_drugs:
+      - "奥拉帕利（C）"
+      - "尼拉帕利（C）"
+      - "他拉唑帕利（C）"
+      - "LY2606368（C）"
+      - "SRA737（C）"
+      - "奥拉帕利+帕博利珠单抗（C）"
+      - "他拉唑帕利+阿替利珠单抗（C）"
+      - "芦卡帕利（D）"
+    review_status: legacy_runtime
+    runtime_eligible: true
+    review_basis: historical_final_report_migration
+    evidence_as_of: "2026-07-14"
+    secondary_review_status: pending_report_group_reconfirmation
+    source_ref: crc358_reviewed_case_a
   # TP53 c.821T>A (p.V274D)：报告组金标准小结表按该位点固定给出
   # WEE1/PARP/Alisertib/Eprenetapopt 相关 C 级药物；避免公共库或 CtDrug
   # 兜底把 MAPK/化疗等其它药物串入 TP53 行。
@@ -229,6 +302,62 @@ reviewed_variant_overrides:
       - "西妥昔单抗（A）"
       - "帕尼单抗（A）"
       - "依维莫司（C）"
+  # 历史报告组终版迁移：KRAS G12C 精确位点，完整保留终版顺序；不与
+  # G12S/G12D 或 KRAS 基因级候选规则互相替代。
+  - gene: KRAS
+    panels: [crc_358_msi]
+    c_hgvs: "c.34G>T"
+    p_hgvs: "p.G12C"
+    variant_site: "c.34G>T,\np.G12C"
+    benefit_drugs:
+      - "索托拉西布/阿达格拉西布+帕尼单抗/西妥昔单抗（A）"
+      - "索托拉西布（C）"
+      - "阿达格拉西布（C）"
+      - "氟泽雷塞（C）"
+      - "格索雷塞（C）"
+      - "氟泽雷塞+西妥昔单抗（C）"
+      - "司美替尼（C）"
+      - "曲美替尼（C）"
+      - "贝美替尼（C）"
+      - "贝美替尼+阿培利司（C）"
+      - "贝美替尼+厄洛替尼（C）"
+      - "安卓健（C）"
+      - "曲美替尼+Navitoclax（C）"
+      - "帕尼单抗+曲美替尼（C）"
+      - "贝美替尼+哌柏西利（C）"
+      - "BI 1701963（C）"
+      - "BI 1701963+曲美替尼（C）"
+      - "PD0325901+哌柏西利（C）"
+      - "奈拉替尼+曲美替尼（C）"
+      - "福巴替尼+贝美替尼（C）"
+      - "度伐利尤单抗+曲美木单抗+司美替尼（C）"
+      - "Defactinib+Avutometinib（C）"
+      - "依维莫司+Avutometinib（C）"
+      - "索托拉西布+阿法替尼（C）"
+      - "索托拉西布+曲美替尼（C）"
+      - "索托拉西布+RMC4630（C）"
+      - "索托拉西布+BBP398（C）"
+      - "BBP398+纳武利尤单抗（C）"
+      - "戈来雷塞（C）"
+      - "戈来雷塞+JAB3312（C）"
+      - "JDQ443（C）"
+      - "GDC6036（C）"
+      - "GH35（C）"
+      - "RMC-6236（C）"
+      - "JMKX1899（C）"
+      - "BEBT-607（C）"
+      - "LY3537982（C）"
+      - "PD0325901（D）"
+    caution_drugs:
+      - "西妥昔单抗（A）"
+      - "帕尼单抗（A）"
+      - "依维莫司（C）"
+    review_status: legacy_runtime
+    runtime_eligible: true
+    review_basis: historical_final_report_migration
+    evidence_as_of: "2026-07-14"
+    secondary_review_status: pending_report_group_reconfirmation
+    source_ref: crc358_reviewed_case_a
   - gene: ERBB2
     c_hgvs: "c.1979G>A"
     p_hgvs:

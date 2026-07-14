@@ -8,8 +8,8 @@
 golden : panels/crc_358_msi/templates/crc_358_msi_golden_template_v0.docx
 corpus : tmp/fit_self_corpus/    (服务器上,3 份从同 golden 生成的 .docx)
   - golden_self.docx       (模板本身)
-  - case_LZ258685.docx     (服务器生成,真实病例 LZ258685)
-  - case_lz258792.docx     (服务器生成,真实病例 lz258792)
+  - case_reviewed_a.docx   (服务器外置的审核回归件)
+  - case_reviewed_b.docx   (服务器外置的审核回归件)
 ```
 
 复跑命令:

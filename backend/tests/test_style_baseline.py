@@ -19,19 +19,38 @@ from pathlib import Path
 
 import pytest
 from docx import Document
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from reportgen.core.golden_case import GoldenCaseOptions, run_golden_case
+from reportgen.core.signature_library import load_signature_entries
 from reportgen.core.style_baseline import diff_baseline, extract_style_baseline
 
 BASELINE_DIR = Path(__file__).parent / "baselines"
 
 
 @pytest.mark.parametrize("panel", ["crc_358_msi", "crc_301_msi"])
-def test_golden_style_baseline(panel: str, tmp_path):
+def test_golden_style_baseline(panel: str, tmp_path, monkeypatch):
+    # Signature images are runtime/PII assets and therefore must not be stored
+    # in Git.  Build deterministic synthetic assets in an isolated external
+    # storage root so this regression test has the same result on a clean CI
+    # runner and on a workstation that happens to have production signatures.
+    runtime_storage = tmp_path / "runtime-storage"
+    monkeypatch.setenv("RG_WEB_STORAGE_ROOT", str(runtime_storage))
+    runtime_storage = runtime_storage.resolve()
+    for role, entries in load_signature_entries(ROOT / "config").items():
+        color = (30, 120, 180) if role == "detector" else (120, 60, 160)
+        for entry in entries:
+            image_path = Path(entry.path)
+            assert image_path.is_relative_to(runtime_storage), (
+                f"test signature must resolve inside isolated storage: {image_path}"
+            )
+            image_path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (80, 30), color=color).save(image_path)
+
     result = run_golden_case(
         GoldenCaseOptions(
             panel=panel,

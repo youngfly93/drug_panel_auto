@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 rule_id: "drugs"
-version: "0.3.0"
-updated: "2026-07-12"
+version: "0.4.1"
+updated: "2026-07-13"
 status: "active"
 description: "CRC drug-display rule declarations used by the generator."
 
@@ -55,6 +55,11 @@ targeted_drug_rules:
   allow_internal_rows: true
   require_cancer_profile_match: false
   approved_drug_rows_enabled: true
+  # 报告组历史验收口径：“靶向药物相关体细胞变异用药提示”
+  # 只展示真正命中用药规则的Ⅰ/Ⅱ类变异。“显示全”指每个命中行的
+  # 药物列表不再压缩为“另 X 项”，不是把无用药结论的检出变异填入该表。
+  summary_display_scope: drug_matched_variants
+  summary_display_variant_levels: ["Ⅰ类", "Ⅱ类"]
   overrides:
     SETD2:
       benefit_drugs: "AZD1775（C）"
@@ -117,11 +122,79 @@ targeted_drug_rules:
           - https://pubmed.ncbi.nlm.nih.gov/26510020/
     - gene: FLT3
       c_hgvs: "c.2537G>A"
+      p_hgvs: "p.G846D"
       variant_site: "c.2537G>A,\np.G846D"
       benefit_drugs:
         - "瑞戈非尼（C）"
         - "索拉非尼（C）"
         - "舒尼替尼（C）"
+    - gene: PIK3CA
+      panels: [crc_358_msi]
+      c_hgvs: "c.1624G>A"
+      p_hgvs: "p.E542K"
+      variant_site: "c.1624G>A,\np.E542K"
+      benefit_drugs:
+        - "依维莫司（C）"
+        - "西罗莫司（C）"
+        - "替西罗莫司（C）"
+        - "阿培利司（C）"
+        - "盐酸可泮利塞（C）"
+        - "培唑帕尼+依维莫司（C）"
+        - "卡匹色替（C）"
+        - "Buparlisib（C）"
+        - "Taselisib（C）"
+        - "Serabelisib（C）"
+        - "伊那利塞（C）"
+        - "伊那利塞+哌柏西利（C）"
+        - "RLY-2608（C）"
+        - "WX390（C）"
+        - "Dactolisib（D）"
+      caution_drugs:
+        - "西妥昔单抗（C）"
+        - "帕尼单抗（C）"
+      review_status: legacy_runtime
+      runtime_eligible: true
+      review_basis: historical_final_report_migration
+      evidence_as_of: "2026-07-14"
+      secondary_review_status: pending_report_group_reconfirmation
+      source_ref: crc358_reviewed_case_a
+    - gene: TP53
+      panels: [crc_358_msi]
+      c_hgvs: "c.499C>T"
+      p_hgvs: "p.Q167*"
+      variant_site: "c.499C>T,\np.Q167*"
+      benefit_drugs:
+        - "AZD1775（C）"
+        - "AZD1775+奥拉帕利（C）"
+        - "Alisertib（C）"
+        - "Alisertib+AZD1775（C）"
+        - "Eprenetapopt（C）"
+      review_status: legacy_runtime
+      runtime_eligible: true
+      review_basis: historical_final_report_migration
+      evidence_as_of: "2026-07-14"
+      secondary_review_status: pending_report_group_reconfirmation
+      source_ref: crc358_reviewed_case_a
+    - gene: ATR
+      panels: [crc_358_msi]
+      c_hgvs: "c.1291delA"
+      p_hgvs: "p.R431Gfs*8"
+      variant_site: "c.1291del,\np.R431Gfs*8"
+      benefit_drugs:
+        - "奥拉帕利（C）"
+        - "尼拉帕利（C）"
+        - "他拉唑帕利（C）"
+        - "LY2606368（C）"
+        - "SRA737（C）"
+        - "奥拉帕利+帕博利珠单抗（C）"
+        - "他拉唑帕利+阿替利珠单抗（C）"
+        - "芦卡帕利（D）"
+      review_status: legacy_runtime
+      runtime_eligible: true
+      review_basis: historical_final_report_migration
+      evidence_as_of: "2026-07-14"
+      secondary_review_status: pending_report_group_reconfirmation
+      source_ref: crc358_reviewed_case_a
     - gene: TP53
       c_hgvs: "c.821T>A"
       p_hgvs: "p.V274D"
@@ -174,6 +247,60 @@ targeted_drug_rules:
         - "西妥昔单抗（A）"
         - "帕尼单抗（A）"
         - "依维莫司（C）"
+    - gene: KRAS
+      panels: [crc_358_msi]
+      c_hgvs: "c.34G>T"
+      p_hgvs: "p.G12C"
+      variant_site: "c.34G>T,\np.G12C"
+      benefit_drugs:
+        - "索托拉西布/阿达格拉西布+帕尼单抗/西妥昔单抗（A）"
+        - "索托拉西布（C）"
+        - "阿达格拉西布（C）"
+        - "氟泽雷塞（C）"
+        - "格索雷塞（C）"
+        - "氟泽雷塞+西妥昔单抗（C）"
+        - "司美替尼（C）"
+        - "曲美替尼（C）"
+        - "贝美替尼（C）"
+        - "贝美替尼+阿培利司（C）"
+        - "贝美替尼+厄洛替尼（C）"
+        - "安卓健（C）"
+        - "曲美替尼+Navitoclax（C）"
+        - "帕尼单抗+曲美替尼（C）"
+        - "贝美替尼+哌柏西利（C）"
+        - "BI 1701963（C）"
+        - "BI 1701963+曲美替尼（C）"
+        - "PD0325901+哌柏西利（C）"
+        - "奈拉替尼+曲美替尼（C）"
+        - "福巴替尼+贝美替尼（C）"
+        - "度伐利尤单抗+曲美木单抗+司美替尼（C）"
+        - "Defactinib+Avutometinib（C）"
+        - "依维莫司+Avutometinib（C）"
+        - "索托拉西布+阿法替尼（C）"
+        - "索托拉西布+曲美替尼（C）"
+        - "索托拉西布+RMC4630（C）"
+        - "索托拉西布+BBP398（C）"
+        - "BBP398+纳武利尤单抗（C）"
+        - "戈来雷塞（C）"
+        - "戈来雷塞+JAB3312（C）"
+        - "JDQ443（C）"
+        - "GDC6036（C）"
+        - "GH35（C）"
+        - "RMC-6236（C）"
+        - "JMKX1899（C）"
+        - "BEBT-607（C）"
+        - "LY3537982（C）"
+        - "PD0325901（D）"
+      caution_drugs:
+        - "西妥昔单抗（A）"
+        - "帕尼单抗（A）"
+        - "依维莫司（C）"
+      review_status: legacy_runtime
+      runtime_eligible: true
+      review_basis: historical_final_report_migration
+      evidence_as_of: "2026-07-14"
+      secondary_review_status: pending_report_group_reconfirmation
+      source_ref: crc358_reviewed_case_a
     - gene: ERBB2
       c_hgvs: "c.1979G>A"
       p_hgvs:
@@ -207,6 +334,8 @@ approved_drug_rows:
       - "瑞戈非尼"
       - "Regorafenib"
       - "[拜万戈]"
+    enabled: false
+    exclusion_basis: crc358_reviewed_historical_table_contract
     gene: "RET、VEGFR1、VEGFR2、VEGFR3、KIT、PDGFRα、\nPDGFRβ、FGFR1、FGFR2、TIE2、DDR2、TrkA、EphA2、RAF1、BRAF、BRAF、V600E、SAPK2、PTK5、ABL"
     indication: "FDA和NMPA批准用于治疗结直肠癌、胃肠道间质瘤和肝癌。2022年结肠癌和直肠癌NCCN指南推荐瑞戈非尼为在所有可用方案进展的结直肠癌患者的治疗方案。2022年CSCO指南推荐瑞戈非尼作为化疗，或抗VEGF和抗EGFR靶向药物等现有标准治疗失败后的三线用药。"
   - drug:

@@ -88,8 +88,19 @@ class MutationDescriptionGenerator:
             except (ValueError, TypeError):
                 frequency = 0.0
 
-        # 自动推断突变类型
-        if not mutation_type:
+        # 上游报告表为了展示会把 indel 粗分为“缺失/重复/插入”，但蛋白 HGVS
+        # 中的 fs 才能决定是否为移码。粗粒度类型不能压过 HGVS 语义。
+        coarse_types = {
+            "缺失",
+            "缺失突变",
+            "重复",
+            "重复突变",
+            "插入",
+            "插入突变",
+            "缺失插入",
+            "缺失插入突变",
+        }
+        if not mutation_type or str(mutation_type).strip() in coarse_types:
             mutation_type = self._infer_mutation_type(c_hgvs, p_hgvs)
 
         # 根据突变类型生成描述
@@ -360,7 +371,7 @@ class MutationDescriptionGenerator:
                 f"该样本检出{gene}基因{c_hgvs}，{p_hgvs}错义突变，"
                 f"第{c_pos}位核苷酸由{c_ref}突变为{c_alt}，"
                 f"导致相应蛋白序列中第{p_pos}位氨基酸由{ref_aa_name}突变为{alt_aa_name}，"
-                f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
             )
 
         # 回退到通用格式
@@ -382,7 +393,7 @@ class MutationDescriptionGenerator:
                 f"该样本检出{gene}基因{c_hgvs}，{p_hgvs}无义突变，"
                 f"第{c_pos}位核苷酸由{c_ref}突变为{c_alt}，"
                 f"导致相应蛋白序列中第{p_pos}位氨基酸由{ref_aa_name}突变为终止密码子，"
-                f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
             )
 
         return self._generate_generic_desc(gene, c_hgvs, p_hgvs, frequency)
@@ -393,6 +404,7 @@ class MutationDescriptionGenerator:
         """生成移码突变描述"""
         # 解析 c.2387_2388del 格式
         del_match = re.match(r"c\.(\d+)_(\d+)del", c_hgvs, re.I)
+        single_del_match = re.match(r"c\.(\d+)del(?:[ATCG]+)?$", c_hgvs, re.I)
         ins_match = re.match(r"c\.(\d+)_(\d+)ins([ATCG]+)", c_hgvs, re.I)
         dup_match = re.match(r"c\.(\d+)(?:_(\d+))?dup", c_hgvs, re.I)
 
@@ -400,6 +412,24 @@ class MutationDescriptionGenerator:
         fs_match = re.match(r"p\.([A-Z])(\d+)([A-Z])fs\*(\d+)", p_hgvs, re.I)
         # 解析更简化的 p.L300fs / p.L1795fs 格式（无终止位点信息）
         fs_simple_match = re.match(r"p\.([A-Z])(\d+)fs", p_hgvs, re.I)
+
+        if single_del_match and fs_match:
+            c_pos = int(single_del_match.group(1))
+            p_ref, p_pos, p_alt, fs_len = (
+                fs_match.group(1).upper(),
+                int(fs_match.group(2)),
+                fs_match.group(3).upper(),
+                int(fs_match.group(4)),
+            )
+            ref_aa_name = self._get_aa_name(p_ref)
+            alt_aa_name = self._get_aa_name(p_alt)
+            return (
+                f"该样本检出{gene}基因{c_hgvs}，{p_hgvs}碱基缺失引起的移码突变，"
+                f"第{c_pos}位核苷酸缺失，"
+                f"导致相应蛋白序列中第{p_pos}位氨基酸由{ref_aa_name}突变为{alt_aa_name}，"
+                f"并开始发生移码，于此后第{fs_len}位氨基酸处翻译终止，"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
+            )
 
         if del_match and fs_match:
             c_start, c_end = int(del_match.group(1)), int(del_match.group(2))
@@ -417,7 +447,7 @@ class MutationDescriptionGenerator:
                 f"第{c_start}位至第{c_end}位核苷酸缺失，"
                 f"导致相应蛋白序列中第{p_pos}位氨基酸由{ref_aa_name}突变为{alt_aa_name}，"
                 f"并开始发生移码，于此后第{fs_len}位氨基酸处翻译终止，"
-                f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
             )
 
         if ins_match and fs_match:
@@ -437,7 +467,7 @@ class MutationDescriptionGenerator:
                 f"第{c_start}位与第{c_end}位核苷酸之间插入{inserted}，"
                 f"导致相应蛋白序列中第{p_pos}位氨基酸由{ref_aa_name}突变为{alt_aa_name}，"
                 f"并开始发生移码，于此后第{fs_len}位氨基酸处翻译终止，"
-                f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
             )
 
         if dup_match and fs_match:
@@ -452,19 +482,24 @@ class MutationDescriptionGenerator:
             ref_aa_name = self._get_aa_name(p_ref)
             alt_aa_name = self._get_aa_name(p_alt)
 
+            position_text = (
+                f"第{c_start}位核苷酸重复，"
+                if c_start == c_end
+                else f"第{c_start}位至第{c_end}位核苷酸重复，"
+            )
             return (
                 f"该样本检出{gene}基因{c_hgvs}，{p_hgvs}碱基重复引起的移码突变，"
-                f"第{c_start}位至第{c_end}位核苷酸发生重复，"
+                f"{position_text}"
                 f"导致相应蛋白序列中第{p_pos}位氨基酸由{ref_aa_name}突变为{alt_aa_name}，"
                 f"并开始发生移码，于此后第{fs_len}位氨基酸处翻译终止，"
-                f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
             )
 
         if fs_simple_match:
             # 仅保证“移码”语义存在，详细机制信息不足时用通用描述。
             return (
                 f"该样本检出{gene}基因{c_hgvs}，{p_hgvs}移码突变，"
-                f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
             )
 
         return self._generate_generic_desc(gene, c_hgvs, p_hgvs, frequency)
@@ -489,10 +524,10 @@ class MutationDescriptionGenerator:
             return (
                 f"该样本检出{gene}基因{c_hgvs}剪接突变，"
                 f"{position_desc}核苷酸由{ref}突变为{alt}，"
-                f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
             )
 
-        return f"该样本检出{gene}基因{c_hgvs}剪接突变，此突变在样本中的突变丰度为{frequency:.2f}%。"
+        return f"该样本检出{gene}基因{c_hgvs}剪接突变，此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
 
     def _generate_inframe_desc(
         self, gene: str, c_hgvs: str, p_hgvs: str, frequency: float
@@ -515,7 +550,7 @@ class MutationDescriptionGenerator:
                 f"第{c_start}位至第{c_end}位核苷酸缺失，"
                 f"导致相应蛋白序列中第{p_pos1}位{ref1_name}至第{p_pos2}位{ref2_name}"
                 f"共{del_count}个氨基酸缺失，"
-                f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
             )
 
         return self._generate_generic_desc(gene, c_hgvs, p_hgvs, frequency)
@@ -527,9 +562,14 @@ class MutationDescriptionGenerator:
         if p_hgvs and p_hgvs != "--" and p_hgvs != "*":
             return (
                 f"该样本检出{gene}基因{c_hgvs}，{p_hgvs}突变，"
-                f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+                f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
             )
         return (
             f"该样本检出{gene}基因{c_hgvs}突变，"
-            f"此突变在样本中的突变丰度为{frequency:.2f}%。"
+            f"此突变在样本中的突变丰度为{self._frequency_text(frequency)}%。"
         )
+
+    @staticmethod
+    def _frequency_text(frequency: float) -> str:
+        number = float(frequency)
+        return str(int(number)) if number.is_integer() else f"{number:.2f}"

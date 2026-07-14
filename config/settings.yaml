@@ -614,6 +614,9 @@ knowledge_bases:
   gene_knowledge_db:
     enabled: true
     path: "data/knowledge_bases/processed/gene_knowledge_db.xlsx"
+    # 结构化 PMID 标题注册表。它只补齐旧 Excel 中缺失的文献题名，
+    # 不覆盖 panel overlay 或工作簿中已经绑定的引用文本。
+    reference_registry_path: "data/knowledge_bases/processed/reference_registry.yaml"
     # reviewed Part-3 wording overlay 现已**按 panel 作用域**：由各 panel.yaml 的
     # rules.reviewed_part3_knowledge 声明，ReportGenerator 在构建 GeneKnowledgeProvider
     # 时按当前 panel 覆盖此值（声明则用、未声明则置空）。此处保留为空仅作占位/向后兼容；

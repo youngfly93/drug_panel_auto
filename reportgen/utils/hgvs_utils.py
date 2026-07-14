@@ -7,9 +7,33 @@ to format HGVS loci and infer simplified variant types for reporting.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from reportgen.utils.text_utils import norm_text as _norm_text
+
+
+_VERBOSE_DEL_DUP_RE = re.compile(
+    r"(?<![A-Za-z0-9])"
+    r"(?P<prefix>c\.\d+(?:[+-]\d+)?(?:_\d+(?:[+-]\d+)?)?)"
+    r"(?P<event>del|dup)(?P<sequence>[ACGT]+)"
+    r"(?![A-Za-z])",
+    flags=re.IGNORECASE,
+)
+
+
+def normalize_c_hgvs_display_text(value: Any) -> str:
+    """Use concise HGVS deletion/duplication notation in report-facing text.
+
+    Matching and provenance retain the source value (for example
+    ``c.1291delA``); only presentation is canonicalized to ``c.1291del``.
+    ``delins`` and non-HGVS prose are intentionally untouched.
+    """
+    text = str(value) if value is not None else ""
+    return _VERBOSE_DEL_DUP_RE.sub(
+        lambda match: f"{match.group('prefix')}{match.group('event').lower()}",
+        text,
+    )
 
 
 def infer_variant_type_cn(c_hgvs: Any) -> str:

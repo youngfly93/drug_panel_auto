@@ -27,7 +27,10 @@ from reportgen.core.validation import build_msi_fields, build_tmb_fields
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
 from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
-from reportgen.utils.hgvs_utils import infer_variant_type_cn
+from reportgen.utils.hgvs_utils import (
+    infer_variant_type_cn,
+    normalize_c_hgvs_display_text,
+)
 from reportgen.utils.text_utils import norm_text as _norm_text
 
 # Panel gene definitions for 358-gene colorectal cancer panel.
@@ -641,7 +644,11 @@ def _normalize_approved_drug_rows(raw: Any) -> List[Dict[str, Any]]:
     rows = raw.get("approved_drug_rows")
     if not isinstance(rows, list):
         return []
-    return [dict(row) for row in rows if isinstance(row, dict)]
+    return [
+        dict(row)
+        for row in rows
+        if isinstance(row, dict) and row.get("enabled") is not False
+    ]
 
 
 def _normalize_nccn_result_rows(raw: Any) -> List[Dict[str, Any]]:
@@ -1028,9 +1035,113 @@ def _format_frequency(freq: Any) -> str:
     if not val:
         return "--"
     try:
-        return f"{float(val):.2f}"
+        number = float(val)
+        if number.is_integer():
+            return str(int(number))
+        return f"{number:.2f}"
     except (ValueError, TypeError):
         return val
+
+
+def _frequency_value(value: Any) -> float:
+    text = _norm_text(value).replace("%", "").strip()
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return float("-inf")
+
+
+def _sort_variants_by_grouped_vaf(
+    variants: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Sort every report variant view by one stable gene-grouped VAF policy.
+
+    Genes are ordered by their highest VAF; variants within a gene are ordered
+    by VAF. This preserves adjacent same-gene rows for Word cell merging while
+    giving Part 2, immune summaries and Part 3 one shared ordering contract.
+    """
+    rows = list(variants)
+    gene_max: Dict[str, float] = {}
+    gene_first: Dict[str, int] = {}
+    for index, row in enumerate(rows):
+        gene = _norm_text(row.get("gene") or row.get("Gene")).upper()
+        value = _frequency_value(
+            row.get("frequency")
+            or row.get("af_pct")
+            or row.get("af")
+            or row.get("Freq(%)")
+            or row.get("AF")
+        )
+        gene_first.setdefault(gene, index)
+        gene_max[gene] = max(gene_max.get(gene, float("-inf")), value)
+    return sorted(
+        rows,
+        key=lambda row: (
+            -gene_max.get(
+                _norm_text(row.get("gene") or row.get("Gene")).upper(),
+                float("-inf"),
+            ),
+            gene_first.get(
+                _norm_text(row.get("gene") or row.get("Gene")).upper(),
+                len(rows),
+            ),
+            -_frequency_value(
+                row.get("frequency")
+                or row.get("af_pct")
+                or row.get("af")
+                or row.get("Freq(%)")
+                or row.get("AF")
+            ),
+        ),
+    )
+
+
+def _row_variant_identity(row: Dict[str, Any]) -> Tuple[str, str, str]:
+    gene = _norm_text(row.get("gene") or row.get("Gene")).upper()
+    c_hgvs = _norm_text(row.get("cHGVS") or row.get("c_hgvs"))
+    p_hgvs = _norm_text(row.get("pHGVS") or row.get("p_hgvs"))
+    locus = _norm_text(row.get("locus") or row.get("variant_site"))
+    if not c_hgvs and locus:
+        match = re.search(r"c\.[^,，\s]+", locus, flags=re.IGNORECASE)
+        c_hgvs = match.group(0) if match else ""
+    if not p_hgvs and locus:
+        match = re.search(r"p\.[^,，\s]+", locus, flags=re.IGNORECASE)
+        p_hgvs = match.group(0) if match else ""
+    return gene, c_hgvs.upper(), p_hgvs.upper()
+
+
+def _sort_rows_by_variant_order(
+    rows: List[Dict[str, Any]], source_variants: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Reapply the canonical variant order after reviewed rows are patched."""
+    source = _sort_variants_by_grouped_vaf(source_variants)
+    exact_order = {
+        _row_variant_identity(row): index for index, row in enumerate(source)
+    }
+    gene_order: Dict[str, int] = {}
+    for index, row in enumerate(source):
+        gene_order.setdefault(_row_variant_identity(row)[0], index)
+    decorated = []
+    for index, row in enumerate(rows):
+        identity = _row_variant_identity(row)
+        rank = exact_order.get(identity, gene_order.get(identity[0], len(source)))
+        decorated.append((rank, index, row))
+    return [row for _, _, row in sorted(decorated, key=lambda item: item[:2])]
+
+
+def _normalize_report_hgvs_display(report_data: ReportData) -> None:
+    """Canonicalize HGVS display only after all raw-value rule matching ends."""
+
+    def transform(value: Any) -> Any:
+        if isinstance(value, str):
+            return normalize_c_hgvs_display_text(value)
+        if isinstance(value, list):
+            return [transform(item) for item in value]
+        if isinstance(value, dict):
+            return {key: transform(item) for key, item in value.items()}
+        return value
+
+    report_data.context = transform(report_data.context)
 
 
 def _as_text_list(value: Any) -> List[str]:
@@ -1160,8 +1271,15 @@ def _compact_drug_display_value(
     if isinstance(value, (list, tuple, set)):
         items = [_norm_text(item) for item in value if _norm_text(item)]
     else:
+        # norm_text() intentionally collapses generic missing-value markers,
+        # including "--", to an empty string. Drug tables use "--" as an
+        # explicit reviewed conclusion (no eligible benefit/caution drug), so
+        # preserve it before applying the generic normalizer.
+        raw_text = str(value).strip()
+        if raw_text in {"-", "--", "—"}:
+            return raw_text
         text = _norm_text(value)
-        if not text or text in {"-", "--"}:
+        if not text:
             return text
         items = [line.strip() for line in text.splitlines() if line.strip()]
     if max_items is None or max_items <= 0 or len(items) <= max_items:
@@ -1331,7 +1449,7 @@ def build_variants_for_template(
         }
         variants.append(variant)
 
-    return variants
+    return _sort_variants_by_grouped_vaf(variants)
 
 
 def build_all_variants_for_template(
@@ -2016,7 +2134,7 @@ def _build_nccn_and_immune_fields(
         variants: List[Dict[str, str]] = []
         for gene in genes:
             variants.extend(_immune_eligible_variants(gene))
-        return variants
+        return _sort_variants_by_grouped_vaf(variants)
 
     def _immune_row_result(row: Dict[str, Any]) -> str:
         genes = _genes_from_row(row)
@@ -2029,7 +2147,9 @@ def _build_nccn_and_immune_fields(
             if not grouped or any(not variants for variants in grouped):
                 return "未检出有害变异"
             return _format_gene_prefixed_variants(
-                [variant for variants in grouped for variant in variants]
+                _sort_variants_by_grouped_vaf(
+                    [variant for variants in grouped for variant in variants]
+                )
             )
 
         if mode == "gene_group":
@@ -2076,8 +2196,21 @@ def _build_nccn_and_immune_fields(
             continue
         if isinstance(genes, str):
             genes = [genes]
-        results = [_format_result(str(g), match) for g in genes if str(g).strip()]
-        val = _first_detected(results, "未检出")
+        gene_names = [str(g).strip() for g in genes if str(g).strip()]
+        results = [_format_result(gene_name, match) for gene_name in gene_names]
+        if len(gene_names) > 1:
+            detected = []
+            for gene_name, result in zip(gene_names, results):
+                if result in {"", "--", "未检出"}:
+                    continue
+                detected.extend(
+                    f"{gene_name}：{line}"
+                    for line in str(result).splitlines()
+                    if line.strip()
+                )
+            val = "\n".join(detected) if detected else "未检出"
+        else:
+            val = _first_detected(results, "未检出")
         report_data.set_field(f"nccn_{key}", val)
         nccn_table_rows.append(
             _table_row(
@@ -2160,6 +2293,8 @@ def _build_crc_approved_drugs(panel_config: PanelConfig) -> List[Dict[str, str]]
     """Build the CRC 2.2 approved/backup targeted-drug table from YAML config."""
     rows: List[Dict[str, str]] = []
     for row in panel_config.approved_drug_rows:
+        if row.get("enabled") is False:
+            continue
         drug = _join_text_value(row.get("drug") or row.get("Drug"))
         gene = _join_text_value(row.get("gene") or row.get("Gene"))
         indication = _norm_text(
@@ -2547,18 +2682,6 @@ def enhance_report_data(
     # total_variants_count: 总变异数（all_variants包含Ⅰ/Ⅱ/Ⅲ类）
     report_data.set_field("total_variants_count", len(all_variants))
 
-    # drug_related_count: 药物相关变异数。
-    # 必须与读者实际看到的 2.1 表(variants_2_1)同源计数，否则脚注"与靶向药物
-    # 用药相关的变异 X 个"会与 2.1 表里带药的行数对不上（审计"变异计数一致"
-    # 不通过）。2.1 表由 FieldMapper 经 _lookup_targeted_drugs_for_variant 生成，
-    # 与此处旧的 build_variants_for_template 列表口径不同（曾出现脚注 4、表格 6
-    # 的偏差）。优先用 variants_2_1，缺失时回退旧列表。
-    variants_2_1_rows = report_data.get_table("variants_2_1")
-    drug_related_source = variants_2_1_rows if variants_2_1_rows else variants
-    report_data.set_field(
-        "drug_related_count", count_drug_related_variants(drug_related_source)
-    )
-
     # Build undetected genes
     detected_genes = {v["gene"] for v in all_variants}
     undetected_genes = build_undetected_genes(detected_genes, panel_config=pc)
@@ -2612,6 +2735,39 @@ def enhance_report_data(
         logging.getLogger("reportgen").warning(
             "靶向药物提示回填失败: %s", e
         )
+
+    # 人工复核覆盖可能更新或补入 2.1/小结行；所有读者可见变异表必须在覆盖
+    # 完成后重新套用同一个 VAF 顺序，不能让后补的 TP53/FLT3 固定落到表尾。
+    for table_name in (
+        "variants",
+        "all_variants",
+        "summary_variants",
+        "immune_positive_variants",
+        "immune_negative_variants",
+        "immune_hyperprogression_variants",
+        "variants_2_1",
+        "targeted_drug_tips",
+    ):
+        rows = list(report_data.get_table(table_name) or [])
+        if rows:
+            report_data.set_table(
+                table_name,
+                _sort_rows_by_variant_order(rows, all_variants),
+            )
+
+    # 计数和品牌摘要必须来自最终已覆盖、已排序的 2.1 口径。
+    variants_2_1_rows = report_data.get_table("variants_2_1") or []
+    drug_related_source = variants_2_1_rows if variants_2_1_rows else variants
+    report_data.set_field(
+        "drug_related_count", count_drug_related_variants(drug_related_source)
+    )
+    report_data.set_field(
+        "targeted_drug_brand_summary",
+        build_targeted_drug_brand_summary(
+            drug_related_source,
+            base_path=base_path,
+        ),
+    )
 
     _compact_drug_display_tables(
         report_data,
@@ -2800,6 +2956,9 @@ def enhance_report_data(
                 "基因知识章节构建失败（不阻断报告生成）: %s", e
             )
 
+    # 所有规则、覆盖和知识匹配均使用原始 HGVS；到此才做显示规范化，确保
+    # c.1291delA 等仍可精确命中，而 Word 中统一显示为 c.1291del。
+    _normalize_report_hgvs_display(report_data)
     return report_data
 
 

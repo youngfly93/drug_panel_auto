@@ -42,3 +42,14 @@ artifacts:
     source_refs:
     - type: workbook
       id: immune_gene_list_public.xlsx
+  reference_registry:
+    path: data/knowledge_bases/processed/reference_registry.yaml
+    sha256: b681da39d2fdc1aebaf73fb543f699e7f92263798eb164489e08247dd7e3c56a
+    source_type: ncbi_pubmed_esummary_registry
+    content_types:
+    - publication_title
+    - publication_identifier
+    evidence_as_of: '2026-07-12'
+    source_refs:
+    - type: ncbi_eutils
+      id: pubmed_esummary
