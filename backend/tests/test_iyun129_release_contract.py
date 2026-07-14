@@ -68,6 +68,11 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert 'HEALTH_STABLE_CHECKS="${HEALTH_STABLE_CHECKS:-2}"' in start
     assert 'previous_release="$(validate_release "$previous_release")"' in start
     assert "os.kill(pid, signal.SIGKILL)" in start
+    assert "REPORTGEN_FAST_TOC" in start
+    assert "must be disabled for production report generation" in start
+    assert start.index("must be disabled for production report generation") < start.index(
+        "stop_existing\nif start_release"
+    )
     assert "RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1" in deploy
     assert "check_signature_registry.py" in deploy
     assert 'rsync -az "$SIGNATURE_ASSET_DIR/"' in deploy
@@ -85,6 +90,44 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert '"patient_info.yaml"' in backup
     assert "reference_reports patient_info.yaml" in backup
     assert '"patient_info.yaml"' in restore
+
+
+def test_runtime_start_rejects_fast_toc_before_process_stop(tmp_path: Path) -> None:
+    releases = tmp_path / "releases"
+    runtime = tmp_path / "runtime"
+    storage = tmp_path / "storage"
+    venv = tmp_path / "venv"
+    release = releases / "1111111"
+    for path in (release, runtime, storage, venv / "bin"):
+        path.mkdir(parents=True, exist_ok=True)
+    (release / "REVISION").write_text("1" * 40 + "\n", encoding="utf-8")
+    (runtime / ".env.prod").write_text(
+        "RG_WEB_SECRET_KEY=synthetic-test-only\nREPORTGEN_FAST_TOC=1\n",
+        encoding="utf-8",
+    )
+    (venv / "bin" / "python").symlink_to(sys.executable)
+    uvicorn = venv / "bin" / "uvicorn"
+    uvicorn.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    uvicorn.chmod(0o755)
+
+    process = subprocess.run(
+        ["bash", str(ROOT / "scripts/iyun62_start_reportgen.sh")],
+        env={
+            **os.environ,
+            "RELEASES_DIR": str(releases),
+            "RUNTIME_DIR": str(runtime),
+            "STORAGE_DIR": str(storage),
+            "VENV_DIR": str(venv),
+            "RELEASE_DIR": str(release),
+        },
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+    assert process.returncode != 0
+    assert "REPORTGEN_FAST_TOC must be disabled" in process.stderr
+    assert not (runtime / "reportgen-web.pid").exists()
 
 
 def test_release_cli_runs_all_required_regression_suites_by_default() -> None:

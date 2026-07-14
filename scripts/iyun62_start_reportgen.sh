@@ -156,6 +156,23 @@ set -a
 . "$ENV_FILE"
 set +a
 
+# Production reports must contain ReportGen PAGEREF fields plus cached page
+# numbers.  The old FAST_TOC/skip switches omit that construction and can leave
+# an empty TOC while the service itself still looks healthy.  Refuse to stop a
+# known-good process when any of these unsafe shortcuts is enabled.
+for unsafe_toc_flag in \
+    REPORTGEN_FAST_TOC \
+    REPORTGEN_SKIP_FINAL_LO_REFRESH \
+    REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS; do
+    unsafe_toc_value="${!unsafe_toc_flag:-}"
+    case "$unsafe_toc_value" in
+        1|true|TRUE|True|yes|YES|Yes|y|Y|on|ON|On)
+            echo "$unsafe_toc_flag must be disabled for production report generation." >&2
+            exit 1
+            ;;
+    esac
+done
+
 export RG_WEB_STORAGE_ROOT="$STORAGE_DIR"
 export RG_WEB_RUNTIME_DIR="$RUNTIME_DIR"
 export RG_WEB_BACKUP_DIR="$BACKUP_DIR"

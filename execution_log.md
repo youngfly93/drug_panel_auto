@@ -41,3 +41,6 @@
 - 合并后精确门禁发现相同 Git tree 的规则/知识哈希受 macOS `._*` AppleDouble
   文件影响。发布哈希现统一排除未随 `git archive` 发布的 Finder 元数据；回归测试
   固定“加入 `._*`/`.DS_Store` 后哈希不得变化”。
+- 生产 UAT 暴露遗留 `REPORTGEN_FAST_TOC=1` 会跳过 PAGEREF/缓存页码构建，导致
+  HTTP 健康但报告 QA 为 `TOC_PAGE_NUMBERS_MISSING`。运行时已关闭该开关；启动脚本
+  现于停止旧进程前阻断 FAST_TOC 及两个同类 skip 开关，防止配置漂移复发。

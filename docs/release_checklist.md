@@ -137,6 +137,13 @@ process-cwd validation pass twice consecutively.
 If the candidate fails, the start script attempts to restore the previous
 release and exits non-zero.
 
+Production `.env.prod` must keep `REPORTGEN_FAST_TOC`,
+`REPORTGEN_SKIP_FINAL_LO_REFRESH`, and
+`REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS` disabled. These shortcuts omit the
+cached PAGEREF directory construction and can produce an empty TOC even when
+HTTP health is green. The runtime start script checks them before stopping the
+known-good process and refuses the switch when any is truthy.
+
 `current_release` is a status pointer, not a deployment command. Do not edit it
 manually. Use the deployment or release-switch scripts below so the process,
 pointer, `REVISION`, and health state change together.
