@@ -49,6 +49,34 @@ def _targeted_summary_gene_order(tables: list[Mapping[str, Any]]) -> list[str]:
     return []
 
 
+def _targeted_drug_brand_pairs(paragraphs: list[Any]) -> list[str]:
+    marker = "上表涉及的已上市的药物名称及对应的商品名称"
+    candidates = [str(text or "").strip() for text in paragraphs if marker in str(text or "")]
+    targeted = next(
+        (text for text in candidates if re.match(r"^\s*2\s*[.．]", text)),
+        candidates[0] if candidates else "",
+    )
+    if not targeted:
+        return []
+    tail = targeted.split("：", 1)[-1]
+    return [
+        f"{drug.strip()}[{brand.strip()}]"
+        for drug, brand in re.findall(r"([^、。：:\n]+)\[([^\]]+)\]", tail)
+    ]
+
+
+def _part3_gene_section_vafs(
+    sections: Mapping[str, Mapping[str, Any]],
+) -> list[float | None]:
+    """Extract displayed VAFs from Part 3 gene-section headers in order."""
+    values: list[float | None] = []
+    for section in sections.values():
+        header = str(section.get("text") or "").splitlines()[0:1]
+        match = re.search(r"；\s*(\d+(?:\.\d+)?)%\s*$", header[0] if header else "")
+        values.append(float(match.group(1)) if match else None)
+    return values
+
+
 def _prefix_match(sections: Mapping[str, Any], prefix: str) -> tuple[str | None, Any]:
     matches = [(key, value) for key, value in sections.items() if key.startswith(prefix)]
     if len(matches) != 1:
@@ -193,6 +221,25 @@ def validate_historical_golden_docx(
         expected=expected_summary.get("gene_order"),
         actual=summary_order,
     )
+
+    expected_brand_summary = expected.get("targeted_drug_brand_summary") or {}
+    actual_brand_pairs = _targeted_drug_brand_pairs(
+        list(snapshot.get("paragraphs") or [])
+    )
+    if expected_brand_summary:
+        expected_brand_pairs = list(expected_brand_summary.get("ordered_pairs") or [])
+        check(
+            "TARGETED_DRUG_BRAND_SUMMARY_COUNT",
+            len(actual_brand_pairs) == len(expected_brand_pairs),
+            expected=len(expected_brand_pairs),
+            actual=len(actual_brand_pairs),
+        )
+        check(
+            "TARGETED_DRUG_BRAND_SUMMARY_ORDER",
+            actual_brand_pairs == expected_brand_pairs,
+            expected=expected_brand_pairs,
+            actual=actual_brand_pairs,
+        )
 
     tables = list(snapshot.get("tables") or [])
     variant_table = _find_table(
@@ -348,6 +395,30 @@ def validate_historical_golden_docx(
     )
 
     actual_gene_order = list(gene_sections)
+    expected_gene_order = list(expected_part3.get("gene_section_order") or [])
+    if expected_gene_order:
+        check(
+            "PART3_GENE_SECTION_ORDER",
+            actual_gene_order == expected_gene_order,
+            expected=expected_gene_order,
+            actual=actual_gene_order,
+        )
+
+    actual_gene_vafs = _part3_gene_section_vafs(gene_sections)
+    if expected_part3.get("strict_vaf_descending") is True:
+        vafs_complete = all(value is not None for value in actual_gene_vafs)
+        numeric_vafs = [value for value in actual_gene_vafs if value is not None]
+        vafs_descending = all(
+            left >= right
+            for left, right in zip(numeric_vafs, numeric_vafs[1:])
+        )
+        check(
+            "PART3_GENE_SECTION_VAF_ORDER",
+            vafs_complete and vafs_descending,
+            expected="strict_descending",
+            actual=actual_gene_vafs,
+        )
+
     required_order = list(expected_part3.get("required_relative_order") or [])
     actual_relative_order = [key for key in actual_gene_order if key in required_order]
     check(
@@ -394,7 +465,10 @@ def validate_historical_golden_docx(
         "checks": {
             "table_count": snapshot.get("table_count"),
             "targeted_summary_gene_order": summary_order,
+            "targeted_drug_brand_pairs": actual_brand_pairs,
             "part3_gene_section_count": len(gene_sections),
+            "part3_gene_section_order": actual_gene_order,
+            "part3_gene_section_vafs": actual_gene_vafs,
             "part3_drug_section_count": len(drug_sections),
             "runtime_contract": runtime_contract,
         },

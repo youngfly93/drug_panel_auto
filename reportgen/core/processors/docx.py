@@ -74,6 +74,13 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
             ),
         ),
         FunctionProcessor(
+            "targeted_drug_brand_summary",
+            "靶向药物商品名汇总失败",
+            lambda c: c.renderer._apply_targeted_drug_brand_summary(
+                c.output_path, c.template_context
+            ),
+        ),
+        FunctionProcessor(
             "immune_table_notes",
             "免疫表条件备注处理失败",
             lambda c: c.renderer._apply_immune_table_notes(

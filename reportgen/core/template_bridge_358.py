@@ -1054,11 +1054,13 @@ def _frequency_value(value: Any) -> float:
 def _sort_variants_by_grouped_vaf(
     variants: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Sort every report variant view by one stable gene-grouped VAF policy.
+    """Sort table-oriented variant views by a stable gene-grouped VAF policy.
 
     Genes are ordered by their highest VAF; variants within a gene are ordered
-    by VAF. This preserves adjacent same-gene rows for Word cell merging while
-    giving Part 2, immune summaries and Part 3 one shared ordering contract.
+    by VAF. This preserves adjacent same-gene rows for Word cell merging. Part 3
+    narrative sections deliberately use ``_sort_variants_by_vaf_desc`` instead,
+    because their reviewed contract is strict row-wise VAF order and has no
+    table-cell merge constraint.
     """
     rows = list(variants)
     gene_max: Dict[str, float] = {}
@@ -1094,6 +1096,35 @@ def _sort_variants_by_grouped_vaf(
             ),
         ),
     )
+
+
+def _sort_variants_by_vaf_desc(
+    variants: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Sort narrative variants by VAF descending, stably across all genes.
+
+    This policy is intentionally separate from the grouped table policy above:
+    a lower-VAF second APC site must not stay ahead of a higher-VAF SMAD4 site
+    merely to keep APC rows adjacent. Equal or missing VAF values retain source
+    order so repeated generation is deterministic.
+    """
+    rows = list(variants)
+    return [
+        row
+        for _index, row in sorted(
+            enumerate(rows),
+            key=lambda item: (
+                -_frequency_value(
+                    item[1].get("frequency")
+                    or item[1].get("af_pct")
+                    or item[1].get("af")
+                    or item[1].get("Freq(%)")
+                    or item[1].get("AF")
+                ),
+                item[0],
+            ),
+        )
+    ]
 
 
 def _row_variant_identity(row: Dict[str, Any]) -> Tuple[str, str, str]:
@@ -2314,8 +2345,16 @@ def _build_crc_approved_drugs(panel_config: PanelConfig) -> List[Dict[str, str]]
     return rows
 
 
-def _load_drug_brand_map(*, base_path: Optional[str] = None) -> Dict[str, str]:
-    """Load marketed drug brand names from config/drug_brands.yaml."""
+def _load_drug_brand_config(
+    *, base_path: Optional[str] = None
+) -> Tuple[Dict[str, str], List[str]]:
+    """Load brand mappings and their explicit targeted-summary order.
+
+    ``brands`` is a lookup mapping, while ``targeted_summary_order`` is the
+    report-group-reviewed presentation order. Keeping them separate prevents a
+    YAML formatter or config editor from silently changing clinical report
+    output by reordering mapping keys.
+    """
     candidates: List[Path] = []
     if base_path:
         root = Path(str(base_path)).expanduser().resolve()
@@ -2326,19 +2365,75 @@ def _load_drug_brand_map(*, base_path: Optional[str] = None) -> Dict[str, str]:
     for path in candidates:
         if not path.exists():
             continue
-        try:
-            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except Exception:
-            continue
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         brands = raw.get("brands") if isinstance(raw, dict) else None
         if not isinstance(brands, dict):
-            continue
-        return {
+            raise ValueError(f"Invalid drug brand config (brands mapping missing): {path}")
+        brand_map = {
             str(drug).strip(): str(brand).strip()
             for drug, brand in brands.items()
             if str(drug).strip() and str(brand).strip()
         }
-    return {}
+        configured_order = raw.get("targeted_summary_order") or []
+        if configured_order and not isinstance(configured_order, list):
+            raise ValueError(
+                f"Invalid drug brand config (targeted_summary_order must be a list): {path}"
+            )
+        ordered = [str(drug).strip() for drug in configured_order if str(drug).strip()]
+        if len(ordered) != len(set(ordered)):
+            raise ValueError(
+                f"Invalid drug brand config (duplicate targeted summary drug): {path}"
+            )
+        unknown = [drug for drug in ordered if drug not in brand_map]
+        if unknown:
+            raise ValueError(
+                "Invalid drug brand config (ordered drug missing from brands): "
+                + ", ".join(unknown)
+            )
+        # Mappings not governed by the CRC targeted-note order (for example
+        # immune-table-only drugs) remain eligible and follow mapping order.
+        ordered_set = set(ordered)
+        ordered.extend(drug for drug in brand_map if drug not in ordered_set)
+        return brand_map, ordered
+    return {}, []
+
+
+def _load_drug_brand_map(*, base_path: Optional[str] = None) -> Dict[str, str]:
+    """Backward-compatible mapping-only view of the brand configuration."""
+    brand_map, _ordered = _load_drug_brand_config(base_path=base_path)
+    return brand_map
+
+
+def _non_overlapping_brand_matches(text: str, brand_names: List[str]) -> Set[str]:
+    """Return drug names matched without nested-name false positives.
+
+    For example, ``替西罗莫司`` contains ``西罗莫司``. The old independent
+    substring scan reported both even when only the longer drug was present.
+    Longest-first interval selection keeps the actual longer token while still
+    allowing the shorter drug to match at a separate occurrence.
+    """
+    candidates: List[Tuple[int, int, str]] = []
+    for drug in brand_names:
+        start = text.find(drug)
+        while start >= 0:
+            candidates.append((start, start + len(drug), drug))
+            start = text.find(drug, start + 1)
+
+    accepted_ranges: List[Tuple[int, int]] = []
+    matched: Set[str] = set()
+    for start, end, drug in sorted(
+        candidates,
+        key=lambda item: (-(item[1] - item[0]), item[0], item[2]),
+    ):
+        overlaps = any(
+            start < accepted_end and end > accepted_start
+            for accepted_start, accepted_end in accepted_ranges
+        )
+        if overlaps:
+            continue
+        accepted_ranges.append((start, end))
+        matched.add(drug)
+    return matched
 
 
 def build_targeted_drug_brand_summary(
@@ -2351,12 +2446,12 @@ def build_targeted_drug_brand_summary(
     The source is the already-filtered 2.1 variants table, so III/hidden rows
     cannot leak into the brand summary. The brand map is maintained in config.
     """
-    brand_map = _load_drug_brand_map(base_path=base_path)
+    brand_map, summary_order = _load_drug_brand_config(base_path=base_path)
     if not brand_map:
         return ""
 
     seen: Set[str] = set()
-    brand_names = sorted(brand_map, key=len, reverse=True)
+    brand_names = list(brand_map)
 
     for row in variants:
         text = "\n".join(
@@ -2366,21 +2461,12 @@ def build_targeted_drug_brand_summary(
         if not text or text.strip() in {"--", "-"}:
             continue
 
-        matches: List[Tuple[int, str]] = []
-        for drug in brand_names:
-            start = text.find(drug)
-            while start >= 0:
-                matches.append((start, drug))
-                start = text.find(drug, start + len(drug))
-        for _, drug in sorted(matches, key=lambda x: x[0]):
-            if drug in seen:
-                continue
-            seen.add(drug)
+        seen.update(_non_overlapping_brand_matches(text, brand_names))
 
     if not seen:
         return ""
 
-    drugs = [drug for drug in brand_map if drug in seen]
+    drugs = [drug for drug in summary_order if drug in seen]
     return "、".join(f"{drug}[{brand_map[drug]}]" for drug in drugs) + "。"
 
 
@@ -2796,20 +2882,26 @@ def enhance_report_data(
             # 第三部分解析范围由 settings.report_content 控制。默认仍支持只解析
             # 2.1 主表变异；本次 reviewed CRC 口径使用 summary_variants，包含
             # 第二维度汇总中展示的 III 类/非用药变异，但不扩展到全 panel。
-            part3_variants = _select_part3_variants(
-                report_content_cfg.get("part3_variant_scope", "variants"),
-                variants,
-            )
-            reference_variants = _select_part3_variants(
-                report_content_cfg.get("part3_reference_variant_scope", "variants"),
-                part3_variants,
-            )
-            drug_variants = _select_part3_variants(
-                report_content_cfg.get(
-                    "part3_drug_variant_scope",
+            part3_variants = _sort_variants_by_vaf_desc(
+                _select_part3_variants(
                     report_content_cfg.get("part3_variant_scope", "variants"),
+                    variants,
+                )
+            )
+            reference_variants = _sort_variants_by_vaf_desc(
+                _select_part3_variants(
+                    report_content_cfg.get("part3_reference_variant_scope", "variants"),
+                    part3_variants,
+                )
+            )
+            drug_variants = _sort_variants_by_vaf_desc(
+                _select_part3_variants(
+                    report_content_cfg.get(
+                        "part3_drug_variant_scope",
+                        report_content_cfg.get("part3_variant_scope", "variants"),
+                    ),
+                    part3_variants,
                 ),
-                part3_variants,
             )
             expected_variant_keys: List[str] = []
             seen_expected_keys: Set[str] = set()

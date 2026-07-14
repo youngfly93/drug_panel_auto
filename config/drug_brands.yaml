@@ -3,31 +3,100 @@
 # This file is shared report configuration, not patient data. Keep it reviewed by
 # business/medical owners; the generator only extracts drugs from final rendered
 # drug columns and looks up names here.
-schema_version: "1.0"
+schema_version: "1.1"
+
+# Report-group-reviewed order for the CRC targeted-drug brand note. This is
+# intentionally independent of YAML mapping order: config formatters and Web
+# editors may reorder ``brands`` without changing report semantics.
+targeted_summary_order:
+  - 依维莫司
+  - 司美替尼
+  - 度伐利尤单抗
+  - 西罗莫司
+  - 替西罗莫司
+  - 阿培利司
+  - 盐酸可泮利塞
+  - 培唑帕尼
+  - 卡匹色替
+  - 伊那利塞
+  - 索托拉西布
+  - 阿达格拉西布
+  - 氟泽雷塞
+  - 格索雷塞
+  - 曲美替尼
+  - 贝美替尼
+  - 帕尼单抗
+  - 奈拉替尼
+  - 福巴替尼
+  - Defactinib
+  - 戈来雷塞
+  - 奥拉帕利
+  - 芦卡帕利
+  - 尼拉帕利
+  - 他拉唑帕利
+  - 氟唑帕利
+  - 帕米帕利
+  - 阿维鲁单抗
+  - 瑞戈非尼
+  - 索拉非尼
+  - 舒尼替尼
+  - 西妥昔单抗
+  - 哌柏西利
+  - 厄洛替尼
+  - 曲美木单抗
+  - Avutometinib
+  - 阿法替尼
+  - 纳武利尤单抗
+  - 帕博利珠单抗
+  - 阿替利珠单抗
+  - 替雷利珠单抗
+
 brands:
-  Avutometinib: "AVMAPKI"
-  Defactinib: "FAKZYNJA"
-  阿替利珠单抗: "泰圣奇"
-  阿维鲁单抗: "巴文西亚"
-  奥拉帕利: "利普卓"
-  贝美替尼: "MEKTOVI"
-  度伐利尤单抗: "英飞凡"
-  福巴替尼: "LYTGOBI"
-  芦卡帕利: "RUBRACA"
-  奈拉替尼: "贺俪安"
-  尼拉帕利: "则乐"
-  帕博利珠单抗: "可瑞达"
-  帕米帕利: "百汇泽"
-  帕尼单抗: "维克替比"
-  哌柏西利: "爱博新"
-  曲美替尼: "迈吉宁"
-  司美替尼: "科赛优"
-  他拉唑帕利: "泰泽纳"
-  替雷利珠单抗: "百泽安"
-  西妥昔单抗: "爱必妥"
-  盐酸可泮利塞: "奥罗巴"
+  # Runtime output includes only drugs present in the final displayed
+  # benefit/caution columns; presentation order comes from the list above.
   依维莫司: "飞尼妥"
+  司美替尼: "科赛优"
+  度伐利尤单抗: "英飞凡"
+  西罗莫司: "赛莫司"
+  替西罗莫司: "TORISEL"
+  阿培利司: "PIQRAY"
+  盐酸可泮利塞: "奥罗巴"
+  培唑帕尼: "维全特"
+  卡匹色替: "荃科得"
+  伊那利塞: "伊赫莱"
+  索托拉西布: "LUMAKRAS"
+  阿达格拉西布: "KRAZATI"
+  氟泽雷塞: "达伯特"
+  格索雷塞: "格舒瑞昔"
+  曲美替尼: "迈吉宁"
+  贝美替尼: "MEKTOVI"
+  帕尼单抗: "维克替比"
+  奈拉替尼: "贺俪安"
+  福巴替尼: "LYTGOBI"
+  Defactinib: "FAKZYNJA"
+  戈来雷塞: "艾瑞凯"
+  奥拉帕利: "利普卓"
+  芦卡帕利: "RUBRACA"
+  尼拉帕利: "则乐"
+  他拉唑帕利: "泰泽纳"
+  氟唑帕利: "艾瑞颐"
+  帕米帕利: "百汇泽"
+  阿维鲁单抗: "巴文西亚"
+  瑞戈非尼: "拜万戈"
+  索拉非尼: "多吉美"
+  舒尼替尼: "索坦"
+  西妥昔单抗: "爱必妥"
+  哌柏西利: "爱博新"
+  厄洛替尼: "特罗凯"
+  曲美木单抗: "IMJUDO"
+  Avutometinib: "AVMAPKI"
+  阿法替尼: "吉泰瑞"
   纳武利尤单抗: "欧狄沃"
+  帕博利珠单抗: "可瑞达"
+  阿替利珠单抗: "泰圣奇"
+  替雷利珠单抗: "百泽安"
+
+  # Additional immune-drug brands used by the separate biomarker table note.
   特瑞普利单抗: "拓益"
   信迪利单抗: "达伯舒"
   卡瑞利珠单抗: "艾立妥"

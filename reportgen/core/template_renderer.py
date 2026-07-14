@@ -1676,6 +1676,70 @@ class TemplateRenderer:
         if changed:
             doc.save(file_path)
 
+    def _apply_targeted_drug_brand_summary(
+        self, file_path: str, context: dict
+    ) -> None:
+        """Render the targeted-drug brand note for slim golden-template chains.
+
+        CRC golden templates deliberately skip the broad ``report_content``
+        processor. This focused processor prevents the reviewed template's
+        static drug list from leaking into a newly generated case.
+        """
+        doc = Document(file_path)
+        changed = self._apply_targeted_drug_brand_summary_to_doc(
+            doc,
+            context,
+            require_marker=True,
+        )
+        if changed:
+            doc.save(file_path)
+
+    def _apply_targeted_drug_brand_summary_to_doc(
+        self,
+        doc,
+        context: dict,
+        *,
+        require_marker: bool = False,
+    ) -> bool:
+        import re
+
+        marker = "上表涉及的已上市的药物名称及对应的商品名称"
+        candidates = [
+            paragraph
+            for paragraph in doc.paragraphs
+            if marker in (paragraph.text or "")
+        ]
+        targeted = next(
+            (
+                paragraph
+                for paragraph in candidates
+                if re.match(r"^\s*2\s*[.．]", paragraph.text or "")
+            ),
+            candidates[0] if candidates else None,
+        )
+        if targeted is None:
+            if require_marker:
+                raise RuntimeError("Targeted-drug brand-summary marker is missing")
+            return False
+
+        brand_summary = str(context.get("targeted_drug_brand_summary") or "").strip()
+        if brand_summary:
+            desired = (
+                "2.上表涉及的已上市的药物名称及对应的商品名称："
+                f"{brand_summary}"
+            )
+        else:
+            desired = "2.上表未涉及可汇总商品名的已上市药物。"
+        if (targeted.text or "") == desired:
+            return False
+        if targeted.runs:
+            targeted.runs[0].text = desired
+            for run in targeted.runs[1:]:
+                run.text = ""
+        else:
+            targeted.add_run(desired)
+        return True
+
     def _apply_immune_table_notes(self, file_path: str, context: dict) -> None:
         """Standalone processor: apply the immune-table conditional footnotes.
 
@@ -2330,22 +2394,10 @@ class TemplateRenderer:
                         lambda s: re.sub(r"与肿瘤密切相关的\d+个基因", f"与肿瘤密切相关的{panel_count}个基因", s),
                     ) or changed
 
-        brand_summary = str(context.get("targeted_drug_brand_summary") or "").strip()
-        brand_prefix = "2.上表涉及的已上市的药物名称及对应的商品名称："
-        for paragraph in doc.paragraphs:
-            if "上表涉及的已上市的药物名称及对应的商品名称" not in (paragraph.text or ""):
-                continue
-            if brand_summary:
-                changed = set_paragraph_text(
-                    paragraph,
-                    f"{brand_prefix}{brand_summary}",
-                ) or changed
-            else:
-                changed = set_paragraph_text(
-                    paragraph,
-                    "2.上表未涉及可汇总商品名的已上市药物。",
-                ) or changed
-            break
+        changed = self._apply_targeted_drug_brand_summary_to_doc(
+            doc,
+            context,
+        ) or changed
 
         # Immune-table conditional footnotes (TMB-H sentence / biomarker-conflict
         # note) + numbering. Extracted so the golden-template chain (which skips

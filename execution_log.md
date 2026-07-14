@@ -14,8 +14,9 @@
   CRC358 panel/癌种/位点级规则；同基因非目标位点不继承这些精确规则。
 - S3：新增 reviewed Part 3 overlay，固定 11 个基因解释和 18 个药物解析，
   治理状态为 `legacy_runtime + pending_report_group_reconfirmation`，保留报告组二审权。
-- S4：小结、2.1、免疫表和第三部分复用基因分组 VAF 稳定排序；reviewed
-  overlay 注入后再次排序。历史终版免疫阳性列表的一处旧排序差异已登记为显式偏差。
+- S4：小结、2.1 和免疫表使用基因分组 VAF 稳定排序，以保证同基因相邻及 Word
+  纵向合并；第三部分改用全局 VAF 严格降序。reviewed overlay 注入后按各自展示契约
+  重新排序。历史终版免疫阳性列表的一处旧排序差异已登记为显式偏差。
 - S5：动态变异表与 NCCN 结果表按相邻同基因执行 OOXML 纵向合并；称呼由性别
   生成；签名从外部 runtime registry 解析并由部署 preflight 校验，真实签名未入 Git。
 - S5：签名说明块与签名作为一个分页语义块处理，Linux LibreOffice 复测未出现
@@ -44,3 +45,35 @@
 - 生产 UAT 暴露遗留 `REPORTGEN_FAST_TOC=1` 会跳过 PAGEREF/缓存页码构建，导致
   HTTP 健康但报告 QA 为 `TOC_PAGE_NUMBERS_MISSING`。运行时已关闭该开关；启动脚本
   现于停止旧进程前阻断 FAST_TOC 及两个同类 skip 开关，防止配置漂移复发。
+- 报告组商品名复核发现历史终版靶向药物备注为 41 项，而旧候选仅 22 项。根因是
+  18 项映射未迁移，且金模板精简处理器链跳过 `report_content`，导致已有映射的
+  1 项仍停留在模板静态旧文本。现已补齐映射并新增关键
+  `targeted_drug_brand_summary` 处理器，CRC358/CRC301 金模板均显式声明执行。
+- 脱敏历史契约新增 41 项商品名精确顺序断言；旧候选稳定触发
+  `TARGETED_DRUG_BRAND_SUMMARY_COUNT/ORDER`，新候选 41/41 通过。iyun129 隔离
+  Linux LibreOffice 复测为 99 页、机器 QA `PASS`、0 issue、空白/低内容页 0，
+  目录 PAGEREF 有效；生产 `current_release` 未切换，仍为既有版本。
+- 商品名修复 Linux 候选 DOCX SHA-256：
+  `c4446704b43af7ef73aadc498f19403e7feecfb1ab0f66e9fdd79fac34fd16c4`；QA
+  SHA-256：`cfb458e75dcbb883b97b021e2916540a18d35cab233804b27194831e6e9ca670`。
+- 本轮相关完整回归 `282 passed`，iyun129 发布契约测试 `14 passed, 1 skipped`；
+  模板病例硬编码扫描 HARD 0，新增运行时代码差异未包含病例姓名或样本号。
+- 继续复核反馈项 3/6 后确认两项共用一个设计问题：展示契约被隐式绑定到容器/配置
+  顺序。商品名摘要原先依赖 YAML 映射插入顺序，且子串扫描会把“替西罗莫司”误判为
+  同时命中“西罗莫司”；第三部分则错误复用了仅适合 Word 合并的基因分组排序。
+- 商品名配置现显式声明 41 项审核顺序；加载时校验重复项、未知项与空配置，名称匹配
+  使用最长优先且不重叠的区间算法。摘要输出不再依赖 YAML 字典顺序。
+- 第三部分现有独立的全局 VAF 稳定降序策略；变异表仍保留基因分组策略。历史契约新增
+  11 个章节精确顺序及严格单调门禁；旧候选会稳定触发
+  `PART3_GENE_SECTION_ORDER/PART3_GENE_SECTION_VAF_ORDER`，防止同类回归再次发布。
+- iyun129 同款 Linux LibreOffice 隔离复测候选为 99 页：41/41 商品名、第三部分 VAF
+  `22.03 > 20.00 > 17.50 > 14.87 > 13.58 > 1.37 > 1.18 > 1.16 > 1.02 > 1.00 > 0.98`；
+  历史契约、机器 QA、全页空白/低内容扫描均 `PASS`，直接 DOCX Diff 为 `WARN`、
+  0 个阻断错误。候选 DOCX SHA-256：
+  `edb4d45cff0eefbc53e1da03a550bda8f853862a99073bc9d51cb3d479472bc2`；QA SHA-256：
+  `a97a12940a5b12ec534157f5009a73e27b7184555ee460fe1826793f59b066fb`。
+- 本轮仅在 iyun129 独立 scratch release 中生成和渲染，未切换 `current_release`、未重启
+  生产进程，也未提交 Git；报告组医学二审和正式发布仍是后续独立动作。
+- 反馈项 3/6 修复后的完整后端回归：`439 passed, 1 skipped`（306.27 秒）；116 条
+  `datetime.utcnow()` 弃用警告均为既有技术债，无功能失败。变更集中回归另为
+  `281 passed`，脱敏历史契约 registry `PASS`。

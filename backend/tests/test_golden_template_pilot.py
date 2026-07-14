@@ -1,8 +1,8 @@
 import importlib.util
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from zipfile import ZipFile
-import xml.etree.ElementTree as ET
 
 from docx import Document
 from docx.shared import RGBColor
@@ -14,10 +14,12 @@ for import_path in (str(ROOT), str(BACKEND)):
     if import_path not in sys.path:
         sys.path.insert(0, import_path)
 
-from app.services.reportgen_bridge import ReportGenBridge  # noqa: E402
+from reportgen.core.processors import CRITICAL_DOCX_PROCESSOR_NAMES  # noqa: E402
 from reportgen.core.report_generator import ReportGenerator  # noqa: E402
 from reportgen.panels.loader import load_panel_package  # noqa: E402
 from reportgen.panels.validation import validate_panel_package  # noqa: E402
+
+from app.services.reportgen_bridge import ReportGenBridge  # noqa: E402
 
 
 def _load_seed_builder():
@@ -57,6 +59,7 @@ def test_crc358_golden_template_declares_template_level_processors():
         "part3_formatted_sections",
         "rebuild_references",
         "signature_placeholder",
+        "targeted_drug_brand_summary",
         "immune_table_notes",
         "bullet_lists",
         "signature_layout",
@@ -112,6 +115,7 @@ def test_crc301_golden_template_declares_active_default_processors():
         "part3_formatted_sections",
         "rebuild_references",
         "signature_placeholder",
+        "targeted_drug_brand_summary",
         "immune_table_notes",
         "bullet_lists",
         "signature_layout",
@@ -270,6 +274,7 @@ def test_report_generator_uses_template_level_processors():
         "part3_formatted_sections",
         "rebuild_references",
         "signature_placeholder",
+        "targeted_drug_brand_summary",
         "immune_table_notes",
         "bullet_lists",
         "signature_layout",
@@ -280,6 +285,7 @@ def test_report_generator_uses_template_level_processors():
         "final_refresh_cleanup",
         "underlines_and_styles",
     )
+    assert "targeted_drug_brand_summary" in CRITICAL_DOCX_PROCESSOR_NAMES
 
 
 def test_crc358_golden_template_has_no_report_guide_spacer_cluster():

@@ -130,12 +130,30 @@ def validate_contract_registry() -> dict[str, Any]:
         expectations = contract.get("expectations") or {}
         for required in (
             "targeted_summary",
+            "targeted_drug_brand_summary",
             "part3",
             "reviewed_variant_rows",
             "vertical_merges",
         ):
             if not expectations.get(required):
                 errors.append(f"{alias}: missing expectation {required}")
+        brand_order = list(
+            (expectations.get("targeted_drug_brand_summary") or {}).get(
+                "ordered_pairs"
+            )
+            or []
+        )
+        if not brand_order or len(brand_order) != len(set(brand_order)):
+            errors.append(f"{alias}: targeted drug brand order is empty or duplicated")
+        part3 = expectations.get("part3") or {}
+        gene_count = int(part3.get("gene_section_count") or 0)
+        gene_order = list(part3.get("gene_section_order") or [])
+        if part3.get("strict_vaf_descending") is not True:
+            errors.append(f"{alias}: Part 3 strict VAF order gate is not enabled")
+        if gene_count <= 0 or len(gene_order) != gene_count:
+            errors.append(
+                f"{alias}: Part 3 exact gene order does not match gene section count"
+            )
         rows.append(
             {
                 "case_alias": alias,

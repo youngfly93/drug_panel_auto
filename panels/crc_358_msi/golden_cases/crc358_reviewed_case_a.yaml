@@ -15,6 +15,49 @@ expectations:
   targeted_summary:
     row_count: 7
     gene_order: [PIK3CA, KRAS, BRCA1, TP53, FLT3, PMS2, ATR]
+  targeted_drug_brand_summary:
+    ordered_pairs:
+      - "依维莫司[飞尼妥]"
+      - "司美替尼[科赛优]"
+      - "度伐利尤单抗[英飞凡]"
+      - "西罗莫司[赛莫司]"
+      - "替西罗莫司[TORISEL]"
+      - "阿培利司[PIQRAY]"
+      - "盐酸可泮利塞[奥罗巴]"
+      - "培唑帕尼[维全特]"
+      - "卡匹色替[荃科得]"
+      - "伊那利塞[伊赫莱]"
+      - "索托拉西布[LUMAKRAS]"
+      - "阿达格拉西布[KRAZATI]"
+      - "氟泽雷塞[达伯特]"
+      - "格索雷塞[格舒瑞昔]"
+      - "曲美替尼[迈吉宁]"
+      - "贝美替尼[MEKTOVI]"
+      - "帕尼单抗[维克替比]"
+      - "奈拉替尼[贺俪安]"
+      - "福巴替尼[LYTGOBI]"
+      - "Defactinib[FAKZYNJA]"
+      - "戈来雷塞[艾瑞凯]"
+      - "奥拉帕利[利普卓]"
+      - "芦卡帕利[RUBRACA]"
+      - "尼拉帕利[则乐]"
+      - "他拉唑帕利[泰泽纳]"
+      - "氟唑帕利[艾瑞颐]"
+      - "帕米帕利[百汇泽]"
+      - "阿维鲁单抗[巴文西亚]"
+      - "瑞戈非尼[拜万戈]"
+      - "索拉非尼[多吉美]"
+      - "舒尼替尼[索坦]"
+      - "西妥昔单抗[爱必妥]"
+      - "哌柏西利[爱博新]"
+      - "厄洛替尼[特罗凯]"
+      - "曲美木单抗[IMJUDO]"
+      - "Avutometinib[AVMAPKI]"
+      - "阿法替尼[吉泰瑞]"
+      - "纳武利尤单抗[欧狄沃]"
+      - "帕博利珠单抗[可瑞达]"
+      - "阿替利珠单抗[泰圣奇]"
+      - "替雷利珠单抗[百泽安]"
   biomarker_summary:
     # The historical final placed TP53 before higher-VAF BRCA1. The hardened
     # pipeline intentionally uses the shared VAF policy in every summary.
@@ -30,6 +73,19 @@ expectations:
   part3:
     gene_section_count: 11
     drug_section_count: 18
+    strict_vaf_descending: true
+    gene_section_order:
+      - APC|C.994C>T|P.R332*
+      - SMAD4|C.1577A>G|P.E526G
+      - APC|C.4666DUP|P.T1556NFS*3
+      - PIK3CA|C.1624G>A|P.E542K
+      - KRAS|C.34G>T|P.G12C
+      - BRCA1|C.505C>T|P.Q169*
+      - DNMT3A|C.1367DEL|P.K456SFS*195
+      - TP53|C.499C>T|P.Q167*
+      - FLT3|C.2537G>A|P.G846D
+      - PMS2|C.1273DEL|P.S425LFS*23
+      - ATR|C.1291DEL|P.R431GFS*8
     required_relative_order:
       - KRAS|C.34G>T|P.G12C
       - DNMT3A|C.1367DEL|P.K456SFS*195
@@ -121,3 +177,14 @@ intentional_deviations:
     candidate_behavior: [KRAS, BRCA1, TP53, PMS2, ATR]
     reason: shared_grouped_vaf_sorting_contract
     approval_status: engineering_spec_approved_pending_report_group_reconfirmation
+  - id: part3_strict_global_vaf_order
+    historical_behavior:
+      - APC|C.994C>T|P.R332*
+      - APC|C.4666DUP|P.T1556NFS*3
+      - SMAD4|C.1577A>G|P.E526G
+    candidate_behavior:
+      - APC|C.994C>T|P.R332*
+      - SMAD4|C.1577A>G|P.E526G
+      - APC|C.4666DUP|P.T1556NFS*3
+    reason: report_group_feedback_requires_part3_rowwise_vaf_descending
+    approval_status: user_directed_engineering_fix_pending_report_group_reconfirmation

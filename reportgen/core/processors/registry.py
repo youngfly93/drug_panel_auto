@@ -24,10 +24,15 @@ PROCESSOR_DEPENDENCIES: Mapping[str, tuple[str, ...]] = {
     "underlines_and_styles": ("final_refresh_cleanup",),
 }
 
-# A report must not be returned as successfully rendered when either the
-# patient-specific Part 3 narrative or its citation list failed to materialize.
+# A report must not be returned as successfully rendered when patient-specific
+# Part 3 content, its citations, or the final-table-driven drug-brand note fails
+# to materialize.
 CRITICAL_DOCX_PROCESSOR_NAMES = frozenset(
-    {"part3_formatted_sections", "rebuild_references"}
+    {
+        "part3_formatted_sections",
+        "rebuild_references",
+        "targeted_drug_brand_summary",
+    }
 )
 
 

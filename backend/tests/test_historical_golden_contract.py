@@ -32,8 +32,30 @@ def test_crc358_historical_contract_is_deidentified_and_structured() -> None:
     assert contract["case_alias"] == "crc358_reviewed_case_a"
     assert contract["privacy"]["contains_phi"] is False
     assert contract["expectations"]["targeted_summary"]["row_count"] == 7
+    assert (
+        len(contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"])
+        == 41
+    )
     assert contract["expectations"]["part3"]["gene_section_count"] == 11
     assert contract["expectations"]["part3"]["drug_section_count"] == 18
+    assert contract["expectations"]["part3"]["strict_vaf_descending"] is True
+    assert len(contract["expectations"]["part3"]["gene_section_order"]) == 11
+
+
+def test_targeted_brand_config_order_matches_historical_contract() -> None:
+    contract = load_historical_golden_contract(CONTRACT)
+    config = yaml.safe_load(
+        (ROOT / "config" / "drug_brands.yaml").read_text(encoding="utf-8")
+    )
+    expected_drugs = [
+        pair.split("[", 1)[0]
+        for pair in contract["expectations"]["targeted_drug_brand_summary"][
+            "ordered_pairs"
+        ]
+    ]
+
+    assert config["targeted_summary_order"] == expected_drugs
+    assert all(drug in config["brands"] for drug in expected_drugs)
 
 
 def test_historical_contract_loader_rejects_phi_contract(tmp_path) -> None:
@@ -45,7 +67,13 @@ def test_historical_contract_loader_rejects_phi_contract(tmp_path) -> None:
         load_historical_golden_contract(path)
 
 
-def _minimal_historical_docx(path: Path, *, include_tp53: bool = True) -> None:
+def _minimal_historical_docx(
+    path: Path,
+    *,
+    include_tp53: bool = True,
+    brand_pairs: list[str] | None = None,
+    part3_headers: list[str] | None = None,
+) -> None:
     doc = Document()
     summary = doc.add_table(rows=2 if include_tp53 else 1, cols=4)
     summary.rows[0].cells[0].text = "基因"
@@ -69,7 +97,18 @@ def _minimal_historical_docx(path: Path, *, include_tp53: bool = True) -> None:
         row[6].text = "1.16"
         row[7].text = "AZD1775（C）"
         row[8].text = "--"
+    if brand_pairs is not None:
+        doc.add_paragraph(
+            "2.上表涉及的已上市的药物名称及对应的商品名称："
+            + "、".join(brand_pairs)
+            + "。"
+        )
     doc.add_paragraph("非业务差异标记")
+    if part3_headers is not None:
+        doc.add_paragraph("第三部分：基因变异及相应靶向/免疫药物解析")
+        for header in part3_headers:
+            doc.add_paragraph(header)
+        doc.add_paragraph("第四部分：附录")
     doc.save(path)
 
 
@@ -152,6 +191,97 @@ def test_historical_contract_blocks_missing_reviewed_variant(tmp_path) -> None:
         "REVIEWED_VARIANT_ROW_PRESENT",
         "TARGETED_SUMMARY_REVIEWED_ROW_PRESENT",
     }
+
+
+def test_historical_contract_blocks_incomplete_targeted_brand_summary(tmp_path) -> None:
+    candidate = tmp_path / "candidate.docx"
+    _minimal_historical_docx(
+        candidate,
+        brand_pairs=["奥拉帕利[利普卓]"],
+    )
+    contract = {
+        "schema_version": "1.0",
+        "case_alias": "synthetic_case",
+        "panel_id": "crc_358_msi",
+        "privacy": {"contains_phi": False},
+        "source": {},
+        "expectations": {
+            "table_count": 2,
+            "targeted_summary": {"row_count": 1, "gene_order": ["TP53"]},
+            "targeted_drug_brand_summary": {
+                "ordered_pairs": [
+                    "奥拉帕利[利普卓]",
+                    "纳武利尤单抗[欧狄沃]",
+                ]
+            },
+            "part3": {"gene_section_count": 0, "drug_section_count": 0},
+            "reviewed_variant_rows": [
+                {
+                    "gene": "TP53",
+                    "c_hgvs": "c.499C>T",
+                    "p_hgvs": "p.Q167*",
+                    "vaf": 1.16,
+                    "benefit_count": 1,
+                    "caution_count": 0,
+                }
+            ],
+        },
+    }
+
+    result = validate_historical_golden_docx(contract=contract, docx_path=candidate)
+
+    assert result["status"] == "FAIL"
+    assert {error["code"] for error in result["errors"]} >= {
+        "TARGETED_DRUG_BRAND_SUMMARY_ORDER"
+    }
+
+
+def test_historical_contract_blocks_grouped_instead_of_global_part3_vaf_order(
+    tmp_path,
+) -> None:
+    candidate = tmp_path / "candidate.docx"
+    _minimal_historical_docx(
+        candidate,
+        part3_headers=[
+            "u APC：c.994C>T，p.R332*；22.03%",
+            "u APC：c.4666dup，p.T1556Nfs*3；17.50%",
+            "u SMAD4：c.1577A>G，p.E526G；20%",
+        ],
+    )
+    contract = {
+        "schema_version": "1.0",
+        "case_alias": "synthetic_case",
+        "panel_id": "crc_358_msi",
+        "privacy": {"contains_phi": False},
+        "source": {},
+        "expectations": {
+            "table_count": 2,
+            "targeted_summary": {"row_count": 1, "gene_order": ["TP53"]},
+            "part3": {
+                "gene_section_count": 3,
+                "drug_section_count": 0,
+                "strict_vaf_descending": True,
+            },
+            "reviewed_variant_rows": [
+                {
+                    "gene": "TP53",
+                    "c_hgvs": "c.499C>T",
+                    "p_hgvs": "p.Q167*",
+                    "vaf": 1.16,
+                    "benefit_count": 1,
+                    "caution_count": 0,
+                }
+            ],
+        },
+    }
+
+    result = validate_historical_golden_docx(contract=contract, docx_path=candidate)
+
+    assert result["status"] == "FAIL"
+    assert {error["code"] for error in result["errors"]} >= {
+        "PART3_GENE_SECTION_VAF_ORDER"
+    }
+    assert result["checks"]["part3_gene_section_vafs"] == [22.03, 17.5, 20.0]
 
 
 def test_committed_historical_contract_registry_passes() -> None:

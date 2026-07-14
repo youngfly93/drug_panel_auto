@@ -1783,6 +1783,71 @@ def test_part3_drug_analysis_scope_follows_summary_variants(tmp_path):
     assert genes == ["TP53", "APC"]
 
 
+def test_part3_uses_global_vaf_order_while_word_tables_keep_gene_groups(tmp_path):
+    """Narrative ordering must not inherit the table cell-merge constraint."""
+    report_data = ReportData()
+    report_data.set_field(
+        "report_content",
+        {
+            "part3_variant_scope": "summary_variants",
+            "part3_reference_variant_scope": "summary_variants",
+        },
+    )
+    variations = [
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "APC",
+            "cHGVS": "c.994C>T",
+            "pHGVS_S": "p.R332*",
+            "Freq(%)": 22.03,
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "APC",
+            "cHGVS": "c.4666_4667insA",
+            "pHGVS_S": "p.T1556Nfs*3",
+            "Freq(%)": 17.50,
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "SMAD4",
+            "cHGVS": "c.1081C>T",
+            "pHGVS_S": "p.R361C",
+            "Freq(%)": 20.00,
+        },
+    ]
+
+    report_data = enhance_report_data(
+        report_data,
+        _excel(tmp_path, variations=variations),
+        field_mapper=_FakeDrugLookup(),
+        gene_knowledge_provider=_FakeDrugSectionGeneKnowledgeProvider(),
+        base_path=str(ROOT),
+    )
+
+    # Table views keep APC adjacent so OOXML vertical merging remains valid.
+    assert [
+        (row["gene"], row["frequency"])
+        for row in report_data.get_table("all_variants")
+    ] == [("APC", "22.03"), ("APC", "17.50"), ("SMAD4", "20")]
+
+    # Part 3 is strict row-wise VAF: 22.03 > 20 > 17.50.
+    assert [
+        row["header"] for row in report_data.get_table("gene_knowledge_sections")
+    ] == ["APC：c.994C>T", "SMAD4：c.1081C>T", "APC：c.4666_4667insA"]
+    assert [
+        row["gene"] for row in report_data.get_table("drug_analysis_sections")
+    ] == ["APC", "SMAD4", "APC"]
+    assert report_data.get_table("gene_references") == [
+        "APC reference",
+        "SMAD4 reference",
+        "APC reference",
+    ]
+
+
 def test_part3_marker_renders_from_context_without_case_stub(tmp_path):
     docx_path = tmp_path / "part3_marker.docx"
     doc = Document()
@@ -1851,9 +1916,79 @@ def test_targeted_drug_brand_summary_uses_final_drug_columns_only():
     )
 
     assert summary == (
-        "Avutometinib[AVMAPKI]、Defactinib[FAKZYNJA]、奥拉帕利[利普卓]、"
-        "帕博利珠单抗[可瑞达]、帕尼单抗[维克替比]、司美替尼[科赛优]、"
-        "西妥昔单抗[爱必妥]。"
+        "司美替尼[科赛优]、帕尼单抗[维克替比]、Defactinib[FAKZYNJA]、"
+        "奥拉帕利[利普卓]、西妥昔单抗[爱必妥]、Avutometinib[AVMAPKI]、"
+        "帕博利珠单抗[可瑞达]。"
+    )
+
+
+def test_targeted_brand_summary_has_explicit_order_and_no_nested_false_match(
+    tmp_path,
+):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "drug_brands.yaml").write_text(
+        """
+schema_version: "1.1"
+targeted_summary_order: [DrugA, DrugB, 西罗莫司, 替西罗莫司, ABC, BCDE]
+brands:
+  DrugB: B牌
+  DrugA: A牌
+  西罗莫司: 西罗莫司牌
+  替西罗莫司: 替西罗莫司牌
+  ABC: ABC牌
+  BCDE: BCDE牌
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    summary = build_targeted_drug_brand_summary(
+        [
+            {
+                "benefit_drugs": "DrugB（C）\n替西罗莫司（C）\nDrugA（C）\nABCDE（C）",
+                "caution_drugs": "--",
+            }
+        ],
+        base_path=str(tmp_path),
+    )
+
+    assert summary == (
+        "DrugA[A牌]、DrugB[B牌]、替西罗莫司[替西罗莫司牌]、BCDE[BCDE牌]。"
+    )
+    assert "西罗莫司[西罗莫司牌]" not in summary
+    assert "ABC[ABC牌]" not in summary
+
+
+def test_targeted_brand_processor_replaces_golden_template_static_summary(tmp_path):
+    docx_path = tmp_path / "targeted_brand_summary.docx"
+    doc = Document()
+    doc.add_paragraph(
+        "2.上表涉及的已上市的药物名称及对应的商品名称：旧商品名。"
+    )
+    doc.add_paragraph(
+        "3. 上表涉及的已上市的药物名称及对应的商品名称："
+        "帕博利珠单抗[可瑞达]、纳武利尤单抗[欧狄沃]。"
+    )
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._apply_targeted_drug_brand_summary(
+        str(docx_path),
+        {
+            "targeted_drug_brand_summary": (
+                "奥拉帕利[利普卓]、纳武利尤单抗[欧狄沃]。"
+            )
+        },
+    )
+
+    paragraphs = [p.text for p in Document(docx_path).paragraphs]
+    assert paragraphs[0] == (
+        "2.上表涉及的已上市的药物名称及对应的商品名称："
+        "奥拉帕利[利普卓]、纳武利尤单抗[欧狄沃]。"
+    )
+    assert paragraphs[1] == (
+        "3. 上表涉及的已上市的药物名称及对应的商品名称："
+        "帕博利珠单抗[可瑞达]、纳武利尤单抗[欧狄沃]。"
     )
 
 
