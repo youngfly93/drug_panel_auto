@@ -29,7 +29,19 @@ from reportgen.core.report_diff import ReportDiffOptions, compare_reports  # noq
 
 def _sha256_files(paths: Iterable[Path]) -> str:
     digest = hashlib.sha256()
-    for path in sorted({item.resolve() for item in paths if item.is_file()}):
+    # Finder may create AppleDouble ``._*`` sidecars on removable/macOS
+    # volumes.  They are neither Git inputs nor files shipped by ``git
+    # archive``; hashing them made the same Git tree produce different release
+    # fingerprints on macOS and Linux.  Ignore these filesystem metadata files
+    # (and the equivalent Finder directory marker) at the common hash boundary.
+    controlled_paths = {
+        item.resolve()
+        for item in paths
+        if item.is_file()
+        and not item.name.startswith("._")
+        and item.name != ".DS_Store"
+    }
+    for path in sorted(controlled_paths):
         try:
             label = path.relative_to(ROOT).as_posix()
         except ValueError:

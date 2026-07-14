@@ -38,3 +38,6 @@
 - GitHub Linux 首轮门禁暴露样式回归依赖本机外置签名：本机有真实 runtime 资产时
   为 2 张签名，干净 CI 为 0 张。测试现于隔离的临时 storage 创建确定性伪签名，
   不再读取真实签名或依赖机器状态；CRC358/CRC301 样式基线定向复测 `2 passed`。
+- 合并后精确门禁发现相同 Git tree 的规则/知识哈希受 macOS `._*` AppleDouble
+  文件影响。发布哈希现统一排除未随 `git archive` 发布的 Finder 元数据；回归测试
+  固定“加入 `._*`/`.DS_Store` 后哈希不得变化”。

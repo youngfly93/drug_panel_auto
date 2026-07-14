@@ -12,7 +12,10 @@ from reportgen.core.historical_golden_contract import (
     load_historical_golden_contract,
     validate_historical_golden_docx,
 )
-from scripts.check_historical_golden_release import _candidate_renderer_fingerprint
+from scripts.check_historical_golden_release import (
+    _candidate_renderer_fingerprint,
+    _sha256_files,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = (
@@ -186,3 +189,16 @@ def test_candidate_renderer_fingerprint_is_explicit_and_complete() -> None:
         _candidate_renderer_fingerprint(
             {"candidate_renderer": {"platform": "Linux", "engine": "LibreOffice"}}
         )
+
+
+def test_release_hash_ignores_macos_filesystem_metadata(tmp_path) -> None:
+    controlled = tmp_path / "rules.yaml"
+    controlled.write_text("rules: controlled\n", encoding="utf-8")
+    expected = _sha256_files([controlled])
+
+    appledouble = tmp_path / "._rules.yaml"
+    appledouble.write_bytes(b"macOS AppleDouble metadata")
+    finder_marker = tmp_path / ".DS_Store"
+    finder_marker.write_bytes(b"Finder metadata")
+
+    assert _sha256_files([controlled, appledouble, finder_marker]) == expected
