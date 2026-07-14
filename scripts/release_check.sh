@@ -8,6 +8,9 @@ WORKFLOW_NAME="${WORKFLOW_NAME:-Reportgen QA Gate}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-tmp/release_check/$(date +%Y%m%d_%H%M%S)}"
 RUN_QA_GATE="${RUN_QA_GATE:-1}"
 RUN_GITHUB_CHECKS="${RUN_GITHUB_CHECKS:-1}"
+RUN_HISTORICAL_GOLDEN="${RUN_HISTORICAL_GOLDEN:-1}"
+REQUIRE_HISTORICAL_GOLDEN="${REQUIRE_HISTORICAL_GOLDEN:-0}"
+HISTORICAL_GOLDEN_MANIFEST="${HISTORICAL_GOLDEN_MANIFEST:-}"
 ALLOW_DIRTY="${ALLOW_DIRTY:-0}"
 QA_GATE_ARGS="${QA_GATE_ARGS:-}"
 
@@ -26,20 +29,41 @@ if [ "$ALLOW_DIRTY" != "1" ]; then
   fi
 fi
 
-if [ "$RUN_QA_GATE" = "1" ]; then
-  mkdir -p "$OUTPUT_ROOT"
+mkdir -p "$OUTPUT_ROOT"
+if [ "$RUN_HISTORICAL_GOLDEN" = "1" ]; then
   echo ""
-  echo "[1/2] Running local QA gate"
+  echo "[1/3] Checking historical golden contracts"
+  if [ -n "$HISTORICAL_GOLDEN_MANIFEST" ] && [ -f "$HISTORICAL_GOLDEN_MANIFEST" ]; then
+    python scripts/check_historical_golden_release.py \
+      --manifest "$HISTORICAL_GOLDEN_MANIFEST" \
+      --output-root "$OUTPUT_ROOT/historical_golden" \
+      --output-json "$OUTPUT_ROOT/historical_golden.json"
+  elif [ "$REQUIRE_HISTORICAL_GOLDEN" = "1" ]; then
+    echo "Historical golden manifest is required but missing: ${HISTORICAL_GOLDEN_MANIFEST:-<unset>}" >&2
+    exit 1
+  else
+    python scripts/check_historical_golden_release.py \
+      --contracts-only \
+      --output-json "$OUTPUT_ROOT/historical_golden_contracts.json"
+  fi
+else
+  echo ""
+  echo "[1/3] Skipping historical golden contracts"
+fi
+
+if [ "$RUN_QA_GATE" = "1" ]; then
+  echo ""
+  echo "[2/3] Running local QA gate"
   # shellcheck disable=SC2086
   python -m reportgen.cli qa gate --output-root "$OUTPUT_ROOT/qa_gate" $QA_GATE_ARGS
 else
   echo ""
-  echo "[1/2] Skipping local QA gate"
+  echo "[2/3] Skipping local QA gate"
 fi
 
 if [ "$RUN_GITHUB_CHECKS" = "1" ]; then
   echo ""
-  echo "[2/2] Checking GitHub branch protection and latest Actions run"
+  echo "[3/3] Checking GitHub branch protection and latest Actions run"
   if ! command -v gh >/dev/null 2>&1; then
     echo "gh CLI is required for GitHub checks. Set RUN_GITHUB_CHECKS=0 to skip." >&2
     exit 1
@@ -96,7 +120,7 @@ if [ "$RUN_GITHUB_CHECKS" = "1" ]; then
   fi
 else
   echo ""
-  echo "[2/2] Skipping GitHub checks"
+  echo "[3/3] Skipping GitHub checks"
 fi
 
 echo ""

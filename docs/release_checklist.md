@@ -4,6 +4,19 @@ This checklist is for promoting the report-generation platform from a feature
 branch to the production server. It assumes the target production branch is
 `main` and the required GitHub check is `qa-gate`.
 
+The production target in this checklist is **iyun129** (`ssh iyun129`, user
+`iy12922`) with immutable releases under
+`/media/desk16/iy12922/apps/reportgen-web-releases/` and uvicorn on port
+`18082`. The root-level `deploy.sh` targets a legacy JD Cloud layout
+(`117.72.75.45`, `/opt/reportgen-web`, systemd, port `8000`) and must not be used
+for iyun129.
+
+For report-group review of the full input → rules → knowledge → DOCX →
+delivery chain, use
+[`report_group_system_report_audit_checklist.md`](report_group_system_report_audit_checklist.md).
+Engineering release completion in this file does not replace medical secondary
+review or real-report UAT.
+
 ## 0. Release Scope
 
 - Confirm the release branch and commit:
@@ -97,51 +110,72 @@ can be used for a faster rerun.
 
 ## 3. Deploy
 
-On the production server:
+Deploy only from a clean local `main` checkout whose `HEAD` is the accepted
+GitHub commit:
 
 ```bash
-ssh root@117.72.75.45
-cd /opt/reportgen-web
-DEPLOY_BRANCH=main bash deploy.sh
+git fetch origin
+git switch main
+git pull --ff-only origin main
+DEPLOY_REF="$(git rev-parse HEAD)" bash scripts/iyun129_deploy_clean.sh
 ```
 
-`deploy.sh` runs the same preflight gate before frontend build and service
-restart. If the gate fails, deployment stops and the existing service is not
-restarted.
+The iyun129 wrapper supplies the production coordinates:
 
-The deploy script requires Node.js 18+ for the frontend build. If the server has
-an older Node.js runtime, it installs Node.js 22 by default. Override with
-`NODE_INSTALL_MAJOR=<major>` only when a server image requires a different
-NodeSource channel.
+- releases: `/media/desk16/iy12922/apps/reportgen-web-releases/<short-sha>`;
+- runtime: `/media/desk16/iy12922/apps/reportgen-web-runtime`;
+- persistent storage: `/media/desk16/iy12922/apps/reportgen-web-storage`;
+- Python venv: `/media/desk16/iy12922/apps/reportgen-web-venv`;
+- health endpoint: `http://127.0.0.1:18082/api/v1/tasks/stats`;
+- public endpoint: `https://panel.mailuo-report.com.cn/api/v1/tasks/stats`.
 
-Preflight artifacts are written to:
+The deploy command runs `make release-check`, builds frontend assets from the
+exact `DEPLOY_REF`, writes the full SHA to the release `REVISION`, installs a
+non-secret `runtime/deployment.env`, and starts the candidate. It updates
+`current_release` only after HTTP health, non-zombie uvicorn identity, and
+process-cwd validation pass twice consecutively.
+If the candidate fails, the start script attempts to restore the previous
+release and exits non-zero.
 
-```text
-/opt/reportgen-web/tmp/deploy_qa_gate/
-```
+`current_release` is a status pointer, not a deployment command. Do not edit it
+manually. Use the deployment or release-switch scripts below so the process,
+pointer, `REVISION`, and health state change together.
 
 ## 4. Production Smoke Test
 
-After deployment:
+First verify the active runtime identity:
 
 ```bash
-systemctl status reportgen-web --no-pager
-curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/api/v1/tasks/stats
+bash scripts/iyun129_release.sh status
 ```
 
 Expected:
 
-- `reportgen-web` is active.
-- API health endpoint returns `200`.
+- `current_release` points to the intended immutable release;
+- release `REVISION` is the intended full commit SHA;
+- the uvicorn PID cwd equals `current_release`;
+- local health is HTTP `200`.
+
+Also verify the public route:
+
+```bash
+curl -fsS -o /dev/null -w "HTTP %{http_code}\n" \
+  https://panel.mailuo-report.com.cn/api/v1/tasks/stats
+```
 
 Then run one report-generation smoke check on the server:
 
 ```bash
-cd /opt/reportgen-web
-source venv/bin/activate
-python -m reportgen.cli qa gate \
+ssh iyun129 '
+set -euo pipefail
+runtime=/media/desk16/iy12922/apps/reportgen-web-runtime
+current=$(head -n 1 "$runtime/current_release")
+cd "$current"
+/media/desk16/iy12922/apps/reportgen-web-venv/bin/python \
+  -m reportgen.cli qa gate \
   --panel crc_358_msi \
   --output-root /tmp/reportgen-release-smoke
+'
 ```
 
 Expected:
@@ -151,12 +185,11 @@ Expected:
 - QA report status is `PASS`;
 - repeated golden diff is `PASS`.
 
-If the server has build and test dependencies available, run the same Web smoke
-flow against production:
+Run the Web smoke flow against production when credentials for the synthetic
+test account are available:
 
 ```bash
-cd /opt/reportgen-web
-WEB_SMOKE_BASE_URL=http://127.0.0.1:8000 \
+WEB_SMOKE_BASE_URL=https://panel.mailuo-report.com.cn \
 WEB_SMOKE_BUILD=0 \
 WEB_SMOKE_ADMIN_USERNAME=<admin_user> \
 WEB_SMOKE_ADMIN_PASSWORD=<admin_password> \
@@ -170,19 +203,44 @@ Expected:
 - generated report QA status is `PASS`;
 - DOCX download succeeds.
 
-## 5. Rollback
-
-Use the last known-good commit from GitHub Actions or deployment logs:
+Record the production renderer fingerprint used for Golden visual QA:
 
 ```bash
-DEPLOY_REF=<known_good_commit_or_tag> bash deploy.sh
+ssh iyun129 '
+uname -srmo
+soffice --version
+locale | sed -n "1,6p"
+for font in "SimSun" "宋体" "Times New Roman"; do fc-match "$font"; done
+fc-list | LC_ALL=C sort | sha256sum
+'
 ```
 
-If production is down and the rollback commit is already known good, an
-emergency rollback may skip the preflight gate:
+The release evidence must include the exact Linux LibreOffice version and the
+DOCX/QA hashes. Final visual acceptance still requires Windows Word/WPS; a Mac
+LibreOffice PASS alone is not production-equivalent evidence.
+
+## 5. Rollback
+
+List the current identity, then switch to an existing known-good release:
 
 ```bash
-DEPLOY_REF=<known_good_commit_or_tag> RUN_PREFLIGHT=0 bash deploy.sh
+bash scripts/iyun129_release.sh status
+bash scripts/iyun129_release.sh rollback <known_good_release_id_or_revision_prefix>
+```
+
+The rollback command validates that exactly one immutable release matches,
+installs the committed runtime-control scripts and iyun129 deployment config,
+starts that release, and verifies pointer/cwd/health consistency. The start
+script keeps `current_release` unchanged until the target passes; on failure it
+automatically attempts to restart the previous release.
+
+If the known-good release directory was removed but its commit is available
+locally, rebuild that exact commit. Skipping preflight is allowed only for an
+already approved known-good rollback SHA:
+
+```bash
+DEPLOY_REF=<known_good_full_commit> RUN_PREFLIGHT=0 \
+  bash scripts/iyun129_deploy_clean.sh
 ```
 
 After rollback, rerun the production smoke test in section 4.
@@ -195,15 +253,22 @@ Record these values in the release note or team message:
 - merged commit SHA on `main`;
 - GitHub Actions run URL;
 - deployment start/end time;
-- server commit after deploy:
+- output of `bash scripts/iyun129_release.sh status`;
+- active release directory and full `REVISION`;
+- uvicorn PID, process cwd, and local/public HTTP status;
+- SHA-256 of `runtime/start_reportgen.sh`, `watchdog.sh`, and
+  `deployment.env` (the environment file contains no secrets);
+- production renderer fingerprint and Golden DOCX/QA hashes;
+- smoke test output;
+- previous and rollback release IDs.
 
 ```bash
-cd /opt/reportgen-web
-git rev-parse --short HEAD
+ssh iyun129 '
+runtime=/media/desk16/iy12922/apps/reportgen-web-runtime
+sha256sum "$runtime/start_reportgen.sh" \
+  "$runtime/watchdog.sh" "$runtime/deployment.env"
+'
 ```
-
-- smoke test output;
-- rollback commit/tag.
 
 ## 7. Stop Conditions
 
@@ -212,5 +277,8 @@ Do not deploy if any of these are true:
 - local `make release-check` fails;
 - GitHub `qa-gate` fails or is missing;
 - PR contains real patient data or generated customer reports;
-- `deploy.sh` preflight fails;
+- the local tree or runtime-control scripts are uncommitted;
+- the iyun129 deploy preflight fails;
+- `current_release`, release `REVISION`, process cwd, or intended SHA disagree;
+- no validated known-good rollback release is recorded;
 - production smoke test cannot generate the synthetic CRC 358 golden report.

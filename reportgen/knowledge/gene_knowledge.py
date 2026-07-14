@@ -220,6 +220,11 @@ class GeneKnowledgeProvider:
                 _log.warning("reviewed Part 3 overlay load failed: %s (%s)", exc, path)
                 continue
 
+            replace_variant_drug_sections = bool(
+                data.get("replace_variant_drug_sections", False)
+            )
+            replaced_drug_groups: set[tuple[str, str]] = set()
+
             for row in data.get("gene_sections") or []:
                 if not isinstance(row, dict):
                     continue
@@ -278,8 +283,15 @@ class GeneKnowledgeProvider:
                     ),
                 }
                 if variant_key:
+                    group_key = (variant_key, drug_type)
+                    if (
+                        replace_variant_drug_sections
+                        and group_key not in replaced_drug_groups
+                    ):
+                        self._reviewed_drug_section_overrides[group_key] = []
+                        replaced_drug_groups.add(group_key)
                     self._reviewed_drug_section_overrides.setdefault(
-                        (variant_key, drug_type), []
+                        group_key, []
                     ).append(clean_row)
                 else:
                     # gene-level drug override (gene only, no c_hgvs): applies to
@@ -1027,10 +1039,13 @@ class GeneKnowledgeProvider:
 
         # 构建标题
         p_display = p_hgvs if p_hgvs and p_hgvs != "--" else ""
+        frequency_display = (
+            str(int(frequency)) if float(frequency).is_integer() else f"{frequency:.2f}"
+        )
         if p_display:
-            header = f"{gene}：{c_hgvs}，{p_display}；{frequency:.2f}%"
+            header = f"{gene}：{c_hgvs}，{p_display}；{frequency_display}%"
         else:
-            header = f"{gene}：{c_hgvs}；{frequency:.2f}%"
+            header = f"{gene}：{c_hgvs}；{frequency_display}%"
 
         # 标题颜色（有药物的用红色，否则用蓝色）
         header_color = "FF0000" if has_drug else "0000FF"

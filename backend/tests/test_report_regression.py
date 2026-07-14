@@ -18,6 +18,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm
 from docx.shared import Inches
+from docx.shared import Pt
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -335,7 +336,9 @@ def test_nccn_mutation_rows_do_not_include_cnv_or_fusion(tmp_path):
     )
     assert report_data.get_field("nccn_ERBB2_AMP") == "CNV:扩增"
     assert report_data.get_field("nccn_FGFR123_MUT") == "未检出"
-    assert report_data.get_field("nccn_FGFR123_FUSION") == "融合:BICC1-FGFR2"
+    assert report_data.get_field("nccn_FGFR123_FUSION") == (
+        "FGFR2：融合:BICC1-FGFR2"
+    )
     assert report_data.get_field("imm_hyper_EGFR_AMP") == "CNV:扩增"
 
 
@@ -400,6 +403,66 @@ def test_nccn_result_rows_are_driven_by_guideline_rules(tmp_path):
     ]
 
 
+def test_grouped_nccn_and_immune_rows_keep_gene_identity_and_vaf_order(tmp_path):
+    report_data = ReportData()
+    variants = [
+        {
+            "gene": "TP53",
+            "cHGVS": "c.499C>T",
+            "pHGVS": "p.Q167*",
+            "frequency": "1.16",
+            "gene_class": "Ⅱ类",
+        },
+        {
+            "gene": "KRAS",
+            "cHGVS": "c.34G>T",
+            "pHGVS": "p.G12C",
+            "frequency": "13.58",
+            "gene_class": "Ⅰ类",
+        },
+        {
+            "gene": "ATR",
+            "cHGVS": "c.1291delA",
+            "pHGVS": "p.R431Gfs*8",
+            "frequency": "0.98",
+            "gene_class": "Ⅱ类",
+        },
+        {
+            "gene": "BRCA1",
+            "cHGVS": "c.505C>T",
+            "pHGVS": "p.Q169*",
+            "frequency": "1.10",
+            "gene_class": "Ⅱ类",
+        },
+    ]
+    panel_config = PanelConfig(
+        nccn_result_rows=[
+            {"key": "BRCA12_MUT", "genes": ["BRCA1", "BRCA2"], "match": "突变"}
+        ],
+        immune_positive_rows=[
+            {"key": "KRAS_TP53", "genes": ["TP53", "KRAS"], "mode": "co_mutation"},
+            {"key": "DDR", "genes": ["ATR", "BRCA1"], "mode": "gene_group"},
+        ],
+    )
+
+    _build_nccn_and_immune_fields(
+        report_data,
+        variants,
+        _excel(tmp_path),
+        panel_config=panel_config,
+    )
+
+    assert report_data.get_field("nccn_BRCA12_MUT") == "BRCA1：c.505C>T，p.Q169*"
+    assert report_data.get_field("imm_pos_KRAS_TP53").splitlines() == [
+        "KRAS：c.34G>T，p.G12C",
+        "TP53：c.499C>T，p.Q167*",
+    ]
+    assert report_data.get_field("imm_pos_DDR").splitlines() == [
+        "BRCA1：c.505C>T，p.Q169*",
+        "ATR：c.1291delA，p.R431Gfs*8",
+    ]
+
+
 def test_crc_guideline_rule_contains_active_nccn_rows():
     package = load_panel_package("crc_358_msi", project_root=ROOT)
     rule = PanelRuleEngine.from_panel_package(package).get("guideline_tables")
@@ -422,6 +485,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
     assert rule["status"] == "active"
     assert len(rows) == 7
     assert "瑞戈非尼" in rows[0]["drug"]
+    assert rows[0]["enabled"] is False
     assert rule["drug_rules"]["approved_drug_rows_source"] == (
         "drugs.yaml:approved_drug_rows"
     )
@@ -431,8 +495,8 @@ def test_crc_drug_rule_contains_active_approved_rows():
 def test_load_panel_config_prefers_drugs_yaml_approved_rows():
     panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_358_msi")
 
-    assert len(panel_config.approved_drug_rows) == 7
-    assert "瑞戈非尼" in panel_config.approved_drug_rows[0]["drug"]
+    assert len(panel_config.approved_drug_rows) == 6
+    assert "贝伐珠单抗" in panel_config.approved_drug_rows[0]["drug"]
 
 
 def test_crc_biomarker_rule_contains_active_immune_tables():
@@ -1151,7 +1215,7 @@ def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
          "cHGVS": "c.844C>T", "pHGVS_S": "p.R282W", "Function": "Missense", "Freq(%)": 50.0},
         {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "APC",
          "Transcript": "NM_000038.6", "Chr": "chr5", "ExIn_ID": "EX10",
-         "cHGVS": "c.994C>T", "pHGVS_S": "p.R332*", "Function": "Nonsense", "Freq(%)": 10.0},
+         "cHGVS": "c.994C>T", "pHGVS_S": "p.R332*", "Function": "Nonsense", "Freq(%)": 10.5},
         {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "KRAS",
          "Transcript": "NM_004985.5", "Chr": "chr12", "ExIn_ID": "EX2",
          "cHGVS": "c.34G>T", "pHGVS_S": "p.G12C", "Function": "Missense", "Freq(%)": 30.0},
@@ -1172,8 +1236,14 @@ def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
 
     detected = [(row["gene"], af(row)) for row in rows if af(row) is not None]
     # genes by max freq (TP53 50 > APC 40 > KRAS 30); APC's two variants stay
-    # together and ordered 40 then 10.
-    assert detected == [("TP53", 50.0), ("APC", 40.0), ("APC", 10.0), ("KRAS", 30.0)]
+    # together and ordered 40 then 10.5. Non-integer VAF display keeps the
+    # reviewed report's two-decimal precision.
+    assert detected == [("TP53", 50.0), ("APC", 40.0), ("APC", 10.5), ("KRAS", 30.0)]
+    assert next(
+        row["af_pct"]
+        for row in rows
+        if row["gene"] == "APC" and row["locus"].startswith("c.994C>T")
+    ) == "10.50"
 
 
 def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path, monkeypatch):
@@ -1197,9 +1267,24 @@ def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path, monkeypat
     # This test only verifies row ordering. Simulate an unavailable production KB
     # so the legacy CtDrug fallback can provide simple synthetic drug rows.
     ctdrug = [
-        {"检测基因": "GENEA", "药物": "DrugA", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
-        {"检测基因": "GENEB", "药物": "DrugB", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
-        {"检测基因": "GENEC", "药物": "DrugC", "证据等级": "A", "用药提示（仅供参考）": "敏感，推荐使用"},
+        {
+            "检测基因": "GENEA",
+            "药物": "DrugA",
+            "证据等级": "A",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+        {
+            "检测基因": "GENEB",
+            "药物": "DrugB",
+            "证据等级": "A",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
+        {
+            "检测基因": "GENEC",
+            "药物": "DrugC",
+            "证据等级": "A",
+            "用药提示（仅供参考）": "敏感，推荐使用",
+        },
     ]
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
     monkeypatch.setattr(mapper, "_load_targeted_drug_db", lambda: None)
@@ -3238,6 +3323,29 @@ def test_signature_layout_keeps_report_date_on_signature_line(tmp_path):
     assert "w:keepLines" in signature_para._p.xml
 
 
+def test_signature_layout_keeps_detection_explanation_with_signature(tmp_path):
+    docx_path = tmp_path / "signature_block.docx"
+    doc = Document()
+    doc.add_paragraph("前文")
+    doc.add_paragraph("4. 检测结果说明")
+    for text in ("说明一", "说明二", "说明三", "说明四"):
+        doc.add_paragraph(text)
+    doc.add_paragraph("检测者：  审核者：  报告日期：2026.07.14")
+    doc.add_paragraph("第三部分：基因变异及相应靶向/免疫药物解析")
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._normalize_signature_layout(str(docx_path), {})
+    renderer._normalize_signature_layout(str(docx_path), {})
+
+    paragraphs = Document(docx_path).paragraphs
+    block = paragraphs[1:6]
+    signature = paragraphs[6]
+    assert all("w:keepNext" in paragraph._p.xml for paragraph in block)
+    assert "w:keepNext" not in signature._p.xml
+    assert "w:keepLines" in signature._p.xml
+
+
 def test_detector_and_reviewer_signature_images_are_context_driven(tmp_path):
     from PIL import Image
 
@@ -3396,6 +3504,25 @@ reviewer:
     )
     assert resolve_signature_path(tmp_path, "reviewer", "李四") == str(reviewer_png)
     assert resolve_signature_path(tmp_path, "reviewer", "王五") == ""
+
+
+def test_signature_library_prefers_external_runtime_storage(tmp_path, monkeypatch):
+    project = tmp_path / "release"
+    config_dir = project / "config"
+    runtime_root = tmp_path / "runtime-storage"
+    runtime_image = runtime_root / "signatures" / "registry" / "detector.png"
+    config_dir.mkdir(parents=True)
+    runtime_image.parent.mkdir(parents=True)
+    runtime_image.write_bytes(b"runtime-signature")
+    (config_dir / "signatures.yaml").write_text(
+        "detector:\n  TEST: storage/signatures/registry/detector.png\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RG_WEB_STORAGE_ROOT", str(runtime_root))
+
+    assert resolve_signature_path(config_dir, "detector", "TEST") == str(
+        runtime_image.resolve()
+    )
 
 
 def test_report_generator_fills_signature_paths_from_library(tmp_path):
@@ -4540,13 +4667,18 @@ def test_standalone_page_break_before_pathway_table_is_removed(tmp_path):
     doc = Document()
     doc.add_paragraph("参考文献：")
     doc.add_paragraph("Cancer Cell. 2007;12:104-107.")
+    doc.add_paragraph("")
     standalone = doc.add_paragraph("")
     standalone.add_run().add_break(WD_BREAK.PAGE)
     first = doc.add_table(rows=1, cols=2)
     first.cell(0, 0).text = "通路名称"
     first.cell(0, 1).text = "MAPK/ERK Signaling Pathway"
 
+    doc.add_paragraph("MAPK/ERK Signaling Pathway")
+    pathway_reference_label = doc.add_paragraph("参考文献：")
+    pathway_reference_label.paragraph_format.space_after = Pt(2)
     embedded = doc.add_paragraph("Nat Rev Cancer. 2003;3:650-665.")
+    embedded.paragraph_format.space_after = Pt(2)
     embedded.add_run().add_break(WD_BREAK.PAGE)
     second = doc.add_table(rows=1, cols=2)
     second.cell(0, 0).text = "通路名称"
@@ -4564,6 +4696,10 @@ def test_standalone_page_break_before_pathway_table_is_removed(tmp_path):
         if not p.text.strip() and 'w:type="page"' in p._p.xml
     ]
     assert empty_breaks == []
+    assert not any(
+        not p.text.strip()
+        for p in rendered.paragraphs[:2]
+    )
     reference_label = next(
         p for p in rendered.paragraphs if p.text.strip() == "参考文献："
     )
@@ -4571,6 +4707,17 @@ def test_standalone_page_break_before_pathway_table_is_removed(tmp_path):
     assert 'w:type="page"' in next(
         p for p in rendered.paragraphs if p.text.startswith("Nat Rev Cancer")
     )._p.xml
+    assert pathway_reference_label.text in [p.text for p in rendered.paragraphs]
+    compacted_label = [
+        p
+        for p in rendered.paragraphs
+        if p.text == pathway_reference_label.text and "keepNext" in p._p.xml
+    ][-1]
+    compacted_reference = next(
+        p for p in rendered.paragraphs if p.text.startswith("Nat Rev Cancer")
+    )
+    assert 'w:after="0"' in compacted_label._p.xml
+    assert 'w:after="0"' in compacted_reference._p.xml
     assert len(rendered.tables) == 2
 
 
@@ -5871,6 +6018,81 @@ def test_fast_toc_skips_static_toc_pdf_detection(tmp_path, monkeypatch):
     assert calls["set_update_fields"] == 1
 
 
+def test_static_toc_page_numbers_converge_after_toc_rebuild(tmp_path, monkeypatch):
+    docx_path = tmp_path / "report.docx"
+    Document().save(docx_path)
+    renderer = TemplateRenderer(log_level="ERROR")
+    first = {"检测结果小结": 2, "参考文献": 67}
+    shifted = {"检测结果小结": 3, "参考文献": 81}
+    detections = iter([first, shifted, shifted])
+    visible = {}
+    writes = []
+
+    monkeypatch.delenv("REPORTGEN_FAST_TOC", raising=False)
+    monkeypatch.delenv("REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: f"/fake/{name}")
+    monkeypatch.setattr(renderer, "_document_contains_toc_or_static_toc", lambda *_: True)
+    monkeypatch.setattr(renderer, "_set_word_compat_pagination", lambda *_: None)
+    monkeypatch.setattr(
+        renderer,
+        "_detect_toc_page_numbers_from_pdf_layout",
+        lambda **_kwargs: next(detections),
+    )
+
+    def fake_write(_path, page_numbers, _context):
+        writes.append(dict(page_numbers))
+        visible.clear()
+        visible.update(page_numbers)
+        return True
+
+    monkeypatch.setattr(renderer, "_write_static_toc_page_numbers", fake_write)
+    monkeypatch.setattr(renderer, "_read_static_toc_page_numbers", lambda *_: dict(visible))
+
+    renderer._populate_static_toc_page_numbers(str(docx_path), {})
+
+    assert writes == [first, shifted]
+    assert visible == shifted
+
+
+def test_static_toc_page_numbers_fail_when_final_layout_never_converges(
+    tmp_path, monkeypatch
+):
+    docx_path = tmp_path / "report.docx"
+    Document().save(docx_path)
+    renderer = TemplateRenderer(log_level="ERROR")
+    detections = iter(
+        [
+            {"参考文献": 67},
+            {"参考文献": 68},
+            {"参考文献": 69},
+            {"参考文献": 70},
+        ]
+    )
+    visible = {}
+
+    monkeypatch.delenv("REPORTGEN_FAST_TOC", raising=False)
+    monkeypatch.delenv("REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: f"/fake/{name}")
+    monkeypatch.setattr(renderer, "_document_contains_toc_or_static_toc", lambda *_: True)
+    monkeypatch.setattr(renderer, "_set_word_compat_pagination", lambda *_: None)
+    monkeypatch.setattr(
+        renderer,
+        "_detect_toc_page_numbers_from_pdf_layout",
+        lambda **_kwargs: next(detections),
+    )
+
+    def fake_write(_path, page_numbers, _context):
+        visible.clear()
+        visible.update(page_numbers)
+        return True
+
+    monkeypatch.setattr(renderer, "_write_static_toc_page_numbers", fake_write)
+    monkeypatch.setattr(renderer, "_read_static_toc_page_numbers", lambda *_: dict(visible))
+
+    with pytest.raises(RuntimeError, match="目录页码.*未收敛"):
+        renderer._populate_static_toc_page_numbers(str(docx_path), {})
+
+
 def test_qa_report_records_post_processor_errors(tmp_path):
     docx_path = tmp_path / "clean.docx"
     doc = Document()
@@ -7115,7 +7337,7 @@ def test_recolor_part3_intro_marker_is_idempotent_and_noop_without_intro(tmp_pat
 
 
 def test_reviewed_part3_knowledge_ships_dnmt3a_and_flt3_overrides():
-    """肖振娟(LZ258685) DNMT3A/FLT3 的策展解析必须随包发布，避免回退到兜底文案。"""
+    """历史终版中的 DNMT3A/FLT3 策展解析必须随包发布，避免回退到兜底文案。"""
     overlay_path = (
         ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
     )
@@ -7317,6 +7539,9 @@ def test_mutation_description_build_variant_lead_by_type():
     # 缺基因或 c.HGVS → 空串
     assert gen.build_variant_lead("", "c.1A>T", "p.M1L") == ""
     assert gen.build_variant_lead("BRAF", "", "p.V600E") == ""
+    assert "第4666位核苷酸重复" in gen.generate(
+        "APC", "c.4666dup", "p.T1556Nfs*3", 17.5, "重复突变"
+    )
 
 
 def test_drug_analysis_relation_prepends_variant_lead():

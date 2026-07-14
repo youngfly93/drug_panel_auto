@@ -30,9 +30,35 @@ def _gene_overrides(value: Any) -> dict[str, dict[str, Any]]:
     }
 
 
-def _governed_rows(
-    raw: Mapping[str, Any], rows: list[dict[str, Any]]
+def _as_panel_ids(row: Mapping[str, Any]) -> set[str]:
+    """Return an optional allow-list of panel ids declared by a rule row."""
+    value = row.get("panel_ids") or row.get("panels") or row.get("panel_id")
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, (list, tuple, set)):
+        values = value
+    else:
+        return set()
+    return {str(item).strip() for item in values if str(item).strip()}
+
+
+def _rows_for_panel(
+    rows: list[dict[str, Any]], panel_id: str
 ) -> list[dict[str, Any]]:
+    """Keep shared rows and rows explicitly scoped to the request panel."""
+    return [
+        row
+        for row in rows
+        if not _as_panel_ids(row) or panel_id in _as_panel_ids(row)
+    ]
+
+
+def _governed_rows(
+    raw: Mapping[str, Any], rows: list[dict[str, Any]], *, panel_id: str
+) -> list[dict[str, Any]]:
+    rows = _rows_for_panel(rows, panel_id)
     if not isinstance(raw.get("governance"), Mapping):
         return rows
     return [
@@ -137,6 +163,9 @@ def load_targeted_drug_rule_context(
             "panel_id": panel_id,
             "source_panel_id": source_panel_id,
             "shared": True,
+            "reviewed_variant_overrides": _rows_for_panel(
+                list(inherited.get("reviewed_variant_overrides") or []), panel_id
+            ),
         }
 
     return {
@@ -177,6 +206,7 @@ def load_targeted_drug_rule_context(
         "reviewed_variant_overrides": _governed_rows(
             raw,
             _dict_rows(policy.get("reviewed_variant_overrides")),
+            panel_id=panel_id,
         ),
         "applicability_rules": _dict_rows(
             policy.get("applicability_rules")

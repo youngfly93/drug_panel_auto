@@ -1,0 +1,123 @@
+schema_version: "1.0"
+case_alias: crc358_reviewed_case_a
+panel_id: crc_358_msi
+status: active_regression_contract
+privacy:
+  contains_phi: false
+  real_case_id_location: external_runtime_registry_only
+source:
+  type: historical_report_group_final
+  reference_docx_sha256: a2dc7e1fee96ae6b5e2c49a864c18853516edf85edeea8c796c65b9ad6c33931
+  review_binding: historical_final_report_migration
+  secondary_review_status: pending_report_group_reconfirmation
+expectations:
+  table_count: 29
+  targeted_summary:
+    row_count: 7
+    gene_order: [PIK3CA, KRAS, BRCA1, TP53, FLT3, PMS2, ATR]
+  biomarker_summary:
+    # The historical final placed TP53 before higher-VAF BRCA1. The hardened
+    # pipeline intentionally uses the shared VAF policy in every summary.
+    immune_positive_gene_order: [KRAS, BRCA1, TP53, PMS2, ATR]
+  approved_drug_table:
+    drug_order: [贝伐珠单抗, 雷莫西尤单抗, 呋喹替尼, 阿柏西普, 阿帕替尼, 盐酸安罗替尼]
+  patient_letter:
+    salutation: 女士
+  vertical_merges:
+    variant_detail: 8
+    nccn_results: 25
+  signature_drawings_min: 2
+  part3:
+    gene_section_count: 11
+    drug_section_count: 18
+    required_relative_order:
+      - KRAS|C.34G>T|P.G12C
+      - DNMT3A|C.1367DEL|P.K456SFS*195
+      - TP53|C.499C>T|P.Q167*
+      - FLT3|C.2537G>A|P.G846D
+      - ATR|C.1291DEL|P.R431GFS*8
+    required_gene_sections:
+      - key: KRAS|C.34G>T|P.G12C
+        normalized_text_sha256: b4975a4b2bd02788ba174ef0733b9863d705e3419409ea20347f2baf2a2264fa
+      - key: TP53|C.499C>T|P.Q167*
+        normalized_text_sha256: afc41467ddf6e74b3aa4b107e4f5670259ecffaf746adeb1adfb9cfba7eb1641
+      - key: FLT3|C.2537G>A|P.G846D
+        normalized_text_sha256: a94331bb923b481dc436873090138582751c91cbacd1fccd0267d787453ccd4c
+      - key: ATR|C.1291DEL|P.R431GFS*8
+        normalized_text_sha256: be83514efa905c15b7139e6770ead04540081bd796c9462b7c925724cf2cc115
+    required_drug_sections:
+      - key_prefix: benefit:KRAS|C.34G>T|P.G12C|索托拉西布/阿达格拉西布
+        normalized_text_sha256: a1804b4ba810f8bfbbfe439829d09db463d38545495445532b888b9a2578d1b7
+      - key_prefix: benefit:KRAS|C.34G>T|P.G12C|曲美替尼
+        normalized_text_sha256: 4ee4aff733fe509cdfb83f8304892364a9b58daad3b647e165efb96839a0d581
+      - key_prefix: benefit:KRAS|C.34G>T|P.G12C|贝美替尼
+        normalized_text_sha256: 5ca2720d62da99cb73a0ea1317ad5e052e49f19e41d2fa073be1dbd9f1401c60
+      - key_prefix: benefit:KRAS|C.34G>T|P.G12C|司美替尼
+        normalized_text_sha256: 566294b29ba7bc26e6e44d5aa1b9dadbdf8985391a01aa24e06469981c083373
+      - key_prefix: benefit:KRAS|C.34G>T|P.G12C|安卓健
+        normalized_text_sha256: 56a0dd3032dd3d417c6e8e90b3dcd20eef1345d01388a625ad17ae5e01884142
+      - key_prefix: benefit:KRAS|C.34G>T|P.G12C|Defactinib+Avutometinib
+        normalized_text_sha256: 613245742800a78c4ac9cf5467efeb434e3d70bf11cf9209bfef08b12c102673
+      - key_prefix: benefit:TP53|C.499C>T|P.Q167*|AZD1775
+        normalized_text_sha256: c3524cba77a11f67dc3ba48f80273dfba483f7ea0cc8ad4e15ba755cdaf9685f
+      - key_prefix: benefit:TP53|C.499C>T|P.Q167*|Alisertib
+        normalized_text_sha256: a355d2701462424fc6a081292931ae5050d45bd6aaacbee34c8fd3ce28aa5940
+      - key_prefix: benefit:TP53|C.499C>T|P.Q167*|Eprenetapopt
+        normalized_text_sha256: 5b935e87e03929db8917be08f8620e442c790dfa3eeaf61cb4137775a4ca3442
+      - key_prefix: benefit:FLT3|C.2537G>A|P.G846D|索拉非尼
+        normalized_text_sha256: 6b2acadb5b75bf2fb1b2b62d897a2bb286399e56bc5aad15d251dc8240f8ccf6
+      - key_prefix: benefit:ATR|C.1291DEL|P.R431GFS*8|奥拉帕利
+        normalized_text_sha256: 1c26bdb3aff71de8668320290ade5f0f4e7d65e9d05df69514326bf855843ec2
+      - key_prefix: caution:KRAS|C.34G>T|P.G12C|西妥昔单抗
+        normalized_text_sha256: 0cac5e8d86129a885f517d43f1b8deadcf4b2094aea7a4711dfb02a557c543dd
+      - key_prefix: caution:KRAS|C.34G>T|P.G12C|依维莫司
+        normalized_text_sha256: 61f54eb0d131eb91ebc7a0b1994fd66716c3ae6e7b533f5f8a6d92657ec8f78f
+  reviewed_variant_rows:
+    - gene: PIK3CA
+      c_hgvs: c.1624G>A
+      p_hgvs: p.E542K
+      vaf: 14.87
+      benefit_count: 15
+      caution_count: 2
+    - gene: KRAS
+      c_hgvs: c.34G>T
+      p_hgvs: p.G12C
+      vaf: 13.58
+      benefit_count: 38
+      caution_count: 3
+    - gene: BRCA1
+      c_hgvs: c.505C>T
+      p_hgvs: p.Q169*
+      vaf: 1.37
+      benefit_count: 14
+      caution_count: 0
+    - gene: TP53
+      c_hgvs: c.499C>T
+      p_hgvs: p.Q167*
+      vaf: 1.16
+      benefit_count: 5
+      caution_count: 0
+    - gene: FLT3
+      c_hgvs: c.2537G>A
+      p_hgvs: p.G846D
+      vaf: 1.02
+      benefit_count: 3
+      caution_count: 0
+    - gene: PMS2
+      c_hgvs: c.1273del
+      p_hgvs: p.S425Lfs*23
+      vaf: 1.0
+      benefit_count: 1
+      caution_count: 0
+    - gene: ATR
+      c_hgvs: c.1291del
+      p_hgvs: p.R431Gfs*8
+      vaf: 0.98
+      benefit_count: 8
+      caution_count: 0
+intentional_deviations:
+  - id: immune_positive_vaf_order
+    historical_behavior: [KRAS, TP53, BRCA1, PMS2, ATR]
+    candidate_behavior: [KRAS, BRCA1, TP53, PMS2, ATR]
+    reason: shared_grouped_vaf_sorting_contract
+    approval_status: engineering_spec_approved_pending_report_group_reconfirmation

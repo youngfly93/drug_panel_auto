@@ -135,7 +135,15 @@ import os
 import subprocess
 
 archive = os.environ["TAR_ARCHIVE"]
-roots = ["meta", "db", "uploads", "reports", "signatures", "reference_reports"]
+roots = [
+    "meta",
+    "db",
+    "uploads",
+    "reports",
+    "signatures",
+    "reference_reports",
+    "patient_info.yaml",
+]
 counts = {root: 0 for root in roots}
 required = {"meta/manifest.pre.json": False, "db/reportgen_web.sqlite": False}
 

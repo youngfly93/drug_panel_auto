@@ -164,6 +164,7 @@ def _run_gene_list_and_qc(ctx: ProcessorContext) -> None:
 def _run_variant_tables(ctx: ProcessorContext) -> None:
     ctx.renderer._fit_tables_to_page_width(ctx.output_path)
     ctx.renderer._optimize_variant_table_layout(ctx.output_path)
+    ctx.renderer._restore_reviewed_vertical_cell_merges(ctx.output_path)
 
 
 def _run_toc_refresh(ctx: ProcessorContext) -> None:
@@ -269,6 +270,8 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
         ctx.output_path, ctx.template_context
     )
     ctx.renderer._restore_detection_content_underlines(ctx.output_path)
+    ctx.renderer._render_patient_salutation(ctx.output_path, ctx.template_context)
+    ctx.renderer._normalize_repeated_terminal_punctuation(ctx.output_path)
     ctx.renderer._restore_patient_letter_fill_underlines(ctx.output_path)
     ctx.renderer._restore_msi_result_emphasis(ctx.output_path, ctx.template_context)
     ctx.renderer._restore_part3_dynamic_styles(ctx.output_path, ctx.template_context)

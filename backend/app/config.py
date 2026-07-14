@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     # --- Worker ---
     max_workers: int = 2
     recover_interrupted_tasks_on_startup: bool = True
+    runtime_instance_lock_enabled: bool = True
     generation_process_isolation: bool = True
     generation_process_timeout_seconds: int = 600
     generation_process_termination_grace_seconds: float = 5.0

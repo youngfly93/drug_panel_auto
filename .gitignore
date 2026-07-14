@@ -68,4 +68,6 @@ tmp/
 ._*
 output/
 bug_pic1/
+bug_file/
 processors_analysis.txt
+.bio_harness/

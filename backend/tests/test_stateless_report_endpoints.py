@@ -29,6 +29,27 @@ from app.services import clinical_info_service as clinical_svc  # noqa: E402
 from app.services.reportgen_bridge import ReportGenBridge  # noqa: E402
 
 
+def test_patient_registry_crud_uses_external_runtime_file(monkeypatch, tmp_path):
+    runtime_registry = tmp_path / "runtime" / "patient_info.yaml"
+    monkeypatch.setenv("REPORTGEN_PATIENT_INFO_PATH", str(runtime_registry))
+
+    clinical_svc.upsert_patient(
+        clinical_svc.PatientInfo(
+            sample_id="CASE001",
+            patient_name="脱敏测试患者",
+            gender="女",
+            cancer_type="结直肠癌",
+        )
+    )
+
+    assert clinical_svc._patient_info_path() == runtime_registry.resolve()
+    assert runtime_registry.is_file()
+    patient = clinical_svc.get_patient("CASE001")
+    assert patient is not None
+    assert patient.patient_name == "脱敏测试患者"
+    assert patient.gender == "女"
+
+
 class FakeBridge:
     def __init__(self):
         self.detect_result = {

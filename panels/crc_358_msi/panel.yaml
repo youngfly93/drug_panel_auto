@@ -33,7 +33,7 @@ templates:
     description: "Current aligned CRC template used by the legacy generator."
   - id: "crc_358_msi_golden_template_v0"
     file: "templates/crc_358_msi_golden_template_v0.docx"
-    version: "0.4.4"
+    version: "0.4.5"
     status: "active"
     description: "Production CRC358+MSI template generated from the reviewed report and guarded by golden-case regression checks."
     processors:
@@ -44,6 +44,7 @@ templates:
       - "bullet_lists"
       - "signature_layout"
       - "front_matter_spacing"
+      - "variant_tables"
       - "blank_page_cleanup"
       - "toc_refresh"
       - "final_refresh_cleanup"
@@ -67,6 +68,9 @@ rules:
 # level (not under `rules:`) because it is a content overlay, not a schema'd
 # rule file. ReportGenerator resolves this per-panel for the gene KB provider.
 reviewed_part3_overlay: "rules/reviewed_part3_knowledge.yaml"
+reviewed_part3_overlay_additions:
+  # 脱敏的历史报告组终版迁移层；仅按基因+精确 HGVS 命中，不含病例标识。
+  - "rules/reviewed_part3_crc358_reviewed_case_a.yaml"
 
 input_contract:
   required_tables:

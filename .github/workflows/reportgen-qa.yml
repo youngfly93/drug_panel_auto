@@ -29,6 +29,17 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest ruff lxml
 
+      - name: Install Linux document renderer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libreoffice-writer \
+            fonts-noto-cjk \
+            poppler-utils
+          soffice --version
+          pdfinfo -v
+          pdftotext -v
+
       - name: Run reportgen QA gate
         run: python -m reportgen.cli qa gate --output-root tmp/ci_qa_gate
 

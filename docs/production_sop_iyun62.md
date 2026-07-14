@@ -1,7 +1,11 @@
 # iyun62 ReportGen Production SOP
 
-适用范围：`https://panel.mailuo-report.com.cn`，生产主机 `iyun-server`
-上的 ReportGen Web。当前阶段暂不引入登录系统，所有上传、生成、下载、
+> **历史拓扑，仅供追溯。** iyun62 已不再是生产目标；当前 iyun129 的发布、
+> 验证与回滚只以 [`release_checklist.md`](release_checklist.md) 为准。不要将本文
+> 的主机别名、路径或端口用于 iyun129。
+
+原适用范围：`https://panel.mailuo-report.com.cn`，主机 `iyun-server`
+上的旧 ReportGen Web。该阶段暂不引入登录系统，所有上传、生成、下载、
 交付确认都按内部生产环境处理。
 
 ## 1. 基本原则

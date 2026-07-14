@@ -1,17 +1,28 @@
 #!/usr/bin/env bash
-# User-level watchdog for iyun62 reportgen-web.
+# User-level watchdog for a clean-release reportgen-web deployment.
 #
-# It keeps the clean-release uvicorn service alive and preserves the existing
-# Cloudflare tunnel. It is intentionally sudo-free because the production SSH
-# user currently has no passwordless sudo.
+# The filename is kept for backward compatibility. Environment-specific paths
+# and ports come from deployment.env beside the runtime copy of this script.
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUNTIME_DIR="${RUNTIME_DIR:-$SCRIPT_DIR}"
+DEPLOYMENT_ENV="${DEPLOYMENT_ENV:-$RUNTIME_DIR/deployment.env}"
+if [ -f "$DEPLOYMENT_ENV" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$DEPLOYMENT_ENV"
+    set +a
+fi
+
 APP_ROOT="${APP_ROOT:-/media/desk16/iyun6208/apps}"
 LEGACY_APP_DIR="${LEGACY_APP_DIR:-$APP_ROOT/reportgen-web}"
+RELEASES_DIR="${RELEASES_DIR:-$APP_ROOT/reportgen-web-releases}"
 RUNTIME_DIR="${RUNTIME_DIR:-$APP_ROOT/reportgen-web-runtime}"
 STORAGE_DIR="${STORAGE_DIR:-$LEGACY_APP_DIR/storage}"
 VENV_DIR="${VENV_DIR:-$LEGACY_APP_DIR/.venv}"
+BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 PORT="${PORT:-8000}"
 LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/tasks/stats}"
 PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/tasks/stats}"
@@ -20,6 +31,7 @@ CLOUDFLARED_TOKEN_FILE="${CLOUDFLARED_TOKEN_FILE:-/media/desk16/iyun6208/.config
 DISK_WARN_PERCENT="${DISK_WARN_PERCENT:-85}"
 LOG_MAX_BYTES="${LOG_MAX_BYTES:-5242880}"
 TUNNEL_RESTART_THRESHOLD="${TUNNEL_RESTART_THRESHOLD:-3}"
+MANAGE_TUNNEL="${MANAGE_TUNNEL:-1}"
 
 LOG_DIR="$RUNTIME_DIR/logs"
 LOG_FILE="$LOG_DIR/watchdog.log"
@@ -55,7 +67,7 @@ current_release() {
             return 0
         fi
     fi
-    find "$APP_ROOT/reportgen-web-releases" -mindepth 1 -maxdepth 1 -type d \
+    find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d \
         -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -n 1 | cut -d' ' -f2-
 }
 
@@ -136,9 +148,12 @@ ensure_web() {
 
     log "web restart local_http=${code:-none} state=$state release=$release"
     RELEASE_DIR="$release" \
+        APP_ROOT="$APP_ROOT" \
+        RELEASES_DIR="$RELEASES_DIR" \
         STORAGE_DIR="$STORAGE_DIR" \
         VENV_DIR="$VENV_DIR" \
         RUNTIME_DIR="$RUNTIME_DIR" \
+        BACKUP_DIR="$BACKUP_DIR" \
         PORT="$PORT" \
         bash "$START_SCRIPT" >> "$LOG_FILE" 2>&1
 }
@@ -198,6 +213,17 @@ ensure_tunnel() {
     start_tunnel
 }
 
+check_external_tunnel() {
+    local public_code
+    public_code="$(http_code "$PUBLIC_HEALTH_URL")"
+    if [ "$public_code" = "200" ]; then
+        log "tunnel ok public_http=$public_code external_manager"
+        return 0
+    fi
+    log "tunnel fail public_http=${public_code:-none} external_manager"
+    return 1
+}
+
 check_disk() {
     local pct
     pct="$(df -P "$STORAGE_DIR" 2>/dev/null | awk 'NR==2 {gsub(/%/, "", $5); print $5}')"
@@ -218,7 +244,11 @@ main() {
     rotate_log
     log "watchdog begin"
     ensure_web || true
-    ensure_tunnel || true
+    if [ "$MANAGE_TUNNEL" = "1" ]; then
+        ensure_tunnel || true
+    else
+        check_external_tunnel || true
+    fi
     check_disk || true
     check_libreoffice || true
     log "watchdog end"
