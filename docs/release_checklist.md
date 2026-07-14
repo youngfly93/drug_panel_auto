@@ -40,9 +40,17 @@ wait for GitHub Actions to finish, then rerun:
 
 The QA gate includes `knowledge_release_gate`. It verifies the versioned base
 knowledge manifest, review-status/runtime consistency, structured provenance,
-duplicate selectors, PII/section leaks, and runtime gene-explanation coverage
-for CRC301/358. A `not_recorded` production Overlay entry or a knowledge file
-hash mismatch blocks release.
+duplicate selectors, PII/section leaks, final-provider content completeness,
+and cited PMID/trial resolution for every `status: active` panel. A
+`not_recorded` production Overlay entry, empty final gene explanation, unresolved
+runtime citation, or knowledge file hash mismatch blocks the engineering release.
+Draft/pilot panels are reported as non-blocking readiness warnings.
+
+The same report contains a separate `clinical_release_readiness` status. It stays
+`BLOCKED` while report-group secondary review is pending, generic fallback remains
+above the accepted content-depth target, or real-report UAT has fewer than 10
+reviewed reports / less than 90% pass rate. An engineering `PASS` must not be
+described as medical approval or UAT completion.
 
 The knowledge gate can also be run directly:
 

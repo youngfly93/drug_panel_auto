@@ -39,6 +39,17 @@ def test_production_knowledge_release_gate_is_self_contained_and_passes(tmp_path
         assert coverage["gene_explanation"]["percent"] == 100.0
         assert coverage["review_governance"]["standardized_percent"] == 100.0
         assert coverage["source_provenance"]["structured_source_percent"] == 100.0
+        runtime_quality = panel["runtime_content_quality"]
+        assert runtime_quality["complete_percent"] == 100.0
+        assert runtime_quality["missing_intro_genes"] == []
+        assert runtime_quality["missing_analysis_genes"] == []
+        assert runtime_quality["citation_integrity"]["unresolved_pmids"] == []
+        assert panel["clinical_release_readiness"]["status"] == "BLOCKED"
+    assert {row["panel_id"] for row in result["non_blocking_panel_readiness"]} == {
+        "endometrial_29",
+        "lung_329_pdl1",
+        "lung_methylation",
+    }
 
 
 def test_effective_governance_keeps_legacy_and_provisional_states_distinct():

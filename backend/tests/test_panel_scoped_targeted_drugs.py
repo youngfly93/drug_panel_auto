@@ -36,6 +36,8 @@ def test_targeted_drug_rule_context_matrix():
     assert set(crc358["allowed_source_dbs"]) == {"INTERNAL", "CGI", "CIVIC"}
     assert crc358["allow_internal_rows"] is True
     assert crc358["approved_drug_rows_enabled"] is True
+    assert crc358["summary_display_scope"] == "drug_matched_variants"
+    assert crc358["summary_display_variant_levels"] == ["Ⅰ类", "Ⅱ类"]
     assert crc358["source_panel_id"] == "crc_358_msi"
     assert len(crc358["reviewed_variant_overrides"]) == 7
     assert len(crc358["applicability_rules"]) == 1
@@ -54,6 +56,8 @@ def test_targeted_drug_rule_context_matrix():
         assert context["allowed_source_dbs"] == []
         assert context["allow_internal_rows"] is False
         assert context["approved_drug_rows_enabled"] is False
+        assert context["summary_display_scope"] == "drug_matched_variants"
+        assert context["summary_display_variant_levels"] == ["Ⅰ类", "Ⅱ类"]
         assert context["reviewed_variant_overrides"] == []
         assert context["applicability_rules"] == []
         assert context["overrides"] == {}

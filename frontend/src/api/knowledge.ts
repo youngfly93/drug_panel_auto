@@ -167,6 +167,46 @@ export interface KnowledgeCoverage {
     gene_explanation_missing_genes: string[]
     runtime_drug_genes: number
     explicitly_approved_drug_genes: number
+    explicit_panel_rule_genes: number
+    panel_rule_status_counts: Record<string, number>
+    runtime_content_quality: {
+      total_genes: number
+      complete_genes: number
+      complete_percent: number
+      missing_intro_genes: string[]
+      missing_analysis_genes: string[]
+      generic_fallback_count: number
+      generic_fallback_percent: number
+      specific_explanation_genes: number
+      specific_explanation_percent: number
+      citation_integrity: {
+        cited_pmids: number
+        unresolved_pmids: string[]
+        cited_trials: number
+        unresolved_trials: string[]
+      }
+    } | null
+    clinical_release_readiness: {
+      status: 'READY' | 'BLOCKED'
+      secondary_review: {
+        owner: string
+        status: string
+        pending_runtime_rows: number
+      }
+      uat: {
+        status: string
+        reviewed_reports: number
+        passed_reports: number
+        pass_rate_percent: number | null
+        required_pass_rate_percent: number
+        minimum_reviewed_reports: number
+      }
+      blocking_reasons: string[]
+      content_depth?: {
+        generic_fallback_count: number
+        specific_explanation_percent: number
+      }
+    }
     multidimensional_coverage: {
       gene_explanation: {
         total: number

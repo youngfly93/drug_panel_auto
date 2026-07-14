@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 rule_id: "drugs"
-version: "0.3.0"
-updated: "2026-07-12"
+version: "0.4.1"
+updated: "2026-07-13"
 status: "active"
 description: "CRC drug-display rule declarations used by the generator."
 
@@ -55,6 +55,11 @@ targeted_drug_rules:
   allow_internal_rows: true
   require_cancer_profile_match: false
   approved_drug_rows_enabled: true
+  # 报告组历史验收口径：“靶向药物相关体细胞变异用药提示”
+  # 只展示真正命中用药规则的Ⅰ/Ⅱ类变异。“显示全”指每个命中行的
+  # 药物列表不再压缩为“另 X 项”，不是把无用药结论的检出变异填入该表。
+  summary_display_scope: drug_matched_variants
+  summary_display_variant_levels: ["Ⅰ类", "Ⅱ类"]
   overrides:
     SETD2:
       benefit_drugs: "AZD1775（C）"

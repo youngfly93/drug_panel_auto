@@ -65,6 +65,8 @@ def _disabled_context(panel_id: str, *, reason: str) -> dict[str, Any]:
         "allow_internal_rows": False,
         "require_cancer_profile_match": True,
         "approved_drug_rows_enabled": False,
+        "summary_display_scope": "drug_matched_variants",
+        "summary_display_variant_levels": ["Ⅰ类", "Ⅱ类"],
         "panel_id": panel_id,
         "source_panel_id": panel_id,
         "shared": False,
@@ -154,6 +156,16 @@ def load_targeted_drug_rule_context(
         "approved_drug_rows_enabled": bool(
             policy.get("approved_drug_rows_enabled", False)
         ),
+        "summary_display_scope": str(
+            policy.get("summary_display_scope") or "drug_matched_variants"
+        ).strip().lower(),
+        "summary_display_variant_levels": [
+            str(level).strip()
+            for level in (
+                policy.get("summary_display_variant_levels") or ["Ⅰ类", "Ⅱ类"]
+            )
+            if str(level).strip()
+        ],
         "panel_id": panel_id,
         "source_panel_id": panel_id,
         "shared": False,

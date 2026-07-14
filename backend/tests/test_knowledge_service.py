@@ -108,7 +108,7 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
         "unique_genes": 377,
         "drug_rows": 81,
         "drug_unique_genes": 26,
-        "targeted_drug_rows": 835,
+        "targeted_drug_rows": 811,
         "targeted_drug_unique_genes": 151,
     }
     overlay_expected = {
@@ -124,8 +124,8 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
         "targeted_drug_applicability_rule_rows": 1,
         "extra_reference_rows": 12,
         "review_status_counts": {
-            "legacy_runtime": 316,
-            "provisional_runtime": 6,
+            "legacy_runtime": 309,
+            "provisional_runtime": 13,
         },
     }
     if panel_id == "crc_301_msi":
@@ -134,8 +134,8 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
             unique_genes=271,
             gene_level_rows=269,
             review_status_counts={
-                "legacy_runtime": 316,
-                "provisional_runtime": 42,
+                "legacy_runtime": 309,
+                "provisional_runtime": 49,
             },
         )
     assert payload["reviewed_overlay"] == overlay_expected
@@ -164,6 +164,21 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
     assert disposition["database_candidate_genes"] in {115, 116}
     assert contract["gene_explanation_complete"] is True
     assert contract["gene_explanation_missing_count"] == 0
+    assert contract["explicit_panel_rule_genes"] == 9
+    assert contract["explicitly_approved_drug_genes"] == 0
+    assert contract["panel_rule_status_counts"] == {
+        "legacy_runtime": 8,
+        "provisional_runtime": 1,
+    }
+    runtime_quality = contract["runtime_content_quality"]
+    assert runtime_quality["complete_percent"] == 100.0
+    assert runtime_quality["missing_intro_genes"] == []
+    assert runtime_quality["missing_analysis_genes"] == []
+    assert runtime_quality["citation_integrity"]["unresolved_pmids"] == []
+    assert contract["clinical_release_readiness"]["status"] == "BLOCKED"
+    assert "generic_gene_fallback_requires_content_review" in contract[
+        "clinical_release_readiness"
+    ]["blocking_reasons"]
     multidimensional = contract["multidimensional_coverage"]
     assert multidimensional["gene_explanation"]["percent"] == 100.0
     assert multidimensional["review_governance"]["standardized_percent"] == 100.0
@@ -235,8 +250,8 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     assert genes["facets"] == {
         "layers": {"reviewed_overlay": 304, "base": 377},
         "review_statuses": {
-            "legacy_runtime": 676,
-            "provisional_runtime": 5,
+            "legacy_runtime": 669,
+            "provisional_runtime": 12,
         },
         "match_scopes": {"gene": 610, "variant": 71},
     }
@@ -257,14 +272,14 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     targeted = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="targeted_drug", page=1, page_size=1
     )
-    assert targeted["total"] == 844
+    assert targeted["total"] == 820
     assert targeted["facets"] == {
-        "layers": {"base": 835, "reviewed_overlay": 9},
+        "layers": {"base": 811, "reviewed_overlay": 9},
         "review_statuses": {
-            "legacy_runtime": 843,
+            "legacy_runtime": 819,
             "provisional_runtime": 1,
         },
-        "match_scopes": {"event": 633, "variant": 150, "gene": 61},
+        "match_scopes": {"event": 612, "variant": 147, "gene": 61},
     }
 
     variant_rows = service.get_catalog_entries(
@@ -278,6 +293,31 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     assert variant_rows["total"] == 71
     assert len(variant_rows["rows"]) == 71
     assert all(row["match_scope"] == "variant" for row in variant_rows["rows"])
+
+
+def test_base_catalog_shows_runtime_normalized_content_not_raw_instruction_cells():
+    smad4 = service.get_catalog_entries(
+        panel_id="crc_358_msi",
+        kind="gene",
+        layer="base",
+        gene="SMAD4",
+        page=1,
+        page_size=10,
+    )["rows"][0]
+    kmt2c = service.get_catalog_entries(
+        panel_id="crc_358_msi",
+        kind="gene",
+        layer="base",
+        gene="KMT2C",
+        page=1,
+        page_size=10,
+    )["rows"][0]
+
+    assert smad4["content"]["content_profile"] == "此前未见位点的基础回退预览"
+    assert "3056个氨基酸" not in smad4["content"]["intro"]
+    assert "552个氨基酸" in smad4["content"]["mutation_analysis"]
+    assert "239919。" not in kmt2c["content"]["mutation_analysis"]
+    assert "4911个氨基酸" in kmt2c["content"]["mutation_analysis"]
 
 
 def test_catalog_search_treats_regex_metacharacters_as_literal_text():
@@ -356,12 +396,19 @@ def test_review_status_filters_distinguish_provisional_and_legacy_runtime():
         page=1,
         page_size=100,
     )
-    assert provisional["total"] == 5
+    assert provisional["total"] == 12
     assert {row["gene"] for row in provisional["rows"]} == {
+        "CD274",
         "CHD2",
+        "ERCC2",
+        "ESR2",
         "HIST1H3B",
+        "HLA-C",
         "HLA-DPA1",
+        "PIK3C2G",
+        "SLCO1B1",
         "WDR90",
+        "XPC",
         "ZNF703",
     }
     assert all(

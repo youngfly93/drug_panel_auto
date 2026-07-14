@@ -67,3 +67,5 @@ tmp/
 # macOS metadata
 ._*
 output/
+bug_pic1/
+processors_analysis.txt

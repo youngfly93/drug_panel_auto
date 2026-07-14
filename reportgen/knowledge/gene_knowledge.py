@@ -55,6 +55,10 @@ class GeneKnowledgeProvider:
         # (normalized gene, drug_type). Lower precedence than variant-level.
         self._gene_level_drug_overrides: Dict[tuple[str, str], List[Dict[str, str]]] = {}
         self._extra_references: List[str] = []
+        self._reference_registry: Dict[str, Dict[str, str]] = {
+            "pmid": {},
+            "trial": {},
+        }
         self._drug_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._drug_full_cache: Dict[str, List[Dict[str, str]]] = {}  # 完整药物信息
         self._gene_transcript_cache: Dict[str, Dict[str, str]] = {}
@@ -88,6 +92,7 @@ class GeneKnowledgeProvider:
             if db_path.exists():
                 self._load_gene_knowledge_db(db_path, gene_kb_config)
             self._load_reviewed_part3_overlays(base, gene_kb_config)
+            self._load_reference_registry(base, gene_kb_config)
 
         # 加载基因-转录本-染色体信息
         transcript_config = self.config.get("gene_transcript_db", {})
@@ -98,6 +103,43 @@ class GeneKnowledgeProvider:
 
         self._loaded = True
         return True
+
+    def _load_reference_registry(self, base: Path, config: Dict) -> None:
+        """Load structured citation titles maintained outside the legacy workbook."""
+        raw_path = str(config.get("reference_registry_path") or "").strip()
+        if not raw_path:
+            return
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = base / path
+        if not path.exists():
+            return
+        try:
+            import yaml
+
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return
+        for row in data.get("references") or []:
+            if not isinstance(row, dict):
+                continue
+            ref_type = str(row.get("type") or "").strip().lower()
+            raw_id = str(row.get("id") or "").strip()
+            citation = str(row.get("citation") or "").strip()
+            if not citation:
+                continue
+            if ref_type in {"pubmed", "pmid"}:
+                match = re.search(r"0*(\d{5,9})", raw_id)
+                if match:
+                    self._reference_registry["pmid"].setdefault(
+                        str(int(match.group(1))), citation
+                    )
+            elif ref_type in {"trial", "clinical_trial"}:
+                match = re.search(r"(?i)((?:NCT|CTR|ChiCTR)\d+)", raw_id)
+                if match:
+                    self._reference_registry["trial"].setdefault(
+                        match.group(1).upper(), citation
+                    )
 
     def _load_gene_knowledge_db(self, path: Path, config: Dict) -> None:
         """加载基因知识库Excel文件"""
@@ -888,7 +930,7 @@ class GeneKnowledgeProvider:
                 ref = str(raw or "").strip()
                 if not ref:
                     continue
-                m = re.match(r"PMID[:\s]*0*(\d+)", ref, re.I)
+                m = re.match(r"PMID\s*[:：]?\s*0*(\d+)", ref, re.I)
                 if m:
                     pmid.setdefault(str(int(m.group(1))), ref)
                     continue
@@ -899,6 +941,12 @@ class GeneKnowledgeProvider:
                 if ref not in seen_other:
                     seen_other.add(ref)
                     other.append(ref)
+        # The structured registry fills title gaps but never overrides a
+        # panel/workbook citation already bound to the same identifier.
+        for identifier, citation in self._reference_registry["pmid"].items():
+            pmid.setdefault(identifier, citation)
+        for identifier, citation in self._reference_registry["trial"].items():
+            trial.setdefault(identifier, citation)
         return {"pmid": pmid, "trial": trial, "other": other}
 
     def get_gene_transcript_info(self, gene: str) -> Dict[str, str]:

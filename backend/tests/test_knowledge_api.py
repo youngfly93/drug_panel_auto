@@ -137,7 +137,7 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
 
     assert provisional_response.status_code == 200
     provisional = provisional_response.json()["data"]
-    assert provisional["total"] == 5
+    assert provisional["total"] == 12
     assert all(
         row["review"]["runtime_eligible"] is True
         and row["provenance"]["source_refs"]

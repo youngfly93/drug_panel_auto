@@ -1062,7 +1062,10 @@ class TemplateRenderer:
             if variant_header_re.match(text):
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 set_spacing(paragraph, before=200, after=0)
-                set_keep_next(paragraph, False)
+                # A variant heading must travel with at least the following
+                # "基因简介" label. Otherwise Word/LibreOffice can leave the
+                # heading alone at the bottom of a page.
+                set_keep_next(paragraph, True)
                 style_runs(
                     paragraph,
                     bold=True,
@@ -2960,6 +2963,84 @@ class TemplateRenderer:
 
         self.logger.debug("已移除标题前空白分页段落", removed=removed)
 
+    def _remove_standalone_page_breaks_before_pathway_tables(
+        self, file_path: str
+    ) -> None:
+        """Remove template-only page-break paragraphs before pathway tables.
+
+        The reviewed CRC template contains a few empty paragraphs whose only
+        content is ``w:br type=page`` immediately before a pathway table. When
+        the previous pathway references have already spilled onto a new page,
+        the redundant break leaves almost the entire page empty. Natural Word
+        pagination is sufficient here; page breaks embedded in non-empty
+        reference paragraphs and all section breaks are deliberately preserved.
+        """
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        doc = Document(file_path)
+        body = doc.element.body
+        children = list(body)
+        removed = 0
+        labels_kept = 0
+
+        def element_text(element) -> str:
+            return "".join(
+                node.text or "" for node in element.iter(qn("w:t"))
+            ).strip()
+
+        def is_pathway_table(element) -> bool:
+            if element.tag != qn("w:tbl"):
+                return False
+            text = element_text(element)
+            lowered = text.lower()
+            return "通路名称" in text and (
+                "signaling pathway" in lowered or "信号通路" in text
+            )
+
+        def is_standalone_page_break(element) -> bool:
+            if element.tag != qn("w:p") or element_text(element):
+                return False
+            if any(element.iter(qn("w:drawing"))) or any(
+                element.iter(qn("w:pict"))
+            ):
+                return False
+            if any(element.iter(qn("w:sectPr"))):
+                return False
+            if any(element.iter(qn("w:pageBreakBefore"))):
+                return True
+            if any(element.iter(qn("w:lastRenderedPageBreak"))):
+                return True
+            return any(
+                (br.get(qn("w:type")) or br.get("type")) == "page"
+                for br in element.iter(qn("w:br"))
+            )
+
+        for idx, element in enumerate(children):
+            if element.tag == qn("w:p") and element_text(element) == "参考文献：":
+                ppr = element.get_or_add_pPr()
+                if ppr.find(qn("w:keepNext")) is None:
+                    ppr.append(OxmlElement("w:keepNext"))
+                    labels_kept += 1
+            if not is_pathway_table(element) or idx == 0:
+                continue
+            previous = children[idx - 1]
+            if not is_standalone_page_break(previous):
+                continue
+            parent = previous.getparent()
+            if parent is None:
+                continue
+            parent.remove(previous)
+            removed += 1
+
+        if removed or labels_kept:
+            doc.save(file_path)
+            self.logger.debug(
+                "已规范通路参考文献与分页",
+                removed=removed,
+                labels_kept=labels_kept,
+            )
+
     def _normalize_front_matter_spacing(self, file_path: str) -> None:
         """Restore the reviewed report-guide offset in front matter.
 
@@ -3117,7 +3198,11 @@ class TemplateRenderer:
             inserted_spacers=guide_spacer_count,
         )
 
-    def _cleanup_section_spacing(self, file_path: str) -> None:
+    def _cleanup_section_spacing(
+        self,
+        file_path: str,
+        section_titles: tuple[str, ...] | None = None,
+    ) -> None:
         """删除章节标题前的空白段落。
 
         仅删除与章节标题同一父节点、且紧邻标题前的完全空白段落，
@@ -3137,7 +3222,7 @@ class TemplateRenderer:
         w_ppr = f"{{{ns_w}}}pPr"
         w_sectpr = f"{{{ns_w}}}sectPr"
 
-        section_titles = (
+        section_titles = section_titles or (
             "报告导读",
             "致您的一封信",
             "第一部分：基本信息",
@@ -3507,6 +3592,7 @@ class TemplateRenderer:
                 underline=True,
                 justify=True,
                 spacing_before=200,
+                keep_next=True,
             )
 
             # 基因简介（紧跟标题，无多余空行）
@@ -4844,7 +4930,7 @@ class TemplateRenderer:
 
         The template keeps the cyan TOC line as a floating shape anchored to the
         "目    录" paragraph. Word/WPS/LibreOffice can lay out refreshed TOC text
-        slightly differently, so after static TOC rewriting we restore the
+        slightly differently, so after TOC rewriting we restore the
         reviewed report's line and circle offsets. We only touch the line and
         small circle anchored to the TOC title.
         """
@@ -5015,12 +5101,12 @@ class TemplateRenderer:
     def _populate_static_toc_page_numbers(
         self, file_path: str, context: dict | None = None
     ) -> None:
-        """Write visible TOC page numbers from the final rendered PDF layout.
+        """Write cached TOC numbers plus reader-refreshable page fields.
 
-        LibreOffice can refresh the PAGEREF fields but may leave the tab run
-        hidden, and in some environments it also preserves stale page numbers.
-        Rendering the final docx to PDF gives us the authoritative pagination
-        without requiring Microsoft Word UI permissions.
+        The PDF probe supplies a useful cached value for previewers that do not
+        refresh fields. Dedicated ReportGen bookmarks and dirty ``PAGEREF``
+        fields let Word/WPS replace that cache with their own actual pagination
+        when the report opens.
         """
         import os
         import shutil
@@ -5041,14 +5127,14 @@ class TemplateRenderer:
             except Exception:
                 pass
             self.logger.info(
-                "已跳过静态目录页码写回",
+                "已跳过目录页码构建",
                 output=file_path,
                 reason="REPORTGEN_FAST_TOC",
             )
             return
 
         if not self._document_contains_toc_or_static_toc(file_path):
-            self.logger.debug("文档不包含目录域/静态目录，跳过静态目录页码写回", output=file_path)
+            self.logger.debug("文档不包含目录，跳过目录页码构建", output=file_path)
             return
 
         soffice = shutil.which("soffice") or shutil.which("libreoffice")
@@ -5056,17 +5142,15 @@ class TemplateRenderer:
         pdfinfo = shutil.which("pdfinfo")
         if not soffice or not pdftotext or not pdfinfo:
             self.logger.debug(
-                "缺少 PDF 布局工具，跳过静态目录页码写回",
+                "缺少 PDF 布局工具，跳过目录缓存页码构建",
                 soffice=bool(soffice),
                 pdftotext=bool(pdftotext),
                 pdfinfo=bool(pdfinfo),
             )
             return
 
-        # Make LibreOffice paginate like Word/WPS *before* detecting page
-        # numbers, so the static numbers we write track the pages a Word/WPS
-        # reader actually sees (LibreOffice otherwise packs content into fewer
-        # pages, drifting the later sections up by several pages).
+        # Keep the cached preview reasonably close to Word/WPS. Exact cross-reader
+        # agreement is provided by the PAGEREF fields, not by this PDF probe.
         self._set_word_compat_pagination(file_path)
 
         page_numbers = self._detect_toc_page_numbers_from_pdf_layout(
@@ -5078,39 +5162,23 @@ class TemplateRenderer:
         if not page_numbers:
             return
 
-        stable_numbers = page_numbers
-        for attempt in range(1, 5):
-            if not self._write_static_toc_page_numbers(file_path, stable_numbers, context):
-                return
+        if not self._write_static_toc_page_numbers(file_path, page_numbers, context):
+            return
 
-            visible_numbers = self._read_static_toc_page_numbers(file_path)
-            detected_numbers = self._detect_toc_page_numbers_from_pdf_layout(
-                file_path=file_path,
-                soffice=soffice,
-                pdftotext=pdftotext,
-                pdfinfo=pdfinfo,
-            )
-            if self._toc_page_numbers_match(visible_numbers, detected_numbers):
-                self.logger.info(
-                    "已按最终 PDF 版式写回目录页码",
-                    output=file_path,
-                    page_numbers=visible_numbers,
-                    attempts=attempt,
-                )
-                return
-            if not detected_numbers:
-                break
-            stable_numbers = detected_numbers
-
+        # The detected numbers are cached display values only. The TOC rows use
+        # dedicated, valid PAGEREF bookmarks and therefore recalculate against
+        # the reader's own pagination when Word/WPS opens the report. Re-rendering
+        # repeatedly here is both wasteful and fundamentally unstable across
+        # layout engines (the same DOCX can paginate differently in LibreOffice).
         self.logger.info(
-            "已按最终 PDF 版式写回目录页码",
+            "已写入可自动刷新的目录页码",
             output=file_path,
-            page_numbers=stable_numbers,
-            attempts="unstable",
+            cached_page_numbers=self._read_static_toc_page_numbers(file_path),
+            mode="PAGEREF",
         )
 
     def _read_static_toc_page_numbers(self, file_path: str) -> dict[str, int]:
-        """Read visible static TOC numbers from DOCX XML."""
+        """Read the visible cached TOC numbers from DOCX XML."""
         import re
         from zipfile import ZipFile
 
@@ -5178,15 +5246,18 @@ class TemplateRenderer:
         page_numbers: dict[str, int],
         context: dict | None = None,
     ) -> bool:
-        """Rebuild the TOC as pure static text: labels + static page numbers.
+        """Rebuild the TOC with cached numbers and refreshable ``PAGEREF`` fields.
 
-        The TOC carries NO fields — no ``HYPERLINK`` jump and no ``PAGEREF``
-        page number. Live fields let Word/WPS re-resolve numbers on open, which
-        on this template's malformed bookmark structure collapsed every entry to
-        page 1. A field-free block can only display the static number written
-        here (derived from the final PDF layout, with Word-compat pagination —
-        see ``_set_word_compat_pagination``), so it is identical in every
-        reader. Click-to-jump is intentionally dropped for that guarantee.
+        LibreOffice, Word and WPS can paginate the same report differently, so
+        no server-side static number is universally correct. Each item therefore
+        gets a dedicated bookmark on its exact body heading, and its page number
+        is emitted as ``PAGEREF`` with the detected number as a cached fallback.
+        Word/WPS refresh the field against their own layout on open.
+
+        Existing template ``_Toc*`` bookmarks are deliberately not reused: the
+        reviewed template contains malformed/stale bookmark ranges that once
+        collapsed every entry to page 1. Only bookmarks created by ReportGen
+        under the ``_ReportGenToc_`` prefix are trusted and reused.
         """
         import copy
         import os
@@ -5198,7 +5269,7 @@ class TemplateRenderer:
         try:
             from lxml import etree
         except Exception as exc:
-            self.logger.debug("缺少 lxml，跳过静态目录页码写回", error=str(exc))
+            self.logger.debug("缺少 lxml，跳过目录页码写回", error=str(exc))
             return False
 
         ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
@@ -5292,6 +5363,8 @@ class TemplateRenderer:
                 "阅读说明": ["阅读说明"],
             }
             toc_target_rules = {
+                "患者及样本信息": {"needles": ["第一部分：基本信息"]},
+                "检测内容": {"exact": ["检测内容"]},
                 "检测结果小结": {"needles": ["1.检测结果小结"]},
                 "靶向药物相关检测结果": {"needles": ["2.靶向药物相关检测结果"]},
                 "免疫治疗疗效评估": {"needles": ["3.免疫治疗疗效评估"]},
@@ -5345,11 +5418,10 @@ class TemplateRenderer:
                 ]
 
             def preferred_bookmark(names: list[str]) -> str | None:
-                for prefix in ("_Toc", "__RefHeading"):
-                    for name in names:
-                        if name.startswith(prefix):
-                            return name
-                return names[0] if names else None
+                for name in names:
+                    if name.startswith("_ReportGenToc_"):
+                        return name
+                return None
 
             def compact_target(text: str) -> str:
                 text = re.sub(r"\s+", "", text or "")
@@ -5370,7 +5442,7 @@ class TemplateRenderer:
             def make_auto_bookmark_name(label: str) -> str:
                 safe = re.sub(r"[^A-Za-z0-9_]+", "_", label)
                 safe = safe.strip("_")[:24] or "toc"
-                return f"_TocAuto_{safe}_{next_bookmark_id}"
+                return f"_ReportGenToc_{safe}_{next_bookmark_id}"
 
             def add_bookmark_to_paragraph(elem: Any, label: str) -> str:
                 nonlocal next_bookmark_id
@@ -5403,6 +5475,11 @@ class TemplateRenderer:
 
                 rule = toc_target_rules.get(label)
                 if rule:
+                    exact = [
+                        compact_target(str(value))
+                        for value in rule.get("exact", [])
+                        if compact_target(str(value))
+                    ]
                     needles = [
                         compact_target(str(needle))
                         for needle in rule.get("needles", [])
@@ -5411,7 +5488,10 @@ class TemplateRenderer:
                     matches = [
                         paragraph
                         for paragraph, _text_norm, text_compact in paragraph_entries
-                        if any(needle in text_compact for needle in needles)
+                        if (
+                            (exact and text_compact in exact)
+                            or any(needle in text_compact for needle in needles)
+                        )
                     ]
                     if not matches and rule.get("fallback"):
                         fallback_norms = [
@@ -5486,11 +5566,14 @@ class TemplateRenderer:
                 *,
                 field_char_type: str | None = None,
                 instruction: str | None = None,
+                dirty: bool = False,
             ) -> Any:
                 run = etree.Element(qn("r"))
                 if field_char_type:
                     field_char = etree.SubElement(run, qn("fldChar"))
                     field_char.set(qn("fldCharType"), field_char_type)
+                    if dirty:
+                        field_char.set(qn("dirty"), "true")
                 if instruction is not None:
                     instr = etree.SubElement(run, qn("instrText"))
                     instr.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
@@ -5547,16 +5630,22 @@ class TemplateRenderer:
             ) -> Any:
                 para = etree.Element(qn("p"))
                 para.append(make_toc_ppr(section, before_twips=before_twips))
-                # Pure static-text TOC: no HYPERLINK field (no click-to-jump).
-                # Live fields let Word/WPS re-resolve numbers on open — which on
-                # malformed-bookmark docs collapses every entry to page 1. A
-                # field-free block can only ever display the static number we
-                # write, so it is bulletproof across every reader. Click-to-jump
-                # is intentionally dropped in favour of that guarantee.
+                anchor = None if section else find_or_create_target_bookmark(label)
                 para.append(make_run(label, section=section))
                 if number is not None:
                     para.append(make_run(tab=True))
-                    para.append(make_run(number))
+                    if anchor:
+                        para.append(
+                            make_field_run(field_char_type="begin", dirty=True)
+                        )
+                        para.append(
+                            make_field_run(instruction=f" PAGEREF {anchor} \\h ")
+                        )
+                        para.append(make_field_run(field_char_type="separate"))
+                        para.append(make_run(number))
+                        para.append(make_field_run(field_char_type="end"))
+                    else:
+                        para.append(make_run(number))
                 return para
 
             def make_page_break_paragraph() -> Any:
@@ -5833,7 +5922,6 @@ class TemplateRenderer:
                 )
 
         return page_numbers
-
     @staticmethod
     def _extract_pdf_footer_page_number(page_text: str) -> int | None:
         """Return the visible report-page footer number from one PDF text page."""
@@ -5952,12 +6040,11 @@ class TemplateRenderer:
     def _set_word_compat_pagination(self, file_path: str) -> None:
         """写入 Word 兼容分页标志，使 LibreOffice 的分页贴近 Word/WPS。
 
-        LibreOffice 默认把内容压进比 Word 更少的页里，导致从 LibreOffice PDF
-        版式探测出的静态目录页码，与读者在 Word/WPS 里实际看到的页相差数页
-        （尤以靠后的章节明显）。开启 ``usePrinterMetrics`` 与
+        LibreOffice 默认把内容压进比 Word 更少的页里。开启
+        ``usePrinterMetrics`` 与
         ``doNotUseHTMLParagraphAutoSpacing`` 这两个 Word 兼容标志后，
-        LibreOffice 的排版（以及据此探测/写入的页码）会大幅贴近 Word，
-        临床关键段基本对齐。这两个标志在 Word 中本就是默认行为（等同空操作），
+        LibreOffice 的缓存排版会更接近 Word；打开文档后的精确页码仍由
+        ``PAGEREF`` 按读者当前版式重算。这两个标志在 Word 中本就是默认行为，
         因此保留在交付的 docx 里是安全的。
         """
         from docx.oxml.ns import qn
@@ -6027,7 +6114,7 @@ class TemplateRenderer:
         return "TOC" in document_xml
 
     def _document_contains_toc_or_static_toc(self, file_path: str) -> bool:
-        """Check whether a docx has a Word TOC field or our static TOC rows."""
+        """Check whether a docx has a Word TOC field or ReportGen TOC rows."""
         from zipfile import ZipFile
 
         try:
@@ -6038,9 +6125,8 @@ class TemplateRenderer:
 
         if "TOC" in document_xml:
             return True
-        # Our static TOC carries no fields (no HYPERLINK/TOC code) — detect it by
-        # the reviewed part-section markers instead, so static page-number
-        # writing still triggers for the pure-static-text layout.
+        # ReportGen rebuilds individual PAGEREF rows rather than a monolithic TOC
+        # field, so retain the reviewed part-section marker fallback.
         return (
             "第一部分" in document_xml
             and "第四部分" in document_xml

@@ -1160,8 +1160,15 @@ def _compact_drug_display_value(
     if isinstance(value, (list, tuple, set)):
         items = [_norm_text(item) for item in value if _norm_text(item)]
     else:
+        # norm_text() intentionally collapses generic missing-value markers,
+        # including "--", to an empty string. Drug tables use "--" as an
+        # explicit reviewed conclusion (no eligible benefit/caution drug), so
+        # preserve it before applying the generic normalizer.
+        raw_text = str(value).strip()
+        if raw_text in {"-", "--", "—"}:
+            return raw_text
         text = _norm_text(value)
-        if not text or text in {"-", "--"}:
+        if not text:
             return text
         items = [line.strip() for line in text.splitlines() if line.strip()]
     if max_items is None or max_items <= 0 or len(items) <= max_items:

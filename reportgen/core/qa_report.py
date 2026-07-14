@@ -9,9 +9,11 @@ patient case. Panel-specific assertions are enabled from project/report context.
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
+from zipfile import ZipFile
 
 from docx import Document
 
@@ -160,9 +162,11 @@ def build_docx_qa_report(
     if empty_numbered:
         issue("error", "EMPTY_NUMBERED_PARAGRAPH", "Rendered DOCX contains visible empty bullet/numbered paragraphs.")
 
-    toc = _inspect_toc(paragraphs)
+    toc = _inspect_toc(paragraphs, output_path=output_path)
     checks["toc_page_numbers"] = toc
-    if toc["status"] == "WARN":
+    if toc["status"] == "FAIL":
+        issue("error", "TOC_FIELD_INVALID", toc["message"])
+    elif toc["status"] == "WARN":
         issue("warning", "TOC_PAGE_NUMBERS_MISSING", toc["message"])
 
     checks["visual_render"] = _build_visual_render_check(
@@ -655,6 +659,11 @@ def _inspect_rendered_png_pages(pngs: Iterable[Path]) -> Dict[str, Any]:
         "blank_nonwhite_ratio": 0.001,
         "blank_dark_ratio": 0.0002,
         "low_content_dark_ratio": 0.0015,
+        # Header/footer text and the light cyan watermark previously made a
+        # body-empty page look non-blank. Inspect the central body separately.
+        "body_crop_top_fraction": 0.10,
+        "body_crop_bottom_fraction": 0.10,
+        "body_low_content_dark_ratio": 0.01,
     }
     try:
         from PIL import Image
@@ -676,6 +685,16 @@ def _inspect_rendered_png_pages(pngs: Iterable[Path]) -> Dict[str, Any]:
 
     blank_pages = [row["path"] for row in pages if row.get("blank")]
     low_content_pages = [row["path"] for row in pages if row.get("low_content")]
+    # Covers/back covers can intentionally be sparse. The new body-content
+    # gate is therefore applied only to interior pages.
+    interior_body_low_content_pages = [
+        row["path"]
+        for idx, row in enumerate(pages)
+        if 0 < idx < len(pages) - 1 and row.get("body_low_content")
+    ]
+    low_content_pages = list(
+        dict.fromkeys(low_content_pages + interior_body_low_content_pages)
+    )
     if unreadable or blank_pages or low_content_pages:
         parts: List[str] = []
         if unreadable:
@@ -715,8 +734,22 @@ def _rendered_png_page_metrics(
     with image_module.open(path) as image:
         original_size = [int(image.width), int(image.height)]
         sampled = image.convert("RGBA")
+        body_top = int(
+            image.height * float(thresholds["body_crop_top_fraction"])
+        )
+        body_bottom = int(
+            image.height
+            * (1.0 - float(thresholds["body_crop_bottom_fraction"]))
+        )
+        body_sampled = sampled.crop((0, body_top, image.width, body_bottom))
         sampled.thumbnail((300, 300))
-        pixels = list(sampled.getdata())
+        body_sampled.thumbnail((300, 300))
+        sampled_data = getattr(sampled, "get_flattened_data", sampled.getdata)
+        body_data = getattr(
+            body_sampled, "get_flattened_data", body_sampled.getdata
+        )
+        pixels = list(sampled_data())
+        body_pixels = list(body_data())
 
     visible = [pixel for pixel in pixels if pixel[3] > 10]
     visible_count = len(visible) or 1
@@ -726,6 +759,13 @@ def _rendered_png_page_metrics(
     dark_count = sum(
         1
         for red, green, blue, _alpha in visible
+        if (red + green + blue) / 3 < 210
+    )
+    body_visible = [pixel for pixel in body_pixels if pixel[3] > 10]
+    body_visible_count = len(body_visible) or 1
+    body_dark_count = sum(
+        1
+        for red, green, blue, _alpha in body_visible
         if (red + green + blue) / 3 < 210
     )
     nonwhite_ratio = nonwhite_count / visible_count
@@ -738,6 +778,10 @@ def _rendered_png_page_metrics(
         not blank
         and dark_ratio < float(thresholds["low_content_dark_ratio"])
     )
+    body_dark_ratio = body_dark_count / body_visible_count
+    body_low_content = body_dark_ratio < float(
+        thresholds["body_low_content_dark_ratio"]
+    )
     return {
         "path": str(path),
         "file_size_bytes": path.stat().st_size,
@@ -745,8 +789,10 @@ def _rendered_png_page_metrics(
         "sampled_pixels": visible_count,
         "nonwhite_ratio": round(nonwhite_ratio, 6),
         "dark_ratio": round(dark_ratio, 6),
+        "body_dark_ratio": round(body_dark_ratio, 6),
         "blank": blank,
         "low_content": low_content,
+        "body_low_content": body_low_content,
     }
 
 
@@ -810,11 +856,100 @@ def _paragraph_has_embedded_object(paragraph: Any) -> bool:
     return "<w:drawing" in xml or "<w:pict" in xml
 
 
-def _inspect_toc(paragraphs: List[Any]) -> Dict[str, Any]:
+def _inspect_reportgen_toc_fields(output_path: Path) -> Optional[Dict[str, Any]]:
+    """Validate ReportGen-owned PAGEREF fields directly from DOCX XML.
+
+    ``python-docx`` omits paragraphs nested in Word content controls, which is
+    where the reviewed TOC lives. XML inspection keeps the QA gate aware of the
+    actual reader-refreshable fields and their target bookmarks.
+    """
+    w_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    qn = lambda tag: f"{{{w_ns}}}{tag}"
+    try:
+        with ZipFile(output_path, "r") as zf:
+            document_root = ET.fromstring(zf.read("word/document.xml"))
+            settings_root = ET.fromstring(zf.read("word/settings.xml"))
+    except Exception as exc:
+        return {
+            "status": "FAIL",
+            "mode": "PAGEREF",
+            "message": f"Unable to inspect TOC field XML: {exc}",
+        }
+
+    anchors: List[str] = []
+    for node in document_root.iter(qn("instrText")):
+        instruction = node.text or ""
+        match = re.search(r"\bPAGEREF\s+(_ReportGenToc_\S+)", instruction)
+        if match:
+            anchors.append(match.group(1))
+    if not anchors:
+        return None
+
+    bookmark_ids: Dict[str, str] = {}
+    for node in document_root.iter(qn("bookmarkStart")):
+        name = node.get(qn("name")) or ""
+        if name.startswith("_ReportGenToc_"):
+            bookmark_ids[name] = node.get(qn("id")) or ""
+    bookmark_end_ids = {
+        node.get(qn("id")) or ""
+        for node in document_root.iter(qn("bookmarkEnd"))
+    }
+    unique_anchors = set(anchors)
+    missing_bookmarks = sorted(unique_anchors - set(bookmark_ids))
+    unclosed_bookmarks = sorted(
+        name
+        for name in unique_anchors & set(bookmark_ids)
+        if bookmark_ids[name] not in bookmark_end_ids
+    )
+    duplicate_targets = sorted(
+        anchor for anchor in unique_anchors if anchors.count(anchor) > 1
+    )
+    update_values = [
+        str(node.get(qn("val")) or "").strip().lower()
+        for node in settings_root.iter(qn("updateFields"))
+    ]
+    update_fields = any(value in {"1", "true", "on"} for value in update_values)
+
+    problems = []
+    if missing_bookmarks:
+        problems.append(f"missing bookmarks={missing_bookmarks}")
+    if unclosed_bookmarks:
+        problems.append(f"unclosed bookmarks={unclosed_bookmarks}")
+    if duplicate_targets:
+        problems.append(f"duplicate targets={duplicate_targets}")
+    if not update_fields:
+        problems.append("updateFields is not enabled")
+
+    return {
+        "status": "FAIL" if problems else "PASS",
+        "mode": "PAGEREF",
+        "field_count": len(anchors),
+        "unique_target_count": len(unique_anchors),
+        "bookmark_count": len(bookmark_ids),
+        "missing_bookmarks": missing_bookmarks,
+        "unclosed_bookmarks": unclosed_bookmarks,
+        "duplicate_targets": duplicate_targets,
+        "update_fields": update_fields,
+        "message": (
+            "ReportGen TOC PAGEREF fields and bookmarks are valid."
+            if not problems
+            else "Invalid ReportGen TOC fields: " + "; ".join(problems)
+        ),
+    }
+
+
+def _inspect_toc(
+    paragraphs: List[Any], *, output_path: Optional[Path] = None
+) -> Dict[str, Any]:
+    if output_path is not None:
+        field_check = _inspect_reportgen_toc_fields(Path(output_path))
+        if field_check is not None:
+            return field_check
+
     texts = [(p.text or "").strip() for p in paragraphs]
     start_idx = None
     for idx, text in enumerate(texts):
-        if text == "目录" or text.startswith("目录 "):
+        if _compact(text).startswith("目录"):
             start_idx = idx
             break
     if start_idx is None:

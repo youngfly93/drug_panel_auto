@@ -119,6 +119,13 @@ class TargetedDrugMixin:
             if gene_col is None or benefit_col is None or caution_col is None:
                 continue
 
+            source_rows = int(len(df))
+            # Exact duplicates must not create repeated drug decisions.  This
+            # is intentionally conservative: rows that differ in evidence,
+            # cancer context or selector remain separate.
+            df = df.drop_duplicates().reset_index(drop=True)
+            duplicate_rows_removed = source_rows - int(len(df))
+
             # 显示归一化：库里部分条目写死了 CIViC/CGI 原始证据标签，例如
             # "Erlotinib（CIViC:Tier I - Level A）"。收敛成干净的证据等级
             # "Erlotinib（A）"。纯显示层——保留药名与等级、不改医学内容，只让各
@@ -146,6 +153,8 @@ class TargetedDrugMixin:
                 path=str(db_path),
                 sheet=sheet,
                 rows=int(len(df)),
+                source_rows=source_rows,
+                exact_duplicate_rows_removed=duplicate_rows_removed,
             )
             xl.close()
             return
@@ -916,8 +925,34 @@ class TargetedDrugMixin:
             _has_explicit_gene_class_labels,
         )
 
+        display_scope = str(
+            (targeted_drug_rules or {}).get(
+                "summary_display_scope", "drug_matched_variants"
+            )
+        ).strip().lower()
+        display_all_reportable = display_scope == "all_reportable_variants"
+        configured_display_levels = {
+            self._norm_text(level)
+            for level in (targeted_drug_rules or {}).get(
+                "summary_display_variant_levels", ["Ⅰ类", "Ⅱ类"]
+            )
+            if self._norm_text(level)
+        }
+        if not configured_display_levels:
+            configured_display_levels = {"Ⅰ类", "Ⅱ类"}
+
+        panel_id = str((targeted_drug_rules or {}).get("panel_id") or "").strip()
+        panel_filter_column = {
+            "crc_358_msi": "ExistInsmall358",
+            "crc_301_msi": "ExistInsmall301",
+        }.get(panel_id)
+
         allow_gene_fallback = not _has_explicit_gene_class_labels(variations)
         for r in variations:
+            if panel_filter_column and panel_filter_column in r and r.get(
+                panel_filter_column
+            ) not in (1, "1", True):
+                continue
             level = self._norm_text(r.get("ExistIn552"))
             gene_tmp = get_gene_from_row(r)
             if not gene_tmp:
@@ -929,8 +964,10 @@ class TargetedDrugMixin:
             )
             if not level:
                 continue
-            # 终版报告：靶向药物提示表仅展示Ⅰ/Ⅱ类
-            if level not in {"Ⅰ类", "Ⅱ类"}:
+            # 默认沿用历史口径，只处理Ⅰ/Ⅱ类。CRC 报告组确认的
+            # all_reportable_variants 口径允许Ⅰ/Ⅱ/Ⅲ类全部进入小结，但Ⅲ类
+            # 仍不参与药物推断，药物列固定显示“--”。
+            if level not in configured_display_levels:
                 continue
             gene = gene_tmp
             c = self._norm_text(r.get("cHGVS"))
@@ -1042,16 +1079,17 @@ class TargetedDrugMixin:
             for s in sites:
                 b, c = "--", "--"
                 source = "none"
+                drug_rule_eligible = s["level"] in {"Ⅰ类", "Ⅱ类"}
 
                 # 优先级 1: override（手动审核的固定规则）
-                if overrides and gene_upper in overrides:
+                if drug_rule_eligible and overrides and gene_upper in overrides:
                     ov = overrides[gene_upper]
                     b = ov.get("benefit_drugs", "--")
                     c = ov.get("caution_drugs", "--")
                     source = "override"
 
                 # 优先级 2: KB 数据库（位点级匹配）
-                elif has_kb:
+                elif drug_rule_eligible and has_kb:
                     kb_b, kb_c, score = self._lookup_targeted_drugs_for_variant(
                         gene,
                         c_point=s["c"],
@@ -1066,7 +1104,7 @@ class TargetedDrugMixin:
                         source = "kb"
 
                 # 优先级 3: CtDrug 表回退（仅 KB 不可用时启用）
-                if allow_ctdrug_fallback and (
+                if drug_rule_eligible and allow_ctdrug_fallback and (
                     source == "none"
                     or (b == "--" and c == "--" and source != "override")
                 ):
@@ -1074,8 +1112,9 @@ class TargetedDrugMixin:
                     if ct_b != "--" or ct_c != "--":
                         b, c = ct_b, ct_c
 
-                # 摘要页口径：只保留真正有药物关联的位点
-                if b == "--" and c == "--":
+                # 默认只保留真正有药物关联的位点；报告组确认需要完整小结的
+                # panel 则保留无药物结论行，并明确显示“--”。
+                if b == "--" and c == "--" and not display_all_reportable:
                     continue
 
                 results.append(

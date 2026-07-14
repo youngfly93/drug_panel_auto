@@ -16,10 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from reportgen.knowledge.release_gate import (  # noqa: E402
-    DEFAULT_PANELS,
-    run_knowledge_release_gate,
-)
+from reportgen.knowledge.release_gate import run_knowledge_release_gate  # noqa: E402
 
 
 def main() -> int:
@@ -35,7 +32,7 @@ def main() -> int:
     args = parser.parse_args()
     result = run_knowledge_release_gate(
         args.project_root,
-        panel_ids=tuple(args.panels or DEFAULT_PANELS),
+        panel_ids=tuple(args.panels) if args.panels else None,
         output_path=args.output,
     )
     print(f"status={result['status']}")
