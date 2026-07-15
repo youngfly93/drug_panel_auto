@@ -579,6 +579,21 @@ export const reportApi = {
     return data.data
   },
 
+  async uploadFeedback(
+    taskId: string,
+    file: File,
+    note = '',
+  ): Promise<{ sample_id: string; filename: string; size: number }> {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('note', note)
+    const { data } = await client.post(`/reports/${taskId}/feedback`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    })
+    return data.data
+  },
+
   buildFileForm(file: File, req: Omit<GenerateRequest, 'upload_id'>): FormData {
     return buildReportFileForm(file, req)
   },
