@@ -27,6 +27,7 @@ PORT="${PORT:-8000}"
 HOST="${HOST:-0.0.0.0}"
 APP_MODULE="${APP_MODULE:-app.main:app}"
 LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
+LEGACY_LOCAL_HEALTH_URL="${LEGACY_LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/tasks/stats}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-60}"
 HEALTH_STABLE_CHECKS="${HEALTH_STABLE_CHECKS:-2}"
 
@@ -147,6 +148,20 @@ for pid in remaining:
     except ProcessLookupError:
         pass
 
+# A killed predecessor may still hold the runtime flock for a short window.
+# Wait for /proc removal before allowing the candidate to start.
+deadline = time.time() + 10
+while remaining and time.time() < deadline:
+    for pid in list(remaining):
+        if not os.path.exists(f"/proc/{pid}"):
+            remaining.remove(pid)
+    time.sleep(0.1)
+
+if remaining:
+    raise SystemExit(
+        "uvicorn processes did not terminate: " + " ".join(map(str, remaining))
+    )
+
 if targets:
     print("Stopped uvicorn PIDs:", " ".join(map(str, targets)))
 PY
@@ -156,6 +171,15 @@ set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
+
+# Deployment-controlled safety settings must win over stale values in the
+# long-lived secret file (for example a historical wildcard CORS value).
+if [ -f "$DEPLOYMENT_ENV" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$DEPLOYMENT_ENV"
+    set +a
+fi
 
 # Production reports must contain ReportGen PAGEREF fields plus cached page
 # numbers.  The old FAST_TOC/skip switches omit that construction and can leave
@@ -186,8 +210,12 @@ STARTED_PID=""
 LAST_HEALTH_CODE="000"
 
 start_release() {
-    local release="$1" expected_cwd actual_cwd process_state process_cmdline attempt stable_checks
+    local release="$1" expected_cwd actual_cwd process_state process_cmdline attempt stable_checks health_url
     expected_cwd="$(canonical_dir "$release")"
+    health_url="$LOCAL_HEALTH_URL"
+    if [ ! -f "$expected_cwd/backend/app/api/health.py" ]; then
+        health_url="$LEGACY_LOCAL_HEALTH_URL"
+    fi
     export RG_WEB_UPSTREAM_ROOT="$expected_cwd"
     cd "$expected_cwd"
     nohup "$VENV_DIR/bin/python" "$VENV_DIR/bin/uvicorn" "$APP_MODULE" \
@@ -210,7 +238,7 @@ start_release() {
             return 1
         fi
         LAST_HEALTH_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
-            "$LOCAL_HEALTH_URL" || true)"
+            "$health_url" || true)"
         if [ "$LAST_HEALTH_CODE" = "200" ]; then
             actual_cwd="$(readlink "/proc/$STARTED_PID/cwd" 2>/dev/null || true)"
             process_state="$(awk '/^State:/ {print $2}' "/proc/$STARTED_PID/status" 2>/dev/null || true)"

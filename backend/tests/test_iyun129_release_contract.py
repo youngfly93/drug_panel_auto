@@ -55,6 +55,8 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     alerts = _read("scripts/iyun62_alerts.sh")
     assert "OPS_LOGIN_URL" in alerts
     assert "OPS_AUTH_USERNAME" in alerts
+    assert "RG_WEB_MONITOR_USERNAME" in alerts
+    assert "RG_WEB_MONITOR_PASSWORD" in alerts
     assert '"Authorization": f"Bearer {token}"' in alerts
 
     cloudflared_start = _read("scripts/iyun129_start_cloudflared.sh")
@@ -83,6 +85,8 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert 'HEALTH_STABLE_CHECKS="${HEALTH_STABLE_CHECKS:-2}"' in start
     assert 'previous_release="$(validate_release "$previous_release")"' in start
     assert "os.kill(pid, signal.SIGKILL)" in start
+    assert "uvicorn processes did not terminate" in start
+    assert start.count('. "$DEPLOYMENT_ENV"') >= 2
     assert "REPORTGEN_FAST_TOC" in start
     assert "must be disabled for production report generation" in start
     assert start.index(
@@ -104,7 +108,10 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
         in watchdog
     )
     assert "/api/v1/healthz" in start
-    assert "/api/v1/tasks/stats" not in start
+    assert "LEGACY_LOCAL_HEALTH_URL" in start
+    assert 'if [ ! -f "$expected_cwd/backend/app/api/health.py" ]' in start
+    assert "LEGACY_LOCAL_HEALTH_URL" in watchdog
+    assert 'release_health_url "$release"' in watchdog
     assert "status|switch|rollback" in release
     assert "Expected exactly one release" in release
 

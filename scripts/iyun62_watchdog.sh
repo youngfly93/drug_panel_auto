@@ -25,6 +25,7 @@ VENV_DIR="${VENV_DIR:-$LEGACY_APP_DIR/.venv}"
 BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 PORT="${PORT:-8000}"
 LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
+LEGACY_LOCAL_HEALTH_URL="${LEGACY_LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/tasks/stats}"
 PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/healthz}"
 TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
 CLOUDFLARED="${CLOUDFLARED:-/media/desk16/iyun6208/bin/cloudflared}"
@@ -70,6 +71,17 @@ current_release() {
     fi
     find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d \
         -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -n 1 | cut -d' ' -f2-
+}
+
+release_health_url() {
+    local release="$1"
+    if [ -f "$release/backend/app/api/health.py" ]; then
+        printf '%s\n' "$LOCAL_HEALTH_URL"
+    else
+        # Compatibility only for switching or rolling back to a pre-healthz
+        # immutable release. New releases always use the minimal health route.
+        printf '%s\n' "$LEGACY_LOCAL_HEALTH_URL"
+    fi
 }
 
 web_process_state() {
@@ -124,10 +136,10 @@ PY
 }
 
 ensure_web() {
-    local code release state
+    local code release state health_url
     release="$(current_release)"
-    code="$(http_code "$LOCAL_HEALTH_URL")"
     if [ -z "${release:-}" ] || [ ! -d "$release" ]; then
+        code="$(http_code "$LOCAL_HEALTH_URL")"
         if [ "$code" = "200" ]; then
             log "web fail local_http=$code; no usable release found"
         else
@@ -136,6 +148,8 @@ ensure_web() {
         return 1
     fi
 
+    health_url="$(release_health_url "$release")"
+    code="$(http_code "$health_url")"
     state="$(web_process_state "$release" 2>/dev/null || echo unknown)"
     if [ "$code" = "200" ] && [[ "$state" == ok\ * ]]; then
         log "web ok local_http=$code $state"
