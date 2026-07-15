@@ -34,19 +34,34 @@ def test_release_checklist_uses_real_iyun129_topology() -> None:
 def test_iyun129_wrapper_pins_production_coordinates() -> None:
     wrapper = _read("scripts/iyun129_deploy_clean.sh")
 
-    assert 'SSH_HOST:-iyun129' in wrapper
+    assert "SSH_HOST:-iyun129" in wrapper
     assert "/media/desk16/iy12922/apps" in wrapper
-    assert 'PORT:-18082' in wrapper
-    assert 'MANAGE_TUNNEL:-0' in wrapper
-    assert 'UPLOAD_MAINTENANCE_SCRIPTS:-0' in wrapper
-    assert 'SYNC_SIGNATURE_ASSETS:-1' in wrapper
-    assert 'SIGNATURE_ASSET_DIR:-storage/signatures' in wrapper
-    assert 'REQUIRE_HISTORICAL_GOLDEN:-1' in wrapper
+    assert "PORT:-18082" in wrapper
+    assert "MANAGE_TUNNEL:-0" in wrapper
+    assert "UPLOAD_MAINTENANCE_SCRIPTS:-0" in wrapper
+    assert "UPLOAD_ALERTS_SCRIPT:-1" in wrapper
+    assert "UPLOAD_CLOUDFLARED_SCRIPTS:-1" in wrapper
+    assert "/api/v1/healthz" in wrapper
+    assert "RG_WEB_DOCS_ENABLED" in wrapper
+    assert "SYNC_SIGNATURE_ASSETS:-1" in wrapper
+    assert "SIGNATURE_ASSET_DIR:-storage/signatures" in wrapper
+    assert "REQUIRE_HISTORICAL_GOLDEN:-1" in wrapper
     assert ".work/historical_golden_release_manifest.yaml" in wrapper
-    assert 'RUN_REMOTE_BACKUP:-1' in wrapper
-    assert 'bash -s -- backup' in wrapper
+    assert "RUN_REMOTE_BACKUP:-1" in wrapper
+    assert "bash -s -- backup" in wrapper
     assert 'backup_archive="${backup_output##*$' in wrapper
-    assert 'test -f \'$backup_archive.manifest.json\'' in wrapper
+    assert "test -f '$backup_archive.manifest.json'" in wrapper
+
+    alerts = _read("scripts/iyun62_alerts.sh")
+    assert "OPS_LOGIN_URL" in alerts
+    assert "OPS_AUTH_USERNAME" in alerts
+    assert '"Authorization": f"Bearer {token}"' in alerts
+
+    cloudflared_start = _read("scripts/iyun129_start_cloudflared.sh")
+    cloudflared_watchdog = _read("scripts/iyun129_watchdog_cloudflared.sh")
+    assert "--protocol http2" in cloudflared_start
+    assert "cloudflared_tunnel_ha_connections" in cloudflared_start
+    assert "cloudflared_tunnel_ha_connections" in cloudflared_watchdog
 
 
 def test_runtime_control_is_configured_and_failure_safe() -> None:
@@ -70,9 +85,9 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert "os.kill(pid, signal.SIGKILL)" in start
     assert "REPORTGEN_FAST_TOC" in start
     assert "must be disabled for production report generation" in start
-    assert start.index("must be disabled for production report generation") < start.index(
-        "stop_existing\nif start_release"
-    )
+    assert start.index(
+        "must be disabled for production report generation"
+    ) < start.index("stop_existing\nif start_release")
     assert "RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1" in deploy
     assert "check_signature_registry.py" in deploy
     assert 'rsync -az "$SIGNATURE_ASSET_DIR/"' in deploy
@@ -80,8 +95,16 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert "check_historical_golden_release.py" in release_check
     assert "REQUIRE_HISTORICAL_GOLDEN" in release_check
     assert 'MANAGE_TUNNEL="${MANAGE_TUNNEL:-1}"' in watchdog
-    assert 'log "tunnel ok public_http=$public_code external_manager"' in watchdog
-    assert 'log "tunnel fail public_http=${public_code:-none} external_manager"' in watchdog
+    assert (
+        'log "tunnel ok connector_connections=$connections external_manager"'
+        in watchdog
+    )
+    assert (
+        'log "tunnel fail connector_connections=${connections:-0} external_manager"'
+        in watchdog
+    )
+    assert "/api/v1/healthz" in start
+    assert "/api/v1/tasks/stats" not in start
     assert "status|switch|rollback" in release
     assert "Expected exactly one release" in release
 
@@ -174,6 +197,9 @@ def test_report_group_checklist_covers_audit_followups() -> None:
         "scripts/iyun62_watchdog.sh",
         "scripts/iyun129_deploy_clean.sh",
         "scripts/iyun129_release.sh",
+        "scripts/iyun129_start_cloudflared.sh",
+        "scripts/iyun129_watchdog_cloudflared.sh",
+        "scripts/iyun62_alerts.sh",
     ],
 )
 def test_release_shell_scripts_parse(relative: str) -> None:
@@ -182,16 +208,22 @@ def test_release_shell_scripts_parse(relative: str) -> None:
 
 @pytest.mark.parametrize(
     "relative",
-    ["scripts/iyun62_start_reportgen.sh", "scripts/iyun62_watchdog.sh"],
+    [
+        "scripts/iyun62_start_reportgen.sh",
+        "scripts/iyun62_watchdog.sh",
+        "scripts/iyun62_alerts.sh",
+    ],
 )
 def test_embedded_python_blocks_compile(relative: str) -> None:
-    blocks = re.findall(r"<<'PY'\n(.*?)\nPY", _read(relative), flags=re.DOTALL)
+    blocks = re.findall(r"<<'PY'[^\n]*\n(.*?)\nPY", _read(relative), flags=re.DOTALL)
     assert blocks
     for block in blocks:
         compile(block, f"{relative}:embedded", "exec")
 
 
-@pytest.mark.skipif(not Path("/proc").is_dir(), reason="runtime switch uses Linux /proc")
+@pytest.mark.skipif(
+    not Path("/proc").is_dir(), reason="runtime switch uses Linux /proc"
+)
 def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
     releases = tmp_path / "releases"
     runtime = tmp_path / "runtime"
@@ -215,8 +247,7 @@ def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
     (venv / "bin" / "python").symlink_to(sys.executable)
     fake_uvicorn = venv / "bin" / "uvicorn"
     fake_uvicorn.write_text(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             import pathlib
             import time
 
@@ -224,10 +255,10 @@ def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
                 raise SystemExit(3)
             while True:
                 time.sleep(1)
-            """
-        ),
+            """),
         encoding="utf-8",
     )
+    fake_uvicorn.chmod(0o755)
     fake_curl = fake_bin / "curl"
     fake_curl.write_text("#!/usr/bin/env bash\nprintf '200'\n", encoding="utf-8")
     fake_curl.chmod(0o755)

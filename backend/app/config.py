@@ -25,7 +25,9 @@ def _detect_project_root() -> Path:
             if (candidate / "config").exists() and (candidate / "reportgen").exists():
                 return candidate  # In-repo layout (Vercel / self-contained)
             if (candidate.parent / "基因组panel自动化系统").exists():
-                return candidate.parent / "基因组panel自动化系统"  # Sibling layout (local dev)
+                return (
+                    candidate.parent / "基因组panel自动化系统"
+                )  # Sibling layout (local dev)
             return candidate
 
     # Fallback: assume sibling layout
@@ -54,6 +56,7 @@ class Settings(BaseSettings):
     access_token_expire_hours: int = 8
     default_admin_username: str = "admin"
     default_admin_password: str = "admin123"
+    docs_enabled: bool = True
 
     # --- Upload ---
     max_upload_size_mb: int = 100

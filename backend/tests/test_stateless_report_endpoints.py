@@ -123,7 +123,9 @@ class FakeBridge:
         self.last_generate_kwargs = kwargs
         output_dir = Path(kwargs["output_dir"])
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = output_dir / f"{Path(kwargs.get('excel_path') or 'fake_report').stem}.docx"
+        output_file = (
+            output_dir / f"{Path(kwargs.get('excel_path') or 'fake_report').stem}.docx"
+        )
         output_file.write_bytes(b"PK\x03\x04fake-docx")
         summary_file = output_file.with_suffix(".summary.json")
         summary_file.write_text(
@@ -304,7 +306,9 @@ def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
         "patient_enrichment_url",
         "https://webapi.example.test/ngsapi/getNgsSample",
     )
-    monkeypatch.setattr(settings, "patient_enrichment_aes_key", "0123456789abcdef0123456789abcdef")
+    monkeypatch.setattr(
+        settings, "patient_enrichment_aes_key", "0123456789abcdef0123456789abcdef"
+    )
     monkeypatch.setattr(settings, "patient_enrichment_encrypt_flag", "fixed-flag")
     monkeypatch.setattr(settings, "patient_enrichment_timeout_seconds", 5.0)
 
@@ -354,7 +358,10 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["success"] is True
-    assert data["output_filename"] == "测试患者-癌种未填-结直肠癌358基因+msi-mljy-case001-修改版.docx"
+    assert (
+        data["output_filename"]
+        == "测试患者-癌种未填-结直肠癌358基因+msi-mljy-case001-修改版.docx"
+    )
     assert data["output_file_base64"].startswith("UEsD")
     assert data["qa_status"] == "PASS"
 
@@ -374,7 +381,10 @@ def test_generate_file_fills_missing_report_date(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["data"]["success"] is True
-    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == date.today().isoformat()
+    assert (
+        bridge.last_generate_kwargs["clinical_info"]["report_date"]
+        == date.today().isoformat()
+    )
 
 
 def test_generate_file_infers_project_type_from_form_project_name(
@@ -399,7 +409,10 @@ def test_generate_file_infers_project_type_from_form_project_name(
                 )
             },
             data={
-                "clinical_info": '{"patient_name":"测试患者","sample_id":"CASE001","project_name":"结直肠癌358基因+MSI"}',
+                "clinical_info": (
+                    '{"patient_name":"测试患者","sample_id":"CASE001",'
+                    '"project_name":"结直肠癌358基因+MSI"}'
+                ),
             },
         )
 
@@ -428,9 +441,9 @@ def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
         assert data["output_file"] is None
 
         status_response = None
-        for _ in range(20):
+        for _ in range(100):
             status_response = client.get(f"/api/v1/reports/{data['task_id']}")
-            if status_response.json()["data"]["status"] != "running":
+            if status_response.json()["data"]["status"] not in {"pending", "running"}:
                 break
             time.sleep(0.05)
         download_response = client.get(f"/api/v1/reports/{data['task_id']}/download")
@@ -472,9 +485,9 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
         task_id = response.json()["data"]["task_id"]
 
         status_response = None
-        for _ in range(20):
+        for _ in range(100):
             status_response = client.get(f"/api/v1/reports/{task_id}")
-            if status_response.json()["data"]["status"] != "running":
+            if status_response.json()["data"]["status"] not in {"pending", "running"}:
                 break
             time.sleep(0.05)
 
@@ -535,15 +548,18 @@ def test_batch_files_fill_missing_report_date(tmp_path, monkeypatch):
         task_id = response.json()["data"]["task_id"]
 
         status_response = None
-        for _ in range(20):
+        for _ in range(100):
             status_response = client.get(f"/api/v1/reports/{task_id}")
-            if status_response.json()["data"]["status"] != "running":
+            if status_response.json()["data"]["status"] not in {"pending", "running"}:
                 break
             time.sleep(0.05)
 
     assert status_response.status_code == 200
     assert status_response.json()["data"]["status"] == "completed"
-    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == date.today().isoformat()
+    assert (
+        bridge.last_generate_kwargs["clinical_info"]["report_date"]
+        == date.today().isoformat()
+    )
 
 
 def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkeypatch):
@@ -575,9 +591,9 @@ def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkey
         task_id = response.json()["data"]["task_id"]
 
         status_response = None
-        for _ in range(20):
+        for _ in range(100):
             status_response = client.get(f"/api/v1/reports/{task_id}")
-            if status_response.json()["data"]["status"] != "running":
+            if status_response.json()["data"]["status"] not in {"pending", "running"}:
                 break
             time.sleep(0.05)
 
@@ -603,9 +619,12 @@ def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
         task_id = response.json()["data"]["task_id"]
 
         first_status_response = None
-        for _ in range(30):
+        for _ in range(100):
             first_status_response = client.get(f"/api/v1/reports/{task_id}")
-            if first_status_response.json()["data"]["status"] != "running":
+            if first_status_response.json()["data"]["status"] not in {
+                "pending",
+                "running",
+            }:
                 break
             time.sleep(0.05)
 
@@ -619,9 +638,12 @@ def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
         assert retry_response.json()["data"]["retry_files"] == 1
 
         final_status_response = None
-        for _ in range(30):
+        for _ in range(100):
             final_status_response = client.get(f"/api/v1/reports/{task_id}")
-            if final_status_response.json()["data"]["status"] != "running":
+            if final_status_response.json()["data"]["status"] not in {
+                "pending",
+                "running",
+            }:
                 break
             time.sleep(0.05)
 
@@ -715,7 +737,9 @@ def test_task_list_supports_production_filters_and_review_state(tmp_path, monkey
         assert stats["delivered"] == 1
 
 
-def test_task_list_attention_filter_surfaces_partial_failed_batch(tmp_path, monkeypatch):
+def test_task_list_attention_filter_surfaces_partial_failed_batch(
+    tmp_path, monkeypatch
+):
     with _client(tmp_path, monkeypatch, bridge=FailOnceBridge()) as client:
         response = client.post(
             "/api/v1/reports/batch-files",
@@ -818,9 +842,9 @@ def test_quality_gate_blocks_failed_batch_delivery(tmp_path, monkeypatch):
         )
         task_id = response.json()["data"]["task_id"]
 
-        for _ in range(30):
+        for _ in range(100):
             status = client.get(f"/api/v1/reports/{task_id}").json()["data"]
-            if status["status"] != "running":
+            if status["status"] not in {"pending", "running"}:
                 break
             time.sleep(0.05)
 
@@ -871,9 +895,13 @@ def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):
                 qa.unlink()
         else:
             qa.write_text(json.dumps({"status": qa_status, "issues": []}))
-        with patch.object(report_api, "_observed_file_response", return_value="OK"), \
-             patch.object(report_api, "_clinical_snapshot", return_value={}), \
-             patch.object(report_api, "_business_report_filename", return_value="x.docx"):
+        with patch.object(
+            report_api, "_observed_file_response", return_value="OK"
+        ), patch.object(
+            report_api, "_clinical_snapshot", return_value={}
+        ), patch.object(
+            report_api, "_business_report_filename", return_value="x.docx"
+        ):
             try:
                 report_api._download_report_response(
                     "t1", db, MagicMock(), override_gate=override

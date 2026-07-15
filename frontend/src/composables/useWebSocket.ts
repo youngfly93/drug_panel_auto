@@ -1,7 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 
 export interface ProgressMessage {
-  type: 'progress' | 'completed' | 'failed'
+  type: 'authenticated' | 'progress' | 'completed' | 'failed'
   task_id: string
   data?: {
     current: number
@@ -26,12 +26,21 @@ export function useWebSocket(taskId: string) {
     ws = new WebSocket(`${protocol}//${host}/ws/tasks/${taskId}/progress`)
 
     ws.onopen = () => {
-      connected.value = true
+      const token = localStorage.getItem('token')
+      if (!token) {
+        ws?.close(4401, 'Not authenticated')
+        return
+      }
+      ws?.send(JSON.stringify({ type: 'authenticate', token }))
     }
 
     ws.onmessage = (event) => {
       try {
         const msg: ProgressMessage = JSON.parse(event.data)
+        if (msg.type === 'authenticated') {
+          connected.value = true
+          return
+        }
         messages.value.push(msg)
         lastMessage.value = msg
       } catch {

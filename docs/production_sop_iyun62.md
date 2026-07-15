@@ -21,7 +21,7 @@
 报告组开始批量生成前，值守同事检查：
 
 ```bash
-curl -s https://panel.mailuo-report.com.cn/api/v1/tasks/stats
+curl -s https://panel.mailuo-report.com.cn/api/v1/healthz
 ssh iyun-server 'tail -n 80 /media/desk16/iyun6208/apps/reportgen-web-runtime/logs/watchdog.log'
 ssh iyun-server 'tail -n 80 /media/desk16/iyun6208/apps/reportgen-web-runtime/logs/alerts.log'
 ssh iyun-server 'ls -1t /media/desk16/iyun6208/apps/reportgen-web-backups/reportgen-web-backup-*.tar.gz | head -1'
@@ -145,7 +145,7 @@ DEPLOY_REF=<known_good_commit> bash scripts/iyun62_deploy_clean.sh
 发布后必须验证：
 
 ```bash
-curl -s -o /dev/null -w "HTTP %{http_code}\n" https://panel.mailuo-report.com.cn/api/v1/tasks/stats
+curl -s -o /dev/null -w "HTTP %{http_code}\n" https://panel.mailuo-report.com.cn/api/v1/healthz
 ssh iyun-server 'cat /media/desk16/iyun6208/apps/reportgen-web-runtime/current_release'
 ```
 

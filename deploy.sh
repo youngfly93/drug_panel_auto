@@ -232,7 +232,7 @@ echo ""
 
 # Quick health check
 sleep 2
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/v1/tasks/stats 2>/dev/null)
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/v1/healthz 2>/dev/null)
 if [ "$HTTP_CODE" = "200" ]; then
     echo "  🏥 健康检查: API 正常 (HTTP $HTTP_CODE)"
 else

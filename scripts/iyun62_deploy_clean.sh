@@ -18,11 +18,14 @@ VENV_DIR="${VENV_DIR:-$LEGACY_APP_DIR/.venv}"
 BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 DEPLOY_REF="${DEPLOY_REF:-$(git rev-parse HEAD)}"
 PORT="${PORT:-8000}"
-LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/tasks/stats}"
-PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/tasks/stats}"
+LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
+PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/healthz}"
+TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
 MANAGE_TUNNEL="${MANAGE_TUNNEL:-1}"
 RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
 UPLOAD_MAINTENANCE_SCRIPTS="${UPLOAD_MAINTENANCE_SCRIPTS:-1}"
+UPLOAD_ALERTS_SCRIPT="${UPLOAD_ALERTS_SCRIPT:-0}"
+UPLOAD_CLOUDFLARED_SCRIPTS="${UPLOAD_CLOUDFLARED_SCRIPTS:-0}"
 SYNC_SIGNATURE_ASSETS="${SYNC_SIGNATURE_ASSETS:-0}"
 SIGNATURE_ASSET_DIR="${SIGNATURE_ASSET_DIR:-storage/signatures}"
 
@@ -30,6 +33,12 @@ if [ ! -f "frontend/package.json" ] || \
         [ ! -f "scripts/iyun62_start_reportgen.sh" ] || \
         [ ! -f "scripts/iyun62_watchdog.sh" ]; then
     echo "Run this script from the reportgen-web repository root." >&2
+    exit 1
+fi
+if [ "$UPLOAD_CLOUDFLARED_SCRIPTS" = "1" ] && \
+        { [ ! -f scripts/iyun129_start_cloudflared.sh ] || \
+          [ ! -f scripts/iyun129_watchdog_cloudflared.sh ]; }; then
+    echo "iyun129 cloudflared runtime scripts are missing." >&2
     exit 1
 fi
 
@@ -69,6 +78,9 @@ fi
 
 git archive "$DEPLOY_REF" | tar -x -C "$tmp_dir"
 python -m py_compile \
+    "$tmp_dir/backend/app/api/health.py" \
+    "$tmp_dir/backend/app/api/router.py" \
+    "$tmp_dir/backend/app/dependencies.py" \
     "$tmp_dir/backend/app/api/ops.py" \
     "$tmp_dir/backend/app/services/generation_process.py" \
     "$tmp_dir/backend/app/services/task_recovery.py" \
@@ -85,6 +97,9 @@ xattr -cr "$tmp_dir" 2>/dev/null || true
 
 # Keep a quick compile check for the currently checked-out scripts too.
 python -m py_compile \
+    backend/app/api/health.py \
+    backend/app/api/router.py \
+    backend/app/dependencies.py \
     backend/app/api/ops.py \
     backend/app/services/generation_process.py \
     backend/app/services/task_recovery.py \
@@ -135,8 +150,11 @@ runtime_config="$tmp_dir/deployment.env.runtime"
     printf 'PORT=%q\n' "$PORT"
     printf 'LOCAL_HEALTH_URL=%q\n' "$LOCAL_HEALTH_URL"
     printf 'PUBLIC_HEALTH_URL=%q\n' "$PUBLIC_HEALTH_URL"
+    printf 'TUNNEL_METRICS_URL=%q\n' "$TUNNEL_METRICS_URL"
     printf 'MANAGE_TUNNEL=%q\n' "$MANAGE_TUNNEL"
     printf 'RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1\n'
+    printf 'RG_WEB_DOCS_ENABLED=%q\n' "${RG_WEB_DOCS_ENABLED:-0}"
+    printf 'RG_WEB_CORS_ORIGINS=%q\n' "${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
 } > "$runtime_config"
 rsync -az "$runtime_config" "$SSH_HOST:$RUNTIME_DIR/deployment.env.next"
 ssh "$SSH_HOST" "set -euo pipefail
@@ -157,6 +175,27 @@ if [ "$UPLOAD_MAINTENANCE_SCRIPTS" = "1" ]; then
     if [ -f scripts/iyun62_restore_drill.sh ]; then
         rsync -az scripts/iyun62_restore_drill.sh "$SSH_HOST:$RUNTIME_DIR/restore_drill.sh"
     fi
+fi
+if [ "$UPLOAD_ALERTS_SCRIPT" = "1" ]; then
+    rsync -az scripts/iyun62_alerts.sh "$SSH_HOST:$RUNTIME_DIR/alerts.sh.next"
+    ssh "$SSH_HOST" "set -euo pipefail
+chmod 700 '$RUNTIME_DIR/alerts.sh.next'
+mv -f '$RUNTIME_DIR/alerts.sh.next' '$RUNTIME_DIR/alerts.sh'
+"
+fi
+if [ "$UPLOAD_CLOUDFLARED_SCRIPTS" = "1" ]; then
+    rsync -az scripts/iyun129_start_cloudflared.sh \
+        "$SSH_HOST:$RUNTIME_DIR/start_panel_cloudflared.sh.next"
+    rsync -az scripts/iyun129_watchdog_cloudflared.sh \
+        "$SSH_HOST:$RUNTIME_DIR/watchdog_panel_cloudflared.sh.next"
+    ssh "$SSH_HOST" "set -euo pipefail
+chmod 700 '$RUNTIME_DIR/start_panel_cloudflared.sh.next' \
+  '$RUNTIME_DIR/watchdog_panel_cloudflared.sh.next'
+mv -f '$RUNTIME_DIR/start_panel_cloudflared.sh.next' \
+  '$RUNTIME_DIR/start_panel_cloudflared.sh'
+mv -f '$RUNTIME_DIR/watchdog_panel_cloudflared.sh.next' \
+  '$RUNTIME_DIR/watchdog_panel_cloudflared.sh'
+"
 fi
 ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/backup.sh' 2>/dev/null || true"
 ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/alerts.sh' 2>/dev/null || true"
@@ -179,6 +218,12 @@ printf 'current_release=%s\\nrevision=%s\\npid=%s\\nprocess_cwd=%s\\n' \
 
 echo "== Public smoke =="
 curl -fsS -o /dev/null -w "$PUBLIC_HEALTH_URL HTTP %{http_code}\n" "$PUBLIC_HEALTH_URL"
+
+if [ "$UPLOAD_CLOUDFLARED_SCRIPTS" = "1" ]; then
+    echo "== Restart Cloudflare connector with reviewed runtime =="
+    ssh "$SSH_HOST" "bash '$RUNTIME_DIR/start_panel_cloudflared.sh'"
+    curl -fsS -o /dev/null -w "$PUBLIC_HEALTH_URL HTTP %{http_code}\n" "$PUBLIC_HEALTH_URL"
+fi
 
 echo "deployed_ref=$resolved_ref"
 echo "release_dir=$release_dir"
