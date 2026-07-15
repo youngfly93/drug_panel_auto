@@ -1,9 +1,15 @@
 """WebSocket endpoint for batch task progress streaming."""
 
+import asyncio
+import json
 from collections import defaultdict
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.dependencies import authenticate_access_token
 
 router = APIRouter()
 
@@ -27,9 +33,29 @@ async def broadcast_progress(task_id: str, message: dict[str, Any]) -> None:
 
 
 @router.websocket("/ws/tasks/{task_id}/progress")
-async def task_progress_ws(websocket: WebSocket, task_id: str):
+async def task_progress_ws(
+    websocket: WebSocket,
+    task_id: str,
+    db: Session = Depends(get_db),
+):
     await websocket.accept()
+    try:
+        raw_auth = await asyncio.wait_for(websocket.receive_text(), timeout=5)
+        auth_message = json.loads(raw_auth)
+        if auth_message.get("type") != "authenticate":
+            raise ValueError("authentication message required")
+        token = auth_message.get("token")
+        if not isinstance(token, str) or not token:
+            raise ValueError("bearer token required")
+        authenticate_access_token(token, db)
+    except (asyncio.TimeoutError, HTTPException, ValueError, json.JSONDecodeError):
+        await websocket.close(code=4401, reason="Not authenticated")
+        return
+    except WebSocketDisconnect:
+        return
+
     _connections[task_id].append(websocket)
+    await websocket.send_json({"type": "authenticated", "task_id": task_id})
     try:
         while True:
             # Keep connection alive; client may send ping/cancel

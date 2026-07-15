@@ -17,14 +17,12 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from docx import Document  # noqa: E402
 from reportgen.core.golden_case import build_crc_358_msi_golden_excel  # noqa: E402
-
 
 BASE_URL = os.environ.get("WEB_SMOKE_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 OUTPUT_ROOT = Path(
@@ -38,6 +36,7 @@ USER_AGENT = os.environ.get(
     "WEB_SMOKE_USER_AGENT",
     "Mozilla/5.0 ReportGenSmoke/1.0",
 )
+ACCESS_TOKEN = ""
 
 
 class SmokeFailure(RuntimeError):
@@ -57,6 +56,8 @@ def _request(
     timeout: int = 120,
 ) -> tuple[int, bytes, dict[str, str]]:
     request_headers = {"User-Agent": USER_AGENT, **(headers or {})}
+    if ACCESS_TOKEN:
+        request_headers["Authorization"] = f"Bearer {ACCESS_TOKEN}"
     req = urllib.request.Request(
         _url(path),
         data=body,
@@ -136,7 +137,9 @@ def _multipart_file_request(
         parts.extend(
             [
                 f"--{boundary}\r\n".encode("utf-8"),
-                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode(
+                    "utf-8"
+                ),
                 value.encode("utf-8"),
                 b"\r\n",
             ]
@@ -189,7 +192,9 @@ def _wait_for_task(task_id: str) -> dict[str, Any]:
         if last_status in {"completed", "failed", "partial_failed", "cancelled"}:
             return data
         time.sleep(3)
-    raise SmokeFailure(f"task {task_id} did not finish before timeout; last_status={last_status}")
+    raise SmokeFailure(
+        f"task {task_id} did not finish before timeout; last_status={last_status}"
+    )
 
 
 def _assert(condition: bool, message: str) -> None:
@@ -200,7 +205,9 @@ def _assert(condition: bool, message: str) -> None:
 def _check_docx_text(path: Path) -> None:
     doc = Document(str(path))
     chunks: list[str] = [p.text for p in doc.paragraphs]
-    chunks.extend(cell.text for table in doc.tables for row in table.rows for cell in row.cells)
+    chunks.extend(
+        cell.text for table in doc.tables for row in table.rows for cell in row.cells
+    )
     text = "\n".join(chunks)
     for needle in [
         "本次共检出体细胞变异：2个",
@@ -216,6 +223,7 @@ def _check_docx_text(path: Path) -> None:
 
 
 def main() -> int:
+    global ACCESS_TOKEN
     started = time.monotonic()
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     print("Web smoke test")
@@ -240,6 +248,7 @@ def main() -> int:
         bool((login.get("data") or {}).get("access_token")),
         "admin login did not return a token",
     )
+    ACCESS_TOKEN = str(login["data"]["access_token"])
     print("  ✅ auth login")
 
     stats = _json_request("GET", "/api/v1/tasks/stats", timeout=30)
@@ -252,8 +261,16 @@ def main() -> int:
         timeout=30,
     )
     ops_raw = json.dumps(ops, ensure_ascii=False)
-    _assert(bool((ops.get("data") or {}).get("deployment")), "ops status is missing deployment")
-    for forbidden in ["/media/desk16", "/Volumes/KINGSTON", "user_agent", "client_host"]:
+    _assert(
+        bool((ops.get("data") or {}).get("deployment")),
+        "ops status is missing deployment",
+    )
+    for forbidden in [
+        "/media/desk16",
+        "/Volumes/KINGSTON",
+        "user_agent",
+        "client_host",
+    ]:
         _assert(forbidden not in ops_raw, f"ops status leaked {forbidden!r}")
     print("  ✅ ops status")
 
@@ -316,18 +333,29 @@ def main() -> int:
     )
     clinical_info = single_values["data"]["fields"]
     _assert(clinical_info.get("sample_id") == "LZ999001", "sample_id extraction failed")
-    _assert(clinical_info.get("patient_name") == "黄金测试患者", "patient extraction failed")
+    _assert(
+        clinical_info.get("patient_name") == "黄金测试患者", "patient extraction failed"
+    )
     print("  ✅ schema + single values")
 
     task_id = _generate_file_async(excel_path, clinical_info)
     report_data = _wait_for_task(task_id)
-    _assert(report_data["status"] == "completed", f"task status is {report_data['status']!r}")
-    _assert(report_data["qa_status"] == "PASS", f"QA status is {report_data['qa_status']!r}")
-    _assert(len(report_data.get("stage_results") or []) > 0, "stage results are missing")
+    _assert(
+        report_data["status"] == "completed",
+        f"task status is {report_data['status']!r}",
+    )
+    _assert(
+        report_data["qa_status"] == "PASS", f"QA status is {report_data['qa_status']!r}"
+    )
+    _assert(
+        len(report_data.get("stage_results") or []) > 0, "stage results are missing"
+    )
     print(f"  ✅ report generation ({task_id})")
 
     qa = _json_request("GET", f"/api/v1/reports/{task_id}/qa", timeout=30)
-    _assert(qa["data"].get("status") == "PASS", "QA report endpoint did not return PASS")
+    _assert(
+        qa["data"].get("status") == "PASS", "QA report endpoint did not return PASS"
+    )
     print("  ✅ QA endpoint")
 
     status, raw_docx, _headers = _request(
@@ -336,7 +364,9 @@ def main() -> int:
         timeout=120,
     )
     _assert(status == 200, f"download returned HTTP {status}")
-    _assert(len(raw_docx) >= MIN_DOCX_BYTES, f"DOCX is too small: {len(raw_docx)} bytes")
+    _assert(
+        len(raw_docx) >= MIN_DOCX_BYTES, f"DOCX is too small: {len(raw_docx)} bytes"
+    )
     downloaded = OUTPUT_ROOT / "downloaded.docx"
     downloaded.write_bytes(raw_docx)
     _check_docx_text(downloaded)
@@ -352,7 +382,9 @@ def main() -> int:
         "duration_seconds": round(time.monotonic() - started, 3),
     }
     report_path = OUTPUT_ROOT / "web_smoke_report.json"
-    report_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(f"  report: {report_path}")
     print("Web smoke test passed.")
     return 0

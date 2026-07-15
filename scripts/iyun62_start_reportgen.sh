@@ -26,6 +26,7 @@ BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 PORT="${PORT:-8000}"
 HOST="${HOST:-0.0.0.0}"
 APP_MODULE="${APP_MODULE:-app.main:app}"
+LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-60}"
 HEALTH_STABLE_CHECKS="${HEALTH_STABLE_CHECKS:-2}"
 
@@ -209,7 +210,7 @@ start_release() {
             return 1
         fi
         LAST_HEALTH_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
-            "http://127.0.0.1:$PORT/api/v1/tasks/stats" || true)"
+            "$LOCAL_HEALTH_URL" || true)"
         if [ "$LAST_HEALTH_CODE" = "200" ]; then
             actual_cwd="$(readlink "/proc/$STARTED_PID/cwd" 2>/dev/null || true)"
             process_state="$(awk '/^State:/ {print $2}' "/proc/$STARTED_PID/status" 2>/dev/null || true)"

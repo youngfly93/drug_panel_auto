@@ -25,7 +25,9 @@ class SPAStaticFiles(StaticFiles):
         except StarletteHTTPException as exc:
             if exc.status_code != 404:
                 raise
-            if path.startswith(("api/", "ws/")):
+            if path in {"docs", "redoc", "openapi.json"} or path.startswith(
+                ("api/", "ws/", "docs/", "redoc/")
+            ):
                 raise
             return await super().get_response("index.html", scope)
 
@@ -90,6 +92,7 @@ async def lifespan(app: FastAPI):
         # starting one each time (~5–8 s saved per call). Non-fatal on failure.
         try:
             from app.services.libreoffice_listener import start_listener, warmup_async
+
             start_listener()
             warmup_async()
         except Exception as exc:
@@ -113,11 +116,13 @@ async def lifespan(app: FastAPI):
     finally:
         try:
             from app.services.libreoffice_listener import stop_listener
+
             stop_listener()
         except Exception:
             pass
         try:
             from app.services.generation_queue import shutdown_generation_queue
+
             shutdown_generation_queue()
         except Exception:
             pass
@@ -130,10 +135,14 @@ def create_app() -> FastAPI:
         description="Genomic panel report automation web platform",
         version="0.1.0",
         lifespan=lifespan,
+        docs_url="/docs" if settings.docs_enabled else None,
+        redoc_url="/redoc" if settings.docs_enabled else None,
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
 
     # CORS — restrict in production via RG_WEB_CORS_ORIGINS env var
     import os
+
     cors_origins = os.environ.get("RG_WEB_CORS_ORIGINS", "").split(",")
     cors_origins = [o.strip() for o in cors_origins if o.strip()]
     app.add_middleware(
@@ -153,7 +162,9 @@ def create_app() -> FastAPI:
     # Serve frontend static files if built
     static_dir = Path(__file__).parent.parent / "static"
     if static_dir.exists():
-        app.mount("/", SPAStaticFiles(directory=str(static_dir), html=True), name="static")
+        app.mount(
+            "/", SPAStaticFiles(directory=str(static_dir), html=True), name="static"
+        )
 
     return app
 

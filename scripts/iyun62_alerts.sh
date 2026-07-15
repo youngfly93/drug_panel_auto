@@ -11,6 +11,8 @@ APP_ROOT="${APP_ROOT:-/media/desk16/iyun6208/apps}"
 RUNTIME_DIR="${RUNTIME_DIR:-$APP_ROOT/reportgen-web-runtime}"
 PORT="${PORT:-8000}"
 OPS_URL="${OPS_URL:-http://127.0.0.1:$PORT/api/v1/admin/ops/status?recent_task_limit=5&download_event_limit=50}"
+OPS_LOGIN_URL="${OPS_LOGIN_URL:-http://127.0.0.1:$PORT/api/v1/auth/login}"
+AUTH_ENV_FILE="${AUTH_ENV_FILE:-$RUNTIME_DIR/.env.prod}"
 ALERT_ENV_FILE="${ALERT_ENV_FILE:-$RUNTIME_DIR/alerts.env}"
 ALERT_FORMAT="${ALERT_FORMAT:-auto}"
 ALERT_MIN_SEVERITY="${ALERT_MIN_SEVERITY:-warning}"
@@ -24,6 +26,15 @@ LOG_DIR="$RUNTIME_DIR/logs"
 LOG_FILE="$LOG_DIR/alerts.log"
 STATE_FILE="${STATE_FILE:-$RUNTIME_DIR/alert_state.json}"
 LOCK_DIR="$RUNTIME_DIR/alerts.lock"
+
+if [ -f "$AUTH_ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$AUTH_ENV_FILE"
+    set +a
+fi
+OPS_AUTH_USERNAME="${OPS_AUTH_USERNAME:-${RG_WEB_DEFAULT_ADMIN_USERNAME:-}}"
+OPS_AUTH_PASSWORD="${OPS_AUTH_PASSWORD:-${RG_WEB_DEFAULT_ADMIN_PASSWORD:-}}"
 
 if [ -f "$ALERT_ENV_FILE" ]; then
     set -a
@@ -43,7 +54,8 @@ Usage:
   iyun62_alerts.sh [check]
 
 Environment overrides:
-  RUNTIME_DIR, PORT, OPS_URL
+  RUNTIME_DIR, PORT, OPS_URL, OPS_LOGIN_URL, AUTH_ENV_FILE
+  OPS_AUTH_USERNAME, OPS_AUTH_PASSWORD
   ALERT_WEBHOOK_URL / RG_WEB_ALERT_WEBHOOK_URL
   ALERT_FORMAT=auto|wecom|dingtalk|feishu|generic
   ALERT_MIN_SEVERITY=warning|danger
@@ -91,6 +103,9 @@ esac
 with_lock
 
 OPS_URL="$OPS_URL" \
+OPS_LOGIN_URL="$OPS_LOGIN_URL" \
+OPS_AUTH_USERNAME="$OPS_AUTH_USERNAME" \
+OPS_AUTH_PASSWORD="$OPS_AUTH_PASSWORD" \
 STATE_FILE="$STATE_FILE" \
 ALERT_WEBHOOK_URL="$ALERT_WEBHOOK_URL" \
 ALERT_FORMAT="$ALERT_FORMAT" \
@@ -134,8 +149,35 @@ def write_json(path: pathlib.Path, payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def fetch_status(url: str) -> dict[str, Any]:
-    request = urllib.request.Request(url, headers={"User-Agent": "reportgen-alerts/1.0"})
+def login_token(url: str, username: str, password: str) -> str:
+    if not username or not password:
+        raise RuntimeError("ops monitor credentials are missing")
+    body = json.dumps({"username": username, "password": password}).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "reportgen-alerts/1.0",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=12) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    token = str((payload.get("data") or {}).get("access_token") or "")
+    if not token:
+        raise RuntimeError("ops monitor login did not return a token")
+    return token
+
+
+def fetch_status(url: str, token: str) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "reportgen-alerts/1.0",
+        },
+    )
     with urllib.request.urlopen(request, timeout=12) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -235,6 +277,7 @@ def format_recovery_message(data: dict[str, Any]) -> str:
 
 def main() -> int:
     ops_url = os.environ["OPS_URL"]
+    login_url = os.environ["OPS_LOGIN_URL"]
     state_file = pathlib.Path(os.environ["STATE_FILE"])
     webhook_url = os.environ.get("ALERT_WEBHOOK_URL") or ""
     fmt = choose_format(webhook_url, os.environ.get("ALERT_FORMAT") or "auto")
@@ -244,7 +287,12 @@ def main() -> int:
     dry_run = os.environ.get("DRY_RUN") == "1"
 
     try:
-        payload = fetch_status(ops_url)
+        token = login_token(
+            login_url,
+            os.environ.get("OPS_AUTH_USERNAME") or "",
+            os.environ.get("OPS_AUTH_PASSWORD") or "",
+        )
+        payload = fetch_status(ops_url, token)
     except Exception as exc:
         payload = {
             "success": True,

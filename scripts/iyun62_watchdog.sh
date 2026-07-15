@@ -24,8 +24,9 @@ STORAGE_DIR="${STORAGE_DIR:-$LEGACY_APP_DIR/storage}"
 VENV_DIR="${VENV_DIR:-$LEGACY_APP_DIR/.venv}"
 BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 PORT="${PORT:-8000}"
-LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/tasks/stats}"
-PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/tasks/stats}"
+LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
+PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/healthz}"
+TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
 CLOUDFLARED="${CLOUDFLARED:-/media/desk16/iyun6208/bin/cloudflared}"
 CLOUDFLARED_TOKEN_FILE="${CLOUDFLARED_TOKEN_FILE:-/media/desk16/iyun6208/.config/reportgen-web/cloudflared-token}"
 DISK_WARN_PERCENT="${DISK_WARN_PERCENT:-85}"
@@ -214,13 +215,14 @@ ensure_tunnel() {
 }
 
 check_external_tunnel() {
-    local public_code
-    public_code="$(http_code "$PUBLIC_HEALTH_URL")"
-    if [ "$public_code" = "200" ]; then
-        log "tunnel ok public_http=$public_code external_manager"
+    local connections
+    connections="$(curl -fsS --max-time 4 "$TUNNEL_METRICS_URL" 2>/dev/null | \
+        awk '$1 == "cloudflared_tunnel_ha_connections" {print int($2); exit}' || true)"
+    if [ "${connections:-0}" -ge 1 ]; then
+        log "tunnel ok connector_connections=$connections external_manager"
         return 0
     fi
-    log "tunnel fail public_http=${public_code:-none} external_manager"
+    log "tunnel fail connector_connections=${connections:-0} external_manager"
     return 1
 }
 

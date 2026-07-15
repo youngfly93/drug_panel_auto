@@ -37,7 +37,7 @@ The script:
 3. uploads the archive, including `backend/static`, to a clean remote release;
 4. starts uvicorn from the clean release while pointing storage to the existing
    production storage directory;
-5. verifies the public `/api/v1/tasks/stats` endpoint.
+5. verifies the public, minimal `/api/v1/healthz` endpoint.
 
 ## Rollback
 
@@ -59,9 +59,9 @@ set -e
 cat /media/desk16/iyun6208/apps/reportgen-web-runtime/current_release
 cat /media/desk16/iyun6208/apps/reportgen-web-runtime/current_release | xargs -I{} cat {}/REVISION
 pgrep -af "[u]vicorn app.main:app"
-curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8000/api/v1/tasks/stats
+curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8000/api/v1/healthz
 '
-curl -s -o /dev/null -w "HTTP %{http_code}\n" https://panel.mailuo-report.com.cn/api/v1/tasks/stats
+curl -s -o /dev/null -w "HTTP %{http_code}\n" https://panel.mailuo-report.com.cn/api/v1/healthz
 ```
 
 ## Watchdog
@@ -206,7 +206,7 @@ HTTP Range resume when the server supports it.
 
 ## Ops Alerts
 
-`/api/v1/admin/ops/status` returns sanitized red/yellow alerts for the
+The admin-authenticated `/api/v1/admin/ops/status` endpoint returns sanitized red/yellow alerts for the
 production dashboard. These alerts contain no patient names, Excel filenames,
 report filenames, client IPs, user agents, or full server paths.
 
