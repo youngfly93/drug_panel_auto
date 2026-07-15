@@ -106,11 +106,11 @@ def upload_report_feedback(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     feedback_logger.info(
-        "feedback uploaded task=%s sample_id=%s file=%s size=%s",
-        task_id,
-        sample_id,
-        stored_path.name,
-        size,
+        "feedback uploaded",
+        task_id=task_id,
+        sample_id=sample_id,
+        file=stored_path.name,
+        size=size,
     )
     return ApiResponse(
         success=True,
