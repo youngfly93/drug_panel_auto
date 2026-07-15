@@ -21,6 +21,8 @@ PORT="${PORT:-8000}"
 LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
 PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/healthz}"
 TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
+PUBLIC_HEALTH_RETRIES="${PUBLIC_HEALTH_RETRIES:-12}"
+PUBLIC_HEALTH_RETRY_INTERVAL_SECONDS="${PUBLIC_HEALTH_RETRY_INTERVAL_SECONDS:-5}"
 MANAGE_TUNNEL="${MANAGE_TUNNEL:-1}"
 RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
 UPLOAD_MAINTENANCE_SCRIPTS="${UPLOAD_MAINTENANCE_SCRIPTS:-1}"
@@ -49,6 +51,22 @@ cleanup() {
     rm -rf "$tmp_dir"
 }
 trap cleanup EXIT
+
+wait_public_health() {
+    local attempt code
+    for attempt in $(seq 1 "$PUBLIC_HEALTH_RETRIES"); do
+        code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+            "$PUBLIC_HEALTH_URL" || true)"
+        printf '%s attempt=%s HTTP %s\n' "$PUBLIC_HEALTH_URL" "$attempt" "${code:-000}"
+        if [ "$code" = "200" ]; then
+            return 0
+        fi
+        if [ "$attempt" -lt "$PUBLIC_HEALTH_RETRIES" ]; then
+            sleep "$PUBLIC_HEALTH_RETRY_INTERVAL_SECONDS"
+        fi
+    done
+    return 1
+}
 
 echo "== Local checks =="
 git rev-parse --verify "$DEPLOY_REF" >/dev/null
@@ -222,7 +240,7 @@ curl -fsS -o /dev/null -w "$PUBLIC_HEALTH_URL HTTP %{http_code}\n" "$PUBLIC_HEAL
 if [ "$UPLOAD_CLOUDFLARED_SCRIPTS" = "1" ]; then
     echo "== Restart Cloudflare connector with reviewed runtime =="
     ssh "$SSH_HOST" "bash '$RUNTIME_DIR/start_panel_cloudflared.sh'"
-    curl -fsS -o /dev/null -w "$PUBLIC_HEALTH_URL HTTP %{http_code}\n" "$PUBLIC_HEALTH_URL"
+    wait_public_health
 fi
 
 echo "deployed_ref=$resolved_ref"

@@ -75,6 +75,12 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert "deployment.env.next" in deploy
     assert "resolved_ref" in deploy
     assert "Verify release identity" in deploy
+    assert "wait_public_health" in deploy
+    assert "PUBLIC_HEALTH_RETRIES" in deploy
+    assert "PUBLIC_HEALTH_RETRY_INTERVAL_SECONDS" in deploy
+    assert deploy.index("Restart Cloudflare connector") < deploy.rindex(
+        "wait_public_health"
+    )
     assert 'DEPLOYMENT_ENV="${DEPLOYMENT_ENV:-$RUNTIME_DIR/deployment.env}"' in start
     assert start.index('if start_release "$RELEASE_DIR"; then') < start.index(
         'write_current_release "$RELEASE_DIR"'
