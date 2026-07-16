@@ -224,10 +224,109 @@ def test_recover_interrupted_batch_requeues_unfinished_rows(tmp_path, monkeypatc
     )
     db.close()
     assert summary["requeued"] == 1
-    assert task.status == "pending"
+    assert task.status == "queued"
     assert task.completed_files == 1
     assert task.failed_files == 0
-    assert [row.status for row in rows] == ["completed", "pending", "pending"]
+    assert [row.status for row in rows] == ["completed", "queued", "queued"]
     assert len(queued) == 1
     assert queued[0]["func"].__name__ == "_complete_batch_files_task"
+    assert [item["index"] for item in queued[0]["kwargs"]["items"]] == [2, 3]
+
+
+def test_recover_preflight_batch_requeues_without_touching_completed_rows(
+    tmp_path,
+    monkeypatch,
+):
+    SessionLocal = _session_factory(tmp_path, monkeypatch)
+    queued = _capture_queue(monkeypatch)
+    task_id = "batch-preflight-recover"
+    output_dir = settings.report_dir / task_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    source_dir = settings.upload_dir / "2026-05-31" / "preflight"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    sources = []
+    for index in (1, 2, 3):
+        path = source_dir / f"synthetic{index}.xlsx"
+        path.write_bytes(b"placeholder")
+        sources.append(path)
+    (output_dir / "batch_inputs.private.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "task_id": task_id,
+                "project_type": "crc_358_msi",
+                "shared_clinical_info": {},
+                "items": [
+                    {
+                        "index": index,
+                        "filename": path.name,
+                        "stored_path": str(path),
+                    }
+                    for index, path in enumerate(sources, start=1)
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    db = SessionLocal()
+    db.add(
+        Task(
+            id=task_id,
+            task_type="batch",
+            status="preflight",
+            output_path=str(output_dir),
+            total_files=3,
+            completed_files=1,
+            failed_files=0,
+            started_at=datetime.utcnow(),
+        )
+    )
+    db.add_all(
+        [
+            TaskResult(
+                task_id=task_id,
+                file_index=1,
+                excel_filename=sources[0].name,
+                status="completed",
+                output_path=str(output_dir / "synthetic1.docx"),
+            ),
+            TaskResult(
+                task_id=task_id,
+                file_index=2,
+                excel_filename=sources[1].name,
+                status="preflight",
+            ),
+            TaskResult(
+                task_id=task_id,
+                file_index=3,
+                excel_filename=sources[2].name,
+                status="queued",
+            ),
+        ]
+    )
+    db.commit()
+    db.close()
+
+    summary = task_recovery.recover_interrupted_tasks(
+        session_factory=SessionLocal,
+        bridge=object(),
+    )
+
+    db = SessionLocal()
+    task = db.query(Task).filter(Task.id == task_id).first()
+    rows = (
+        db.query(TaskResult)
+        .filter(TaskResult.task_id == task_id)
+        .order_by(TaskResult.file_index.asc())
+        .all()
+    )
+    db.close()
+    assert summary["requeued"] == 1
+    assert task.status == "queued"
+    assert task.started_at is None
+    assert [row.status for row in rows] == ["completed", "queued", "queued"]
+    assert rows[0].output_path.endswith("synthetic1.docx")
+    assert len(queued) == 1
     assert [item["index"] for item in queued[0]["kwargs"]["items"]] == [2, 3]

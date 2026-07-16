@@ -111,7 +111,10 @@ def run_callable_with_timeout(
     )
     started = time.monotonic()
     process.start()
-    process.join(timeout=timeout)
+    # Process startup is part of the caller's wall-clock budget.  Subtract it
+    # before waiting so a slow spawn cannot silently extend a 12s hard limit.
+    remaining = max(0.0, timeout - (time.monotonic() - started))
+    process.join(timeout=remaining)
 
     if process.is_alive():
         _join_or_kill(process, grace_seconds=grace)

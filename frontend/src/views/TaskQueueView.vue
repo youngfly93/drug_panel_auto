@@ -69,6 +69,10 @@
 
         <el-select v-model="statusFilter" placeholder="任务状态" clearable :disabled="locksWorkflowFilters">
           <el-option label="运行中" value="running" />
+          <el-option label="已排队" value="queued" />
+          <el-option label="预检中" value="preflight" />
+          <el-option label="生成中" value="generating" />
+          <el-option label="质控中" value="qa" />
           <el-option label="已完成" value="completed" />
           <el-option label="部分失败" value="partial_failed" />
           <el-option label="失败" value="failed" />
@@ -202,7 +206,7 @@
             @click="downloadReport(row.id)"
           >{{ downloadingTasks[row.id] ? '下载中' : '下载' }}</el-button>
           <el-popconfirm
-            v-if="row.status === 'running' || row.status === 'pending'"
+            v-if="isActiveTaskStatus(row.status)"
             title="确认取消当前任务？"
             @confirm="cancelTask(row.id)"
           >
@@ -340,6 +344,10 @@ function statusTagType(status: string) {
     completed: 'success',
     partial_failed: 'danger',
     failed: 'danger',
+    queued: 'info',
+    preflight: 'warning',
+    generating: 'warning',
+    qa: 'warning',
     running: 'warning',
     pending: 'info',
     cancelled: 'info',
@@ -352,11 +360,22 @@ function statusLabel(status: string) {
     completed: '已完成',
     partial_failed: '部分失败',
     failed: '失败',
+    queued: '已排队',
+    preflight: '预检中',
+    generating: '生成中',
+    qa: '质控中',
     running: '运行中',
     pending: '待执行',
     cancelled: '已取消',
   }
   return map[status] || status
+}
+
+function isActiveTaskStatus(status?: string | null) {
+  return Boolean(
+    status
+    && ['queued', 'preflight', 'generating', 'qa', 'pending', 'running'].includes(status),
+  )
 }
 
 function qaTagType(status?: string | null) {

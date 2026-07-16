@@ -220,7 +220,7 @@
               {{ batchPassDownloading ? '正在下载 QA PASS ZIP' : '下载 QA PASS ZIP' }}
             </el-button>
             <el-popconfirm
-              v-if="task?.status === 'running' || task?.status === 'pending'"
+              v-if="isActiveTaskStatus(task?.status)"
               title="确认取消当前批量任务？正在生成的文件会完成本轮后停止。"
               @confirm="cancelBatchTask"
             >
@@ -267,6 +267,10 @@
             <el-select v-model="batchStatusFilter" placeholder="文件状态" clearable>
               <el-option label="已完成" value="completed" />
               <el-option label="失败" value="failed" />
+              <el-option label="已排队" value="queued" />
+              <el-option label="预检中" value="preflight" />
+              <el-option label="生成中" value="generating" />
+              <el-option label="质控中" value="qa" />
               <el-option label="待执行" value="pending" />
               <el-option label="运行中" value="running" />
               <el-option label="已取消" value="cancelled" />
@@ -1325,6 +1329,10 @@ function statusTagType(status: string) {
     completed: 'success',
     partial_failed: 'danger',
     failed: 'danger',
+    queued: 'info',
+    preflight: 'warning',
+    generating: 'warning',
+    qa: 'warning',
     running: 'warning',
     pending: 'info',
     cancelled: 'info',
@@ -1337,11 +1345,22 @@ function statusLabel(status: string) {
     completed: '已完成',
     partial_failed: '部分失败',
     failed: '失败',
+    queued: '已排队',
+    preflight: '预检中',
+    generating: '生成中',
+    qa: '质控中',
     running: '运行中',
     pending: '待执行',
     cancelled: '已取消',
   }
   return map[status] || status
+}
+
+function isActiveTaskStatus(status?: string | null) {
+  return Boolean(
+    status
+    && ['queued', 'preflight', 'generating', 'qa', 'pending', 'running'].includes(status),
+  )
 }
 
 function qaTagType(status?: string | null) {

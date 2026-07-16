@@ -1,14 +1,19 @@
 import io
 import json
+import multiprocessing
+import subprocess
 import sys
+import threading
 import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openpyxl import Workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -26,7 +31,34 @@ from app.config import settings  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.dependencies import get_bridge  # noqa: E402
 from app.services import clinical_info_service as clinical_svc  # noqa: E402
+from app.services import generation_preflight  # noqa: E402
 from app.services.reportgen_bridge import ReportGenBridge  # noqa: E402
+
+BATCH_TERMINAL_STATUSES = {"completed", "failed", "partial_failed", "cancelled"}
+
+
+def _wait_for_task_terminal(client, task_id: str, *, attempts: int = 80):
+    response = None
+    for _ in range(attempts):
+        response = client.get(f"/api/v1/reports/{task_id}")
+        if response.json()["data"]["status"] in BATCH_TERMINAL_STATUSES:
+            return response
+        time.sleep(0.05)
+    return response
+
+
+def _synthetic_xlsx_bytes(sample_id: str = "LZ000001") -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Meta"
+    sheet.append(["样本编号", sample_id])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def _slow_enrichment_worker(*_args):
+    time.sleep(5)
 
 
 def test_patient_registry_crud_uses_external_runtime_file(monkeypatch, tmp_path):
@@ -192,9 +224,40 @@ class SlowBridge(FakeBridge):
         return super().generate_report(**kwargs)
 
 
+class CountingBridge(FakeBridge):
+    def __init__(self):
+        super().__init__()
+        self.read_count = 0
+
+    def read_excel(self, excel_path):
+        self.read_count += 1
+        return super().read_excel(excel_path)
+
+
+class ConfiguredDateBridge(MissingDateBridge):
+    def get_mapped_clinical_fields(self, excel_data):
+        fields = super().get_mapped_clinical_fields(excel_data)
+        if Path(excel_data.path).stem == "case2":
+            fields["collection_date"] = "2026-05-19"
+        return fields
+
+
+class StageBridge(FakeBridge):
+    def read_excel(self, excel_path):
+        time.sleep(0.12)
+        return super().read_excel(excel_path)
+
+    def generate_report(self, **kwargs):
+        time.sleep(0.12)
+        return super().generate_report(**kwargs)
+
+
 def _client(tmp_path, monkeypatch, bridge=None):
     bridge = bridge or FakeBridge()
     monkeypatch.setattr(settings, "storage_root", tmp_path)
+    monkeypatch.setattr(settings, "patient_enrichment_process_isolation", False)
+    monkeypatch.setattr(settings, "patient_enrichment_provider", "generic")
+    monkeypatch.setattr(settings, "patient_enrichment_url", "")
     monkeypatch.setattr(
         report_api.diff_svc,
         "run_auto_reference_diff",
@@ -287,7 +350,7 @@ def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
 
     def fake_urlopen(req, timeout):
         requests.append(req)
-        assert timeout == 5.0
+        assert timeout == 2.0
         assert req.full_url == "https://webapi.example.test/ngsapi/getNgsSample"
         assert req.headers["Content-type"] == "application/json"
         body = json.loads(req.data.decode("utf-8"))
@@ -337,6 +400,87 @@ def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
     assert merged["department"] == "结直肠肿瘤科"
     assert merged["sample_type"] == "新鲜组织"
     assert merged["patient_name"] == "已手动填写"
+
+
+def test_enrichment_transport_fallback_shares_one_deadline(monkeypatch):
+    observed = {}
+
+    def slow_urlopen(*_args, **_kwargs):
+        time.sleep(0.08)
+        raise clinical_svc.urlerror.URLError("synthetic urllib timeout")
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        observed["timeout"] = kwargs["timeout"]
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(clinical_svc.request, "urlopen", slow_urlopen)
+    monkeypatch.setattr(clinical_svc.shutil, "which", lambda _name: "/usr/bin/curl")
+    monkeypatch.setattr(clinical_svc.subprocess, "run", fake_run)
+
+    started = time.perf_counter()
+    raw, warnings = clinical_svc._post_json_with_curl_fallback(
+        "https://example.test/enrich",
+        b"{}",
+        timeout=0.2,
+        source="Synthetic",
+    )
+    elapsed = time.perf_counter() - started
+
+    max_time_index = observed["command"].index("--max-time") + 1
+    curl_budget = float(observed["command"][max_time_index])
+    assert raw is None
+    assert warnings
+    assert 0 < curl_budget <= 0.13
+    assert observed["timeout"] <= 0.63
+    assert elapsed < 0.5
+
+
+def test_enrichment_hard_timeout_terminates_child_process(monkeypatch):
+    monkeypatch.setattr(settings, "patient_enrichment_process_isolation", True)
+    monkeypatch.setattr(
+        clinical_svc,
+        "_enrich_patient_in_child",
+        _slow_enrichment_worker,
+    )
+    before = {child.pid for child in multiprocessing.active_children()}
+
+    started = time.perf_counter()
+    result = clinical_svc.enrich_patient_with_hard_timeout(
+        "LZ000001",
+        project_type="crc_358_msi",
+        timeout_seconds=0.2,
+    )
+    elapsed = time.perf_counter() - started
+    time.sleep(0.1)
+    after = {child.pid for child in multiprocessing.active_children()}
+
+    assert elapsed < 1.0
+    assert result.found is False
+    assert any("exceeded" in warning for warning in result.warnings)
+    assert after <= before
+
+
+def test_enrichment_hard_timeout_returns_fast_child_payload(tmp_path, monkeypatch):
+    registry = tmp_path / "patient_info.yaml"
+    registry.write_text(
+        "patients:\n  LZ000001:\n    patient_name: 合成测试患者\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("REPORTGEN_PATIENT_INFO_PATH", str(registry))
+    monkeypatch.setenv("RG_WEB_PATIENT_ENRICHMENT_PROVIDER", "generic")
+    monkeypatch.setenv("RG_WEB_PATIENT_ENRICHMENT_URL", "")
+    monkeypatch.setattr(settings, "patient_enrichment_process_isolation", True)
+
+    result = clinical_svc.enrich_patient_with_hard_timeout(
+        "LZ000001",
+        project_type="crc_358_msi",
+        timeout_seconds=3,
+    )
+
+    assert result.found is True
+    assert result.fields["patient_name"] == "合成测试患者"
+    assert result.source == "patient_info"
 
 
 def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
@@ -427,12 +571,7 @@ def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
         assert data["success"] is True
         assert data["output_file"] is None
 
-        status_response = None
-        for _ in range(20):
-            status_response = client.get(f"/api/v1/reports/{data['task_id']}")
-            if status_response.json()["data"]["status"] != "running":
-                break
-            time.sleep(0.05)
+        status_response = _wait_for_task_terminal(client, data["task_id"])
         download_response = client.get(f"/api/v1/reports/{data['task_id']}/download")
 
     assert status_response.status_code == 200
@@ -471,12 +610,7 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
         assert response.status_code == 200
         task_id = response.json()["data"]["task_id"]
 
-        status_response = None
-        for _ in range(20):
-            status_response = client.get(f"/api/v1/reports/{task_id}")
-            if status_response.json()["data"]["status"] != "running":
-                break
-            time.sleep(0.05)
+        status_response = _wait_for_task_terminal(client, task_id)
 
         results_response = client.get(f"/api/v1/reports/{task_id}/batch-results")
         result_rows = results_response.json()["data"]["items"]
@@ -534,12 +668,7 @@ def test_batch_files_fill_missing_report_date(tmp_path, monkeypatch):
         assert response.status_code == 200
         task_id = response.json()["data"]["task_id"]
 
-        status_response = None
-        for _ in range(20):
-            status_response = client.get(f"/api/v1/reports/{task_id}")
-            if status_response.json()["data"]["status"] != "running":
-                break
-            time.sleep(0.05)
+        status_response = _wait_for_task_terminal(client, task_id)
 
     assert status_response.status_code == 200
     assert status_response.json()["data"]["status"] == "completed"
@@ -550,7 +679,7 @@ def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkey
     bridge = MissingDateBridge()
     enrich_calls = []
 
-    def fake_enrich_patient(sample_id, project_type=None):
+    def fake_enrich_patient(sample_id, project_type=None, **_kwargs):
         enrich_calls.append((sample_id, project_type))
         return SimpleNamespace(fields={"receive_date": "2026-05-20"})
 
@@ -574,18 +703,248 @@ def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkey
         assert response.status_code == 200
         task_id = response.json()["data"]["task_id"]
 
-        status_response = None
-        for _ in range(20):
-            status_response = client.get(f"/api/v1/reports/{task_id}")
-            if status_response.json()["data"]["status"] != "running":
-                break
-            time.sleep(0.05)
+        status_response = _wait_for_task_terminal(client, task_id)
 
     assert status_response.status_code == 200
     assert status_response.json()["data"]["status"] == "completed"
     assert ("case1", "crc_358_msi") in enrich_calls
     assert bridge.last_generate_kwargs["clinical_info"]["receive_date"] == "2026-05-20"
     assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == "2026-05-31"
+
+
+def test_batch_files_ack_is_fast_and_does_not_preflight_synchronously(
+    tmp_path,
+    monkeypatch,
+):
+    queued_jobs = []
+    enrichment_calls = []
+    bridge = CountingBridge()
+
+    monkeypatch.setattr(
+        batch_api,
+        "submit_generation_job",
+        lambda func, *args, **kwargs: queued_jobs.append((func, args, kwargs)),
+    )
+
+    def forbidden_enrichment(*_args, **_kwargs):
+        enrichment_calls.append(True)
+        time.sleep(1)
+        raise AssertionError("提交请求不得调用外部富集")
+
+    monkeypatch.setattr(
+        batch_api.clinical_svc,
+        "enrich_patient_with_hard_timeout",
+        forbidden_enrichment,
+    )
+    payload = _synthetic_xlsx_bytes()
+    files = [
+        (
+            "files",
+            (
+                f"case{index:02d}.xlsx",
+                payload,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        )
+        for index in range(1, 15)
+    ]
+
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        started = time.perf_counter()
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=files,
+            data={"project_type": "crc_358_msi"},
+            headers={"Idempotency-Key": "batch-fast-ack-0001"},
+        )
+        elapsed = time.perf_counter() - started
+
+    assert response.status_code == 200
+    accepted = response.json()["data"]
+    assert accepted["status"] == "queued"
+    assert accepted["total_files"] == 14
+    assert accepted["accept_duration_ms"] < 5000
+    assert elapsed < 5
+    assert bridge.read_count == 0
+    assert enrichment_calls == []
+    assert len(queued_jobs) == 1
+
+
+def test_batch_files_idempotency_contract_and_concurrent_double_click(
+    tmp_path,
+    monkeypatch,
+):
+    queued_jobs = []
+    monkeypatch.setattr(
+        batch_api,
+        "submit_generation_job",
+        lambda func, *args, **kwargs: queued_jobs.append((func, args, kwargs)),
+    )
+    body = _synthetic_xlsx_bytes()
+
+    def submit(client, key: str, *, content: bytes = body):
+        return client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                (
+                    "files",
+                    (
+                        "case01.xlsx",
+                        content,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    ),
+                )
+            ],
+            data={"project_type": "crc_358_msi"},
+            headers={"Idempotency-Key": key},
+        )
+
+    with _client(tmp_path, monkeypatch) as client:
+        first = submit(client, "batch-idempotent-0001")
+        replay = submit(client, "batch-idempotent-0001")
+        conflict = submit(
+            client,
+            "batch-idempotent-0001",
+            content=_synthetic_xlsx_bytes("LZ000002"),
+        )
+        new_key = submit(client, "batch-idempotent-0002")
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(submit, client, "batch-idempotent-race-0003")
+                for _ in range(2)
+            ]
+            concurrent = [future.result() for future in futures]
+
+    assert first.status_code == 200
+    assert replay.status_code == 200
+    assert first.json()["data"]["task_id"] == replay.json()["data"]["task_id"]
+    assert replay.json()["data"]["idempotent_replay"] is True
+    assert conflict.status_code == 409
+    assert new_key.status_code == 200
+    assert new_key.json()["data"]["task_id"] != first.json()["data"]["task_id"]
+    assert [response.status_code for response in concurrent] == [200, 200]
+    assert len({response.json()["data"]["task_id"] for response in concurrent}) == 1
+    assert sum(
+        not response.json()["data"]["idempotent_replay"]
+        for response in concurrent
+    ) == 1
+    assert len(queued_jobs) == 3
+
+
+def test_batch_preflight_reuses_one_excel_parse_per_file(tmp_path, monkeypatch):
+    bridge = CountingBridge()
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"placeholder1", "application/vnd.ms-excel")),
+                ("files", ("case2.xlsx", b"placeholder2", "application/vnd.ms-excel")),
+            ],
+            data={"project_type": "crc_358_msi"},
+        )
+        status_response = _wait_for_task_terminal(
+            client,
+            response.json()["data"]["task_id"],
+        )
+
+    assert status_response.json()["data"]["status"] == "completed"
+    assert bridge.read_count == 2
+
+
+def test_batch_configured_required_date_fails_only_affected_file(
+    tmp_path,
+    monkeypatch,
+):
+    bridge = ConfiguredDateBridge()
+    monkeypatch.setattr(
+        generation_preflight,
+        "required_date_fields",
+        lambda _project_type: [
+            ("report_date", "报告日期"),
+            ("collection_date", "采样日期"),
+        ],
+    )
+
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"placeholder1", "application/vnd.ms-excel")),
+                ("files", ("case2.xlsx", b"placeholder2", "application/vnd.ms-excel")),
+            ],
+            data={"project_type": "crc_358_msi"},
+        )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+        status_response = _wait_for_task_terminal(client, task_id)
+        results_response = client.get(f"/api/v1/reports/{task_id}/batch-results")
+
+    status = status_response.json()["data"]
+    rows = results_response.json()["data"]["items"]
+    assert status["status"] == "partial_failed"
+    assert [row["status"] for row in rows] == ["failed", "completed"]
+    assert "采样日期" in rows[0]["errors"][0]
+    assert "receive_date" not in rows[1]["errors"]
+    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == date.today().isoformat()
+
+
+def test_batch_status_machine_exposes_all_background_stages(tmp_path, monkeypatch):
+    test_client = _client(tmp_path, monkeypatch, bridge=StageBridge())
+
+    def slow_diff(*_args, **_kwargs):
+        time.sleep(0.12)
+        return {"status": "PASS", "summary": {}}
+
+    monkeypatch.setattr(batch_api.diff_svc, "run_batch_reference_diff", slow_diff)
+    observed = ["queued"]
+    with test_client as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[("files", ("case1.xlsx", b"placeholder", "application/vnd.ms-excel"))],
+            data={"project_type": "crc_358_msi"},
+        )
+        task_id = response.json()["data"]["task_id"]
+        for _ in range(120):
+            status = client.get(f"/api/v1/reports/{task_id}").json()["data"]["status"]
+            if status != observed[-1]:
+                observed.append(status)
+            if status in BATCH_TERMINAL_STATUSES:
+                break
+            time.sleep(0.01)
+
+    expected = ["queued", "preflight", "generating", "qa", "completed"]
+    positions = [observed.index(status) for status in expected]
+    assert positions == sorted(positions)
+
+
+def test_batch_fourteen_synthetic_files_complete(tmp_path, monkeypatch):
+    payload = _synthetic_xlsx_bytes()
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                (
+                    "files",
+                    (
+                        f"case{index:02d}.xlsx",
+                        payload,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    ),
+                )
+                for index in range(1, 15)
+            ],
+            data={"project_type": "crc_358_msi"},
+        )
+        task_id = response.json()["data"]["task_id"]
+        status_response = _wait_for_task_terminal(client, task_id, attempts=160)
+        results_response = client.get(f"/api/v1/reports/{task_id}/batch-results")
+
+    status = status_response.json()["data"]
+    assert status["status"] == "completed"
+    assert status["completed_files"] == 14
+    assert status["failed_files"] == 0
+    assert len(results_response.json()["data"]["items"]) == 14
 
 
 def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
@@ -602,12 +961,7 @@ def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
         assert response.status_code == 200
         task_id = response.json()["data"]["task_id"]
 
-        first_status_response = None
-        for _ in range(30):
-            first_status_response = client.get(f"/api/v1/reports/{task_id}")
-            if first_status_response.json()["data"]["status"] != "running":
-                break
-            time.sleep(0.05)
+        first_status_response = _wait_for_task_terminal(client, task_id)
 
         first_status = first_status_response.json()["data"]
         assert first_status["status"] == "partial_failed"
@@ -618,12 +972,7 @@ def test_batch_failed_rows_can_be_retried(tmp_path, monkeypatch):
         assert retry_response.status_code == 200
         assert retry_response.json()["data"]["retry_files"] == 1
 
-        final_status_response = None
-        for _ in range(30):
-            final_status_response = client.get(f"/api/v1/reports/{task_id}")
-            if final_status_response.json()["data"]["status"] != "running":
-                break
-            time.sleep(0.05)
+        final_status_response = _wait_for_task_terminal(client, task_id)
 
         results_response = client.get(f"/api/v1/reports/{task_id}/batch-results")
 
@@ -663,6 +1012,38 @@ def test_batch_cancel_marks_pending_rows(tmp_path, monkeypatch):
     assert status["cancelled_files"] >= 1
     assert results["cancelled_files"] >= 1
     assert "cancelled" in [row["status"] for row in results["items"]]
+
+
+def test_batch_cancel_during_qa_is_not_overwritten(tmp_path, monkeypatch):
+    qa_entered = threading.Event()
+    release_qa = threading.Event()
+    test_client = _client(tmp_path, monkeypatch, bridge=StageBridge())
+
+    def blocked_diff(*_args, **_kwargs):
+        qa_entered.set()
+        assert release_qa.wait(timeout=2)
+        return {"status": "PASS", "summary": {}}
+
+    monkeypatch.setattr(batch_api.diff_svc, "run_batch_reference_diff", blocked_diff)
+    with test_client as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[("files", ("case1.xlsx", b"placeholder", "application/vnd.ms-excel"))],
+            data={"project_type": "crc_358_msi"},
+        )
+        assert response.status_code == 200
+        task_id = response.json()["data"]["task_id"]
+        assert qa_entered.wait(timeout=2)
+        assert client.get(f"/api/v1/reports/{task_id}").json()["data"]["status"] == "qa"
+
+        cancel_response = client.delete(f"/api/v1/tasks/{task_id}")
+        assert cancel_response.status_code == 200
+        release_qa.set()
+        time.sleep(0.1)
+
+        status = client.get(f"/api/v1/reports/{task_id}").json()["data"]
+
+    assert status["status"] == "cancelled"
 
 
 def test_task_list_supports_production_filters_and_review_state(tmp_path, monkeypatch):
@@ -818,11 +1199,7 @@ def test_quality_gate_blocks_failed_batch_delivery(tmp_path, monkeypatch):
         )
         task_id = response.json()["data"]["task_id"]
 
-        for _ in range(30):
-            status = client.get(f"/api/v1/reports/{task_id}").json()["data"]
-            if status["status"] != "running":
-                break
-            time.sleep(0.05)
+        _wait_for_task_terminal(client, task_id)
 
         gate_response = client.get(f"/api/v1/reports/{task_id}/quality-gate")
         delivery_response = client.post(

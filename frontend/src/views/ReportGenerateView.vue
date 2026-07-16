@@ -70,7 +70,7 @@
         <div class="batch-actions">
           <el-button @click="$router.push(`/tasks/${batchTask.id}`)">查看批量详情</el-button>
           <el-popconfirm
-            v-if="batchTask.status === 'running' || batchTask.status === 'pending'"
+            v-if="isActiveTaskStatus(batchTask.status)"
             title="确认取消当前批量任务？正在生成的文件会完成本轮后停止。"
             @confirm="cancelCurrentBatch"
           >
@@ -521,6 +521,7 @@ const singleDownloading = ref(false)
 const singleDownloadStatus = ref('')
 const batchTask = ref<TaskStatus | null>(null)
 const batchResultRows = ref<BatchResultItem[]>([])
+const batchIdempotencyKey = ref<string | null>(null)
 let batchPollTimer: number | null = null
 let singlePollTimer: number | null = null
 
@@ -884,6 +885,13 @@ watch(
   { immediate: true },
 )
 
+watch(
+  [batchProjectType, batchTemplateName],
+  () => {
+    batchIdempotencyKey.value = null
+  },
+)
+
 // Dynamic form driven by project type
 const form = useDynamicForm(projectType)
 
@@ -935,6 +943,8 @@ function handleBatchFileChange(_uploadFile: any, uploadFiles: any[]) {
     .filter((file): file is File => Boolean(file))
   batchTask.value = null
   batchResultRows.value = []
+  batchIdempotencyKey.value = null
+  stopBatchPolling()
 }
 
 function handleBatchFileRemove(_uploadFile: any, uploadFiles: any[]) {
@@ -959,14 +969,23 @@ async function startBatchGenerate() {
   batchResultRows.value = []
   stopBatchPolling()
   try {
-    const accepted = await reportApi.generateBatchFromFiles(batchFiles.value, {
-      clinical_info: {},
-      project_type: batchProjectType.value,
-      project_name: null,
-      template_name: batchTemplateName.value,
-      template_contract_mode: 'warn',
-    })
-    ElMessage.info('批量任务已进入后台生成')
+    batchIdempotencyKey.value ||= createIdempotencyKey()
+    const accepted = await reportApi.generateBatchFromFiles(
+      batchFiles.value,
+      {
+        clinical_info: {},
+        project_type: batchProjectType.value,
+        project_name: null,
+        template_name: batchTemplateName.value,
+        template_contract_mode: 'warn',
+      },
+      batchIdempotencyKey.value,
+    )
+    ElMessage.info(
+      accepted.idempotent_replay
+        ? '已识别为重试，继续查看原批量任务'
+        : '批量任务已进入后台生成',
+    )
     batchTask.value = {
       id: accepted.task_id,
       task_type: 'batch',
@@ -978,7 +997,7 @@ async function startBatchGenerate() {
       cancelled_files: 0,
       pending_files: accepted.total_files,
       running_files: 0,
-      status_counts: {},
+      status_counts: { queued: accepted.total_files },
       output_path: null,
       created_at: null,
       started_at: null,
@@ -1251,6 +1270,20 @@ function shortTaskId(value: string) {
   return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value
 }
 
+function createIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `batch-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+}
+
+function isActiveTaskStatus(status?: string | null) {
+  return Boolean(
+    status
+    && ['queued', 'preflight', 'generating', 'qa', 'pending', 'running'].includes(status),
+  )
+}
+
 async function downloadReport(taskId: string) {
   singleDownloading.value = true
   singleDownloadStatus.value = '正在准备报告下载'
@@ -1304,6 +1337,10 @@ function statusTagType(status: string) {
     completed: 'success',
     partial_failed: 'danger',
     failed: 'danger',
+    queued: 'info',
+    preflight: 'warning',
+    generating: 'warning',
+    qa: 'warning',
     running: 'warning',
     pending: 'info',
     cancelled: 'info',
@@ -1316,6 +1353,10 @@ function statusLabel(status: string) {
     completed: '已完成',
     partial_failed: '部分失败',
     failed: '失败',
+    queued: '已排队',
+    preflight: '预检中',
+    generating: '生成中',
+    qa: '质控中',
     running: '运行中',
     pending: '待执行',
     cancelled: '已取消',

@@ -7,14 +7,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
 from app.models.task import Task, TaskResult
+from app.services.batch_lifecycle import (
+    BATCH_ACTIVE_STATUSES,
+    BATCH_ITEM_ACTIVE_STATUSES,
+)
 from app.services.generation_queue import submit_generation_job
 
-IN_FLIGHT_STATUSES = {"pending", "running"}
+SINGLE_IN_FLIGHT_STATUSES = {"pending", "running"}
 TERMINAL_STATUSES = {"completed", "failed", "partial_failed", "cancelled"}
 RECOVERY_MESSAGE = "服务重启时任务未完成，系统已执行恢复处理。"
 PRIVATE_REQUEST_FILENAME = "generation_request.private.json"
@@ -96,7 +101,7 @@ def _fail_task(db: Session, task: Task, reason: str) -> None:
             db.query(TaskResult)
             .filter(
                 TaskResult.task_id == task.id,
-                TaskResult.status.in_(list(IN_FLIGHT_STATUSES)),
+                TaskResult.status.in_(list(BATCH_ITEM_ACTIVE_STATUSES)),
             )
             .update(
                 {
@@ -206,7 +211,7 @@ def _recover_batch_task(db: Session, task: Task, bridge: Any) -> str:
         db.query(TaskResult)
         .filter(
             TaskResult.task_id == task.id,
-            TaskResult.status.in_(list(IN_FLIGHT_STATUSES)),
+            TaskResult.status.in_(list(BATCH_ITEM_ACTIVE_STATUSES)),
         )
         .order_by(TaskResult.file_index.asc())
         .all()
@@ -223,7 +228,7 @@ def _recover_batch_task(db: Session, task: Task, bridge: Any) -> str:
             )
             continue
         retry_items.append(item)
-        row.status = "pending"
+        row.status = "queued"
         row.output_path = None
         row.duration_seconds = None
         row.errors = None
@@ -242,7 +247,10 @@ def _recover_batch_task(db: Session, task: Task, bridge: Any) -> str:
     )
 
     if not retry_items:
-        task.status = "failed" if task.failed_files else "completed"
+        if task.completed_files and task.failed_files:
+            task.status = "partial_failed"
+        else:
+            task.status = "failed" if task.failed_files else "completed"
         task.completed_at = datetime.utcnow()
         task.warnings = _append_json_list(
             task.warnings,
@@ -251,9 +259,13 @@ def _recover_batch_task(db: Session, task: Task, bridge: Any) -> str:
         )
         db.commit()
         _write_batch_report(db, task)
-        return "failed" if task.status == "failed" else "skipped"
+        return (
+            "failed"
+            if task.status in {"failed", "partial_failed"}
+            else "skipped"
+        )
 
-    task.status = "pending"
+    task.status = "queued"
     task.started_at = None
     task.completed_at = None
     task.duration_seconds = None
@@ -299,7 +311,18 @@ def recover_interrupted_tasks(
     try:
         tasks = (
             db.query(Task)
-            .filter(Task.status.in_(list(IN_FLIGHT_STATUSES)))
+            .filter(
+                or_(
+                    and_(
+                        Task.task_type == "single",
+                        Task.status.in_(list(SINGLE_IN_FLIGHT_STATUSES)),
+                    ),
+                    and_(
+                        Task.task_type == "batch",
+                        Task.status.in_(list(BATCH_ACTIVE_STATUSES)),
+                    ),
+                )
+            )
             .order_by(Task.created_at.asc())
             .all()
         )

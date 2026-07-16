@@ -44,6 +44,9 @@ export interface BatchGenerateResult {
   status: string
   total_files: number
   retry_files?: number
+  idempotency_key?: string
+  idempotent_replay?: boolean
+  accept_duration_ms?: number
 }
 
 export interface TaskStatus {
@@ -597,7 +600,11 @@ export const reportApi = {
     return data.data
   },
 
-  async generateBatchFromFiles(files: File[], req: Omit<GenerateRequest, 'upload_id'>): Promise<BatchGenerateResult> {
+  async generateBatchFromFiles(
+    files: File[],
+    req: Omit<GenerateRequest, 'upload_id'>,
+    idempotencyKey: string,
+  ): Promise<BatchGenerateResult> {
     const form = new FormData()
     files.forEach((file) => form.append('files', file))
     form.append('clinical_info', JSON.stringify(req.clinical_info || {}))
@@ -607,7 +614,12 @@ export const reportApi = {
     if (req.template_contract_mode) {
       form.append('template_contract_mode', req.template_contract_mode)
     }
-    const { data } = await client.post('/reports/batch-files', form)
+    const { data } = await client.post('/reports/batch-files', form, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+      // Multipart 上传时间与服务端建档时间不同；服务端必须在接收后秒回。
+      // 不再用浏览器固定 90s 去等后台富集或报告生成。
+      timeout: 0,
+    })
     return data.data
   },
 

@@ -1,7 +1,11 @@
 """Batch report generation endpoints."""
 
 import asyncio
+import hashlib
 import json
+import re
+import shutil
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -13,32 +17,48 @@ from fastapi import (
     Depends,
     File,
     Form,
+    Header,
     HTTPException,
     Request,
     UploadFile,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal, get_db
-from app.dependencies import get_bridge
+from app.dependencies import get_bridge, get_current_user
+from app.models.batch_submission import BatchSubmission
 from app.models.task import Task, TaskResult
 from app.models.upload import Upload
+from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.services import clinical_info_service as clinical_svc
+from app.services import reference_report_service as diff_svc
 from app.services.audit_log import record_audit_event
-from app.services.file_manager import ensure_report_dir, save_upload
-from app.services.generation_process import run_generate_report_with_timeout
-from app.services.generation_queue import submit_generation_job
+from app.services.batch_lifecycle import (
+    BATCH_ACTIVE_STATUSES,
+    BATCH_ITEM_ACTIVE_STATUSES,
+    BATCH_ITEM_TERMINAL_STATUSES,
+    BATCH_QUEUED_STATUSES,
+    empty_batch_status_counts,
+)
+from app.services.file_manager import (
+    ensure_report_dir,
+    save_upload_with_digest,
+)
 from app.services.generation_preflight import (
     required_dates_error_message,
     validate_required_dates,
 )
-from app.services import reference_report_service as diff_svc
+from app.services.generation_process import run_generate_report_with_timeout
+from app.services.generation_queue import submit_generation_job
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_manager import submit_batch_task
 
 router = APIRouter(prefix="/reports", tags=["reports-batch"])
+
+IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
 
 
 def _json_list(value: Optional[str]) -> list:
@@ -87,7 +107,10 @@ def _enrich_clinical_payload(
         return clinical_svc.fill_missing_report_date(payload)
     if not sample_id and lookup_id:
         payload["sample_id"] = lookup_id
-    enrichment = clinical_svc.enrich_patient(lookup_id, project_type=project_type)
+    enrichment = clinical_svc.enrich_patient_with_hard_timeout(
+        lookup_id,
+        project_type=project_type,
+    )
     payload = clinical_svc.merge_enrichment_into_values(payload, enrichment)
     return clinical_svc.fill_missing_report_date(payload)
 
@@ -101,17 +124,98 @@ def _batch_inputs_path(output_dir: str | Path) -> Path:
 
 
 def _batch_status_counts(results: list[TaskResult]) -> dict[str, int]:
-    counts = {
-        "pending": 0,
-        "running": 0,
-        "completed": 0,
-        "failed": 0,
-        "cancelled": 0,
-    }
+    counts = empty_batch_status_counts()
     for result in results:
         status = result.status or "pending"
         counts[status] = counts.get(status, 0) + 1
     return counts
+
+
+def _normalized_idempotency_key(value: Optional[str]) -> str:
+    key = str(value or "").strip() or str(uuid.uuid4())
+    if not IDEMPOTENCY_KEY_PATTERN.fullmatch(key):
+        raise HTTPException(
+            status_code=400,
+            detail="Idempotency-Key 格式无效，请使用 8-128 位字母、数字或 ._:-。",
+        )
+    return key
+
+
+def _batch_request_digest(
+    *,
+    items: list[dict],
+    shared_clinical_info: dict,
+    project_type: Optional[str],
+    project_name: Optional[str],
+    template_name: Optional[str],
+    template_contract_mode: str,
+) -> str:
+    canonical = {
+        "files": [
+            {
+                "index": int(item["index"]),
+                "filename": str(item.get("filename") or ""),
+                "size": int(item.get("file_size") or 0),
+                "sha256": str(item.get("sha256") or ""),
+            }
+            for item in items
+        ],
+        "clinical_info": shared_clinical_info,
+        "project_type": project_type,
+        "project_name": project_name,
+        "template_name": template_name,
+        "template_contract_mode": template_contract_mode,
+    }
+    encoded = json.dumps(
+        canonical,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _cleanup_uncommitted_batch(items: list[dict], output_dir: Path | None = None) -> None:
+    """Remove only per-request artifacts created before an idempotency replay."""
+    storage_root = settings.storage_root.resolve()
+    for item in items:
+        stored_path = Path(str(item.get("stored_path") or ""))
+        try:
+            parent = stored_path.resolve().parent
+            parent.relative_to(storage_root)
+        except (OSError, ValueError):
+            continue
+        shutil.rmtree(parent, ignore_errors=True)
+    if output_dir is not None:
+        try:
+            resolved = output_dir.resolve()
+            resolved.relative_to(settings.report_dir.resolve())
+        except (OSError, ValueError):
+            return
+        shutil.rmtree(resolved, ignore_errors=True)
+
+
+def _idempotent_response_data(
+    db: Session,
+    submission: BatchSubmission,
+    *,
+    accept_started: float,
+) -> dict:
+    task = db.query(Task).filter(Task.id == submission.task_id).first()
+    if task is None:
+        raise HTTPException(
+            status_code=409,
+            detail="幂等记录对应的任务不存在，请更换 Idempotency-Key 后重试。",
+        )
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "total_files": task.total_files,
+        "idempotency_key": submission.idempotency_key,
+        "idempotent_replay": True,
+        "accept_duration_ms": round((time.perf_counter() - accept_started) * 1000, 3),
+    }
 
 
 def _resolve_batch_status(*, completed: int, failed: int, total: int) -> str:
@@ -225,7 +329,7 @@ def _prepare_item_clinical_payload(
     shared_clinical_info: dict,
     project_type: Optional[str],
     project_name: Optional[str],
-) -> tuple[dict, Optional[str], Optional[str]]:
+) -> tuple[dict, Optional[str], Optional[str], object]:
     excel_data = bridge.read_excel(stored_path)
     detected_project_type = project_type
     detected_project_name = project_name
@@ -255,10 +359,10 @@ def _prepare_item_clinical_payload(
         detected_project_type,
         lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
     )
-    return clinical_payload, detected_project_type, detected_project_name
+    return clinical_payload, detected_project_type, detected_project_name, excel_data
 
 
-def _build_item_payload(
+def _preflight_item_payload(
     *,
     stored_path: str,
     original_filename: str,
@@ -266,11 +370,13 @@ def _build_item_payload(
     shared_clinical_info: dict,
     project_type: Optional[str],
     project_name: Optional[str],
-    template_name: Optional[str],
-    output_dir: str,
-    template_contract_mode: str,
-) -> tuple[dict, dict, Optional[str], Optional[str]]:
-    clinical_payload, detected_project_type, detected_project_name = (
+) -> dict:
+    (
+        clinical_payload,
+        detected_project_type,
+        detected_project_name,
+        excel_data,
+    ) = (
         _prepare_item_clinical_payload(
             stored_path=stored_path,
             original_filename=original_filename,
@@ -280,6 +386,67 @@ def _build_item_payload(
             project_name=project_name,
         )
     )
+
+    preflight = validate_required_dates(
+        bridge,
+        excel_path=stored_path,
+        clinical_info=clinical_payload,
+        project_type=detected_project_type,
+        project_name=detected_project_name,
+        excel_data=excel_data,
+    )
+    missing = list(preflight.get("missing") or [])
+    if missing:
+        raise ValueError(required_dates_error_message(missing))
+    return {
+        "clinical_payload": clinical_payload,
+        "project_type": detected_project_type,
+        "project_name": detected_project_name,
+        "preflight": preflight,
+    }
+
+
+def _batch_terminal_counts(db: Session, task_id: str) -> tuple[int, int]:
+    completed_files = (
+        db.query(TaskResult)
+        .filter(TaskResult.task_id == task_id, TaskResult.status == "completed")
+        .count()
+    )
+    failed_files = (
+        db.query(TaskResult)
+        .filter(TaskResult.task_id == task_id, TaskResult.status == "failed")
+        .count()
+    )
+    return completed_files, failed_files
+
+
+def _refresh_batch_counts(db: Session, task: Task, *, started_at: datetime) -> None:
+    task.completed_files, task.failed_files = _batch_terminal_counts(db, task.id)
+    task.duration_seconds = (datetime.utcnow() - started_at).total_seconds()
+
+
+def _load_batch_task_fresh(db: Session, task_id: str) -> Task | None:
+    """Reload task state so cancellation from another session is observable."""
+    return (
+        db.query(Task)
+        .populate_existing()
+        .filter(Task.id == task_id)
+        .first()
+    )
+
+
+def _build_item_payload(
+    *,
+    stored_path: str,
+    bridge: ReportGenBridge,
+    prepared: dict,
+    template_name: Optional[str],
+    output_dir: str,
+    template_contract_mode: str,
+) -> tuple[dict, dict, Optional[str], Optional[str]]:
+    clinical_payload = prepared["clinical_payload"]
+    detected_project_type = prepared.get("project_type")
+    detected_project_name = prepared.get("project_name")
 
     result = run_generate_report_with_timeout(
         bridge,
@@ -328,20 +495,41 @@ def _complete_batch_files_task(
     bridge: ReportGenBridge,
 ) -> None:
     db = SessionLocal()
-    start_time = datetime.utcnow()
+    worker_started = datetime.utcnow()
     try:
-        task = db.query(Task).filter(Task.id == task_id).first()
+        task = _load_batch_task_fresh(db, task_id)
         if not task:
             return
         if task.status == "cancelled":
             return
-        task.status = "running"
-        task.started_at = task.started_at or start_time
-        task.output_path = output_dir
+        started_at = task.started_at or worker_started
+        transitioned = (
+            db.query(Task)
+            .filter(
+                Task.id == task_id,
+                Task.status.in_(list(BATCH_QUEUED_STATUSES)),
+            )
+            .update(
+                {
+                    Task.status: "preflight",
+                    Task.started_at: started_at,
+                    Task.output_path: output_dir,
+                },
+                synchronize_session=False,
+            )
+        )
+        if transitioned != 1:
+            db.rollback()
+            return
         db.commit()
+        task = _load_batch_task_fresh(db, task_id)
+        if not task:
+            return
+        _write_batch_report(db, task)
 
+        prepared_items: list[tuple[dict, dict]] = []
         for item in items:
-            task = db.query(Task).filter(Task.id == task_id).first()
+            task = _load_batch_task_fresh(db, task_id)
             if not task or task.status == "cancelled":
                 break
             row = (
@@ -354,22 +542,119 @@ def _complete_batch_files_task(
             )
             if not row:
                 continue
-            row.status = "running"
+            if row.status in BATCH_ITEM_TERMINAL_STATUSES:
+                continue
+            row.status = "preflight"
+            row.validation_summary = json.dumps(
+                {"stage": "preflight"},
+                ensure_ascii=False,
+            )
             db.commit()
 
             started = datetime.utcnow()
             try:
-                result, validation_summary, _ptype, _pname = _build_item_payload(
+                prepared = _preflight_item_payload(
                     stored_path=item["stored_path"],
                     original_filename=item["filename"],
                     bridge=bridge,
                     shared_clinical_info=shared_clinical_info,
                     project_type=project_type,
                     project_name=project_name,
+                )
+                task = _load_batch_task_fresh(db, task_id)
+                row = (
+                    db.query(TaskResult)
+                    .filter(
+                        TaskResult.task_id == task_id,
+                        TaskResult.file_index == item["index"],
+                    )
+                    .first()
+                )
+                if not task or task.status == "cancelled" or not row:
+                    break
+                row.validation_summary = json.dumps(
+                    {
+                        "stage": "preflight",
+                        "preflight": prepared.get("preflight") or {},
+                        "project_type": prepared.get("project_type"),
+                        "project_name": prepared.get("project_name"),
+                    },
+                    ensure_ascii=False,
+                )
+                prepared_items.append((item, prepared))
+            except Exception as exc:
+                row.status = "failed"
+                row.duration_seconds = (datetime.utcnow() - started).total_seconds()
+                row.errors = json.dumps([str(exc)], ensure_ascii=False)
+                row.warnings = json.dumps([], ensure_ascii=False)
+                row.validation_summary = json.dumps(
+                    {"stage": "preflight", "preflight": {"ok": False}},
+                    ensure_ascii=False,
+                )
+
+            task = _load_batch_task_fresh(db, task_id)
+            if not task:
+                return
+            _refresh_batch_counts(db, task, started_at=started_at)
+            db.commit()
+            _write_batch_report(db, task)
+
+        task = _load_batch_task_fresh(db, task_id)
+        if not task or task.status == "cancelled":
+            return
+        completed_files, failed_files = _batch_terminal_counts(db, task_id)
+        transitioned = (
+            db.query(Task)
+            .filter(Task.id == task_id, Task.status == "preflight")
+            .update(
+                {
+                    Task.status: "generating",
+                    Task.completed_files: completed_files,
+                    Task.failed_files: failed_files,
+                    Task.duration_seconds: (
+                        datetime.utcnow() - started_at
+                    ).total_seconds(),
+                },
+                synchronize_session=False,
+            )
+        )
+        if transitioned != 1:
+            db.rollback()
+            return
+        db.commit()
+        task = _load_batch_task_fresh(db, task_id)
+        if not task:
+            return
+        _write_batch_report(db, task)
+
+        for item, prepared in prepared_items:
+            task = _load_batch_task_fresh(db, task_id)
+            if not task or task.status == "cancelled":
+                break
+            row = (
+                db.query(TaskResult)
+                .filter(
+                    TaskResult.task_id == task_id,
+                    TaskResult.file_index == item["index"],
+                )
+                .first()
+            )
+            if not row or row.status in BATCH_ITEM_TERMINAL_STATUSES:
+                continue
+            row.status = "generating"
+            db.commit()
+            started = datetime.utcnow()
+            try:
+                result, validation_summary, _ptype, _pname = _build_item_payload(
+                    stored_path=item["stored_path"],
+                    bridge=bridge,
+                    prepared=prepared,
                     template_name=template_name,
                     output_dir=output_dir,
                     template_contract_mode=template_contract_mode,
                 )
+                row.status = "qa"
+                db.commit()
                 success = bool(result.get("success"))
                 row.status = "completed" if success else "failed"
                 row.output_path = result.get("output_file")
@@ -379,6 +664,8 @@ def _complete_batch_files_task(
                     result.get("warnings") or [],
                     ensure_ascii=False,
                 )
+                validation_summary["stage"] = "qa"
+                validation_summary["preflight"] = prepared.get("preflight") or {}
                 row.validation_summary = json.dumps(
                     validation_summary,
                     ensure_ascii=False,
@@ -388,74 +675,155 @@ def _complete_batch_files_task(
                 row.duration_seconds = (datetime.utcnow() - started).total_seconds()
                 row.errors = json.dumps([str(exc)], ensure_ascii=False)
                 row.warnings = json.dumps([], ensure_ascii=False)
-                row.validation_summary = json.dumps({}, ensure_ascii=False)
+                row.validation_summary = json.dumps(
+                    {"stage": "generating", "preflight": prepared.get("preflight") or {}},
+                    ensure_ascii=False,
+                )
 
-            task = db.query(Task).filter(Task.id == task_id).first()
-            task.completed_files = (
-                db.query(TaskResult)
-                .filter(TaskResult.task_id == task_id, TaskResult.status == "completed")
-                .count()
-            )
-            task.failed_files = (
-                db.query(TaskResult)
-                .filter(TaskResult.task_id == task_id, TaskResult.status == "failed")
-                .count()
-            )
-            task.duration_seconds = (datetime.utcnow() - start_time).total_seconds()
+            task = _load_batch_task_fresh(db, task_id)
+            if not task:
+                return
+            _refresh_batch_counts(db, task, started_at=started_at)
             db.commit()
             _write_batch_report(db, task)
 
-        task = db.query(Task).filter(Task.id == task_id).first()
-        if task and task.status != "cancelled":
-            task.completed_files = (
-                db.query(TaskResult)
-                .filter(TaskResult.task_id == task_id, TaskResult.status == "completed")
-                .count()
+        task = _load_batch_task_fresh(db, task_id)
+        if not task or task.status == "cancelled":
+            return
+        completed_files, failed_files = _batch_terminal_counts(db, task_id)
+        transitioned = (
+            db.query(Task)
+            .filter(Task.id == task_id, Task.status == "generating")
+            .update(
+                {
+                    Task.status: "qa",
+                    Task.completed_files: completed_files,
+                    Task.failed_files: failed_files,
+                    Task.duration_seconds: (
+                        datetime.utcnow() - started_at
+                    ).total_seconds(),
+                },
+                synchronize_session=False,
             )
-            task.failed_files = (
-                db.query(TaskResult)
-                .filter(TaskResult.task_id == task_id, TaskResult.status == "failed")
-                .count()
+        )
+        if transitioned != 1:
+            db.rollback()
+            return
+        db.commit()
+        task = _load_batch_task_fresh(db, task_id)
+        if not task:
+            return
+        batch_report = _write_batch_report(db, task)
+
+        warnings = []
+        if task.completed_files:
+            try:
+                diff_payload = diff_svc.run_batch_reference_diff(
+                    db,
+                    task,
+                    batch_report,
+                    fail_on="fail",
+                    max_samples=50,
+                )
+                summary = diff_payload.get("summary") or {}
+                warnings.append(
+                    "批量Diff: "
+                    f"{diff_payload.get('status')} "
+                    f"命中{summary.get('matched_references', 0)}/"
+                    f"{summary.get('total_reports', 0)}，"
+                    f"阻断{summary.get('blocked', 0)}"
+                )
+            except Exception as exc:
+                warnings.append(f"批量自动基准对比失败: {exc}")
+
+        completed_files, failed_files = _batch_terminal_counts(db, task_id)
+        completed_at = datetime.utcnow()
+        final_status = _resolve_batch_status(
+            completed=completed_files,
+            failed=failed_files,
+            total=task.total_files,
+        )
+        updated = (
+            db.query(Task)
+            .filter(Task.id == task_id, Task.status == "qa")
+            .update(
+                {
+                    Task.status: final_status,
+                    Task.completed_files: completed_files,
+                    Task.failed_files: failed_files,
+                    Task.completed_at: completed_at,
+                    Task.duration_seconds: (completed_at - started_at).total_seconds(),
+                    Task.warnings: json.dumps(warnings, ensure_ascii=False),
+                },
+                synchronize_session=False,
             )
-            task.status = _resolve_batch_status(
-                completed=task.completed_files,
-                failed=task.failed_files,
-                total=task.total_files,
-            )
-            task.completed_at = datetime.utcnow()
-            task.duration_seconds = (task.completed_at - start_time).total_seconds()
-            warnings = []
-            batch_report = _write_batch_report(db, task)
-            if task.completed_files:
-                try:
-                    diff_payload = diff_svc.run_batch_reference_diff(
-                        db,
-                        task,
-                        batch_report,
-                        fail_on="fail",
-                        max_samples=50,
-                    )
-                    summary = diff_payload.get("summary") or {}
-                    warnings.append(
-                        "批量Diff: "
-                        f"{diff_payload.get('status')} "
-                        f"命中{summary.get('matched_references', 0)}/"
-                        f"{summary.get('total_reports', 0)}，"
-                        f"阻断{summary.get('blocked', 0)}"
-                    )
-                except Exception as exc:
-                    warnings.append(f"批量自动基准对比失败: {exc}")
-            task.warnings = json.dumps(warnings, ensure_ascii=False)
-            db.commit()
+        )
+        if updated != 1:
+            db.rollback()
+            return
+        db.commit()
+        task = _load_batch_task_fresh(db, task_id)
+        if task:
             _write_batch_report(db, task)
     except Exception as exc:
-        task = db.query(Task).filter(Task.id == task_id).first()
-        if task:
-            task.status = "failed"
-            task.errors = json.dumps([str(exc)], ensure_ascii=False)
-            task.completed_at = datetime.utcnow()
-            task.duration_seconds = (task.completed_at - start_time).total_seconds()
+        task = _load_batch_task_fresh(db, task_id)
+        if task and task.status != "cancelled":
+            effective_started = task.started_at or worker_started
+            completed_at = datetime.utcnow()
+            failed_transition = (
+                db.query(Task)
+                .filter(
+                    Task.id == task_id,
+                    Task.status.in_(list(BATCH_ACTIVE_STATUSES)),
+                )
+                .update(
+                    {
+                        Task.status: "failed",
+                        Task.errors: json.dumps([str(exc)], ensure_ascii=False),
+                        Task.completed_at: completed_at,
+                        Task.duration_seconds: (
+                            completed_at - effective_started
+                        ).total_seconds(),
+                    },
+                    synchronize_session=False,
+                )
+            )
+            if failed_transition != 1:
+                db.rollback()
+                return
+            (
+                db.query(TaskResult)
+                .filter(
+                    TaskResult.task_id == task_id,
+                    TaskResult.status.in_(list(BATCH_ITEM_ACTIVE_STATUSES)),
+                )
+                .update(
+                    {
+                        TaskResult.status: "failed",
+                        TaskResult.errors: json.dumps(
+                            ["批量后台任务异常终止，请在任务详情中重试失败文件。"],
+                            ensure_ascii=False,
+                        ),
+                    },
+                    synchronize_session=False,
+                )
+            )
+            completed_files, failed_files = _batch_terminal_counts(db, task_id)
+            (
+                db.query(Task)
+                .filter(Task.id == task_id, Task.status == "failed")
+                .update(
+                    {
+                        Task.completed_files: completed_files,
+                        Task.failed_files: failed_files,
+                    },
+                    synchronize_session=False,
+                )
+            )
             db.commit()
+            task = _load_batch_task_fresh(db, task_id)
+            if task:
+                _write_batch_report(db, task)
     finally:
         db.close()
 
@@ -581,10 +949,18 @@ def batch_generate_from_files(
     project_name: Optional[str] = Form(None),
     template_name: Optional[str] = Form(None),
     template_contract_mode: str = Form("warn"),
+    idempotency_key_header: Optional[str] = Header(
+        None,
+        alias="Idempotency-Key",
+    ),
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
-    """Start a production batch task from multiple uploaded Excel files."""
+    """Persist a production batch and return before preflight/enrichment."""
+    accept_started = time.perf_counter()
+    idempotency_key = _normalized_idempotency_key(idempotency_key_header)
+    user_scope = f"user:{current_user.id}" if current_user else "anonymous"
     excel_files = [file for file in files if file.filename]
     if not excel_files:
         raise HTTPException(status_code=400, detail="请至少上传 1 个 Excel 文件")
@@ -604,52 +980,62 @@ def batch_generate_from_files(
     if not isinstance(shared_clinical_info, dict):
         raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
 
+    items: list[dict] = []
+    try:
+        for index, file in enumerate(excel_files, start=1):
+            upload_id, stored_path, file_size, file_digest = save_upload_with_digest(file)
+            items.append(
+                {
+                    "index": index,
+                    "upload_id": upload_id,
+                    "filename": file.filename,
+                    "stored_path": str(stored_path),
+                    "file_size": file_size,
+                    "sha256": file_digest,
+                }
+            )
+    except Exception:
+        _cleanup_uncommitted_batch(items)
+        raise
+
+    request_digest = _batch_request_digest(
+        items=items,
+        shared_clinical_info=shared_clinical_info,
+        project_type=project_type,
+        project_name=project_name,
+        template_name=template_name,
+        template_contract_mode=template_contract_mode,
+    )
+    existing = (
+        db.query(BatchSubmission)
+        .filter(
+            BatchSubmission.user_scope == user_scope,
+            BatchSubmission.idempotency_key == idempotency_key,
+        )
+        .first()
+    )
+    if existing:
+        _cleanup_uncommitted_batch(items)
+        if existing.request_digest != request_digest:
+            raise HTTPException(
+                status_code=409,
+                detail="该 Idempotency-Key 已用于不同的文件或参数，请更换后重试。",
+            )
+        return ApiResponse(
+            data=_idempotent_response_data(
+                db,
+                existing,
+                accept_started=accept_started,
+            )
+        )
+
     task_id = str(uuid.uuid4())
     output_dir = ensure_report_dir(task_id)
-    items: list[dict] = []
-    for index, file in enumerate(excel_files, start=1):
-        _upload_id, stored_path, _file_size = save_upload(file)
-        items.append(
-            {
-                "index": index,
-                "filename": file.filename,
-                "stored_path": str(stored_path),
-            }
-        )
-    missing_date_rows: list[str] = []
-    for item in items:
-        clinical_payload, detected_project_type, detected_project_name = (
-            _prepare_item_clinical_payload(
-                stored_path=item["stored_path"],
-                original_filename=item["filename"],
-                bridge=bridge,
-                shared_clinical_info=shared_clinical_info,
-                project_type=project_type,
-                project_name=project_name,
-            )
-        )
-        preflight = validate_required_dates(
-            bridge,
-            excel_path=item["stored_path"],
-            clinical_info=clinical_payload,
-            project_type=detected_project_type,
-            project_name=detected_project_name,
-        )
-        missing = list(preflight.get("missing") or [])
-        if missing:
-            missing_date_rows.append(
-                f"第 {item['index']} 个 Excel：{required_dates_error_message(missing)}"
-            )
-    if missing_date_rows:
-        detail = "；".join(missing_date_rows[:5])
-        if len(missing_date_rows) > 5:
-            detail += f"；另有 {len(missing_date_rows) - 5} 个文件缺少必填日期"
-        raise HTTPException(status_code=400, detail=detail)
-
     task = Task(
         id=task_id,
         task_type="batch",
-        status="pending",
+        status="queued",
+        user_id=current_user.id if current_user else None,
         project_type=project_type,
         output_path=str(output_dir),
         total_files=len(items),
@@ -661,17 +1047,65 @@ def batch_generate_from_files(
             else None
         ),
     )
-    db.add(task)
-    for item in items:
-        db.add(
-            TaskResult(
-                task_id=task_id,
-                file_index=item["index"],
-                excel_filename=item["filename"],
-                status="pending",
+    submission = BatchSubmission(
+        user_scope=user_scope,
+        idempotency_key=idempotency_key,
+        request_digest=request_digest,
+        task_id=task_id,
+    )
+    try:
+        db.add(task)
+        db.add(submission)
+        for item in items:
+            db.add(
+                TaskResult(
+                    task_id=task_id,
+                    file_index=item["index"],
+                    excel_filename=item["filename"],
+                    status="queued",
+                )
             )
+        _write_batch_inputs(
+            output_dir=output_dir,
+            task_id=task_id,
+            items=items,
+            shared_clinical_info=shared_clinical_info,
+            project_type=project_type,
+            project_name=project_name,
+            template_name=template_name,
+            template_contract_mode=template_contract_mode,
         )
-    db.commit()
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        winner = (
+            db.query(BatchSubmission)
+            .filter(
+                BatchSubmission.user_scope == user_scope,
+                BatchSubmission.idempotency_key == idempotency_key,
+            )
+            .first()
+        )
+        _cleanup_uncommitted_batch(items, output_dir)
+        if winner and winner.request_digest == request_digest:
+            return ApiResponse(
+                data=_idempotent_response_data(
+                    db,
+                    winner,
+                    accept_started=accept_started,
+                )
+            )
+        if winner:
+            raise HTTPException(
+                status_code=409,
+                detail="该 Idempotency-Key 已用于不同的文件或参数，请更换后重试。",
+            )
+        raise
+    except Exception:
+        db.rollback()
+        _cleanup_uncommitted_batch(items, output_dir)
+        raise
+
     record_audit_event(
         db,
         action="report.batch_queued",
@@ -684,19 +1118,9 @@ def batch_generate_from_files(
             "project_type": project_type,
             "template_name": template_name,
             "template_contract_mode": template_contract_mode,
-            "status": "pending",
+            "status": "queued",
             "total_files": len(items),
         },
-    )
-    _write_batch_inputs(
-        output_dir=output_dir,
-        task_id=task_id,
-        items=items,
-        shared_clinical_info=shared_clinical_info,
-        project_type=project_type,
-        project_name=project_name,
-        template_name=template_name,
-        template_contract_mode=template_contract_mode,
     )
     _write_batch_report(db, task)
 
@@ -716,8 +1140,14 @@ def batch_generate_from_files(
     return ApiResponse(
         data={
             "task_id": task_id,
-            "status": "pending",
+            "status": "queued",
             "total_files": len(items),
+            "idempotency_key": idempotency_key,
+            "idempotent_replay": False,
+            "accept_duration_ms": round(
+                (time.perf_counter() - accept_started) * 1000,
+                3,
+            ),
         }
     )
 
@@ -736,7 +1166,7 @@ def retry_failed_batch_files(
         raise HTTPException(status_code=404, detail="任务不存在")
     if task.task_type != "batch":
         raise HTTPException(status_code=400, detail="仅批量任务支持失败重试")
-    if task.status in {"running", "pending"}:
+    if task.status in BATCH_ACTIVE_STATUSES:
         raise HTTPException(status_code=409, detail="批量任务仍在运行，不能重试")
     if not task.output_path:
         raise HTTPException(status_code=404, detail="批量任务输出目录不存在")
@@ -768,7 +1198,7 @@ def retry_failed_batch_files(
             missing.append(row.excel_filename)
             continue
         retry_items.append(item)
-        row.status = "pending"
+        row.status = "queued"
         row.output_path = None
         row.duration_seconds = None
         row.errors = None
@@ -783,7 +1213,7 @@ def retry_failed_batch_files(
     if not retry_items:
         raise HTTPException(status_code=400, detail="没有可重试的失败文件")
 
-    task.status = "pending"
+    task.status = "queued"
     task.failed_files = (
         db.query(TaskResult)
         .filter(TaskResult.task_id == task_id, TaskResult.status == "failed")
@@ -811,7 +1241,7 @@ def retry_failed_batch_files(
             "project_type": task.project_type,
             "include_cancelled": include_cancelled,
             "retry_files": len(retry_items),
-            "status": "pending",
+            "status": "queued",
             "total_files": task.total_files,
         },
     )
@@ -833,7 +1263,7 @@ def retry_failed_batch_files(
     return ApiResponse(
         data={
             "task_id": task_id,
-            "status": "pending",
+            "status": "queued",
             "retry_files": len(retry_items),
             "total_files": task.total_files,
         }

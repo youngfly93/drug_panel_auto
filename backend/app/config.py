@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     patient_enrichment_url: str = ""
     patient_enrichment_token: str = ""
     patient_enrichment_timeout_seconds: float = 5.0
+    patient_enrichment_hard_timeout_seconds: float = 12.0
+    patient_enrichment_process_isolation: bool = True
     patient_enrichment_source_name: str = "patient_registry"
     patient_enrichment_aes_key: str = ""
     patient_enrichment_encrypt_flag: str = ""
