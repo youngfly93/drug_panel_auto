@@ -10,8 +10,17 @@ source:
   reference_docx_sha256: a2dc7e1fee96ae6b5e2c49a864c18853516edf85edeea8c796c65b9ad6c33931
   review_binding: historical_final_report_migration
   secondary_review_status: pending_report_group_reconfirmation
+medical_uat:
+  status: blocked
+  blockers:
+    - id: KRAS_G12C_DRUG_RECONFIRMATION
+      reason: report_group_feedback_conflicts_with_historical_final_drug_list
+      scope: KRAS_c.34G>T_p.G12C
 expectations:
   table_count: 29
+  variant_counts:
+    targeted_drug_related: 7
+    targeted_or_immune_related: 8
   targeted_summary:
     row_count: 7
     gene_order: [PIK3CA, KRAS, BRCA1, TP53, FLT3, PMS2, ATR]
@@ -73,11 +82,13 @@ expectations:
   part3:
     gene_section_count: 11
     drug_section_count: 18
-    strict_vaf_descending: true
+    group_by_gene: true
+    gene_order_by_max_vaf_descending: true
+    within_gene_vaf_descending: true
     gene_section_order:
       - APC|C.994C>T|P.R332*
-      - SMAD4|C.1577A>G|P.E526G
       - APC|C.4666DUP|P.T1556NFS*3
+      - SMAD4|C.1577A>G|P.E526G
       - PIK3CA|C.1624G>A|P.E542K
       - KRAS|C.34G>T|P.G12C
       - BRCA1|C.505C>T|P.Q169*
@@ -177,14 +188,3 @@ intentional_deviations:
     candidate_behavior: [KRAS, BRCA1, TP53, PMS2, ATR]
     reason: shared_grouped_vaf_sorting_contract
     approval_status: engineering_spec_approved_pending_report_group_reconfirmation
-  - id: part3_strict_global_vaf_order
-    historical_behavior:
-      - APC|C.994C>T|P.R332*
-      - APC|C.4666DUP|P.T1556NFS*3
-      - SMAD4|C.1577A>G|P.E526G
-    candidate_behavior:
-      - APC|C.994C>T|P.R332*
-      - SMAD4|C.1577A>G|P.E526G
-      - APC|C.4666DUP|P.T1556NFS*3
-    reason: report_group_feedback_requires_part3_rowwise_vaf_descending
-    approval_status: user_directed_engineering_fix_pending_report_group_reconfirmation

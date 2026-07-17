@@ -22,6 +22,7 @@ def _reviewed_low_tmb_context():
     return {
         "total_variants_count": 8,
         "drug_related_count": 4,
+        "targeted_or_immune_related_count": 4,
         "tmb_value": "6.5",
         "tmb_status": "L",
         "tmb_summary": "6.5mutations/Mb，TMB-L\n(本次检测结果低于参考值\n10 mutations/Mb)",

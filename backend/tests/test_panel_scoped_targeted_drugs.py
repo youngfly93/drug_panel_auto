@@ -7,11 +7,16 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+BACKEND = ROOT / "backend"
+for import_path in (str(ROOT), str(BACKEND)):
+    if import_path not in sys.path:
+        sys.path.insert(0, import_path)
 
+from app.services import knowledge_service
 from reportgen.core.field_mapper import FieldMapper
+from reportgen.core.report_generator import ReportGenerator
 from reportgen.core.template_bridge_358 import load_panel_config
+from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
 from reportgen.panels.loader import load_panel_package
 from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 
@@ -39,7 +44,7 @@ def test_targeted_drug_rule_context_matrix():
     assert crc358["summary_display_scope"] == "drug_matched_variants"
     assert crc358["summary_display_variant_levels"] == ["Ⅰ类", "Ⅱ类"]
     assert crc358["source_panel_id"] == "crc_358_msi"
-    assert len(crc358["reviewed_variant_overrides"]) == 11
+    assert len(crc358["reviewed_variant_overrides"]) == 15
     assert len(crc358["applicability_rules"]) == 1
     assert set(crc358["overrides"]) == {"ATM", "SETD2"}
 
@@ -63,6 +68,50 @@ def test_targeted_drug_rule_context_matrix():
         assert context["reviewed_variant_overrides"] == []
         assert context["applicability_rules"] == []
         assert context["overrides"] == {}
+
+
+def test_shared_part3_overlay_honors_exact_row_panel_scope():
+    variant = {
+        "gene": "FANCD2",
+        "cHGVS": "c.1630C>T",
+        "pHGVS": "p.Q544*",
+        "benefit_drugs": "奥拉帕利（C）",
+        "caution_drugs": "--",
+    }
+
+    def sections(panel_id: str):
+        package = _package(panel_id)
+        provider = GeneKnowledgeProvider(
+            {
+                "enabled": True,
+                "panel_id": panel_id,
+                "gene_knowledge_db": {
+                    "enabled": True,
+                    "path": "missing.xlsx",
+                    "reviewed_part3_overlay_paths": (
+                        ReportGenerator._resolve_panel_reviewed_part3_overlays(
+                            package
+                        )
+                    ),
+                },
+            }
+        )
+        provider.load(base_path=str(ROOT))
+        return provider.build_drug_analysis_sections([variant])
+
+    assert [row["gene"] for row in sections("crc_358_msi")] == ["FANCD2"]
+    assert sections("crc_301_msi") == []
+
+    # The read-only Web catalog must expose the same scope as Word runtime.
+    assert knowledge_service.get_catalog_entries(
+        panel_id="crc_301_msi",
+        kind="drug",
+        layer="reviewed_overlay",
+        gene="FANCD2",
+        search="c.1630C>T",
+        page=1,
+        page_size=10,
+    )["total"] == 0
 
 
 def test_same_mapper_does_not_leak_reviewed_override_between_panels():

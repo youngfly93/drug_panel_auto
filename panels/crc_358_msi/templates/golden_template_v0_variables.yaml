@@ -107,7 +107,7 @@ paragraph_templates:
     text: "*本次共检出体细胞变异：{{ total_variants_count }}个，其中与靶向药物用药相关的变异有：{{ drug_related_count }}个。"
   - id: "variant_analysis_count_sentence"
     contains: "在本次检测范围内，检出体细胞变异"
-    text: "在本次检测范围内，检出体细胞变异：{{ total_variants_count }}个，其中与靶向/免疫药物相关的变异：{{ drug_related_count }}个。（下面红色标注的为有对应靶向/免疫药物的基因变异。）"
+    text: "在本次检测范围内，检出体细胞变异：{{ total_variants_count }}个，其中与靶向/免疫药物相关的变异：{{ targeted_or_immune_related_count }}个。（下面红色标注的为有对应靶向/免疫药物的基因变异。）"
 
 table_loops:
   - id: "targeted_drug_tips"

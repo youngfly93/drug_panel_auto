@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 rule_id: "drugs"
-version: "0.4.1"
-updated: "2026-07-13"
+version: "0.5.0"
+updated: "2026-07-16"
 status: "active"
 description: "CRC drug-display rule declarations used by the generator."
 
@@ -120,6 +120,131 @@ targeted_drug_rules:
         secondary_review_status: pending_report_group_review
         references:
           - https://pubmed.ncbi.nlm.nih.gov/26510020/
+    - gene: FANCD2
+      panels: [crc_358_msi]
+      c_hgvs: "c.1630C>T"
+      p_hgvs: "p.Q544*"
+      variant_site: "c.1630C>T,\np.Q544*"
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs:
+        - "奥拉帕利（C）"
+        - "芦卡帕利（C）"
+        - "尼拉帕利（C）"
+        - "他拉唑帕利（C）"
+        - "奥拉帕利+帕博利珠单抗（C）"
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
+      evidence_level: cross_cancer_level_c
+      evidence_as_of: "2026-07-16"
+      cancer_scope: cross_cancer_trial_evidence_not_crc_approval
+      secondary_review_status: pending_report_group_reconfirmation
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_historical_migration_review
+        reviewed_at: "2026-07-16"
+        risk_level: high
+        secondary_review_status: pending_report_group_reconfirmation
+        references:
+          - https://clinicaltrials.gov/study/NCT03413995
+          - https://clinicaltrials.gov/study/NCT04633902
+    - gene: RAD50
+      panels: [crc_358_msi]
+      c_hgvs: "c.1093C>T"
+      p_hgvs: "p.R365*"
+      variant_site: "c.1093C>T,\np.R365*"
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs:
+        - "奥拉帕利（C）"
+        - "芦卡帕利（C）"
+        - "尼拉帕利（C）"
+        - "他拉唑帕利（C）"
+        - "AZD6738+奥拉帕利（C）"
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
+      evidence_level: cross_cancer_level_c
+      evidence_as_of: "2026-07-16"
+      cancer_scope: cross_cancer_trial_evidence_not_crc_approval
+      secondary_review_status: pending_report_group_reconfirmation
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_historical_migration_review
+        reviewed_at: "2026-07-16"
+        risk_level: high
+        secondary_review_status: pending_report_group_reconfirmation
+        references:
+          - https://clinicaltrials.gov/study/NCT03413995
+          - https://clinicaltrials.gov/study/NCT02286687
+          - https://clinicaltrials.gov/study/NCT02576444
+    - gene: PALB2
+      panels: [crc_358_msi]
+      c_hgvs: "c.47del"
+      p_hgvs: "p.K16Sfs*2"
+      variant_site: "c.47del,\np.K16Sfs*2"
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs:
+        - "奥拉帕利（C）"
+        - "芦卡帕利（C）"
+        - "尼拉帕利（C）"
+        - "他拉唑帕利（C）"
+        - "氟唑帕利（C）"
+        - "LY2606368（C）"
+        - "奥拉帕利+帕博利珠单抗（C）"
+        - "帕米帕利+替雷利珠单抗（C）"
+        - "芦卡帕利+阿替利珠单抗（C）"
+        - "他拉唑帕利+阿替利珠单抗（C）"
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
+      evidence_level: cross_cancer_level_c
+      evidence_as_of: "2026-07-16"
+      cancer_scope: cross_cancer_trial_evidence_not_crc_approval
+      secondary_review_status: pending_report_group_reconfirmation
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_historical_migration_review
+        reviewed_at: "2026-07-16"
+        risk_level: high
+        secondary_review_status: pending_report_group_reconfirmation
+        references:
+          - https://pubmed.ncbi.nlm.nih.gov/20871615/
+          - https://pubmed.ncbi.nlm.nih.gov/25263539/
+          - https://clinicaltrials.gov/study/NCT03413995
+          - https://clinicaltrials.gov/study/NCT02873975
+    - gene: RAD51D
+      panels: [crc_358_msi]
+      c_hgvs: "c.685C>T"
+      p_hgvs: "p.Q229*"
+      variant_site: "c.685C>T,\np.Q229*"
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs:
+        - "芦卡帕利（C）"
+        - "LY2606368（C）"
+        - "帕米帕利+替雷利珠单抗（C）"
+        - "芦卡帕利+阿替利珠单抗（C）"
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: report_group_feedback_20260716_plus_cross_cancer_trial_registry_review
+      evidence_level: cross_cancer_level_c
+      evidence_as_of: "2026-07-16"
+      cancer_scope: cross_cancer_trial_evidence_not_crc_approval
+      secondary_review_status: pending_report_group_reconfirmation
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_evidence_review
+        reviewed_at: "2026-07-16"
+        risk_level: high
+        secondary_review_status: pending_report_group_reconfirmation
+        references:
+          - https://clinicaltrials.gov/study/NCT03413995
+          - https://clinicaltrials.gov/study/NCT02873975
+          - https://clinicaltrials.gov/study/NCT04985721
+          - https://clinicaltrials.gov/study/NCT04276376
     - gene: FLT3
       c_hgvs: "c.2537G>A"
       p_hgvs: "p.G846D"

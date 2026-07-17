@@ -209,6 +209,18 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         "5. 参考文献",
         "本次检测质控结果",
     )
+    report_content = ctx.template_context.get("report_content") or {}
+    forced_page_break_headings = tuple(
+        report_content.get("force_page_break_before_headings") or ()
+    )
+
+    def enforce_configured_page_breaks() -> None:
+        enforce = getattr(
+            ctx.renderer, "_enforce_page_break_before_headings", None
+        )
+        if forced_page_break_headings and callable(enforce):
+            enforce(ctx.output_path, forced_page_break_headings)
+
     ctx.renderer._normalize_final_section_layout(ctx.output_path)
     # The golden template-specific processor list does not run the broad
     # section-spacing pass. Compact only the Part 3 boundary here so the report
@@ -228,6 +240,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         ctx.output_path,
         heading_cleanup_targets,
     )
+    enforce_configured_page_breaks()
     if _env_truthy("REPORTGEN_FAST_TOC") or _env_truthy(
         "REPORTGEN_SKIP_FINAL_LO_REFRESH"
     ):
@@ -256,6 +269,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         ctx.output_path,
         heading_cleanup_targets,
     )
+    enforce_configured_page_breaks()
     ctx.renderer._normalize_toc_decoration_layout(ctx.output_path)
     ctx.renderer._restore_reviewed_body_headers(ctx.output_path)
     # 注：此处不再 _populate_static_toc_page_numbers。该操作要 LibreOffice 把整份
@@ -282,6 +296,9 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     ctx.renderer._restore_patient_letter_fill_underlines(ctx.output_path)
     ctx.renderer._restore_msi_result_emphasis(ctx.output_path, ctx.template_context)
     ctx.renderer._restore_part3_dynamic_styles(ctx.output_path, ctx.template_context)
+    bold_brands = getattr(ctx.renderer, "_bold_drug_brand_brackets", None)
+    if callable(bold_brands):
+        bold_brands(ctx.output_path)
     # LibreOffice/Word field refresh can rewrite image relationships. Render the
     # detector/reviewer signatures as inline images at the very end so they sit
     # cleanly on the label baseline and uploaded signatures remain effective.
@@ -300,6 +317,28 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
         ctx.renderer._recolor_part3_intro_marker(ctx.output_path)
     except Exception as recolor_err:
         ctx.logger.warning("第三部分装饰符回黑失败", error=str(recolor_err))
+    report_content = ctx.template_context.get("report_content") or {}
+    force_breaks = getattr(
+        ctx.renderer, "_enforce_page_break_before_headings", None
+    )
+    configured_headings = tuple(
+        report_content.get("force_page_break_before_headings") or ()
+    )
+    if configured_headings and callable(force_breaks):
+        force_breaks(ctx.output_path, configured_headings)
+    # These are final-output normalizers. They intentionally run after all
+    # LibreOffice/TOC refreshes and after other python-docx saves so the direct
+    # reference font and floating back-cover coordinates are the final state.
+    normalize_references = getattr(
+        ctx.renderer, "_normalize_reference_section_style", None
+    )
+    if callable(normalize_references):
+        normalize_references(ctx.output_path, ctx.template_context)
+    normalize_back_cover = getattr(
+        ctx.renderer, "_normalize_back_cover_artwork", None
+    )
+    if callable(normalize_back_cover):
+        normalize_back_cover(ctx.output_path, ctx.template_context)
 
 
 def _run_signature_placeholders(ctx: ProcessorContext) -> None:

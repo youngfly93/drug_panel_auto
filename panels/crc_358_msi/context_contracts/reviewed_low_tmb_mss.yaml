@@ -12,6 +12,8 @@ fields:
     equals: 8
   drug_related_count:
     equals: 4
+  targeted_or_immune_related_count:
+    equals: 4
   tmb_value:
     equals: "6.5"
   tmb_status:

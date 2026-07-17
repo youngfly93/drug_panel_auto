@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -32,13 +33,26 @@ def test_crc358_historical_contract_is_deidentified_and_structured() -> None:
     assert contract["case_alias"] == "crc358_reviewed_case_a"
     assert contract["privacy"]["contains_phi"] is False
     assert contract["expectations"]["targeted_summary"]["row_count"] == 7
+    assert contract["expectations"]["variant_counts"] == {
+        "targeted_drug_related": 7,
+        "targeted_or_immune_related": 8,
+    }
+    assert contract["medical_uat"]["status"] == "blocked"
+    assert contract["medical_uat"]["blockers"][0]["id"] == (
+        "KRAS_G12C_DRUG_RECONFIRMATION"
+    )
     assert (
         len(contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"])
         == 41
     )
     assert contract["expectations"]["part3"]["gene_section_count"] == 11
     assert contract["expectations"]["part3"]["drug_section_count"] == 18
-    assert contract["expectations"]["part3"]["strict_vaf_descending"] is True
+    assert contract["expectations"]["part3"]["group_by_gene"] is True
+    assert (
+        contract["expectations"]["part3"]["gene_order_by_max_vaf_descending"]
+        is True
+    )
+    assert contract["expectations"]["part3"]["within_gene_vaf_descending"] is True
     assert len(contract["expectations"]["part3"]["gene_section_order"]) == 11
 
 
@@ -73,8 +87,19 @@ def _minimal_historical_docx(
     include_tp53: bool = True,
     brand_pairs: list[str] | None = None,
     part3_headers: list[str] | None = None,
+    targeted_count: int | None = None,
+    targeted_or_immune_count: int | None = None,
 ) -> None:
     doc = Document()
+    if targeted_count is not None:
+        doc.add_paragraph(
+            f"*本次共检出体细胞变异：11个，其中与靶向药物用药相关的变异有：{targeted_count}个。"
+        )
+    if targeted_or_immune_count is not None:
+        doc.add_paragraph(
+            "在本次检测范围内，检出体细胞变异：11个，"
+            f"其中与靶向/免疫药物相关的变异：{targeted_or_immune_count}个。"
+        )
     summary = doc.add_table(rows=2 if include_tp53 else 1, cols=4)
     summary.rows[0].cells[0].text = "基因"
     summary.rows[0].cells[1].text = "突变位点"
@@ -236,7 +261,42 @@ def test_historical_contract_blocks_incomplete_targeted_brand_summary(tmp_path) 
     }
 
 
-def test_historical_contract_blocks_grouped_instead_of_global_part3_vaf_order(
+def test_historical_contract_blocks_targeted_immune_union_count_regression(
+    tmp_path,
+) -> None:
+    candidate = tmp_path / "candidate.docx"
+    _minimal_historical_docx(
+        candidate,
+        targeted_count=7,
+        targeted_or_immune_count=7,
+    )
+    contract = {
+        "schema_version": "1.0",
+        "case_alias": "synthetic_case",
+        "panel_id": "crc_358_msi",
+        "privacy": {"contains_phi": False},
+        "source": {},
+        "expectations": {
+            "table_count": 2,
+            "targeted_summary": {"row_count": 1, "gene_order": ["TP53"]},
+            "variant_counts": {
+                "targeted_drug_related": 7,
+                "targeted_or_immune_related": 8,
+            },
+            "part3": {"gene_section_count": 0, "drug_section_count": 0},
+            "reviewed_variant_rows": [],
+        },
+    }
+
+    result = validate_historical_golden_docx(contract=contract, docx_path=candidate)
+
+    assert result["status"] == "FAIL"
+    assert {error["code"] for error in result["errors"]} >= {
+        "TARGETED_OR_IMMUNE_RELATED_COUNT_TEXT"
+    }
+
+
+def test_historical_contract_blocks_split_gene_groups_in_part3(
     tmp_path,
 ) -> None:
     candidate = tmp_path / "candidate.docx"
@@ -244,8 +304,8 @@ def test_historical_contract_blocks_grouped_instead_of_global_part3_vaf_order(
         candidate,
         part3_headers=[
             "u APC：c.994C>T，p.R332*；22.03%",
-            "u APC：c.4666dup，p.T1556Nfs*3；17.50%",
             "u SMAD4：c.1577A>G，p.E526G；20%",
+            "u APC：c.4666dup，p.T1556Nfs*3；17.50%",
         ],
     )
     contract = {
@@ -260,7 +320,9 @@ def test_historical_contract_blocks_grouped_instead_of_global_part3_vaf_order(
             "part3": {
                 "gene_section_count": 3,
                 "drug_section_count": 0,
-                "strict_vaf_descending": True,
+                "group_by_gene": True,
+                "gene_order_by_max_vaf_descending": True,
+                "within_gene_vaf_descending": True,
             },
             "reviewed_variant_rows": [
                 {
@@ -279,9 +341,9 @@ def test_historical_contract_blocks_grouped_instead_of_global_part3_vaf_order(
 
     assert result["status"] == "FAIL"
     assert {error["code"] for error in result["errors"]} >= {
-        "PART3_GENE_SECTION_VAF_ORDER"
+        "PART3_GENE_GROUP_CONTIGUITY"
     }
-    assert result["checks"]["part3_gene_section_vafs"] == [22.03, 17.5, 20.0]
+    assert result["checks"]["part3_gene_section_vafs"] == [22.03, 20.0, 17.5]
 
 
 def test_committed_historical_contract_registry_passes() -> None:
@@ -297,6 +359,10 @@ def test_committed_historical_contract_registry_passes() -> None:
         text=True,
     )
     assert process.returncode == 0, process.stdout + process.stderr
+    result = json.loads(process.stdout)
+    assert result["status"] == "PASS"
+    assert result["medical_status"] == "BLOCKED"
+    assert result["registry"]["contracts"][0]["medical_uat_status"] == "blocked"
 
 
 def test_candidate_renderer_fingerprint_is_explicit_and_complete() -> None:

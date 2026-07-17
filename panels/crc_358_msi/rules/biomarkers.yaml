@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 rule_id: "biomarkers"
-version: "0.2.0"
-updated: "2026-05-21"
+version: "0.2.1"
+updated: "2026-07-16"
 status: "active"
 description: "CRC biomarker display rules used by the generator."
 
@@ -51,6 +51,7 @@ biomarkers:
         - BRCA2
         - BRIP1
         - FANCA
+        - FANCD2
         - FANCC
         - PALB2
         - RAD51C
@@ -138,10 +139,12 @@ biomarkers:
             - CDK12
             - FANCI
             - FANCM
+            - FANCD2
             - MRE11A
             - NBN
             - RAD50
             - RAD51
+            - RAD51D
           mode: gene_group
     negative:
       genes:

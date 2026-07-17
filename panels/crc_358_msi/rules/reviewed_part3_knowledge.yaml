@@ -1425,6 +1425,112 @@ drug_sections:
     secondary_review_status: pending_report_group_review
     references:
     - https://pubmed.ncbi.nlm.nih.gov/26510020/
+- gene: FANCD2
+  panels: [crc_358_msi]
+  c_hgvs: c.1630C>T
+  p_hgvs: p.Q544*
+  type: benefit
+  header: FANCD2：c.1630C>T，p.Q544*突变相应潜在获益药物
+  drug_name: 奥拉帕利（Olaparib）、芦卡帕利（Rucaparib）、尼拉帕利（Niraparib）、他拉唑帕利（Talazoparib）、奥拉帕利+帕博利珠单抗（Olaparib+Pembrolizumab）
+  relation: 该样本检出FANCD2无义变异，预期导致蛋白翻译提前终止并可能影响Fanconi贫血/DNA交联修复通路。该通路缺陷为PARP抑制剂及相关联合方案的临床试验入组依据之一；目前不能据此认定这些药物已获批用于FANCD2变异结直肠癌。
+  clinical: ClinicalTrials.gov登记的芦卡帕利前列腺癌Ⅱ期研究将FANCD2等同源重组修复基因胚系有害变异列为入组条件[NCT03413995]；奥拉帕利联合帕博利珠单抗的晚期黑色素瘤Ⅱ期研究也将FANCD2列入HR异常基因范围[NCT04633902]。其余药物名称来自实验室历史终版知识迁移；均按C级跨癌种/临床试验提示，不作为结直肠癌标准用药结论。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
+  evidence_level: cross_cancer_level_c
+  evidence_as_of: '2026-07-16'
+  cancer_scope: cross_cancer_trial_evidence_not_crc_approval
+  secondary_review_status: pending_report_group_reconfirmation
+  review_metadata:
+    reviewer: codex
+    reviewer_type: ai_assisted_first_pass_historical_migration_review
+    reviewed_at: '2026-07-16'
+    risk_level: high
+    secondary_review_status: pending_report_group_reconfirmation
+    references:
+    - https://clinicaltrials.gov/study/NCT03413995
+    - https://clinicaltrials.gov/study/NCT04633902
+- gene: RAD50
+  panels: [crc_358_msi]
+  c_hgvs: c.1093C>T
+  p_hgvs: p.R365*
+  type: benefit
+  header: RAD50：c.1093C>T，p.R365*突变相应潜在获益药物
+  drug_name: 奥拉帕利（Olaparib）、芦卡帕利（Rucaparib）、尼拉帕利（Niraparib）、他拉唑帕利（Talazoparib）、AZD6738+奥拉帕利（Olaparib）
+  relation: 该样本检出RAD50无义变异，预期导致蛋白翻译提前终止。RAD50是MRN复合体成员，参与DNA双链断裂感知与同源重组修复。临床试验曾将有害RAD50/MRN异常作为PARP或ATR通路方案的入组条件；该依据不等同于RAD50变异结直肠癌已确证获益。
+  clinical: 芦卡帕利前列腺癌Ⅱ期研究将RAD50有害胚系变异列入入组范围[NCT03413995]；尼拉帕利联合卡铂的HRD实体瘤Ⅰ期研究、他拉唑帕利的BRCA通路异常Ⅱ期研究均包含RAD50[NCT03209401，NCT02286687]；奥拉帕利联合ATR抑制剂的研究包含MRN/RAD50异常队列[NCT02576444]。上述为跨癌种试验依据，不是结直肠癌获批适应证。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
+  evidence_level: cross_cancer_level_c
+  evidence_as_of: '2026-07-16'
+  cancer_scope: cross_cancer_trial_evidence_not_crc_approval
+  secondary_review_status: pending_report_group_reconfirmation
+  review_metadata:
+    reviewer: codex
+    reviewer_type: ai_assisted_first_pass_historical_migration_review
+    reviewed_at: '2026-07-16'
+    risk_level: high
+    secondary_review_status: pending_report_group_reconfirmation
+    references:
+    - https://clinicaltrials.gov/study/NCT03413995
+    - https://clinicaltrials.gov/study/NCT03209401
+    - https://clinicaltrials.gov/study/NCT02286687
+    - https://clinicaltrials.gov/study/NCT02576444
+- gene: PALB2
+  panels: [crc_358_msi]
+  c_hgvs: c.47del
+  p_hgvs: p.K16Sfs*2
+  type: benefit
+  header: PALB2：c.47del，p.K16Sfs*2突变相应潜在获益药物
+  drug_name: 奥拉帕利（Olaparib）、芦卡帕利（Rucaparib）、尼拉帕利（Niraparib）、他拉唑帕利（Talazoparib）、氟唑帕利（Fluzoparib）、LY2606368、奥拉帕利+帕博利珠单抗、帕米帕利+替雷利珠单抗、芦卡帕利+阿替利珠单抗、他拉唑帕利+阿替利珠单抗
+  relation: 该样本检出PALB2移码变异，预期导致蛋白截短和功能缺失。PALB2与BRCA1/BRCA2共同参与同源重组修复，PALB2功能缺失在前临床与跨癌种研究中可提供PARP抑制剂敏感性的生物学依据[20871615，25263539]。该结论不代表所列药物已获批用于PALB2变异结直肠癌。
+  clinical: 芦卡帕利前列腺癌Ⅱ期研究、LY2606368（Prexasertib）HRD实体瘤Ⅱ期研究均将PALB2异常列为入组条件[NCT03413995，NCT02873975]。本条药物组合保留实验室历史终版的C级展示口径，仅作跨癌种/临床试验提示，并已标记待报告组二审复核。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
+  evidence_level: cross_cancer_level_c
+  evidence_as_of: '2026-07-16'
+  cancer_scope: cross_cancer_trial_evidence_not_crc_approval
+  secondary_review_status: pending_report_group_reconfirmation
+  review_metadata:
+    reviewer: codex
+    reviewer_type: ai_assisted_first_pass_historical_migration_review
+    reviewed_at: '2026-07-16'
+    risk_level: high
+    secondary_review_status: pending_report_group_reconfirmation
+    references:
+    - https://pubmed.ncbi.nlm.nih.gov/20871615/
+    - https://pubmed.ncbi.nlm.nih.gov/25263539/
+    - https://clinicaltrials.gov/study/NCT03413995
+    - https://clinicaltrials.gov/study/NCT02873975
+- gene: RAD51D
+  panels: [crc_358_msi]
+  c_hgvs: c.685C>T
+  p_hgvs: p.Q229*
+  type: benefit
+  header: RAD51D：c.685C>T，p.Q229*突变相应潜在获益药物
+  drug_name: 芦卡帕利（Rucaparib）、LY2606368、帕米帕利+替雷利珠单抗、芦卡帕利+阿替利珠单抗
+  relation: 该样本检出RAD51D无义变异，预期导致蛋白翻译提前终止。RAD51D参与同源重组修复；临床试验曾将有害RAD51D异常纳入PARP抑制剂、CHK1抑制剂或PARP/免疫联合方案的筛选范围。该依据不等同于RAD51D变异结直肠癌已确证获益或获批适应证。
+  clinical: 芦卡帕利前列腺癌Ⅱ期研究、LY2606368（Prexasertib）HRD实体瘤Ⅱ期研究和帕米帕利联合替雷利珠单抗的HRR缺陷肿瘤Ⅱ期研究均明确包含RAD51D异常[NCT03413995，NCT02873975，NCT04985721]。芦卡帕利联合阿替利珠单抗的实体瘤Ⅱ期研究将双等位功能缺失RAD51D列入分层[NCT04276376]。均为跨癌种试验依据，按C级提示。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: report_group_feedback_20260716_plus_cross_cancer_trial_registry_review
+  evidence_level: cross_cancer_level_c
+  evidence_as_of: '2026-07-16'
+  cancer_scope: cross_cancer_trial_evidence_not_crc_approval
+  secondary_review_status: pending_report_group_reconfirmation
+  review_metadata:
+    reviewer: codex
+    reviewer_type: ai_assisted_first_pass_evidence_review
+    reviewed_at: '2026-07-16'
+    risk_level: high
+    secondary_review_status: pending_report_group_reconfirmation
+    references:
+    - https://clinicaltrials.gov/study/NCT03413995
+    - https://clinicaltrials.gov/study/NCT02873975
+    - https://clinicaltrials.gov/study/NCT04985721
+    - https://clinicaltrials.gov/study/NCT04276376
 - gene: TP53
   c_hgvs: c.844C>T
   p_hgvs: p.R282W

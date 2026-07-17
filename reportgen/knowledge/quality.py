@@ -53,6 +53,7 @@ def build_panel_gene_provider(project_root: str | Path, package: Any) -> GeneKno
     provider = GeneKnowledgeProvider(
         {
             "enabled": True,
+            "panel_id": package.panel_id,
             "gene_knowledge_db": gene_config,
             "gene_transcript_db": knowledge.get("gene_transcript_db") or {},
         }
