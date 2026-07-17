@@ -287,7 +287,10 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
 
         # Block 7: 免疫基因分类摘要
         try:
-            immuno_summary = self._build_immuno_gene_summary(excel_data)
+            immuno_summary = self._build_immuno_gene_summary(
+                excel_data,
+                panel_package=panel_package,
+            )
             for field, key in [
                 ("immuno_positive_genes", "pos"),
                 ("immuno_negative_genes", "neg"),

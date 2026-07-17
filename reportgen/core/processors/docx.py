@@ -201,6 +201,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
     heading_cleanup_targets = (
         "基因变异解析",
         "靶向药物/免疫用药提示解析",
+        "2. 靶向药物相关检测结果",
         "3. 阅读说明",
         "2.3 NCCN 推荐临床常规靶向药物相关基因检测结果（不限于本癌种）",
         "2. 结直肠癌诊疗知识",
@@ -209,6 +210,18 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         "5. 参考文献",
         "本次检测质控结果",
     )
+    report_content = ctx.template_context.get("report_content") or {}
+    forced_page_break_headings = tuple(
+        report_content.get("force_page_break_before_headings") or ()
+    )
+
+    def enforce_configured_page_breaks() -> None:
+        enforce = getattr(
+            ctx.renderer, "_enforce_page_break_before_headings", None
+        )
+        if forced_page_break_headings and callable(enforce):
+            enforce(ctx.output_path, forced_page_break_headings)
+
     ctx.renderer._normalize_final_section_layout(ctx.output_path)
     # The golden template-specific processor list does not run the broad
     # section-spacing pass. Compact only the Part 3 boundary here so the report
@@ -228,6 +241,8 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         ctx.output_path,
         heading_cleanup_targets,
     )
+    enforce_configured_page_breaks()
+    native_refresh_attempted = False
     if _env_truthy("REPORTGEN_FAST_TOC") or _env_truthy(
         "REPORTGEN_SKIP_FINAL_LO_REFRESH"
     ):
@@ -244,6 +259,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         except Exception:
             pass
     else:
+        native_refresh_attempted = True
         try:
             ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
             ctx.renderer._set_update_fields(ctx.output_path)
@@ -256,6 +272,15 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         ctx.output_path,
         heading_cleanup_targets,
     )
+    enforce_configured_page_breaks()
+    # LibreOffice 7.3 can discard the direct ``w:tblBorders`` formatting on
+    # the static gene-list table while refreshing fields.  Restore only those
+    # border nodes after the round-trip: re-running the full compactor here
+    # would also touch row heights/font sizes and destabilize final pagination.
+    if native_refresh_attempted:
+        ctx.renderer._restore_gene_list_table_borders(
+            ctx.output_path, ctx.template_context
+        )
     ctx.renderer._normalize_toc_decoration_layout(ctx.output_path)
     ctx.renderer._restore_reviewed_body_headers(ctx.output_path)
     # 注：此处不再 _populate_static_toc_page_numbers。该操作要 LibreOffice 把整份
@@ -282,17 +307,14 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     ctx.renderer._restore_patient_letter_fill_underlines(ctx.output_path)
     ctx.renderer._restore_msi_result_emphasis(ctx.output_path, ctx.template_context)
     ctx.renderer._restore_part3_dynamic_styles(ctx.output_path, ctx.template_context)
+    bold_brands = getattr(ctx.renderer, "_bold_drug_brand_brackets", None)
+    if callable(bold_brands):
+        bold_brands(ctx.output_path)
     # LibreOffice/Word field refresh can rewrite image relationships. Render the
     # detector/reviewer signatures as inline images at the very end so they sit
     # cleanly on the label baseline and uploaded signatures remain effective.
     ctx.renderer._render_inline_signatures(ctx.output_path, ctx.template_context)
     ctx.renderer._remove_empty_numbered_paragraphs(ctx.output_path)
-    try:
-        ctx.renderer._populate_static_toc_page_numbers(
-            ctx.output_path, ctx.template_context
-        )
-    except Exception as refresh_err:
-        ctx.logger.warning("样式修复后目录页码回写失败", error=str(refresh_err))
     # Final step: recolor the Part 3 intro ❖ bullet to black. Must be last —
     # the field-refresh processors rebuild numbering.xml and re-introduce the
     # template's red marker, so any earlier recolor is overwritten.
@@ -300,6 +322,37 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
         ctx.renderer._recolor_part3_intro_marker(ctx.output_path)
     except Exception as recolor_err:
         ctx.logger.warning("第三部分装饰符回黑失败", error=str(recolor_err))
+    report_content = ctx.template_context.get("report_content") or {}
+    force_breaks = getattr(
+        ctx.renderer, "_enforce_page_break_before_headings", None
+    )
+    configured_headings = tuple(
+        report_content.get("force_page_break_before_headings") or ()
+    )
+    if configured_headings and callable(force_breaks):
+        force_breaks(ctx.output_path, configured_headings)
+    # These are final-output normalizers. They intentionally run after all
+    # LibreOffice/TOC refreshes and after other python-docx saves so the direct
+    # reference font and floating back-cover coordinates are the final state.
+    normalize_references = getattr(
+        ctx.renderer, "_normalize_reference_section_style", None
+    )
+    if callable(normalize_references):
+        normalize_references(ctx.output_path, ctx.template_context)
+    normalize_back_cover = getattr(
+        ctx.renderer, "_normalize_back_cover_artwork", None
+    )
+    if callable(normalize_back_cover):
+        normalize_back_cover(ctx.output_path, ctx.template_context)
+    # Pagination must be finalized only after every layout-affecting normalizer
+    # above (notably forced section breaks and reference font normalization).
+    # Otherwise the cached PAGEREF values describe a pre-final document and can
+    # drift by many pages. Do not swallow convergence failures: this processor
+    # is release-critical, so the normal processor error path must block the
+    # half-finalized report instead of returning it with a warning-only TOC.
+    ctx.renderer._populate_static_toc_page_numbers(
+        ctx.output_path, ctx.template_context
+    )
 
 
 def _run_signature_placeholders(ctx: ProcessorContext) -> None:

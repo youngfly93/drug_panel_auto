@@ -18,7 +18,7 @@ from zipfile import ZipFile
 from docx import Document
 
 from reportgen.core.pipeline.summary import summarize_stage_results
-from reportgen.core.processors import CRITICAL_DOCX_PROCESSOR_NAMES
+from reportgen.core.processors import critical_docx_processor_names
 from reportgen.models.report_data import ReportData
 from reportgen.utils.artifacts import write_json
 from reportgen.utils.docx_render import render_docx_to_pngs
@@ -211,10 +211,11 @@ def build_docx_qa_report(
         for row in processor_rows
         if isinstance(row, Mapping) and row.get("status") == "ERROR"
     ]
+    critical_names = critical_docx_processor_names(project_type)
     critical_processor_errors = [
         row
         for row in processor_errors
-        if row.get("name") in CRITICAL_DOCX_PROCESSOR_NAMES
+        if row.get("name") in critical_names
     ]
     checks["post_processors"] = {
         "status": (
@@ -1544,6 +1545,9 @@ def _build_business_checks(
 
     total_count = _as_int(context.get("total_variants_count"))
     drug_count = _as_int(context.get("drug_related_count"))
+    targeted_or_immune_count = _as_int(
+        context.get("targeted_or_immune_related_count")
+    )
 
     if total_count is not None:
         expected = f"本次共检出体细胞变异：{total_count}个"
@@ -1557,6 +1561,28 @@ def _build_business_checks(
         checks["drug_related_count_text"] = {
             "status": "PASS" if _compact(expected) in compact_text else "FAIL",
             "expected": expected,
+        }
+
+    if targeted_or_immune_count is not None:
+        expected = (
+            "与靶向/免疫药物相关的变异："
+            f"{targeted_or_immune_count}个"
+        )
+        checks["targeted_or_immune_related_count_text"] = {
+            "status": "PASS" if _compact(expected) in compact_text else "FAIL",
+            "expected": expected,
+        }
+
+    raw_brand_warnings = context.get("targeted_drug_brand_warnings")
+    if raw_brand_warnings is not None:
+        brand_warnings = (
+            [str(item) for item in raw_brand_warnings if str(item)]
+            if isinstance(raw_brand_warnings, (list, tuple, set))
+            else [str(raw_brand_warnings)]
+        )
+        checks["targeted_drug_brand_mapping"] = {
+            "status": "WARN" if brand_warnings else "PASS",
+            "warning_codes": brand_warnings,
         }
 
     tmb_status = str(context.get("tmb_status") or "").strip()
@@ -1580,6 +1606,12 @@ def _business_issues(checks: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
     messages = {
         "total_variant_count_text": "Total variant count text does not match report context.",
         "drug_related_count_text": "Drug-related variant count text does not match report context.",
+        "targeted_or_immune_related_count_text": (
+            "Targeted-or-immune variant union count text does not match report context."
+        ),
+        "targeted_drug_brand_mapping": (
+            "Targeted drug brand mapping requires explicit configuration review."
+        ),
         "tmb_status_text": "TMB status from context was not found in rendered text.",
         "msi_status_text": "MSI status from context was not found in rendered text.",
     }

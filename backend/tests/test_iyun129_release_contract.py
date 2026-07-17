@@ -51,6 +51,7 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert "bash -s -- backup" in wrapper
     assert 'backup_archive="${backup_output##*$' in wrapper
     assert "test -f '$backup_archive.manifest.json'" in wrapper
+    assert "RG_WEB_CORS_ORIGINS" in wrapper
 
     alerts = _read("scripts/iyun62_alerts.sh")
     assert "OPS_LOGIN_URL" in alerts
@@ -99,6 +100,8 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
         "must be disabled for production report generation"
     ) < start.index("stop_existing\nif start_release")
     assert "RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1" in deploy
+    assert "backend/app/api/health.py" in deploy
+    assert "TUNNEL_METRICS_URL" in deploy
     assert "check_signature_registry.py" in deploy
     assert 'rsync -az "$SIGNATURE_ASSET_DIR/"' in deploy
     release_check = _read("scripts/release_check.sh")
@@ -118,14 +121,101 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert 'if [ ! -f "$expected_cwd/backend/app/api/health.py" ]' in start
     assert "LEGACY_LOCAL_HEALTH_URL" in watchdog
     assert 'release_health_url "$release"' in watchdog
+    assert "/api/v1/healthz" in release
+    assert "LEGACY_LOCAL_HEALTH_URL" in release
+    assert 'if [ ! -f "$current/backend/app/api/health.py" ]' in release
     assert "status|switch|rollback" in release
     assert "Expected exactly one release" in release
+
+    web_smoke = _read("scripts/web_smoke.py")
+    assert 'request_headers.setdefault("Authorization", f"Bearer {ACCESS_TOKEN}")' in web_smoke
+    assert '"/api/v1/healthz"' in web_smoke
+    assert "task stats must require authentication" in web_smoke
 
     backup = _read("scripts/iyun62_backup.sh")
     restore = _read("scripts/iyun62_restore_drill.sh")
     assert '"patient_info.yaml"' in backup
     assert "reference_reports patient_info.yaml" in backup
     assert '"patient_info.yaml"' in restore
+
+
+@pytest.mark.parametrize(
+    ("has_health_module", "expected_url"),
+    [
+        (False, "http://legacy.invalid/api/v1/tasks/stats"),
+        (True, "http://candidate.invalid/api/v1/healthz"),
+    ],
+)
+def test_release_status_uses_endpoint_supported_by_current_release(
+    tmp_path: Path,
+    has_health_module: bool,
+    expected_url: str,
+) -> None:
+    runtime = tmp_path / "runtime"
+    release = tmp_path / "releases" / "1111111"
+    fake_bin = tmp_path / "fake-bin"
+    runtime.mkdir()
+    release.mkdir(parents=True)
+    fake_bin.mkdir()
+    (runtime / "current_release").write_text(str(release) + "\n", encoding="utf-8")
+    (runtime / "reportgen-web.pid").write_text("12345\n", encoding="utf-8")
+    (release / "REVISION").write_text("1" * 40 + "\n", encoding="utf-8")
+    if has_health_module:
+        health_module = release / "backend/app/api/health.py"
+        health_module.parent.mkdir(parents=True)
+        health_module.write_text("# synthetic health module\n", encoding="utf-8")
+
+    fake_ssh = fake_bin / "ssh"
+    fake_ssh.write_text(
+        "#!/usr/bin/env bash\nshift\nexec \"$@\"\n",
+        encoding="utf-8",
+    )
+    fake_readlink = fake_bin / "readlink"
+    fake_readlink.write_text(
+        "#!/usr/bin/env bash\nprintf '%s\\n' \"$EXPECTED_CWD\"\n",
+        encoding="utf-8",
+    )
+    fake_curl = fake_bin / "curl"
+    fake_curl.write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            url=""
+            for arg in "$@"; do
+                case "$arg" in
+                    http://*|https://*) url="$arg" ;;
+                esac
+            done
+            printf '%s\n' "$url" >> "$CURL_LOG"
+            printf '200'
+            """
+        ),
+        encoding="utf-8",
+    )
+    for executable in (fake_ssh, fake_readlink, fake_curl):
+        executable.chmod(0o755)
+
+    curl_log = tmp_path / "curl.log"
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/iyun129_release.sh"), "status"],
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "SSH_HOST": "synthetic-host",
+            "RUNTIME_DIR": str(runtime),
+            "LOCAL_HEALTH_URL": "http://candidate.invalid/api/v1/healthz",
+            "LEGACY_LOCAL_HEALTH_URL": "http://legacy.invalid/api/v1/tasks/stats",
+            "EXPECTED_CWD": str(release),
+            "CURL_LOG": str(curl_log),
+        },
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert curl_log.read_text(encoding="utf-8").splitlines() == [expected_url]
+    assert "health=HTTP 200" in result.stdout
 
 
 def test_runtime_start_rejects_fast_toc_before_process_stop(tmp_path: Path) -> None:

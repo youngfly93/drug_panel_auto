@@ -114,6 +114,7 @@ def validate_contract_registry() -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     errors: list[str] = []
     aliases: set[str] = set()
+    medical_blocked = False
     for path in discover_contracts():
         try:
             contract = load_historical_golden_contract(path)
@@ -129,6 +130,7 @@ def validate_contract_registry() -> dict[str, Any]:
             errors.append(f"{alias}: invalid reference_docx_sha256")
         expectations = contract.get("expectations") or {}
         for required in (
+            "variant_counts",
             "targeted_summary",
             "targeted_drug_brand_summary",
             "part3",
@@ -137,6 +139,19 @@ def validate_contract_registry() -> dict[str, Any]:
         ):
             if not expectations.get(required):
                 errors.append(f"{alias}: missing expectation {required}")
+        variant_counts = expectations.get("variant_counts") or {}
+        for field in ("targeted_drug_related", "targeted_or_immune_related"):
+            if not isinstance(variant_counts.get(field), int):
+                errors.append(f"{alias}: invalid variant count expectation {field}")
+        medical_uat = contract.get("medical_uat") or {}
+        medical_uat_status = str(medical_uat.get("status") or "").strip().lower()
+        if medical_uat_status not in {"approved", "blocked"}:
+            errors.append(f"{alias}: medical_uat.status must be approved or blocked")
+        if medical_uat_status != "approved":
+            medical_blocked = True
+        blockers = list(medical_uat.get("blockers") or [])
+        if medical_uat_status == "blocked" and not blockers:
+            errors.append(f"{alias}: blocked medical UAT requires at least one blocker")
         brand_order = list(
             (expectations.get("targeted_drug_brand_summary") or {}).get(
                 "ordered_pairs"
@@ -148,8 +163,13 @@ def validate_contract_registry() -> dict[str, Any]:
         part3 = expectations.get("part3") or {}
         gene_count = int(part3.get("gene_section_count") or 0)
         gene_order = list(part3.get("gene_section_order") or [])
-        if part3.get("strict_vaf_descending") is not True:
-            errors.append(f"{alias}: Part 3 strict VAF order gate is not enabled")
+        for field in (
+            "group_by_gene",
+            "gene_order_by_max_vaf_descending",
+            "within_gene_vaf_descending",
+        ):
+            if part3.get(field) is not True:
+                errors.append(f"{alias}: Part 3 grouped VAF gate {field} is not enabled")
         if gene_count <= 0 or len(gene_order) != gene_count:
             errors.append(
                 f"{alias}: Part 3 exact gene order does not match gene section count"
@@ -159,12 +179,15 @@ def validate_contract_registry() -> dict[str, Any]:
                 "case_alias": alias,
                 "panel_id": contract.get("panel_id"),
                 "contract_sha256": _sha256_files([path]),
+                "medical_uat_status": medical_uat_status,
+                "medical_uat_blockers": blockers,
             }
         )
     if not rows:
         errors.append("no historical golden contracts discovered")
     return {
         "status": "PASS" if not errors else "FAIL",
+        "medical_status": "BLOCKED" if medical_blocked else "PASS",
         "contract_count": len(rows),
         "contracts": rows,
         "errors": errors,
@@ -207,6 +230,7 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
         cases = []
 
     results: list[dict[str, Any]] = []
+    medical_blocked = False
     for case in cases:
         alias = str(case.get("case_alias") or "")
         try:
@@ -224,6 +248,11 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
             continue
         if alias != contract.get("case_alias"):
             errors.append(f"{alias}: contract alias mismatch")
+        medical_uat = contract.get("medical_uat") or {}
+        medical_uat_status = str(medical_uat.get("status") or "").strip().lower()
+        medical_uat_blockers = list(medical_uat.get("blockers") or [])
+        if medical_uat_status != "approved":
+            medical_blocked = True
         contract_result = validate_historical_golden_docx(
             contract=contract,
             docx_path=candidate_path,
@@ -268,6 +297,8 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
                 "contract_status": contract_result.get("status"),
                 "diff_status": diff_result.get("status"),
                 "qa_status": qa_status,
+                "medical_uat_status": medical_uat_status,
+                "medical_uat_blockers": medical_uat_blockers,
                 "candidate_renderer_fingerprint": candidate_renderer,
                 "reference_sha256": contract_result.get("reference", {}).get("docx_sha256"),
                 "candidate_sha256": contract_result.get("docx_sha256"),
@@ -284,6 +315,7 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
     return {
         "schema_version": "1.0",
         "status": "PASS" if not errors else "FAIL",
+        "medical_status": "BLOCKED" if medical_blocked else "PASS",
         "source_revision": current_revision,
         "gate_runner_fingerprint": _renderer_fingerprint(),
         "case_count": len(results),
@@ -301,13 +333,18 @@ def main() -> int:
     args = parser.parse_args()
 
     registry = validate_contract_registry()
-    result: dict[str, Any] = {"registry": registry, "status": registry["status"]}
+    result: dict[str, Any] = {
+        "registry": registry,
+        "status": registry["status"],
+        "medical_status": registry["medical_status"],
+    }
     if args.manifest:
         runtime = run_manifest_gate(
             Path(args.manifest).resolve(),
             Path(args.output_root).resolve(),
         )
         result["runtime"] = runtime
+        result["medical_status"] = runtime["medical_status"]
         if runtime["status"] != "PASS":
             result["status"] = "FAIL"
     elif not args.contracts_only:

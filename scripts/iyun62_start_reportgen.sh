@@ -214,6 +214,7 @@ start_release() {
     expected_cwd="$(canonical_dir "$release")"
     health_url="$LOCAL_HEALTH_URL"
     if [ ! -f "$expected_cwd/backend/app/api/health.py" ]; then
+        # Compatibility only for rollback to a pre-healthz immutable release.
         health_url="$LEGACY_LOCAL_HEALTH_URL"
     fi
     export RG_WEB_UPSTREAM_ROOT="$expected_cwd"
@@ -237,7 +238,7 @@ start_release() {
         if [ -z "$process_state" ] || [ "$process_state" = "Z" ]; then
             return 1
         fi
-        LAST_HEALTH_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+        LAST_HEALTH_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 \
             "$health_url" || true)"
         if [ "$LAST_HEALTH_CODE" = "200" ]; then
             actual_cwd="$(readlink "/proc/$STARTED_PID/cwd" 2>/dev/null || true)"

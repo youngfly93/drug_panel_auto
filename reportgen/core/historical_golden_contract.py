@@ -65,6 +65,24 @@ def _targeted_drug_brand_pairs(paragraphs: list[Any]) -> list[str]:
     ]
 
 
+def _related_variant_counts(paragraphs: list[Any]) -> dict[str, int | None]:
+    """Extract the two deliberately different report-level variant counts."""
+    compact = re.sub(r"\s+", "", "\n".join(str(item or "") for item in paragraphs))
+
+    def extract(pattern: str) -> int | None:
+        matches = re.findall(pattern, compact)
+        return int(matches[0]) if len(matches) == 1 else None
+
+    return {
+        "targeted_drug_related": extract(
+            r"与靶向药物用药相关的变异有[:：](\d+)个"
+        ),
+        "targeted_or_immune_related": extract(
+            r"与靶向/免疫药物相关的变异[:：](\d+)个"
+        ),
+    }
+
+
 def _part3_gene_section_vafs(
     sections: Mapping[str, Mapping[str, Any]],
 ) -> list[float | None]:
@@ -75,6 +93,24 @@ def _part3_gene_section_vafs(
         match = re.search(r"；\s*(\d+(?:\.\d+)?)%\s*$", header[0] if header else "")
         values.append(float(match.group(1)) if match else None)
     return values
+
+
+def _part3_gene_vaf_blocks(
+    sections: Mapping[str, Mapping[str, Any]],
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Return gene sequence and contiguous VAF blocks from Part 3 sections."""
+    genes: list[str] = []
+    blocks: list[dict[str, Any]] = []
+    for (key, _section), vaf in zip(
+        sections.items(), _part3_gene_section_vafs(sections)
+    ):
+        gene = str(key or "").split("|", 1)[0].strip().upper()
+        genes.append(gene)
+        if blocks and blocks[-1]["gene"] == gene:
+            blocks[-1]["vafs"].append(vaf)
+        else:
+            blocks.append({"gene": gene, "vafs": [vaf]})
+    return genes, blocks
 
 
 def _prefix_match(sections: Mapping[str, Any], prefix: str) -> tuple[str | None, Any]:
@@ -239,6 +275,26 @@ def validate_historical_golden_docx(
             actual_brand_pairs == expected_brand_pairs,
             expected=expected_brand_pairs,
             actual=actual_brand_pairs,
+        )
+
+    expected_variant_counts = expected.get("variant_counts") or {}
+    actual_variant_counts = _related_variant_counts(
+        list(snapshot.get("paragraphs") or [])
+    )
+    for field, code in (
+        ("targeted_drug_related", "TARGETED_DRUG_RELATED_COUNT_TEXT"),
+        (
+            "targeted_or_immune_related",
+            "TARGETED_OR_IMMUNE_RELATED_COUNT_TEXT",
+        ),
+    ):
+        if field not in expected_variant_counts:
+            continue
+        check(
+            code,
+            actual_variant_counts[field] == int(expected_variant_counts[field]),
+            expected=expected_variant_counts[field],
+            actual=actual_variant_counts[field],
         )
 
     tables = list(snapshot.get("tables") or [])
@@ -419,6 +475,55 @@ def validate_historical_golden_docx(
             actual=actual_gene_vafs,
         )
 
+    actual_gene_sequence, actual_gene_blocks = _part3_gene_vaf_blocks(
+        gene_sections
+    )
+    vafs_complete = all(value is not None for value in actual_gene_vafs)
+    if expected_part3.get("group_by_gene") is True:
+        block_genes = [str(block["gene"]) for block in actual_gene_blocks]
+        check(
+            "PART3_GENE_GROUP_CONTIGUITY",
+            len(block_genes) == len(set(block_genes)),
+            expected="each_gene_in_one_contiguous_block",
+            actual=actual_gene_sequence,
+        )
+    if expected_part3.get("gene_order_by_max_vaf_descending") is True:
+        block_max_vafs = [
+            max(float(value) for value in block["vafs"] if value is not None)
+            if all(value is not None for value in block["vafs"])
+            else None
+            for block in actual_gene_blocks
+        ]
+        numeric_block_max_vafs = [
+            value for value in block_max_vafs if value is not None
+        ]
+        check(
+            "PART3_GENE_BLOCK_MAX_VAF_ORDER",
+            vafs_complete
+            and all(
+                left >= right
+                for left, right in zip(
+                    numeric_block_max_vafs, numeric_block_max_vafs[1:]
+                )
+            ),
+            expected="gene_blocks_descending_by_max_vaf",
+            actual=block_max_vafs,
+        )
+    if expected_part3.get("within_gene_vaf_descending") is True:
+        within_gene_descending = vafs_complete and all(
+            all(
+                float(left) >= float(right)
+                for left, right in zip(block["vafs"], block["vafs"][1:])
+            )
+            for block in actual_gene_blocks
+        )
+        check(
+            "PART3_WITHIN_GENE_VAF_ORDER",
+            within_gene_descending,
+            expected="within_each_gene_descending_by_vaf",
+            actual=actual_gene_blocks,
+        )
+
     required_order = list(expected_part3.get("required_relative_order") or [])
     actual_relative_order = [key for key in actual_gene_order if key in required_order]
     check(
@@ -466,9 +571,11 @@ def validate_historical_golden_docx(
             "table_count": snapshot.get("table_count"),
             "targeted_summary_gene_order": summary_order,
             "targeted_drug_brand_pairs": actual_brand_pairs,
+            "variant_counts": actual_variant_counts,
             "part3_gene_section_count": len(gene_sections),
             "part3_gene_section_order": actual_gene_order,
             "part3_gene_section_vafs": actual_gene_vafs,
+            "part3_gene_vaf_blocks": actual_gene_blocks,
             "part3_drug_section_count": len(drug_sections),
             "runtime_contract": runtime_contract,
         },

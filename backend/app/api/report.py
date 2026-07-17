@@ -32,8 +32,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal, get_db
-from app.models.audit import AuditLog
 from app.dependencies import get_bridge
+from app.models.audit import AuditLog
 from app.models.task import Task, TaskResult
 from app.models.upload import Upload
 from app.schemas.common import ApiResponse
@@ -44,19 +44,25 @@ from app.schemas.report import (
     TaskStatus,
 )
 from app.services import clinical_info_service as clinical_svc
-from app.services.audit_log import audit_event_payload, record_audit_event
 from app.services import reference_report_service as diff_svc
+from app.services.audit_log import audit_event_payload, record_audit_event
+from app.services.batch_lifecycle import (
+    BATCH_ACTIVE_STATUSES,
+    empty_batch_status_counts,
+    pending_file_count,
+    working_file_count,
+)
 from app.services.file_manager import (
     ensure_report_dir,
     save_feedback_upload,
     save_upload,
 )
-from app.services.generation_process import run_generate_report_with_timeout
-from app.services.generation_queue import submit_generation_job
 from app.services.generation_preflight import (
     required_dates_error_message,
     validate_required_dates,
 )
+from app.services.generation_process import run_generate_report_with_timeout
+from app.services.generation_queue import submit_generation_job
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_recovery import write_single_generation_request
 
@@ -474,13 +480,7 @@ def _load_json_dict(value: Optional[str]) -> dict:
 
 
 def _batch_status_counts(db: Session, task_id: str) -> dict[str, int]:
-    counts = {
-        "pending": 0,
-        "running": 0,
-        "completed": 0,
-        "failed": 0,
-        "cancelled": 0,
-    }
+    counts = empty_batch_status_counts()
     rows = (
         db.query(TaskResult.status, func.count(TaskResult.id))
         .filter(TaskResult.task_id == task_id)
@@ -569,7 +569,12 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
     task_errors = _load_json_list(task.errors)
     task_warnings = _load_json_list(task.warnings)
 
-    if task.status in {"pending", "running"}:
+    task_is_active = (
+        task.status in BATCH_ACTIVE_STATUSES
+        if task.task_type == "batch"
+        else task.status in {"pending", "running"}
+    )
+    if task_is_active:
         issues.append(
             _gate_issue("blocker", "TASK_NOT_FINISHED", "任务仍在生成中，不能进入交付。")
         )
@@ -591,33 +596,37 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
             .order_by(TaskResult.file_index.asc())
             .all()
         )
-        counts = {
-            "pending": 0,
-            "running": 0,
-            "completed": 0,
-            "failed": 0,
-            "cancelled": 0,
-        }
+        counts = empty_batch_status_counts()
         for row in rows:
             counts[row.status or "pending"] = counts.get(row.status or "pending", 0) + 1
 
         if not rows:
             issues.append(_gate_issue("blocker", "BATCH_EMPTY", "批量任务没有逐文件结果。"))
-        if counts.get("running") or counts.get("pending"):
+        pending_count = pending_file_count(counts)
+        working_count = working_file_count(counts)
+        if working_count or pending_count:
             issues.append(
                 _gate_issue(
                     "blocker",
                     "BATCH_NOT_FINISHED",
-                    f"批量任务仍有 {counts.get('running', 0)} 个运行中、{counts.get('pending', 0)} 个待执行。",
+                    f"批量任务仍有 {working_count} 个处理中、{pending_count} 个待执行。",
                 )
             )
         if counts.get("failed"):
             issues.append(
-                _gate_issue("blocker", "BATCH_HAS_FAILURES", f"批量任务有 {counts['failed']} 个失败文件。")
+                _gate_issue(
+                    "blocker",
+                    "BATCH_HAS_FAILURES",
+                    f"批量任务有 {counts['failed']} 个失败文件。",
+                )
             )
         if counts.get("cancelled"):
             issues.append(
-                _gate_issue("blocker", "BATCH_HAS_CANCELLED", f"批量任务有 {counts['cancelled']} 个已取消文件。")
+                _gate_issue(
+                    "blocker",
+                    "BATCH_HAS_CANCELLED",
+                    f"批量任务有 {counts['cancelled']} 个已取消文件。",
+                )
             )
 
         for row in rows:
@@ -636,20 +645,40 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
                 continue
             if not row.output_path or not Path(row.output_path).exists():
                 issues.append(
-                    _gate_issue("blocker", "OUTPUT_MISSING", f"{row.excel_filename} 报告文件不存在。", scope)
+                    _gate_issue(
+                        "blocker",
+                        "OUTPUT_MISSING",
+                        f"{row.excel_filename} 报告文件不存在。",
+                        scope,
+                    )
                 )
             qa_status = validation.get("qa_status")
             if qa_status == "FAIL":
                 issues.append(
-                    _gate_issue("blocker", "QA_FAIL", f"{row.excel_filename} QA 状态为 FAIL。", scope)
+                    _gate_issue(
+                        "blocker",
+                        "QA_FAIL",
+                        f"{row.excel_filename} QA 状态为 FAIL。",
+                        scope,
+                    )
                 )
             elif qa_status == "WARN":
                 issues.append(
-                    _gate_issue("warning", "QA_WARN", f"{row.excel_filename} QA 状态为 WARN。", scope)
+                    _gate_issue(
+                        "warning",
+                        "QA_WARN",
+                        f"{row.excel_filename} QA 状态为 WARN。",
+                        scope,
+                    )
                 )
             elif not qa_status:
                 issues.append(
-                    _gate_issue("warning", "QA_MISSING", f"{row.excel_filename} 未记录 QA 状态。", scope)
+                    _gate_issue(
+                        "warning",
+                        "QA_MISSING",
+                        f"{row.excel_filename} 未记录 QA 状态。",
+                        scope,
+                    )
                 )
             for warning in row_warnings:
                 if _is_required_field_warning(warning):
@@ -747,7 +776,10 @@ def _artifact_sidecars(output_path: Optional[str]) -> list[tuple[Optional[Path],
     return [
         (_report_summary_sidecar_path(output_path), f"summaries/{path.stem}.summary.json"),
         (_qa_sidecar_path(output_path), f"qa/{path.stem}.qa.json"),
-        (_field_provenance_sidecar_path(output_path), f"field_provenance/{path.stem}.field_provenance.json"),
+        (
+            _field_provenance_sidecar_path(output_path),
+            f"field_provenance/{path.stem}.field_provenance.json",
+        ),
         (_stage_results_sidecar_path(output_path), f"stage_results/{path.stem}.stage_results.json"),
     ]
 
@@ -1482,8 +1514,8 @@ def get_task_status(task_id: str, db: Session = Depends(get_db)):
             completed_files=task.completed_files,
             failed_files=task.failed_files,
             cancelled_files=batch_counts.get("cancelled", 0),
-            pending_files=batch_counts.get("pending", 0),
-            running_files=batch_counts.get("running", 0),
+            pending_files=pending_file_count(batch_counts),
+            running_files=working_file_count(batch_counts),
             status_counts=batch_counts,
             output_path=task.output_path,
             field_provenance_file=(
@@ -1601,13 +1633,7 @@ def get_batch_results(task_id: str, db: Session = Depends(get_db)):
         .order_by(TaskResult.file_index.asc())
         .all()
     )
-    counts = {
-        "pending": 0,
-        "running": 0,
-        "completed": 0,
-        "failed": 0,
-        "cancelled": 0,
-    }
+    counts = empty_batch_status_counts()
     for row in rows:
         counts[row.status or "pending"] = counts.get(row.status or "pending", 0) + 1
     output_root = Path(task.output_path) if task.output_path else None
@@ -1659,8 +1685,8 @@ def get_batch_results(task_id: str, db: Session = Depends(get_db)):
             "completed_files": task.completed_files,
             "failed_files": task.failed_files,
             "cancelled_files": counts.get("cancelled", 0),
-            "pending_files": counts.get("pending", 0),
-            "running_files": counts.get("running", 0),
+            "pending_files": pending_file_count(counts),
+            "running_files": working_file_count(counts),
             "status_counts": counts,
             "output_root": str(output_root) if output_root else None,
             "items": items,

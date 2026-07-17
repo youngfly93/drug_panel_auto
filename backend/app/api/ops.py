@@ -24,6 +24,11 @@ from app.config import settings
 from app.database import get_db
 from app.models.task import Task, TaskResult
 from app.schemas.common import ApiResponse
+from app.services.batch_lifecycle import (
+    BATCH_ACTIVE_STATUSES,
+    BATCH_QUEUED_STATUSES,
+    BATCH_WORKING_STATUSES,
+)
 from app.services.generation_queue import queue_stats
 from app.services.runtime_instance_lock import runtime_instance_lock_status
 from app.services.task_recovery import last_recovery_summary
@@ -204,7 +209,11 @@ def _libreoffice_listener_status() -> dict[str, Any]:
 
 def _task_counts(db: Session) -> dict[str, Any]:
     rows = db.query(Task.status, func.count(Task.id)).group_by(Task.status).all()
-    by_status = {
+    raw_by_status = {
+        "queued": 0,
+        "preflight": 0,
+        "generating": 0,
+        "qa": 0,
         "pending": 0,
         "running": 0,
         "completed": 0,
@@ -213,11 +222,19 @@ def _task_counts(db: Session) -> dict[str, Any]:
         "cancelled": 0,
     }
     for status, count in rows:
-        by_status[str(status or "unknown")] = int(count)
-    total = sum(by_status.values())
+        raw_by_status[str(status or "unknown")] = int(count)
+    total = sum(raw_by_status.values())
+    by_status = dict(raw_by_status)
+    by_status["pending"] = sum(
+        raw_by_status.get(status, 0) for status in BATCH_QUEUED_STATUSES
+    )
+    by_status["running"] = sum(
+        raw_by_status.get(status, 0) for status in BATCH_WORKING_STATUSES
+    )
     return {
         "total": total,
         "by_status": by_status,
+        "by_stage": raw_by_status,
         "failed_total": by_status.get("failed", 0) + by_status.get("partial_failed", 0),
     }
 
@@ -615,8 +632,14 @@ def _task_unit_counts(task: Task, results: list[TaskResult]) -> dict[str, int]:
                 "completed": int(status_counts.get("completed") or task.completed_files or 0),
                 "failed": int(status_counts.get("failed") or task.failed_files or 0),
                 "cancelled": int(status_counts.get("cancelled") or 0),
-                "pending": int(status_counts.get("pending") or 0),
-                "running": int(status_counts.get("running") or 0),
+                "pending": sum(
+                    int(status_counts.get(status) or 0)
+                    for status in BATCH_QUEUED_STATUSES
+                ),
+                "running": sum(
+                    int(status_counts.get(status) or 0)
+                    for status in BATCH_WORKING_STATUSES
+                ),
             }
         )
         accounted = (
@@ -626,7 +649,7 @@ def _task_unit_counts(task: Task, results: list[TaskResult]) -> dict[str, int]:
             + counts["pending"]
             + counts["running"]
         )
-        if counts["total"] > accounted and task.status in {"pending", "running"}:
+        if counts["total"] > accounted and task.status in BATCH_ACTIVE_STATUSES:
             counts["pending"] += counts["total"] - accounted
         return counts
 

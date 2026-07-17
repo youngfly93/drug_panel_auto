@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional
@@ -367,7 +368,12 @@ def get_patient(sample_id: str) -> Optional[PatientInfo]:
     return PatientInfo(sample_id=sample_id, **{k: str(v) if v else None for k, v in info.items()})
 
 
-def enrich_patient(sample_id: str, project_type: Optional[str] = None) -> PatientEnrichment:
+def enrich_patient(
+    sample_id: str,
+    project_type: Optional[str] = None,
+    *,
+    timeout_seconds: Optional[float] = None,
+) -> PatientEnrichment:
     """
     Enrich clinical fields by sample_id.
 
@@ -400,6 +406,7 @@ def enrich_patient(sample_id: str, project_type: Optional[str] = None) -> Patien
     external_fields, external_source, external_warnings = _fetch_external_patient(
         sample_id,
         project_type=project_type,
+        timeout_seconds=timeout_seconds,
     )
     warnings.extend(external_warnings)
     if external_fields:
@@ -470,10 +477,15 @@ def _patient_fields_from_local_registry(sample_id: str) -> dict[str, Any]:
 def _fetch_external_patient(
     sample_id: str,
     project_type: Optional[str] = None,
+    *,
+    timeout_seconds: Optional[float] = None,
 ) -> tuple[dict[str, Any], Optional[str], list[str]]:
     provider = str(settings.patient_enrichment_provider or "generic").strip().lower()
     if provider == "marvelbio":
-        return _fetch_marvelbio_patient(sample_id)
+        return _fetch_marvelbio_patient(
+            sample_id,
+            timeout_seconds=timeout_seconds,
+        )
 
     url = str(settings.patient_enrichment_url or "").strip()
     if not url:
@@ -496,10 +508,15 @@ def _fetch_external_patient(
         headers["Authorization"] = f"Bearer {settings.patient_enrichment_token}"
 
     req = request.Request(endpoint, headers=headers, method="GET")
+    timeout = float(
+        timeout_seconds
+        if timeout_seconds is not None
+        else settings.patient_enrichment_timeout_seconds
+    )
     try:
         with request.urlopen(
             req,
-            timeout=float(settings.patient_enrichment_timeout_seconds),
+            timeout=max(0.1, timeout),
         ) as response:
             raw = response.read().decode("utf-8")
     except (urlerror.URLError, TimeoutError, OSError) as exc:
@@ -523,6 +540,8 @@ def _fetch_external_patient(
 
 def _fetch_marvelbio_patient(
     sample_id: str,
+    *,
+    timeout_seconds: Optional[float] = None,
 ) -> tuple[dict[str, Any], Optional[str], list[str]]:
     url = str(settings.patient_enrichment_url or "").strip()
     aes_key = str(settings.patient_enrichment_aes_key or "")
@@ -547,7 +566,11 @@ def _fetch_marvelbio_patient(
     raw, lookup_warnings = _post_json_with_curl_fallback(
         url,
         body,
-        timeout=float(settings.patient_enrichment_timeout_seconds),
+        timeout=float(
+            timeout_seconds
+            if timeout_seconds is not None
+            else settings.patient_enrichment_timeout_seconds
+        ),
         source="MarvelBio",
     )
     if raw is None:
@@ -583,6 +606,9 @@ def _post_json_with_curl_fallback(
     timeout: float,
     source: str,
 ) -> tuple[Optional[str], list[str]]:
+    """POST JSON within one shared wall-clock budget across both transports."""
+    total_budget = max(0.1, float(timeout))
+    deadline = time.monotonic() + total_budget
     req = request.Request(
         url,
         data=body,
@@ -594,8 +620,11 @@ def _post_json_with_curl_fallback(
         },
         method="POST",
     )
+    # Keep enough of the one total budget for curl, whose --max-time is a real
+    # wall-clock cap and works around urllib/TLS incompatibilities seen in prod.
+    urllib_budget = min(total_budget, max(0.1, total_budget * 0.4))
     try:
-        with request.urlopen(req, timeout=timeout) as response:
+        with request.urlopen(req, timeout=urllib_budget) as response:
             return response.read().decode("utf-8"), []
     except (urlerror.URLError, TimeoutError, OSError) as exc:
         urllib_error = str(exc)
@@ -604,15 +633,22 @@ def _post_json_with_curl_fallback(
     if not curl:
         return None, [f"{source} enrichment lookup failed: {urllib_error}"]
 
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None, [
+            f"{source} enrichment lookup failed within {total_budget:g}s: "
+            f"{urllib_error}"
+        ]
+
     try:
         completed = subprocess.run(
             [
                 curl,
                 "-ksS",
                 "--connect-timeout",
-                str(max(1, int(timeout))),
+                f"{max(0.1, min(remaining, remaining * 0.5)):.3f}",
                 "--max-time",
-                str(max(2, int(timeout) + 2)),
+                f"{max(0.1, remaining):.3f}",
                 "-H",
                 "Accept: application/json",
                 "-H",
@@ -626,7 +662,7 @@ def _post_json_with_curl_fallback(
             input=body,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=timeout + 4,
+            timeout=max(0.2, remaining + 0.5),
             check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
@@ -642,6 +678,71 @@ def _post_json_with_curl_fallback(
             f"curl fallback failed: {stderr or completed.returncode}"
         ]
     return completed.stdout.decode("utf-8", errors="ignore"), []
+
+
+def _enrich_patient_in_child(
+    sample_id: str,
+    project_type: Optional[str],
+    timeout_seconds: float,
+) -> PatientEnrichment:
+    return enrich_patient(
+        sample_id,
+        project_type=project_type,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def enrich_patient_with_hard_timeout(
+    sample_id: str,
+    project_type: Optional[str] = None,
+    *,
+    timeout_seconds: Optional[float] = None,
+) -> PatientEnrichment:
+    """Return enrichment within a killable total deadline for batch workers."""
+    hard_timeout = max(
+        0.1,
+        float(
+            timeout_seconds
+            if timeout_seconds is not None
+            else settings.patient_enrichment_hard_timeout_seconds
+        ),
+    )
+    if not settings.patient_enrichment_process_isolation:
+        return enrich_patient(
+            sample_id,
+            project_type=project_type,
+            timeout_seconds=hard_timeout,
+        )
+
+    from app.services.generation_process import (
+        GenerationProcessError,
+        GenerationTimeoutError,
+        run_callable_with_timeout,
+    )
+
+    try:
+        result = run_callable_with_timeout(
+            _enrich_patient_in_child,
+            args=(sample_id, project_type, hard_timeout),
+            timeout_seconds=hard_timeout,
+            grace_seconds=0.25,
+        )
+    except GenerationTimeoutError:
+        return PatientEnrichment(
+            sample_id=sample_id,
+            warnings=[
+                f"patient enrichment exceeded {hard_timeout:g}s and was skipped"
+            ],
+        )
+    except GenerationProcessError as exc:
+        return PatientEnrichment(
+            sample_id=sample_id,
+            warnings=[f"patient enrichment failed and was skipped: {exc}"],
+        )
+    return result if isinstance(result, PatientEnrichment) else PatientEnrichment(
+        sample_id=sample_id,
+        warnings=["patient enrichment returned an invalid result and was skipped"],
+    )
 
 
 def _aes_cbc_pkcs5_base64(text: str, key: str) -> str:

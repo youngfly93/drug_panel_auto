@@ -7,20 +7,120 @@ We keep method names as FieldMapper internals for backward compatibility.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 import pandas as pd
 
 from reportgen.models.excel_data import ExcelDataSource
+from reportgen.rules.schema import load_rule_yaml
 
 
 class ImmuneGeneMixin:
-    def _load_immune_gene_sets(self) -> dict[str, set[str]]:
+    def _load_panel_immune_gene_sets(
+        self,
+        panel_package: Any,
+    ) -> dict[str, set[str]] | None:
+        """Load the authoritative immune sets declared by one Panel package.
+
+        ``None`` means that the package does not declare a biomarkers rule and
+        the legacy public XLSX may be used as a compatibility fallback.  Once a
+        package declares ``rules.biomarkers``, its immune table is authoritative:
+        a missing/malformed table raises instead of silently changing medical
+        semantics by falling back to the global list.
+        """
+        if panel_package is None:
+            return None
+
+        rules = getattr(panel_package, "rules", {}) or {}
+        if not isinstance(rules, Mapping) or "biomarkers" not in rules:
+            return None
+
+        rule_path = panel_package.resolve_rule_file("biomarkers")
+        raw = load_rule_yaml(rule_path)
+        biomarkers = raw.get("biomarkers")
+        if not isinstance(biomarkers, Mapping):
+            raise ValueError(
+                f"Panel biomarker rule has no biomarkers mapping: {rule_path}"
+            )
+        tables = biomarkers.get("immune_gene_tables")
+        if not isinstance(tables, Mapping):
+            raise ValueError(
+                f"Panel biomarker rule has no immune_gene_tables mapping: {rule_path}"
+            )
+
+        def collect(category: str) -> set[str]:
+            section = tables.get(category)
+            if not isinstance(section, Mapping):
+                return set()
+            values = section.get("genes") or []
+            if isinstance(values, str):
+                values = [values]
+            if not isinstance(values, (list, tuple, set)):
+                raise ValueError(
+                    f"Panel immune genes must be a list: {rule_path}#{category}"
+                )
+            return {
+                str(value).strip().upper()
+                for value in values
+                if str(value).strip()
+            }
+
+        gene_sets = {
+            "pos": collect("positive"),
+            "neg": collect("negative"),
+            "hyper": collect("hyperprogression"),
+        }
+        self.logger.info(
+            "使用Panel免疫基因规则",
+            panel_id=str(getattr(panel_package, "panel_id", "") or ""),
+            path=str(rule_path),
+            pos=len(gene_sets["pos"]),
+            neg=len(gene_sets["neg"]),
+            hyper=len(gene_sets["hyper"]),
+        )
+        return gene_sets
+
+    @staticmethod
+    def _panel_variant_membership_columns(panel_package: Any) -> tuple[str, ...]:
+        """Return panel-membership columns declared for ``Variations`` rows."""
+        if panel_package is None:
+            return ()
+        contract = getattr(panel_package, "input_contract", {}) or {}
+        if not isinstance(contract, Mapping):
+            return ()
+        required = contract.get("required_columns") or {}
+        if not isinstance(required, Mapping):
+            return ()
+        columns = required.get("Variations") or []
+        if isinstance(columns, str):
+            columns = [columns]
+        if not isinstance(columns, (list, tuple, set)):
+            return ()
+        return tuple(
+            str(column).strip()
+            for column in columns
+            if str(column).strip().lower().startswith("existinsmall")
+        )
+
+    def _load_immune_gene_sets(
+        self,
+        panel_package: Any = None,
+    ) -> dict[str, set[str]]:
         """加载免疫相关基因列表（正相关/负相关/超进展相关）。
+
+        Panel包声明的 ``rules/biomarkers.yaml`` 是运行时单一真源；只有
+        未声明该规则的旧项目才回退到公共xlsx。
 
         期望的xlsx结构示例见 `2025.12.12/1-免疫治疗相关基因.xlsx`：
         - 前3列：免疫治疗正相关基因（可能跨多列排版）
         - 中间3列：免疫治疗负相关基因
         - 后2列：免疫超进展相关基因（可能带备注列）
         """
+        panel_gene_sets = self._load_panel_immune_gene_sets(panel_package)
+        if panel_gene_sets is not None:
+            return panel_gene_sets
+
         if self._immune_gene_list_loaded:
             return self._immune_gene_sets
         self._immune_gene_list_loaded = True
@@ -59,7 +159,7 @@ class ImmuneGeneMixin:
                     continue
                 for v in df[col].tolist():
                     s = self._norm_text(v)
-                    if not s or s == "基因":
+                    if not s or s in {"基因", "又名"}:
                         continue
                     # 去掉可能的备注（如 "EGFR 只要扩增"）
                     s = s.split()[0].strip()
@@ -89,9 +189,14 @@ class ImmuneGeneMixin:
         )
         return self._immune_gene_sets
 
-    def _build_immuno_gene_summary(self, excel_data: ExcelDataSource) -> dict[str, str]:
+    def _build_immuno_gene_summary(
+        self,
+        excel_data: ExcelDataSource,
+        *,
+        panel_package: Any = None,
+    ) -> dict[str, str]:
         """生成免疫相关基因检出摘要（用于模板表格）。"""
-        gene_sets = self._load_immune_gene_sets()
+        gene_sets = self._load_immune_gene_sets(panel_package=panel_package)
         if not gene_sets:
             return {
                 "pos": "未检出",
@@ -101,6 +206,12 @@ class ImmuneGeneMixin:
 
         variations = excel_data.get_table_data("Variations") or []
         cnv_rows = excel_data.get_table_data("Cnv") or []
+        membership_columns = self._panel_variant_membership_columns(panel_package)
+
+        def belongs_to_panel(row: dict) -> bool:
+            if not membership_columns:
+                return True
+            return any(row.get(column) in (1, "1", True) for column in membership_columns)
 
         def egfr_negative_match(row: dict) -> bool:
             haystack = " ".join(
@@ -127,6 +238,8 @@ class ImmuneGeneMixin:
             lines: list[str] = []
             seen: set[str] = set()
             for r in variations:
+                if not belongs_to_panel(r):
+                    continue
                 level = self._norm_text(r.get("ExistIn552"))
                 # 终版：仅使用Ⅰ/Ⅱ类突变进入免疫相关基因汇总
                 if level not in {"Ⅰ类", "Ⅱ类"}:

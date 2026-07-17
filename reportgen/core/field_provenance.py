@@ -52,6 +52,8 @@ DERIVED_FIELDS = {
     "msi_summary",
     "total_variants_count",
     "drug_related_count",
+    "targeted_or_immune_related_count",
+    "targeted_drug_brand_warnings",
 }
 
 

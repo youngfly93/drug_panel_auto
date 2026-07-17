@@ -58,6 +58,7 @@ class TemplateRenderer:
         report_data: ReportData,
         output_path: str,
         post_processor_names: Optional[Sequence[str]] = None,
+        critical_processor_names: Optional[Sequence[str]] = None,
     ) -> str:
         """
         渲染模板并保存
@@ -128,6 +129,7 @@ class TemplateRenderer:
                 context,
                 template_path,
                 processor_names=post_processor_names,
+                critical_processor_names=critical_processor_names,
             )
 
             # 验证生成的文件可以被正常打开
@@ -171,6 +173,7 @@ class TemplateRenderer:
         context: dict,
         template_path: str,
         processor_names: Optional[Sequence[str]] = None,
+        critical_processor_names: Optional[Sequence[str]] = None,
     ) -> None:
         """Run post-render processors and keep an execution report."""
         processor_context = ProcessorContext(
@@ -191,10 +194,15 @@ class TemplateRenderer:
             processors=len(self.last_processor_report),
             errors=len(errors),
         )
+        critical_names = frozenset(
+            CRITICAL_DOCX_PROCESSOR_NAMES
+            if critical_processor_names is None
+            else critical_processor_names
+        )
         critical_errors = [
             row
             for row in errors
-            if row.get("name") in CRITICAL_DOCX_PROCESSOR_NAMES
+            if row.get("name") in critical_names
         ]
         if critical_errors:
             summary = "; ".join(
@@ -1123,7 +1131,7 @@ class TemplateRenderer:
 
             if variant_header_re.match(text):
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                set_spacing(paragraph, before=200, after=0)
+                set_spacing(paragraph, before=200, after=200)
                 # A variant heading must travel with at least the following
                 # "基因简介" label. Otherwise Word/LibreOffice can leave the
                 # heading alone at the bottom of a page.
@@ -2985,6 +2993,30 @@ class TemplateRenderer:
         w_last_rendered_page_break = f"{{{ns_w}}}lastRenderedPageBreak"
         w_drawing = f"{{{ns_w}}}drawing"
         w_pict = f"{{{ns_w}}}pict"
+        ignorable_boundary_tags = {
+            f"{{{ns_w}}}{name}"
+            for name in (
+                "bookmarkStart",
+                "bookmarkEnd",
+                "commentRangeStart",
+                "commentRangeEnd",
+                "customXmlInsRangeStart",
+                "customXmlInsRangeEnd",
+                "customXmlDelRangeStart",
+                "customXmlDelRangeEnd",
+                "customXmlMoveFromRangeStart",
+                "customXmlMoveFromRangeEnd",
+                "customXmlMoveToRangeStart",
+                "customXmlMoveToRangeEnd",
+                "moveFromRangeStart",
+                "moveFromRangeEnd",
+                "moveToRangeStart",
+                "moveToRangeEnd",
+                "permStart",
+                "permEnd",
+                "proofErr",
+            )
+        }
 
         def paragraph_text(elem) -> str:
             return "".join((node.text or "") for node in elem.iter(w_t)).strip()
@@ -3038,8 +3070,18 @@ class TemplateRenderer:
             cluster = []
             saw_page_break = False
             prev_idx = idx - 1
-            while prev_idx >= 0 and is_blank_paragraph(children[prev_idx]):
+            while prev_idx >= 0:
                 prev = children[prev_idx]
+                # Word/LibreOffice may place bookmark or range-boundary nodes
+                # between a template-owned blank break paragraph and its
+                # heading. They have no rendered content and must not hide the
+                # break from this narrow cleanup. Tables and other body content
+                # still stop the scan, so section boundaries are not crossed.
+                if prev.tag in ignorable_boundary_tags:
+                    prev_idx -= 1
+                    continue
+                if not is_blank_paragraph(prev):
+                    break
                 cluster.append(prev)
                 saw_page_break = saw_page_break or has_page_break(prev)
                 prev_idx -= 1
@@ -3076,6 +3118,95 @@ class TemplateRenderer:
                 os.unlink(tmp_name)
 
         self.logger.debug("已移除标题前空白分页段落", removed=removed)
+
+    def _enforce_page_break_before_headings(
+        self, file_path: str, headings: tuple[str, ...] | None = None
+    ) -> None:
+        """Apply an idempotent page-break-before property to exact headings.
+
+        A paragraph property is used instead of a standalone page-break run:
+        when a heading already lands at the top of a page it does not create an
+        extra blank page, and LibreOffice/Word can safely refresh fields without
+        moving the break into an empty paragraph.
+        """
+        target_headings = {
+            str(item).strip() for item in (headings or ()) if str(item).strip()
+        }
+        if not target_headings:
+            return
+
+        doc = Document(file_path)
+        changed = False
+        from docx.oxml.ns import qn
+
+        w_br = qn("w:br")
+        w_type = qn("w:type")
+        w_last_rendered_page_break = qn("w:lastRenderedPageBreak")
+        for paragraph in doc.paragraphs:
+            if (paragraph.text or "").strip() not in target_headings:
+                continue
+            # A few legacy templates put an explicit page-break run inside the
+            # heading itself. Keeping that run together with pageBreakBefore
+            # creates two independent pagination instructions and can yield a
+            # blank page after a LibreOffice field refresh. The paragraph
+            # property below is the single source of truth.
+            for node in list(paragraph._p.iter()):
+                if node.tag == w_br and node.get(w_type) == "page":
+                    parent = node.getparent()
+                    if parent is not None:
+                        parent.remove(node)
+                        changed = True
+                elif node.tag == w_last_rendered_page_break:
+                    parent = node.getparent()
+                    if parent is not None:
+                        parent.remove(node)
+                        changed = True
+            if paragraph.paragraph_format.page_break_before is not True:
+                paragraph.paragraph_format.page_break_before = True
+                changed = True
+            if paragraph.paragraph_format.keep_with_next is not True:
+                paragraph.paragraph_format.keep_with_next = True
+                changed = True
+        if changed:
+            doc.save(file_path)
+
+    def _bold_drug_brand_brackets(self, file_path: str) -> None:
+        """Bold only ``[brand]`` fragments in targeted/immune brand summaries."""
+        import copy
+        import re
+
+        marker = "上表涉及的已上市的药物名称及对应的商品名称"
+        bracket_re = re.compile(r"(\[[^\[\]\r\n]+\])")
+        doc = Document(file_path)
+        changed = False
+        for paragraph in doc.paragraphs:
+            full_text = paragraph.text or ""
+            if marker not in full_text or not bracket_re.search(full_text):
+                continue
+
+            base_rpr = next(
+                (
+                    copy.deepcopy(run._r.rPr)
+                    for run in paragraph.runs
+                    if (run.text or "") and run._r.rPr is not None
+                ),
+                None,
+            )
+            for run in list(paragraph.runs):
+                paragraph._p.remove(run._r)
+            for segment in bracket_re.split(full_text):
+                if not segment:
+                    continue
+                run = paragraph.add_run(segment)
+                if base_rpr is not None:
+                    existing = run._r.rPr
+                    if existing is not None:
+                        run._r.remove(existing)
+                    run._r.insert(0, copy.deepcopy(base_rpr))
+                run.font.bold = bool(bracket_re.fullmatch(segment))
+            changed = True
+        if changed:
+            doc.save(file_path)
 
     def _remove_standalone_page_breaks_before_pathway_tables(
         self, file_path: str
@@ -3549,7 +3680,10 @@ class TemplateRenderer:
         caution_sections = context.get("drug_caution_sections", [])
         references = context.get("gene_references", [])
         total_count = context.get("total_variants_count", 0)
-        drug_count = context.get("drug_related_count", 0)
+        targeted_or_immune_count = context.get(
+            "targeted_or_immune_related_count",
+            context.get("drug_related_count", 0),
+        )
         has_static_reading_section = has_following_paragraph("3. 阅读说明")
         has_static_reference_section = has_following_paragraph("5. 参考文献")
 
@@ -3731,7 +3865,7 @@ class TemplateRenderer:
         current = add_para_after(
             current,
             f"在本次检测范围内，检出体细胞变异：{total_count}个，"
-            f"其中与靶向/免疫药物相关的变异：{drug_count}个。"
+            f"其中与靶向/免疫药物相关的变异：{targeted_or_immune_count}个。"
             "（下面红色标注的为有对应靶向/免疫药物的基因变异。）",
             size=10.5,
             justify=True,
@@ -3756,6 +3890,7 @@ class TemplateRenderer:
                 underline=True,
                 justify=True,
                 spacing_before=200,
+                spacing_after=200,
                 keep_next=True,
             )
 
@@ -3966,6 +4101,155 @@ class TemplateRenderer:
             references=len(references),
         )
 
+    def _normalize_reference_section_style(
+        self, file_path: str, context: dict
+    ) -> None:
+        """Apply the configured font to reference entries, excluding the heading.
+
+        The reviewed CRC template stores reference entries in the ``Normal``
+        style, whose effective font can vary between Word and LibreOffice.
+        Direct run formatting is therefore used for the bounded reference list
+        only.  Heading and following QC/method/company sections are untouched.
+        """
+        from docx.oxml.ns import qn
+        from docx.shared import Pt
+        from docx.text.run import Run
+
+        content_cfg = self._report_content_config(context)
+        style_cfg = content_cfg.get("reference_style")
+        if not isinstance(style_cfg, dict):
+            return
+
+        font_name = str(style_cfg.get("font_name") or "").strip()
+        font_size_raw = style_cfg.get("font_size_pt")
+        if not font_name or font_size_raw is None:
+            return
+        font_size_pt = self._float_config(font_size_raw, 10.5)
+        if font_size_pt <= 0:
+            return
+
+        doc = Document(file_path)
+        start, end = find_reference_section_bounds(doc.paragraphs)
+        if start is None:
+            return
+
+        changed_runs = 0
+        font_attrs = tuple(qn(f"w:{name}") for name in ("ascii", "hAnsi", "eastAsia"))
+        for paragraph in doc.paragraphs[start + 1 : end]:
+            if not (paragraph.text or "").strip():
+                continue
+            for run_element in paragraph._p.iter(qn("w:r")):
+                run = Run(run_element, paragraph)
+                r_pr = run._element.get_or_add_rPr()
+                r_fonts = r_pr.rFonts
+                font_matches = r_fonts is not None and all(
+                    r_fonts.get(attr) == font_name for attr in font_attrs
+                )
+                current_size = run.font.size
+                size_matches = (
+                    current_size is not None
+                    and abs(current_size.pt - font_size_pt) < 0.01
+                )
+                if font_matches and size_matches:
+                    continue
+                self._set_run_font_name(run, font_name)
+                run.font.size = Pt(font_size_pt)
+                changed_runs += 1
+
+        if changed_runs:
+            doc.save(file_path)
+            self.logger.debug(
+                "已规范参考文献正文样式",
+                font=font_name,
+                size_pt=font_size_pt,
+                runs=changed_runs,
+            )
+
+    def _normalize_back_cover_artwork(self, file_path: str, context: dict) -> None:
+        """Set the marked back-cover artwork to an idempotent horizontal position.
+
+        Full-page back-cover artwork is a floating drawing rather than a normal
+        paragraph.  Paragraph indentation therefore cannot move it.  The
+        template-owned drawing is selected by its stable ``wp:docPr``
+        description and assigned an absolute target offset, avoiding both
+        patient-specific logic and cumulative movement on repeated processing.
+        """
+        from docx.oxml.ns import qn
+
+        content_cfg = self._report_content_config(context)
+        cover_cfg = content_cfg.get("back_cover_artwork")
+        if not isinstance(cover_cfg, dict):
+            return
+
+        description_marker = str(
+            cover_cfg.get("description_marker") or ""
+        ).strip()
+        horizontal_alignment = str(
+            cover_cfg.get("horizontal_alignment") or ""
+        ).strip().lower()
+        offset_raw = cover_cfg.get("horizontal_offset_cm")
+        if not description_marker or (
+            horizontal_alignment != "page_left" and offset_raw is None
+        ):
+            return
+        relative_from = str(
+            cover_cfg.get("horizontal_relative_from") or ""
+        ).strip()
+
+        wp_anchor = qn("wp:anchor")
+        wp_doc_pr = qn("wp:docPr")
+        wp_position_h = qn("wp:positionH")
+        wp_pos_offset = qn("wp:posOffset")
+
+        doc = Document(file_path)
+        if horizontal_alignment == "page_left":
+            if not doc.sections:
+                return
+            inset_cm = self._float_config(
+                cover_cfg.get("page_left_inset_cm"), 0.0
+            )
+            # The final-page drawing is positioned relative to the text column.
+            # Negating the final section's left margin aligns its nearly-A4-width
+            # image to the physical page edge without encoding a template-specific
+            # magic coordinate.
+            target_offset = -int(doc.sections[-1].left_margin.emu) + int(
+                round(inset_cm * 360000)
+            )
+            offset_cm = target_offset / 360000
+        else:
+            offset_cm = self._float_config(offset_raw, 0.0)
+            target_offset = int(round(offset_cm * 360000))
+        matched = 0
+        changed = 0
+        for anchor in doc.element.body.iter(wp_anchor):
+            doc_pr = anchor.find(wp_doc_pr)
+            if doc_pr is None or (doc_pr.get("descr") or "").strip() != description_marker:
+                continue
+            position_h = anchor.find(wp_position_h)
+            pos_offset = (
+                position_h.find(wp_pos_offset) if position_h is not None else None
+            )
+            if position_h is None or pos_offset is None:
+                continue
+            matched += 1
+            if relative_from and position_h.get("relativeFrom") != relative_from:
+                position_h.set("relativeFrom", relative_from)
+                changed += 1
+            if (pos_offset.text or "").strip() != str(target_offset):
+                pos_offset.text = str(target_offset)
+                changed += 1
+
+        if changed:
+            doc.save(file_path)
+            self.logger.debug(
+                "已规范报告末页整页图位置",
+                marker=description_marker,
+                horizontal_offset_cm=offset_cm,
+                matched=matched,
+            )
+        elif not matched:
+            self.logger.debug("未找到报告末页整页图标记", marker=description_marker)
+
     def _rebuild_reference_section(self, file_path: str, context: dict) -> None:
         """按正文实际引用重建末尾"5. 参考文献"列表。
 
@@ -4107,6 +4391,7 @@ class TemplateRenderer:
                 "Reference rebuild left cited identifiers unresolved: "
                 + ", ".join(missing_ids)
             )
+        self._normalize_reference_section_style(file_path, context)
         self.logger.info("参考文献按引用重建完成", references=len(refs))
 
     def _render_signature_placeholder(self, file_path: str, context: dict) -> None:
@@ -6304,33 +6589,131 @@ class TemplateRenderer:
                 return int(text)
         return None
 
-    def _compact_gene_list_tables(self, file_path: str, context: dict | None = None) -> None:
-        """Align static gene-list tables with the reviewed report layout."""
-        from docx.enum.table import WD_ROW_HEIGHT_RULE
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-        from docx.shared import Cm, Pt
+    def _apply_gene_list_table_borders(
+        self, doc: Any, context: dict | None = None
+    ) -> int:
+        """Apply explicit gene-list borders to an already loaded document."""
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
 
-        doc = Document(file_path)
         changed = 0
         content_cfg = self._report_content_config(context)
         style_cfg = content_cfg.get("gene_list_table_style")
         style_cfg = style_cfg if isinstance(style_cfg, dict) else {}
-        row_height_cm = self._float_config(style_cfg.get("row_height_cm"), 0.88)
-        header_font_size = self._float_config(style_cfg.get("header_font_size"), 14.0)
-        body_font_size = self._float_config(style_cfg.get("body_font_size"), 10.5)
+        border_color = self._hex_color_config(
+            style_cfg.get("border_color"), "BEBEBE"
+        )
+        border_size = self._int_text_config(style_cfg.get("border_size"), "4")
 
         for table in doc.tables:
             if not table.rows:
                 continue
             header_text = " ".join(cell.text for cell in table.rows[0].cells)
-            if "Gene List for MLseq" not in header_text and "基因检测列表" not in header_text:
+            if (
+                "Gene List for MLseq" not in header_text
+                and "基因检测列表" not in header_text
+            ):
                 continue
 
+            # The reviewed layout requires a visible outer frame and internal
+            # grid. Do not rely on a named Word table style: template edits or
+            # LibreOffice round-trips can drop that style while preserving the
+            # table content.
+            tbl_pr = table._tbl.tblPr
+            borders = tbl_pr.find(qn("w:tblBorders"))
+            if borders is None:
+                borders = OxmlElement("w:tblBorders")
+                tbl_pr.append(borders)
+                changed += 1
+            for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+                border = borders.find(qn(f"w:{edge}"))
+                if border is None:
+                    border = OxmlElement(f"w:{edge}")
+                    borders.append(border)
+                    changed += 1
+                values = {
+                    qn("w:val"): "single",
+                    qn("w:sz"): border_size,
+                    qn("w:space"): "0",
+                    qn("w:color"): border_color,
+                }
+                for attr, value in values.items():
+                    if border.get(attr) != value:
+                        border.set(attr, value)
+                        changed += 1
+
+        return changed
+
+    def _restore_gene_list_table_borders(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
+        """Restore borders lost during a native Word/LibreOffice refresh."""
+        doc = Document(file_path)
+        changed = self._apply_gene_list_table_borders(doc, context)
+        if changed:
+            doc.save(file_path)
+            self.logger.debug("已恢复基因检测列表边框", changes=changed)
+
+    def _compact_gene_list_tables(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
+        """Align static gene-list tables with the reviewed report layout."""
+        from docx.enum.table import WD_ROW_HEIGHT_RULE
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        from docx.shared import Cm, Pt
+
+        doc = Document(file_path)
+        changed = self._apply_gene_list_table_borders(doc, context)
+        content_cfg = self._report_content_config(context)
+        style_cfg = content_cfg.get("gene_list_table_style")
+        style_cfg = style_cfg if isinstance(style_cfg, dict) else {}
+        row_height_cm = self._float_config(style_cfg.get("row_height_cm"), 0.88)
+        header_font_size = self._float_config(
+            style_cfg.get("header_font_size"), 14.0
+        )
+        body_font_size = self._float_config(style_cfg.get("body_font_size"), 10.5)
+        w_br = qn("w:br")
+        w_type = qn("w:type")
+        w_last_rendered_page_break = qn("w:lastRenderedPageBreak")
+
+        for table in doc.tables:
+            if not table.rows:
+                continue
+            header_text = " ".join(cell.text for cell in table.rows[0].cells)
+            if (
+                "Gene List for MLseq" not in header_text
+                and "基因检测列表" not in header_text
+            ):
+                continue
+
+            seen_title_paragraphs: set[int] = set()
             for row_idx, row in enumerate(table.rows):
                 row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
                 row.height = Cm(row_height_cm)
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
+                        # The legacy merged title row carries an embedded page
+                        # break in some templates. Section pagination is owned
+                        # by the preceding exact heading's pageBreakBefore;
+                        # retaining this second break can split the 358-gene
+                        # table or leave its final row on an otherwise empty
+                        # page. Merged cells expose the same paragraph multiple
+                        # times, hence the identity guard.
+                        paragraph_marker = id(paragraph._p)
+                        if row_idx == 0 and paragraph_marker not in seen_title_paragraphs:
+                            seen_title_paragraphs.add(paragraph_marker)
+                            for node in list(paragraph._p.iter()):
+                                if node.tag == w_br and node.get(w_type) == "page":
+                                    parent = node.getparent()
+                                    if parent is not None:
+                                        parent.remove(node)
+                                        changed += 1
+                                elif node.tag == w_last_rendered_page_break:
+                                    parent = node.getparent()
+                                    if parent is not None:
+                                        parent.remove(node)
+                                        changed += 1
                         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                         paragraph.paragraph_format.space_before = Pt(0)
                         paragraph.paragraph_format.space_after = Pt(0)

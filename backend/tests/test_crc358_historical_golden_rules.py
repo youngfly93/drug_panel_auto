@@ -27,6 +27,7 @@ def _provider() -> GeneKnowledgeProvider:
     provider = GeneKnowledgeProvider(
         {
             "enabled": True,
+            "panel_id": "crc_358_msi",
             "gene_knowledge_db": {
                 "enabled": True,
                 "path": "does-not-exist.xlsx",

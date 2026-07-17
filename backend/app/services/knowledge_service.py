@@ -390,6 +390,25 @@ def _resolve_overlay(package: Any) -> tuple[Optional[Path], Optional[dict], str]
     combined["gene_sections"] = []
     combined["drug_sections"] = []
 
+    def row_applies_to_panel(row: dict[str, Any]) -> bool:
+        raw_panels = row.get("panels")
+        if raw_panels is None:
+            raw_panels = row.get("panel_ids")
+        if raw_panels is None:
+            raw_panels = row.get("panel_id")
+        if raw_panels is None:
+            return True
+        if isinstance(raw_panels, str):
+            raw_panels = [raw_panels]
+        if not isinstance(raw_panels, (list, tuple, set)):
+            return False
+        allowed = {
+            str(value).strip().casefold()
+            for value in raw_panels
+            if str(value).strip()
+        }
+        return str(package.panel_id).strip().casefold() in allowed
+
     def append_rows(data: dict[str, Any], source_path: Path) -> None:
         source = data.get("source") if isinstance(data.get("source"), dict) else {}
         origin_panel_id = str(source.get("panel") or package.panel_id)
@@ -399,6 +418,8 @@ def _resolve_overlay(package: Any) -> tuple[Optional[Path], Optional[dict], str]
             defaults = governance_defaults(data, kind)
             for row in data.get(section) or []:
                 if not isinstance(row, dict):
+                    continue
+                if not row_applies_to_panel(row):
                     continue
                 tagged = dict(row)
                 tagged["_origin_panel_id"] = origin_panel_id

@@ -31,6 +31,7 @@ from reportgen.core.pipeline import (
     StageHandle,
     summarize_stage_results,
 )
+from reportgen.core.processors import critical_docx_processor_names
 from reportgen.core.qa_report import (
     attach_pipeline_summary,
     build_docx_qa_report,
@@ -684,6 +685,7 @@ class ReportGenerator:
                 )
                 provider_cfg = {
                     "enabled": True,
+                    "panel_id": state.canonical_project_type,
                     "gene_knowledge_db": gene_kb_cfg,
                     "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
                 }
@@ -1106,6 +1108,9 @@ class ReportGenerator:
             post_processor_names=self._get_template_processor_names(
                 state.panel_package,
                 state.template_file,
+            ),
+            critical_processor_names=critical_docx_processor_names(
+                state.canonical_project_type
             ),
         )
         state.processor_report = list(

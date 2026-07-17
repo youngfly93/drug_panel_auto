@@ -7,7 +7,6 @@ from typing import Any
 
 from app.services.reportgen_bridge import ReportGenBridge
 
-
 MISSING_MARKERS = {"", "-", "--", "未知", "未填写", "unknown", "none", "null", "nan", "n/a", "na"}
 
 
@@ -32,13 +31,15 @@ def validate_required_dates(
     clinical_info: dict[str, Any] | None,
     project_type: str | None,
     project_name: str | None = None,
+    excel_data: Any | None = None,
 ) -> dict[str, Any]:
     """Validate report/receive dates after merging clinical form fields.
 
     The returned payload is safe for API responses: it contains only field names
     and labels, not patient values or filenames.
     """
-    excel_data = bridge.read_excel(str(excel_path))
+    if excel_data is None:
+        excel_data = bridge.read_excel(str(excel_path))
     if clinical_info:
         inject_clinical_info = getattr(bridge, "_inject_clinical_info_into_excel", None)
         if callable(inject_clinical_info):

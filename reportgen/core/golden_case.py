@@ -59,6 +59,7 @@ CRC_358_MSI_EXPECTATIONS: Dict[str, Any] = {
     "expected_context": {
         "total_variants_count": 2,
         "drug_related_count": 1,
+        "targeted_or_immune_related_count": 1,
         "tmb_status": "L",
         "msi_status": "MSS",
     },
@@ -72,10 +73,12 @@ CRC_358_MSI_EXPECTATIONS: Dict[str, Any] = {
         "biomarker_table_present",
         "total_variant_count_text",
         "drug_related_count_text",
+        "targeted_or_immune_related_count_text",
     ],
     "required_text": [
         "本次共检出体细胞变异：2个",
         "与靶向药物用药相关的变异有：1个",
+        "与靶向/免疫药物相关的变异：1个",
         "6.5mutations/Mb，TMB-L",
         "微卫星稳定型，MSS",
         "多项临床研究表明，TMB-H的肿瘤",

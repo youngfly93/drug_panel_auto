@@ -15,6 +15,7 @@ Key responsibilities:
 Python 3.9 compatible.
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,6 +33,9 @@ from reportgen.utils.hgvs_utils import (
     normalize_c_hgvs_display_text,
 )
 from reportgen.utils.text_utils import norm_text as _norm_text
+
+
+LOGGER = logging.getLogger("reportgen")
 
 # Panel gene definitions for 358-gene colorectal cancer panel.
 #
@@ -697,6 +701,19 @@ def load_panel_config(
     Returns a *new* PanelConfig every call — no global mutation.
     Falls back to defaults when the config file is missing or invalid.
     """
+    # A supplied PanelPackage is the authoritative identity/path source.  This
+    # keeps direct callers safe even when they omit the redundant ``panel_id``
+    # and ``panel_config_path`` arguments; otherwise the legacy resolver can
+    # silently fall back to crc_358_msi and leak its rules into another panel.
+    if panel_package is not None:
+        if not str(panel_id or "").strip():
+            panel_id = str(getattr(panel_package, "panel_id", "") or "").strip()
+        if not str(config_path or "").strip():
+            try:
+                config_path = str(panel_package.resolve_rule_file("panel_rules"))
+            except (KeyError, OSError, ValueError):
+                config_path = None
+
     cfg_path = _resolve_config_path(
         base_path,
         panel_id=panel_id,
@@ -1054,13 +1071,12 @@ def _frequency_value(value: Any) -> float:
 def _sort_variants_by_grouped_vaf(
     variants: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Sort table-oriented variant views by a stable gene-grouped VAF policy.
+    """Sort variant views by a stable gene-grouped VAF policy.
 
     Genes are ordered by their highest VAF; variants within a gene are ordered
-    by VAF. This preserves adjacent same-gene rows for Word cell merging. Part 3
-    narrative sections deliberately use ``_sort_variants_by_vaf_desc`` instead,
-    because their reviewed contract is strict row-wise VAF order and has no
-    table-cell merge constraint.
+    by VAF. This preserves adjacent same-gene rows for Word cell merging and
+    keeps the Part 2 tables, Part 3 narrative and references on one shared
+    ordering contract.
     """
     rows = list(variants)
     gene_max: Dict[str, float] = {}
@@ -1101,12 +1117,11 @@ def _sort_variants_by_grouped_vaf(
 def _sort_variants_by_vaf_desc(
     variants: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Sort narrative variants by VAF descending, stably across all genes.
+    """Sort variants by VAF descending, stably across all genes.
 
-    This policy is intentionally separate from the grouped table policy above:
-    a lower-VAF second APC site must not stay ahead of a higher-VAF SMAD4 site
-    merely to keep APC rows adjacent. Equal or missing VAF values retain source
-    order so repeated generation is deterministic.
+    Kept as a narrow utility for consumers that explicitly require global VAF
+    order. CRC358 report sections use ``_sort_variants_by_grouped_vaf`` so the
+    same gene is not split into multiple narrative blocks.
     """
     rows = list(variants)
     return [
@@ -1890,13 +1905,72 @@ def count_drug_related_variants(
 
     A variant is drug-related if benefit_drugs or caution_drugs is not empty/--
     """
-    count = 0
-    for v in variants:
-        benefit = v.get("benefit_drugs", "--")
-        caution = v.get("caution_drugs", "--")
-        if (benefit and benefit != "--") or (caution and caution != "--"):
-            count += 1
-    return count
+    return sum(1 for variant in variants if _has_drug_association(variant))
+
+
+def _has_drug_association(variant: Dict[str, Any]) -> bool:
+    """Return whether a displayed variant row has a benefit/caution drug."""
+    placeholders = {"", "-", "--", "—"}
+    return any(
+        _norm_text(variant.get(key)) not in placeholders
+        for key in ("benefit_drugs", "caution_drugs")
+    )
+
+
+def count_targeted_or_immune_related_variants(
+    targeted_variants: List[Dict[str, Any]],
+    immune_variant_groups: List[List[Dict[str, Any]]],
+) -> int:
+    """Count the distinct variant union used by the Part 3 introduction.
+
+    ``drug_related_count`` is intentionally the targeted-drug subset shown in
+    the top summary.  The Part 3 sentence has a wider contract: variants
+    related to targeted *or* immune therapy.  Count stable variant identities
+    across the final targeted rows and all three immune groups so overlaps are
+    included only once.
+    """
+    identities: Set[Tuple[str, str, str]] = set()
+
+    def add(row: Dict[str, Any]) -> None:
+        identity = _row_variant_identity(row)
+        if identity[0]:
+            identities.add(identity)
+
+    for row in targeted_variants:
+        if _has_drug_association(row):
+            add(row)
+    for group in immune_variant_groups:
+        for row in group:
+            add(row)
+    return len(identities)
+
+
+def _mark_therapy_associated_variants(
+    variants: List[Dict[str, Any]],
+    immune_variant_groups: List[List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """Annotate Part 3 rows that are targeted- or immune-therapy related.
+
+    Part 3 heading colour represents the wider targeted/immune union, whereas
+    the legacy implementation only inspected the two targeted-drug columns.
+    Copy each row before adding the semantic flag so other report tables are not
+    mutated as a side effect.
+    """
+    immune_identities = {
+        _row_variant_identity(row)
+        for group in immune_variant_groups
+        for row in group
+        if _row_variant_identity(row)[0]
+    }
+    annotated: List[Dict[str, Any]] = []
+    for row in variants:
+        item = dict(row)
+        item["has_therapy_association"] = bool(
+            _has_drug_association(item)
+            or _row_variant_identity(item) in immune_identities
+        )
+        annotated.append(item)
+    return annotated
 
 
 def _build_nccn_and_immune_fields(
@@ -2446,28 +2520,54 @@ def build_targeted_drug_brand_summary(
     The source is the already-filtered 2.1 variants table, so III/hidden rows
     cannot leak into the brand summary. The brand map is maintained in config.
     """
+    summary, _warnings = _build_targeted_drug_brand_summary_result(
+        variants,
+        base_path=base_path,
+    )
+    return summary
+
+
+def _build_targeted_drug_brand_summary_result(
+    variants: List[Dict[str, str]],
+    *,
+    base_path: Optional[str] = None,
+) -> Tuple[str, List[str]]:
+    """Return the summary plus machine-readable mapping review warnings."""
+    placeholders = {"", "-", "--", "—"}
+    drug_texts = []
+    for row in variants:
+        values = [
+            str(row.get(key) or "").strip()
+            for key in ("benefit_drugs", "caution_drugs")
+        ]
+        values = [value for value in values if value not in placeholders]
+        if values:
+            drug_texts.append("\n".join(values))
+    if not drug_texts:
+        return "", []
+
     brand_map, summary_order = _load_drug_brand_config(base_path=base_path)
     if not brand_map:
-        return ""
+        LOGGER.warning(
+            "Targeted drug rows are non-empty but drug brand config is unavailable"
+        )
+        return "", ["BRAND_CONFIG_MISSING"]
 
     seen: Set[str] = set()
     brand_names = list(brand_map)
 
-    for row in variants:
-        text = "\n".join(
-            str(row.get(key) or "")
-            for key in ("benefit_drugs", "caution_drugs")
-        )
-        if not text or text.strip() in {"--", "-"}:
-            continue
-
+    for text in drug_texts:
         seen.update(_non_overlapping_brand_matches(text, brand_names))
 
     if not seen:
-        return ""
+        LOGGER.warning(
+            "Targeted drug rows are non-empty but no configured marketed drug matched; "
+            "brand mapping review is required"
+        )
+        return "", ["NO_CONFIGURED_BRAND_MATCH"]
 
     drugs = [drug for drug in summary_order if drug in seen]
-    return "、".join(f"{drug}[{brand_map[drug]}]" for drug in drugs) + "。"
+    return "、".join(f"{drug}[{brand_map[drug]}]" for drug in drugs) + "。", []
 
 
 def _override_has_detected_variant(
@@ -2685,10 +2785,6 @@ def enhance_report_data(
         panel_config=pc,
     )
     report_data.set_table("variants", variants)
-    report_data.set_field(
-        "targeted_drug_brand_summary",
-        build_targeted_drug_brand_summary(variants, base_path=base_path),
-    )
 
     # Build all variants for summary (含Ⅲ类)
     all_variants = build_all_variants_for_template(
@@ -2848,11 +2944,25 @@ def enhance_report_data(
         "drug_related_count", count_drug_related_variants(drug_related_source)
     )
     report_data.set_field(
-        "targeted_drug_brand_summary",
-        build_targeted_drug_brand_summary(
+        "targeted_or_immune_related_count",
+        count_targeted_or_immune_related_variants(
+            drug_related_source,
+            [
+                report_data.get_table("immune_positive_variants") or [],
+                report_data.get_table("immune_negative_variants") or [],
+                report_data.get_table("immune_hyperprogression_variants") or [],
+            ],
+        ),
+    )
+    targeted_brand_summary, targeted_brand_warnings = (
+        _build_targeted_drug_brand_summary_result(
             drug_related_source,
             base_path=base_path,
-        ),
+        )
+    )
+    report_data.set_field("targeted_drug_brand_summary", targeted_brand_summary)
+    report_data.set_field(
+        "targeted_drug_brand_warnings", targeted_brand_warnings
     )
 
     _compact_drug_display_tables(
@@ -2882,19 +2992,27 @@ def enhance_report_data(
             # 第三部分解析范围由 settings.report_content 控制。默认仍支持只解析
             # 2.1 主表变异；本次 reviewed CRC 口径使用 summary_variants，包含
             # 第二维度汇总中展示的 III 类/非用药变异，但不扩展到全 panel。
-            part3_variants = _sort_variants_by_vaf_desc(
-                _select_part3_variants(
-                    report_content_cfg.get("part3_variant_scope", "variants"),
-                    variants,
+            immune_variant_groups = [
+                report_data.get_table("immune_positive_variants") or [],
+                report_data.get_table("immune_negative_variants") or [],
+                report_data.get_table("immune_hyperprogression_variants") or [],
+            ]
+            part3_variants = _sort_variants_by_grouped_vaf(
+                _mark_therapy_associated_variants(
+                    _select_part3_variants(
+                        report_content_cfg.get("part3_variant_scope", "variants"),
+                        variants,
+                    ),
+                    immune_variant_groups,
                 )
             )
-            reference_variants = _sort_variants_by_vaf_desc(
+            reference_variants = _sort_variants_by_grouped_vaf(
                 _select_part3_variants(
                     report_content_cfg.get("part3_reference_variant_scope", "variants"),
                     part3_variants,
                 )
             )
-            drug_variants = _sort_variants_by_vaf_desc(
+            drug_variants = _sort_variants_by_grouped_vaf(
                 _select_part3_variants(
                     report_content_cfg.get(
                         "part3_drug_variant_scope",

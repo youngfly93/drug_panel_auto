@@ -112,10 +112,31 @@ const recentTasks = ref<TaskItem[]>([])
 const loading = ref(false)
 
 function statusType(s: string) {
-  return { completed: 'success', failed: 'danger', running: 'warning', pending: 'info' }[s] || 'info'
+  return {
+    completed: 'success',
+    partial_failed: 'danger',
+    failed: 'danger',
+    queued: 'info',
+    preflight: 'warning',
+    generating: 'warning',
+    qa: 'warning',
+    running: 'warning',
+    pending: 'info',
+  }[s] || 'info'
 }
 function statusLabel(s: string) {
-  return { completed: '已完成', failed: '失败', running: '运行中', pending: '待执行', cancelled: '已取消' }[s] || s
+  return {
+    completed: '已完成',
+    partial_failed: '部分失败',
+    failed: '失败',
+    queued: '已排队',
+    preflight: '预检中',
+    generating: '生成中',
+    qa: '质控中',
+    running: '运行中',
+    pending: '待执行',
+    cancelled: '已取消',
+  }[s] || s
 }
 
 onMounted(async () => {

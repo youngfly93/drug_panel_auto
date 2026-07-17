@@ -228,6 +228,8 @@ class GeneKnowledgeProvider:
             for row in data.get("gene_sections") or []:
                 if not isinstance(row, dict):
                     continue
+                if not self._reviewed_row_applies_to_panel(row):
+                    continue
                 if not self._reviewed_row_runtime_enabled(
                     row, data=data, kind="gene"
                 ):
@@ -257,6 +259,8 @@ class GeneKnowledgeProvider:
 
             for row in data.get("drug_sections") or []:
                 if not isinstance(row, dict):
+                    continue
+                if not self._reviewed_row_applies_to_panel(row):
                     continue
                 if not self._reviewed_row_runtime_enabled(
                     row, data=data, kind="drug"
@@ -308,6 +312,40 @@ class GeneKnowledgeProvider:
                 ref_text = self._norm_text(ref)
                 if ref_text and ref_text not in self._extra_references:
                     self._extra_references.append(ref_text)
+
+    def _reviewed_row_applies_to_panel(self, row: Dict[str, Any]) -> bool:
+        """Return whether a reviewed overlay row belongs to this request panel.
+
+        Overlay files may be shared by multiple panel packages.  Unscoped rows
+        retain the legacy shared behavior, while an explicit ``panels`` (or
+        singular/alias form) prevents a panel-specific exact rule from leaking
+        into another panel that happens to reuse the same YAML file.
+        """
+        panel_id = self._norm_text(
+            self.config.get("panel_id")
+            or (self.config.get("gene_knowledge_db") or {}).get("panel_id")
+        )
+        if not panel_id:
+            # Keep direct/legacy provider construction backward compatible.
+            return True
+
+        raw_panels = row.get("panels")
+        if raw_panels is None:
+            raw_panels = row.get("panel_ids")
+        if raw_panels is None:
+            raw_panels = row.get("panel_id")
+        if raw_panels is None:
+            return True
+        if isinstance(raw_panels, str):
+            raw_panels = [raw_panels]
+        if not isinstance(raw_panels, (list, tuple, set)):
+            return False
+        allowed = {
+            self._norm_text(value).casefold()
+            for value in raw_panels
+            if self._norm_text(value)
+        }
+        return panel_id.casefold() in allowed
 
     @staticmethod
     def _reviewed_row_runtime_enabled(
@@ -1132,7 +1170,7 @@ class GeneKnowledgeProvider:
             # 判断是否有药物
             benefit_drugs = v.get("benefit_drugs", "")
             caution_drugs = v.get("caution_drugs", "")
-            has_drug = (
+            has_drug = bool(v.get("has_therapy_association")) or (
                 benefit_drugs and benefit_drugs != "--" and benefit_drugs != "无"
             ) or (caution_drugs and caution_drugs != "--" and caution_drugs != "无")
 

@@ -117,15 +117,15 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
         "unique_genes": 235,
         "gene_level_rows": 233,
         "variant_level_rows": 82,
-        "drug_rows": 36,
-        "drug_unique_genes": 12,
-        "targeted_drug_rule_rows": 13,
-        "targeted_drug_rule_unique_genes": 11,
+        "drug_rows": 40,
+        "drug_unique_genes": 16,
+        "targeted_drug_rule_rows": 17,
+        "targeted_drug_rule_unique_genes": 15,
         "targeted_drug_applicability_rule_rows": 1,
         "extra_reference_rows": 12,
         "review_status_counts": {
             "legacy_runtime": 338,
-            "provisional_runtime": 13,
+            "provisional_runtime": 17,
         },
     }
     if panel_id == "crc_301_msi":
@@ -170,12 +170,12 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
     assert contract["gene_explanation_complete"] is True
     assert contract["gene_explanation_missing_count"] == 0
     assert contract["explicit_panel_rule_genes"] == (
-        11 if panel_id == "crc_358_msi" else 9
+        15 if panel_id == "crc_358_msi" else 9
     )
     assert contract["explicitly_approved_drug_genes"] == 0
     assert contract["panel_rule_status_counts"] == {
         "legacy_runtime": 12 if panel_id == "crc_358_msi" else 8,
-        "provisional_runtime": 1,
+        "provisional_runtime": 5 if panel_id == "crc_358_msi" else 1,
     }
     runtime_quality = contract["runtime_content_quality"]
     assert runtime_quality["complete_percent"] == 100.0
@@ -266,27 +266,27 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     drugs = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="drug", page=1, page_size=1
     )
-    assert drugs["total"] == 117
+    assert drugs["total"] == 121
     assert drugs["facets"] == {
-        "layers": {"base": 81, "reviewed_overlay": 36},
+        "layers": {"base": 81, "reviewed_overlay": 40},
         "review_statuses": {
             "legacy_runtime": 116,
-            "provisional_runtime": 1,
+            "provisional_runtime": 5,
         },
-        "match_scopes": {"gene": 48, "variant": 67, "event": 2},
+        "match_scopes": {"gene": 48, "variant": 71, "event": 2},
     }
 
     targeted = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="targeted_drug", page=1, page_size=1
     )
-    assert targeted["total"] == 824
+    assert targeted["total"] == 828
     assert targeted["facets"] == {
-        "layers": {"base": 811, "reviewed_overlay": 13},
+        "layers": {"base": 811, "reviewed_overlay": 17},
         "review_statuses": {
             "legacy_runtime": 823,
-            "provisional_runtime": 1,
+            "provisional_runtime": 5,
         },
-        "match_scopes": {"event": 612, "variant": 151, "gene": 61},
+        "match_scopes": {"event": 612, "variant": 155, "gene": 61},
     }
 
     variant_rows = service.get_catalog_entries(
@@ -461,9 +461,18 @@ def test_review_status_filters_distinguish_provisional_and_legacy_runtime():
         page=1,
         page_size=100,
     )
-    assert provisional_targeted_rules["total"] == 1
-    assert provisional_targeted_rules["rows"][0]["gene"] == "FANCA"
-    assert provisional_targeted_rules["rows"][0]["provenance"]["source_refs"]
+    assert provisional_targeted_rules["total"] == 5
+    assert {row["gene"] for row in provisional_targeted_rules["rows"]} == {
+        "FANCA",
+        "FANCD2",
+        "PALB2",
+        "RAD50",
+        "RAD51D",
+    }
+    assert all(
+        row["provenance"]["source_refs"]
+        for row in provisional_targeted_rules["rows"]
+    )
 
 
 def test_public_catalog_payload_does_not_expose_internal_paths_or_phi_fields():

@@ -1,8 +1,8 @@
 """File upload and storage management."""
 
+import hashlib
 import json
 import re
-import shutil
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -15,26 +15,32 @@ ALLOWED_SIGNATURE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_FEEDBACK_EXTENSIONS = {".docx", ".doc", ".pdf", ".txt", ".md"}
 
 
-def save_upload(file: UploadFile) -> tuple[str, Path, int]:
-    """
-    Save an uploaded file to storage.
-
-    Returns: (upload_id, stored_path, file_size_bytes)
-    """
+def save_upload_with_digest(file: UploadFile) -> tuple[str, Path, int, str]:
+    """Save an upload once while computing its SHA-256 content digest."""
     upload_id = str(uuid.uuid4())
     today = date.today().isoformat()
     dest_dir = settings.upload_dir / today / upload_id
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     dest_path = dest_dir / (file.filename or "upload.xlsx")
-
-    # Stream to disk
+    digest = hashlib.sha256()
     size = 0
     with open(dest_path, "wb") as f:
         while chunk := file.file.read(8192):
             size += len(chunk)
+            digest.update(chunk)
             f.write(chunk)
 
+    return upload_id, dest_path, size, digest.hexdigest()
+
+
+def save_upload(file: UploadFile) -> tuple[str, Path, int]:
+    """
+    Save an uploaded file to storage.
+
+    Returns: (upload_id, stored_path, file_size_bytes)
+    """
+    upload_id, dest_path, size, _digest = save_upload_with_digest(file)
     return upload_id, dest_path, size
 
 

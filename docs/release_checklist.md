@@ -126,8 +126,9 @@ The iyun129 wrapper supplies the production coordinates:
 - runtime: `/media/desk16/iy12922/apps/reportgen-web-runtime`;
 - persistent storage: `/media/desk16/iy12922/apps/reportgen-web-storage`;
 - Python venv: `/media/desk16/iy12922/apps/reportgen-web-venv`;
-- health endpoint: `http://127.0.0.1:18082/api/v1/healthz`;
-- public endpoint: `https://panel.mailuo-report.com.cn/api/v1/healthz`.
+- anonymous liveness endpoint: `http://127.0.0.1:18082/api/v1/healthz`;
+- public liveness endpoint: `https://panel.mailuo-report.com.cn/api/v1/healthz`;
+- authenticated task statistics: `https://panel.mailuo-report.com.cn/api/v1/tasks/stats`.
 
 The deploy command runs `make release-check`, builds frontend assets from the
 exact `DEPLOY_REF`, writes the full SHA to the release `REVISION`, installs a
@@ -169,6 +170,10 @@ Also verify the public route:
 curl -fsS -o /dev/null -w "HTTP %{http_code}\n" \
   https://panel.mailuo-report.com.cn/api/v1/healthz
 ```
+
+The liveness endpoint must remain anonymous and storage-free. Business and
+operational endpoints, including `/api/v1/tasks/stats`, must continue to require
+authentication and must not be reused as deployment probes.
 
 Then run one report-generation smoke check on the server:
 

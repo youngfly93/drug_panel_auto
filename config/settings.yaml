@@ -434,6 +434,26 @@ report_content:
   show_hla_table: false
   part3_variant_scope: "summary_variants"
   part3_reference_variant_scope: "summary_variants"
+  # 参考文献正文使用报告组约定的西文字体；标题样式不在此处改写。
+  reference_style:
+    font_name: "Calibri"
+    font_size_pt: 10.5
+  # 末页整页图在模板中以稳定的替代说明“报告末页”标识。
+  # 使用绝对目标坐标而不是逐次左移，保证重复后处理不会累计漂移。
+  back_cover_artwork:
+    description_marker: "报告末页"
+    horizontal_relative_from: "column"
+    horizontal_alignment: "page_left"
+    page_left_inset_cm: 0.0
+  # 标题自身的 pageBreakBefore 属性不会在标题已落在新页时
+  # 额外制造空白页，也能经受 Word/LibreOffice 的目录刷新。
+  force_page_break_before_headings:
+    - "2.3 NCCN 推荐临床常规靶向药物相关基因检测结果（不限于本癌种）"
+    - "结肠癌NCCN指南（2022 V1）和直肠癌NCCN指南（2022 V1）"
+    - "3. 阅读说明"
+    - "4. 基因检测列表"
+    - "5. 参考文献"
+    - "本次检测质控结果"
   patient_letter:
     after_greeting:
       - "感谢您选择本机构为您精心定的{project_name}检测项目。天津脉络医学检验很荣幸能为您提供基因检测服务。"

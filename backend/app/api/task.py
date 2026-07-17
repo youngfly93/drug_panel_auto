@@ -14,6 +14,14 @@ from app.database import get_db
 from app.models.task import Task, TaskResult
 from app.schemas.common import ApiResponse
 from app.services import reference_report_service as diff_svc
+from app.services.batch_lifecycle import (
+    BATCH_ACTIVE_STATUSES,
+    BATCH_QUEUED_STATUSES,
+    BATCH_WORKING_STATUSES,
+    empty_batch_status_counts,
+    pending_file_count,
+    working_file_count,
+)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -104,13 +112,7 @@ def _load_stage_results_summary(
 
 
 def _batch_status_counts(db: Session, task_id: str) -> dict[str, int]:
-    counts = {
-        "pending": 0,
-        "running": 0,
-        "completed": 0,
-        "failed": 0,
-        "cancelled": 0,
-    }
+    counts = empty_batch_status_counts()
     rows = (
         db.query(TaskResult.status, func.count(TaskResult.id))
         .filter(TaskResult.task_id == task_id)
@@ -176,8 +178,8 @@ def _task_item(task: Task, db: Session) -> dict:
         "completed_files": task.completed_files,
         "failed_files": task.failed_files,
         "cancelled_files": batch_counts.get("cancelled", 0),
-        "pending_files": batch_counts.get("pending", 0),
-        "running_files": batch_counts.get("running", 0),
+        "pending_files": pending_file_count(batch_counts),
+        "running_files": working_file_count(batch_counts),
         "status_counts": batch_counts,
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "started_at": task.started_at.isoformat() if task.started_at else None,
@@ -217,7 +219,12 @@ def list_tasks(
 ):
     query = db.query(Task).order_by(Task.created_at.desc())
     if status:
-        query = query.filter(Task.status == status)
+        if status == "running":
+            query = query.filter(Task.status.in_(list(BATCH_WORKING_STATUSES)))
+        elif status == "pending":
+            query = query.filter(Task.status.in_(list(BATCH_QUEUED_STATUSES)))
+        else:
+            query = query.filter(Task.status == status)
     if task_type:
         query = query.filter(Task.task_type == task_type)
     if project_type:
@@ -265,8 +272,12 @@ def task_stats(db: Session = Depends(get_db)):
     total = db.query(Task).count()
     completed = db.query(Task).filter(Task.status == "completed").count()
     failed = db.query(Task).filter(Task.status.in_(["failed", "partial_failed"])).count()
-    running = db.query(Task).filter(Task.status == "running").count()
-    pending = db.query(Task).filter(Task.status == "pending").count()
+    running = db.query(Task).filter(
+        Task.status.in_(list(BATCH_WORKING_STATUSES))
+    ).count()
+    pending = db.query(Task).filter(
+        Task.status.in_(list(BATCH_QUEUED_STATUSES))
+    ).count()
     partial_failed = db.query(Task).filter(Task.status == "partial_failed").count()
     cancelled = db.query(Task).filter(Task.status == "cancelled").count()
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -317,8 +328,8 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
         "completed_files": task.completed_files,
         "failed_files": task.failed_files,
         "cancelled_files": batch_counts.get("cancelled", 0),
-        "pending_files": batch_counts.get("pending", 0),
-        "running_files": batch_counts.get("running", 0),
+        "pending_files": pending_file_count(batch_counts),
+        "running_files": working_file_count(batch_counts),
         "status_counts": batch_counts,
         "output_path": task.output_path,
         "qa_status": qa_status,
@@ -345,13 +356,23 @@ def cancel_task(task_id: str, db: Session = Depends(get_db)):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    if task.status not in ("pending", "running"):
+    task_is_active = (
+        task.status in BATCH_ACTIVE_STATUSES
+        if task.task_type == "batch"
+        else task.status in {"pending", "running"}
+    )
+    if not task_is_active:
         raise HTTPException(status_code=400, detail="只能取消待执行或执行中的任务")
 
     if task.task_type == "batch":
         (
             db.query(TaskResult)
-            .filter(TaskResult.task_id == task_id, TaskResult.status == "pending")
+            .filter(
+                TaskResult.task_id == task_id,
+                TaskResult.status.in_(
+                    list(BATCH_QUEUED_STATUSES | {"preflight"})
+                ),
+            )
             .update({TaskResult.status: "cancelled"}, synchronize_session=False)
         )
         counts = _batch_status_counts(db, task_id)
