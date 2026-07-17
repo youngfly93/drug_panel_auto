@@ -6589,35 +6589,30 @@ class TemplateRenderer:
                 return int(text)
         return None
 
-    def _compact_gene_list_tables(self, file_path: str, context: dict | None = None) -> None:
-        """Align static gene-list tables with the reviewed report layout."""
-        from docx.enum.table import WD_ROW_HEIGHT_RULE
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
+    def _apply_gene_list_table_borders(
+        self, doc: Any, context: dict | None = None
+    ) -> int:
+        """Apply explicit gene-list borders to an already loaded document."""
         from docx.oxml import OxmlElement
         from docx.oxml.ns import qn
-        from docx.shared import Cm, Pt
 
-        doc = Document(file_path)
         changed = 0
         content_cfg = self._report_content_config(context)
         style_cfg = content_cfg.get("gene_list_table_style")
         style_cfg = style_cfg if isinstance(style_cfg, dict) else {}
-        row_height_cm = self._float_config(style_cfg.get("row_height_cm"), 0.88)
-        header_font_size = self._float_config(style_cfg.get("header_font_size"), 14.0)
-        body_font_size = self._float_config(style_cfg.get("body_font_size"), 10.5)
         border_color = self._hex_color_config(
             style_cfg.get("border_color"), "BEBEBE"
         )
         border_size = self._int_text_config(style_cfg.get("border_size"), "4")
-        w_br = qn("w:br")
-        w_type = qn("w:type")
-        w_last_rendered_page_break = qn("w:lastRenderedPageBreak")
 
         for table in doc.tables:
             if not table.rows:
                 continue
             header_text = " ".join(cell.text for cell in table.rows[0].cells)
-            if "Gene List for MLseq" not in header_text and "基因检测列表" not in header_text:
+            if (
+                "Gene List for MLseq" not in header_text
+                and "基因检测列表" not in header_text
+            ):
                 continue
 
             # The reviewed layout requires a visible outer frame and internal
@@ -6629,15 +6624,68 @@ class TemplateRenderer:
             if borders is None:
                 borders = OxmlElement("w:tblBorders")
                 tbl_pr.append(borders)
+                changed += 1
             for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
                 border = borders.find(qn(f"w:{edge}"))
                 if border is None:
                     border = OxmlElement(f"w:{edge}")
                     borders.append(border)
-                border.set(qn("w:val"), "single")
-                border.set(qn("w:sz"), border_size)
-                border.set(qn("w:space"), "0")
-                border.set(qn("w:color"), border_color)
+                    changed += 1
+                values = {
+                    qn("w:val"): "single",
+                    qn("w:sz"): border_size,
+                    qn("w:space"): "0",
+                    qn("w:color"): border_color,
+                }
+                for attr, value in values.items():
+                    if border.get(attr) != value:
+                        border.set(attr, value)
+                        changed += 1
+
+        return changed
+
+    def _restore_gene_list_table_borders(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
+        """Restore borders lost during a native Word/LibreOffice refresh."""
+        doc = Document(file_path)
+        changed = self._apply_gene_list_table_borders(doc, context)
+        if changed:
+            doc.save(file_path)
+            self.logger.debug("已恢复基因检测列表边框", changes=changed)
+
+    def _compact_gene_list_tables(
+        self, file_path: str, context: dict | None = None
+    ) -> None:
+        """Align static gene-list tables with the reviewed report layout."""
+        from docx.enum.table import WD_ROW_HEIGHT_RULE
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        from docx.shared import Cm, Pt
+
+        doc = Document(file_path)
+        changed = self._apply_gene_list_table_borders(doc, context)
+        content_cfg = self._report_content_config(context)
+        style_cfg = content_cfg.get("gene_list_table_style")
+        style_cfg = style_cfg if isinstance(style_cfg, dict) else {}
+        row_height_cm = self._float_config(style_cfg.get("row_height_cm"), 0.88)
+        header_font_size = self._float_config(
+            style_cfg.get("header_font_size"), 14.0
+        )
+        body_font_size = self._float_config(style_cfg.get("body_font_size"), 10.5)
+        w_br = qn("w:br")
+        w_type = qn("w:type")
+        w_last_rendered_page_break = qn("w:lastRenderedPageBreak")
+
+        for table in doc.tables:
+            if not table.rows:
+                continue
+            header_text = " ".join(cell.text for cell in table.rows[0].cells)
+            if (
+                "Gene List for MLseq" not in header_text
+                and "基因检测列表" not in header_text
+            ):
+                continue
 
             seen_title_paragraphs: set[int] = set()
             for row_idx, row in enumerate(table.rows):

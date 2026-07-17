@@ -274,12 +274,11 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
     )
     enforce_configured_page_breaks()
     # LibreOffice 7.3 can discard the direct ``w:tblBorders`` formatting on
-    # the static 358-gene table while refreshing fields.  Reapply the reviewed
-    # table style after that round-trip.  This still runs before the final
-    # static TOC probe in ``underlines_and_styles``, so any layout effect is
-    # included in the cached page numbers instead of making them stale.
+    # the static gene-list table while refreshing fields.  Restore only those
+    # border nodes after the round-trip: re-running the full compactor here
+    # would also touch row heights/font sizes and destabilize final pagination.
     if native_refresh_attempted:
-        ctx.renderer._compact_gene_list_tables(
+        ctx.renderer._restore_gene_list_table_borders(
             ctx.output_path, ctx.template_context
         )
     ctx.renderer._normalize_toc_decoration_layout(ctx.output_path)

@@ -6816,6 +6816,8 @@ def test_final_refresh_recleans_heading_breaks_after_native_refresh(monkeypatch)
         def _remove_standalone_page_breaks_before_pathway_tables(self, *_args): pass
         def _compact_gene_list_tables(self, *_args):
             sequence.append("gene_list")
+        def _restore_gene_list_table_borders(self, *_args):
+            sequence.append("gene_list_borders")
         def _normalize_quality_control_tables(self, *_args): pass
         def _optimize_variant_table_layout(self, *_args): pass
         def _cleanup_trailing_blank_page(self, *_args): pass
@@ -6847,7 +6849,7 @@ def test_final_refresh_recleans_heading_breaks_after_native_refresh(monkeypatch)
         "heading_cleanup",
         "refresh",
         "heading_cleanup",
-        "gene_list",
+        "gene_list_borders",
     ]
 
 
