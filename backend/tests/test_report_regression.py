@@ -6814,7 +6814,8 @@ def test_final_refresh_recleans_heading_breaks_after_native_refresh(monkeypatch)
         def _normalize_final_section_layout(self, *_args): pass
         def _cleanup_section_spacing(self, *_args): pass
         def _remove_standalone_page_breaks_before_pathway_tables(self, *_args): pass
-        def _compact_gene_list_tables(self, *_args): pass
+        def _compact_gene_list_tables(self, *_args):
+            sequence.append("gene_list")
         def _normalize_quality_control_tables(self, *_args): pass
         def _optimize_variant_table_layout(self, *_args): pass
         def _cleanup_trailing_blank_page(self, *_args): pass
@@ -6841,7 +6842,71 @@ def test_final_refresh_recleans_heading_breaks_after_native_refresh(monkeypatch)
         )
     )
 
-    assert sequence == ["heading_cleanup", "refresh", "heading_cleanup"]
+    assert sequence == [
+        "gene_list",
+        "heading_cleanup",
+        "refresh",
+        "heading_cleanup",
+        "gene_list",
+    ]
+
+
+def test_final_refresh_restores_gene_list_borders_dropped_by_libreoffice(
+    tmp_path, monkeypatch
+):
+    """The native field refresh must not erase the reviewed gene-list frame."""
+    docx_path = tmp_path / "gene_list_after_refresh.docx"
+    doc = Document()
+    table = doc.add_table(rows=2, cols=2)
+    table.rows[0].cells[0].text = "Gene List for MLseq (n=358)"
+    table.rows[1].cells[0].text = "ABL1"
+    table.rows[1].cells[1].text = "ABL2"
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+
+    def simulate_libreoffice_refresh(path):
+        refreshed = Document(path)
+        tbl_pr = refreshed.tables[0]._tbl.tblPr
+        borders = tbl_pr.find(qn("w:tblBorders"))
+        assert borders is not None  # the pre-refresh normalizer added it
+        tbl_pr.remove(borders)
+        refreshed.save(path)
+
+    monkeypatch.setattr(
+        renderer,
+        "_refresh_fields_with_native_engine",
+        simulate_libreoffice_refresh,
+    )
+    monkeypatch.setattr(renderer, "_set_update_fields", lambda *_args: None)
+    monkeypatch.setattr(
+        renderer, "_normalize_toc_decoration_layout", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        renderer, "_restore_reviewed_body_headers", lambda *_args: None
+    )
+    monkeypatch.delenv("REPORTGEN_FAST_TOC", raising=False)
+    monkeypatch.delenv("REPORTGEN_SKIP_FINAL_LO_REFRESH", raising=False)
+
+    _run_final_refresh_cleanup(
+        SimpleNamespace(
+            renderer=renderer,
+            output_path=str(docx_path),
+            template_context={},
+            logger=SimpleNamespace(
+                info=lambda *_args, **_kwargs: None,
+                warning=lambda *_args, **_kwargs: None,
+            ),
+        )
+    )
+
+    rendered = Document(docx_path)
+    borders = rendered.tables[0]._tbl.tblPr.find(qn("w:tblBorders"))
+    assert borders is not None
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        border = borders.find(qn(f"w:{edge}"))
+        assert border is not None
+        assert border.get(qn("w:val")) == "single"
 
 
 def test_fast_toc_skips_static_toc_pdf_detection(tmp_path, monkeypatch):

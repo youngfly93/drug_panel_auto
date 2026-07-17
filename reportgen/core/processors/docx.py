@@ -242,6 +242,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         heading_cleanup_targets,
     )
     enforce_configured_page_breaks()
+    native_refresh_attempted = False
     if _env_truthy("REPORTGEN_FAST_TOC") or _env_truthy(
         "REPORTGEN_SKIP_FINAL_LO_REFRESH"
     ):
@@ -258,6 +259,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         except Exception:
             pass
     else:
+        native_refresh_attempted = True
         try:
             ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
             ctx.renderer._set_update_fields(ctx.output_path)
@@ -271,6 +273,15 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         heading_cleanup_targets,
     )
     enforce_configured_page_breaks()
+    # LibreOffice 7.3 can discard the direct ``w:tblBorders`` formatting on
+    # the static 358-gene table while refreshing fields.  Reapply the reviewed
+    # table style after that round-trip.  This still runs before the final
+    # static TOC probe in ``underlines_and_styles``, so any layout effect is
+    # included in the cached page numbers instead of making them stale.
+    if native_refresh_attempted:
+        ctx.renderer._compact_gene_list_tables(
+            ctx.output_path, ctx.template_context
+        )
     ctx.renderer._normalize_toc_decoration_layout(ctx.output_path)
     ctx.renderer._restore_reviewed_body_headers(ctx.output_path)
     # 注：此处不再 _populate_static_toc_page_numbers。该操作要 LibreOffice 把整份
