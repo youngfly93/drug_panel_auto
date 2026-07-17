@@ -183,7 +183,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column label="操作" width="272" fixed="right">
         <template #default="{ row }">
           <el-button
             text
@@ -201,6 +201,22 @@
             :loading="Boolean(downloadingTasks[row.id])"
             @click="downloadReport(row.id)"
           >{{ downloadingTasks[row.id] ? '下载中' : '下载' }}</el-button>
+          <el-upload
+            v-if="row.task_type === 'single'"
+            :show-file-list="false"
+            :auto-upload="true"
+            :http-request="feedbackRequest(row.id)"
+            accept=".docx,.doc,.pdf,.txt,.md"
+            class="feedback-upload"
+          >
+            <el-button
+              text
+              type="warning"
+              size="small"
+              :icon="Upload"
+              :loading="Boolean(feedbackUploading[row.id])"
+            >{{ feedbackUploading[row.id] ? '上传中' : '反馈' }}</el-button>
+          </el-upload>
           <el-popconfirm
             v-if="row.status === 'running' || row.status === 'pending'"
             title="确认取消当前任务？"
@@ -237,6 +253,7 @@ import {
   Download,
   Refresh,
   Search,
+  Upload,
   View,
   WarningFilled,
 } from '@element-plus/icons-vue'
@@ -260,6 +277,7 @@ const stats = ref<TaskStats>({
 })
 const loading = ref(false)
 const downloadingTasks = ref<Record<string, boolean>>({})
+const feedbackUploading = ref<Record<string, boolean>>({})
 const quickFilter = ref<QuickFilter>('all')
 const searchQuery = ref('')
 const appliedSearch = ref('')
@@ -530,6 +548,25 @@ async function downloadReport(taskId: string) {
   }
 }
 
+function feedbackRequest(taskId: string) {
+  return (option: any) => handleFeedbackUpload(taskId, option)
+}
+
+async function handleFeedbackUpload(taskId: string, option: any) {
+  const file = option.file as File
+  feedbackUploading.value[taskId] = true
+  try {
+    const res = await reportApi.uploadFeedback(taskId, file)
+    ElMessage.success(`反馈已上传（样本 ${res.sample_id}）`)
+    option.onSuccess?.(res)
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.detail || err.message || '反馈上传失败')
+    option.onError?.(err)
+  } finally {
+    feedbackUploading.value[taskId] = false
+  }
+}
+
 function openDetail(taskId: string) {
   router.push(`/tasks/${taskId}`)
 }
@@ -549,6 +586,14 @@ onMounted(fetchTasks)
 .task-queue {
   display: grid;
   gap: 16px;
+}
+
+.feedback-upload {
+  display: inline-block;
+}
+
+.feedback-upload :deep(.el-upload) {
+  display: inline-block;
 }
 
 .queue-head,

@@ -121,5 +121,9 @@ class Settings(BaseSettings):
     def reference_report_dir(self) -> Path:
         return self.storage_root / "reference_reports"
 
+    @property
+    def feedback_dir(self) -> Path:
+        return self.storage_root / "feedback"
+
 
 settings = Settings()

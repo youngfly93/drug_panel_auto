@@ -46,7 +46,11 @@ from app.schemas.report import (
 from app.services import clinical_info_service as clinical_svc
 from app.services.audit_log import audit_event_payload, record_audit_event
 from app.services import reference_report_service as diff_svc
-from app.services.file_manager import ensure_report_dir, save_upload
+from app.services.file_manager import (
+    ensure_report_dir,
+    save_feedback_upload,
+    save_upload,
+)
 from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
 from app.services.generation_preflight import (
@@ -58,6 +62,64 @@ from app.services.task_recovery import write_single_generation_request
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 download_logger = get_logger("reportgen-web.download")
+feedback_logger = get_logger("reportgen-web.feedback")
+
+
+@router.post("/{task_id}/feedback", response_model=ApiResponse[dict])
+def upload_report_feedback(
+    task_id: str,
+    file: UploadFile = File(...),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """报告组反馈上传：按样本号归档到 storage/feedback/<sample_id>/。
+
+    从任务的报告 summary 推导样本号；无法推导时回退用 task_id 作为目录。
+    """
+    filename = (file.filename or "").lower()
+    if not filename.endswith((".docx", ".doc", ".pdf", ".txt", ".md")):
+        raise HTTPException(
+            status_code=400, detail="反馈文件仅支持 DOCX/DOC/PDF/TXT/MD 格式"
+        )
+
+    sample_id = task_id
+    task = db.query(Task).filter(Task.id == task_id).first()
+    output_path = getattr(task, "output_path", None) if task else None
+    if output_path:
+        summary_path = Path(output_path).with_suffix(".summary.json")
+        try:
+            if summary_path.exists():
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                sid = str(
+                    (summary.get("patient") or {}).get("sample_id") or ""
+                ).strip()
+                if sid:
+                    sample_id = sid
+        except Exception:  # noqa: BLE001 - best-effort sample_id resolution
+            pass
+
+    try:
+        stored_path, size = save_feedback_upload(
+            file, sample_id, note=note, task_id=task_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    feedback_logger.info(
+        "feedback uploaded",
+        task_id=task_id,
+        sample_id=sample_id,
+        file=stored_path.name,
+        size=size,
+    )
+    return ApiResponse(
+        success=True,
+        data={
+            "sample_id": sample_id,
+            "filename": stored_path.name,
+            "size": size,
+        },
+    )
 DOWNLOAD_SLOW_WARN_SECONDS = float(
     os.environ.get("RG_WEB_DOWNLOAD_SLOW_WARN_SECONDS", "10")
 )
