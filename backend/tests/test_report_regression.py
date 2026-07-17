@@ -6378,6 +6378,39 @@ def test_blank_heading_cleanup_does_not_cross_tables(tmp_path):
     assert "w:keepNext" in paragraphs[-2]._p.xml
 
 
+def test_blank_heading_cleanup_removes_legacy_break_before_targeted_results(
+    tmp_path,
+):
+    docx_path = tmp_path / "targeted_results_heading_cleanup.docx"
+    doc = Document()
+    doc.add_paragraph("免疫治疗说明末行")
+    breaker = doc.add_paragraph()
+    breaker.add_run().add_break(WD_BREAK.PAGE)
+    doc.add_paragraph("2. 靶向药物相关检测结果")
+    doc.add_paragraph("检测结果正文")
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._remove_blank_page_breaks_before_headings(
+        str(docx_path),
+        ("2. 靶向药物相关检测结果",),
+    )
+
+    cleaned = Document(docx_path)
+    assert not any(
+        'w:type="page"' in paragraph._p.xml
+        for paragraph in cleaned.paragraphs
+        if not paragraph.text.strip()
+    )
+    headings = [
+        paragraph
+        for paragraph in cleaned.paragraphs
+        if paragraph.text.strip() == "2. 靶向药物相关检测结果"
+    ]
+    assert len(headings) == 1
+    assert "w:keepNext" in headings[0]._p.xml
+
+
 def test_exact_section_headings_use_idempotent_page_break_before(tmp_path):
     docx_path = tmp_path / "forced_heading_breaks.docx"
     headings = (
@@ -6722,8 +6755,8 @@ def test_fast_toc_skips_final_libreoffice_refresh(monkeypatch):
         def _cleanup_trailing_blank_page(self, *_args):
             pass
 
-        def _remove_blank_page_breaks_before_headings(self, *_args):
-            sequence.append("heading_cleanup")
+        def _remove_blank_page_breaks_before_headings(self, _path, headings):
+            sequence.append(("heading_cleanup", tuple(headings)))
 
         def _refresh_fields_with_native_engine(self, *_args):
             calls["refresh"] += 1
@@ -6757,7 +6790,14 @@ def test_fast_toc_skips_final_libreoffice_refresh(monkeypatch):
 
     assert calls["refresh"] == 0
     assert calls["set_update_fields"] == 1
-    assert sequence == ["heading_cleanup", "heading_cleanup"]
+    assert [name for name, _headings in sequence] == [
+        "heading_cleanup",
+        "heading_cleanup",
+    ]
+    assert all(
+        "2. 靶向药物相关检测结果" in headings
+        for _name, headings in sequence
+    )
 
 
 def test_final_refresh_recleans_heading_breaks_after_native_refresh(monkeypatch):
