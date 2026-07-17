@@ -38,6 +38,7 @@ USER_AGENT = os.environ.get(
     "WEB_SMOKE_USER_AGENT",
     "Mozilla/5.0 ReportGenSmoke/1.0",
 )
+ACCESS_TOKEN = ""
 
 
 class SmokeFailure(RuntimeError):
@@ -57,6 +58,8 @@ def _request(
     timeout: int = 120,
 ) -> tuple[int, bytes, dict[str, str]]:
     request_headers = {"User-Agent": USER_AGENT, **(headers or {})}
+    if ACCESS_TOKEN:
+        request_headers.setdefault("Authorization", f"Bearer {ACCESS_TOKEN}")
     req = urllib.request.Request(
         _url(path),
         data=body,
@@ -216,6 +219,8 @@ def _check_docx_text(path: Path) -> None:
 
 
 def main() -> int:
+    global ACCESS_TOKEN
+    ACCESS_TOKEN = ""
     started = time.monotonic()
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     print("Web smoke test")
@@ -230,6 +235,12 @@ def main() -> int:
     )
     print("  ✅ frontend index")
 
+    health = _json_request("GET", "/api/v1/healthz", timeout=30)
+    _assert(health == {"status": "ok"}, "anonymous health payload is invalid")
+    status, _raw, _headers = _request("GET", "/api/v1/tasks/stats", timeout=30)
+    _assert(status == 401, f"task stats must require authentication, got HTTP {status}")
+    print("  ✅ anonymous liveness + protected task stats")
+
     login = _json_request(
         "POST",
         "/api/v1/auth/login",
@@ -240,6 +251,7 @@ def main() -> int:
         bool((login.get("data") or {}).get("access_token")),
         "admin login did not return a token",
     )
+    ACCESS_TOKEN = str(login["data"]["access_token"])
     print("  ✅ auth login")
 
     stats = _json_request("GET", "/api/v1/tasks/stats", timeout=30)

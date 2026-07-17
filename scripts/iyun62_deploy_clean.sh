@@ -18,8 +18,9 @@ VENV_DIR="${VENV_DIR:-$LEGACY_APP_DIR/.venv}"
 BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 DEPLOY_REF="${DEPLOY_REF:-$(git rev-parse HEAD)}"
 PORT="${PORT:-8000}"
-LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/tasks/stats}"
-PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/tasks/stats}"
+LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
+PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/healthz}"
+TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
 MANAGE_TUNNEL="${MANAGE_TUNNEL:-1}"
 RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
 UPLOAD_MAINTENANCE_SCRIPTS="${UPLOAD_MAINTENANCE_SCRIPTS:-1}"
@@ -69,6 +70,9 @@ fi
 
 git archive "$DEPLOY_REF" | tar -x -C "$tmp_dir"
 python -m py_compile \
+    "$tmp_dir/backend/app/api/health.py" \
+    "$tmp_dir/backend/app/api/router.py" \
+    "$tmp_dir/backend/app/dependencies.py" \
     "$tmp_dir/backend/app/api/ops.py" \
     "$tmp_dir/backend/app/services/generation_process.py" \
     "$tmp_dir/backend/app/services/task_recovery.py" \
@@ -85,6 +89,9 @@ xattr -cr "$tmp_dir" 2>/dev/null || true
 
 # Keep a quick compile check for the currently checked-out scripts too.
 python -m py_compile \
+    backend/app/api/health.py \
+    backend/app/api/router.py \
+    backend/app/dependencies.py \
     backend/app/api/ops.py \
     backend/app/services/generation_process.py \
     backend/app/services/task_recovery.py \
@@ -135,8 +142,11 @@ runtime_config="$tmp_dir/deployment.env.runtime"
     printf 'PORT=%q\n' "$PORT"
     printf 'LOCAL_HEALTH_URL=%q\n' "$LOCAL_HEALTH_URL"
     printf 'PUBLIC_HEALTH_URL=%q\n' "$PUBLIC_HEALTH_URL"
+    printf 'TUNNEL_METRICS_URL=%q\n' "$TUNNEL_METRICS_URL"
     printf 'MANAGE_TUNNEL=%q\n' "$MANAGE_TUNNEL"
     printf 'RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1\n'
+    printf 'RG_WEB_DOCS_ENABLED=%q\n' "${RG_WEB_DOCS_ENABLED:-0}"
+    printf 'RG_WEB_CORS_ORIGINS=%q\n' "${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
 } > "$runtime_config"
 rsync -az "$runtime_config" "$SSH_HOST:$RUNTIME_DIR/deployment.env.next"
 ssh "$SSH_HOST" "set -euo pipefail

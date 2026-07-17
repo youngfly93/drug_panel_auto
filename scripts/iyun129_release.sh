@@ -19,19 +19,22 @@ STORAGE_DIR="${STORAGE_DIR:-$APP_ROOT/reportgen-web-storage}"
 VENV_DIR="${VENV_DIR:-$APP_ROOT/reportgen-web-venv}"
 BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 PORT="${PORT:-18082}"
-LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/tasks/stats}"
-PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/tasks/stats}"
+LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
+PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/healthz}"
+TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
+RG_WEB_DOCS_ENABLED="${RG_WEB_DOCS_ENABLED:-0}"
+RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
 
 status_remote() {
-    ssh "$SSH_HOST" bash -s -- "$RUNTIME_DIR" "$PORT" <<'REMOTE'
+    ssh "$SSH_HOST" bash -s -- "$RUNTIME_DIR" "$LOCAL_HEALTH_URL" <<'REMOTE'
 set -euo pipefail
 runtime_dir="$1"
-port="$2"
+health_url="$2"
 current="$(head -n 1 "$runtime_dir/current_release")"
 revision="$(head -n 1 "$current/REVISION")"
 pid="$(cat "$runtime_dir/reportgen-web.pid")"
 process_cwd="$(readlink "/proc/$pid/cwd")"
-health="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:$port/api/v1/tasks/stats" || true)"
+health="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$health_url" || true)"
 printf 'current_release=%s\nrevision=%s\npid=%s\nprocess_cwd=%s\nhealth=HTTP %s\n' \
     "$current" "$revision" "$pid" "$process_cwd" "$health"
 test "$process_cwd" = "$current"
@@ -66,7 +69,10 @@ install_runtime_tools() {
         printf 'PORT=%q\n' "$PORT"
         printf 'LOCAL_HEALTH_URL=%q\n' "$LOCAL_HEALTH_URL"
         printf 'PUBLIC_HEALTH_URL=%q\n' "$PUBLIC_HEALTH_URL"
+        printf 'TUNNEL_METRICS_URL=%q\n' "$TUNNEL_METRICS_URL"
         printf 'MANAGE_TUNNEL=0\n'
+        printf 'RG_WEB_DOCS_ENABLED=%q\n' "$RG_WEB_DOCS_ENABLED"
+        printf 'RG_WEB_CORS_ORIGINS=%q\n' "$RG_WEB_CORS_ORIGINS"
     } > "$runtime_config"
 
     rsync -az scripts/iyun62_start_reportgen.sh "$SSH_HOST:$RUNTIME_DIR/start_reportgen.sh.next"

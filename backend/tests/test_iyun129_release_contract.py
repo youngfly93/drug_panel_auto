@@ -47,6 +47,9 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert 'bash -s -- backup' in wrapper
     assert 'backup_archive="${backup_output##*$' in wrapper
     assert 'test -f \'$backup_archive.manifest.json\'' in wrapper
+    assert "/api/v1/healthz" in wrapper
+    assert "RG_WEB_DOCS_ENABLED" in wrapper
+    assert "RG_WEB_CORS_ORIGINS" in wrapper
 
 
 def test_runtime_control_is_configured_and_failure_safe() -> None:
@@ -74,16 +77,33 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
         "stop_existing\nif start_release"
     )
     assert "RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1" in deploy
+    assert "backend/app/api/health.py" in deploy
+    assert "TUNNEL_METRICS_URL" in deploy
     assert "check_signature_registry.py" in deploy
     assert 'rsync -az "$SIGNATURE_ASSET_DIR/"' in deploy
     release_check = _read("scripts/release_check.sh")
     assert "check_historical_golden_release.py" in release_check
     assert "REQUIRE_HISTORICAL_GOLDEN" in release_check
     assert 'MANAGE_TUNNEL="${MANAGE_TUNNEL:-1}"' in watchdog
-    assert 'log "tunnel ok public_http=$public_code external_manager"' in watchdog
-    assert 'log "tunnel fail public_http=${public_code:-none} external_manager"' in watchdog
+    assert 'log "tunnel ok connector_connections=$connections external_manager"' in watchdog
+    assert (
+        'log "tunnel fail connector_connections=${connections:-0} external_manager"'
+        in watchdog
+    )
+    assert "/api/v1/healthz" in start
+    assert "LEGACY_LOCAL_HEALTH_URL" in start
+    assert 'if [ ! -f "$expected_cwd/backend/app/api/health.py" ]' in start
+    assert "LEGACY_LOCAL_HEALTH_URL" in watchdog
+    assert 'release_health_url "$release"' in watchdog
+    assert "/api/v1/healthz" in release
+    assert "/api/v1/tasks/stats" not in release
     assert "status|switch|rollback" in release
     assert "Expected exactly one release" in release
+
+    web_smoke = _read("scripts/web_smoke.py")
+    assert 'request_headers.setdefault("Authorization", f"Bearer {ACCESS_TOKEN}")' in web_smoke
+    assert '"/api/v1/healthz"' in web_smoke
+    assert "task stats must require authentication" in web_smoke
 
     backup = _read("scripts/iyun62_backup.sh")
     restore = _read("scripts/iyun62_restore_drill.sh")

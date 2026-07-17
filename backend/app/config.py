@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     access_token_expire_hours: int = 8
     default_admin_username: str = "admin"
     default_admin_password: str = "admin123"
+    docs_enabled: bool = True
 
     # --- Upload ---
     max_upload_size_mb: int = 100
