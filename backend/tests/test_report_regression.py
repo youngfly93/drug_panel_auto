@@ -49,8 +49,15 @@ from reportgen.core.golden_case import (
     run_visual_render,
 )
 from reportgen.core.project_detector import ProjectDetector
-from reportgen.core.processors import ProcessorContext, run_processors
-from reportgen.core.processors.docx import _run_final_refresh_cleanup
+from reportgen.core.processors import (
+    CRITICAL_DOCX_PROCESSOR_NAMES,
+    ProcessorContext,
+    run_processors,
+)
+from reportgen.core.processors.docx import (
+    _run_final_refresh_cleanup,
+    _run_underlines_and_styles,
+)
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
 from reportgen.core.report_summary import build_report_summary, write_report_summary
 from reportgen.core.report_generator import ReportGenerator
@@ -6574,6 +6581,119 @@ def test_underlines_and_styles_processor_is_idempotent(tmp_path):
         _write_crc_style_docx,
         context={"panel_style": _crc_panel_style()},
     )
+
+
+def test_underlines_and_styles_finalizes_toc_after_layout_normalizers(monkeypatch):
+    renderer = TemplateRenderer(log_level="ERROR")
+    sequence = []
+    no_op_methods = (
+        "_remove_template_underlines",
+        "_restore_variant_summary_table_style",
+        "_restore_variant_detail_table_style",
+        "_restore_biomarker_table_style",
+        "_restore_clinical_result_table_style",
+        "_restore_detection_content_underlines",
+        "_render_patient_salutation",
+        "_normalize_repeated_terminal_punctuation",
+        "_restore_patient_letter_fill_underlines",
+        "_restore_msi_result_emphasis",
+        "_restore_part3_dynamic_styles",
+        "_bold_drug_brand_brackets",
+        "_render_inline_signatures",
+        "_remove_empty_numbered_paragraphs",
+    )
+    for name in no_op_methods:
+        monkeypatch.setattr(renderer, name, lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        renderer,
+        "_recolor_part3_intro_marker",
+        lambda *_args: sequence.append("recolor"),
+    )
+    monkeypatch.setattr(
+        renderer,
+        "_enforce_page_break_before_headings",
+        lambda *_args: sequence.append("page_breaks"),
+    )
+    monkeypatch.setattr(
+        renderer,
+        "_normalize_reference_section_style",
+        lambda *_args: sequence.append("references"),
+    )
+    monkeypatch.setattr(
+        renderer,
+        "_normalize_back_cover_artwork",
+        lambda *_args: sequence.append("back_cover"),
+    )
+    monkeypatch.setattr(
+        renderer,
+        "_populate_static_toc_page_numbers",
+        lambda *_args: sequence.append("toc"),
+    )
+
+    _run_underlines_and_styles(
+        SimpleNamespace(
+            renderer=renderer,
+            output_path="report.docx",
+            template_context={
+                "report_content": {
+                    "force_page_break_before_headings": ["5. 参考文献"]
+                }
+            },
+            logger=SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+        )
+    )
+
+    assert sequence == [
+        "recolor",
+        "page_breaks",
+        "references",
+        "back_cover",
+        "toc",
+    ]
+
+
+def test_underlines_and_styles_does_not_swallow_toc_convergence_failure(
+    monkeypatch,
+):
+    renderer = TemplateRenderer(log_level="ERROR")
+    no_op_methods = (
+        "_remove_template_underlines",
+        "_restore_variant_summary_table_style",
+        "_restore_variant_detail_table_style",
+        "_restore_biomarker_table_style",
+        "_restore_clinical_result_table_style",
+        "_restore_detection_content_underlines",
+        "_render_patient_salutation",
+        "_normalize_repeated_terminal_punctuation",
+        "_restore_patient_letter_fill_underlines",
+        "_restore_msi_result_emphasis",
+        "_restore_part3_dynamic_styles",
+        "_bold_drug_brand_brackets",
+        "_render_inline_signatures",
+        "_remove_empty_numbered_paragraphs",
+        "_recolor_part3_intro_marker",
+        "_normalize_reference_section_style",
+        "_normalize_back_cover_artwork",
+    )
+    for name in no_op_methods:
+        monkeypatch.setattr(renderer, name, lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        renderer,
+        "_populate_static_toc_page_numbers",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("目录页码未收敛")),
+    )
+
+    with pytest.raises(RuntimeError, match="目录页码未收敛"):
+        _run_underlines_and_styles(
+            SimpleNamespace(
+                renderer=renderer,
+                output_path="report.docx",
+                template_context={},
+                logger=SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+            )
+        )
+
+    assert "underlines_and_styles" in CRITICAL_DOCX_PROCESSOR_NAMES
 
 
 def test_fast_toc_skips_final_libreoffice_refresh(monkeypatch):

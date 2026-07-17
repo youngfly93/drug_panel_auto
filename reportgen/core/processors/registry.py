@@ -32,6 +32,7 @@ CRITICAL_DOCX_PROCESSOR_NAMES = frozenset(
         "part3_formatted_sections",
         "rebuild_references",
         "targeted_drug_brand_summary",
+        "underlines_and_styles",
     }
 )
 

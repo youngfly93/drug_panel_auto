@@ -304,12 +304,6 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     # cleanly on the label baseline and uploaded signatures remain effective.
     ctx.renderer._render_inline_signatures(ctx.output_path, ctx.template_context)
     ctx.renderer._remove_empty_numbered_paragraphs(ctx.output_path)
-    try:
-        ctx.renderer._populate_static_toc_page_numbers(
-            ctx.output_path, ctx.template_context
-        )
-    except Exception as refresh_err:
-        ctx.logger.warning("样式修复后目录页码回写失败", error=str(refresh_err))
     # Final step: recolor the Part 3 intro ❖ bullet to black. Must be last —
     # the field-refresh processors rebuild numbering.xml and re-introduce the
     # template's red marker, so any earlier recolor is overwritten.
@@ -339,6 +333,15 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     )
     if callable(normalize_back_cover):
         normalize_back_cover(ctx.output_path, ctx.template_context)
+    # Pagination must be finalized only after every layout-affecting normalizer
+    # above (notably forced section breaks and reference font normalization).
+    # Otherwise the cached PAGEREF values describe a pre-final document and can
+    # drift by many pages. Do not swallow convergence failures: this processor
+    # is release-critical, so the normal processor error path must block the
+    # half-finalized report instead of returning it with a warning-only TOC.
+    ctx.renderer._populate_static_toc_page_numbers(
+        ctx.output_path, ctx.template_context
+    )
 
 
 def _run_signature_placeholders(ctx: ProcessorContext) -> None:
