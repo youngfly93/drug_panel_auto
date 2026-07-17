@@ -26,15 +26,36 @@ PROCESSOR_DEPENDENCIES: Mapping[str, tuple[str, ...]] = {
 
 # A report must not be returned as successfully rendered when patient-specific
 # Part 3 content, its citations, or the final-table-driven drug-brand note fails
-# to materialize.
+# to materialize.  Final pagination is release-critical only for the CRC panels
+# whose golden contracts currently cover the full DOCX/TOC pipeline.  Keeping
+# that policy panel-scoped prevents an experimental panel from being blocked by
+# a platform-specific LibreOffice pagination probe while still recording the
+# processor error in its QA report.
 CRITICAL_DOCX_PROCESSOR_NAMES = frozenset(
     {
         "part3_formatted_sections",
         "rebuild_references",
         "targeted_drug_brand_summary",
-        "underlines_and_styles",
     }
 )
+
+PANEL_SCOPED_CRITICAL_DOCX_PROCESSOR_NAMES: Mapping[str, frozenset[str]] = {
+    "crc_301": frozenset({"underlines_and_styles"}),
+    "crc_301_msi": frozenset({"underlines_and_styles"}),
+    "crc_358": frozenset({"underlines_and_styles"}),
+    "crc_358_msi": frozenset({"underlines_and_styles"}),
+}
+
+
+def critical_docx_processor_names(
+    project_type: str | None = None,
+) -> frozenset[str]:
+    """Return unconditional plus panel-scoped release-critical processors."""
+    panel_id = str(project_type or "").strip().lower()
+    return frozenset(
+        set(CRITICAL_DOCX_PROCESSOR_NAMES)
+        | set(PANEL_SCOPED_CRITICAL_DOCX_PROCESSOR_NAMES.get(panel_id, ()))
+    )
 
 
 class ProcessorRegistry:

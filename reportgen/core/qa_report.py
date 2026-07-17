@@ -18,7 +18,7 @@ from zipfile import ZipFile
 from docx import Document
 
 from reportgen.core.pipeline.summary import summarize_stage_results
-from reportgen.core.processors import CRITICAL_DOCX_PROCESSOR_NAMES
+from reportgen.core.processors import critical_docx_processor_names
 from reportgen.models.report_data import ReportData
 from reportgen.utils.artifacts import write_json
 from reportgen.utils.docx_render import render_docx_to_pngs
@@ -211,10 +211,11 @@ def build_docx_qa_report(
         for row in processor_rows
         if isinstance(row, Mapping) and row.get("status") == "ERROR"
     ]
+    critical_names = critical_docx_processor_names(project_type)
     critical_processor_errors = [
         row
         for row in processor_errors
-        if row.get("name") in CRITICAL_DOCX_PROCESSOR_NAMES
+        if row.get("name") in critical_names
     ]
     checks["post_processors"] = {
         "status": (

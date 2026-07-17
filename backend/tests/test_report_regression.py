@@ -51,6 +51,7 @@ from reportgen.core.golden_case import (
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.processors import (
     CRITICAL_DOCX_PROCESSOR_NAMES,
+    critical_docx_processor_names,
     ProcessorContext,
     run_processors,
 )
@@ -6726,7 +6727,13 @@ def test_underlines_and_styles_does_not_swallow_toc_convergence_failure(
             )
         )
 
-    assert "underlines_and_styles" in CRITICAL_DOCX_PROCESSOR_NAMES
+    assert "underlines_and_styles" not in CRITICAL_DOCX_PROCESSOR_NAMES
+    assert "underlines_and_styles" in critical_docx_processor_names(
+        "crc_358_msi"
+    )
+    assert "underlines_and_styles" not in critical_docx_processor_names(
+        "endometrial_29"
+    )
 
 
 def test_fast_toc_skips_final_libreoffice_refresh(monkeypatch):
@@ -6983,6 +6990,36 @@ def test_qa_report_fails_on_critical_part3_processor_error(tmp_path):
         issue["code"] == "CRITICAL_POST_PROCESSOR_ERROR"
         for issue in qa["issues"]
     )
+
+
+def test_qa_report_scopes_final_pagination_failure_to_crc_panels(tmp_path):
+    docx_path = tmp_path / "clean.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+    processor_report = [
+        {
+            "name": "underlines_and_styles",
+            "status": "ERROR",
+            "error": "目录页码未收敛",
+        }
+    ]
+
+    crc = build_docx_qa_report(
+        output_file=str(docx_path),
+        project_type="crc_358_msi",
+        processor_report=processor_report,
+    )
+    draft = build_docx_qa_report(
+        output_file=str(docx_path),
+        project_type="endometrial_29",
+        processor_report=processor_report,
+    )
+
+    assert crc["checks"]["post_processors"]["status"] == "FAIL"
+    assert crc["checks"]["post_processors"]["critical_error_count"] == 1
+    assert draft["checks"]["post_processors"]["status"] == "WARN"
+    assert draft["checks"]["post_processors"]["critical_error_count"] == 0
 
 
 def test_qa_report_detects_placeholder_residue(tmp_path):

@@ -58,6 +58,7 @@ class TemplateRenderer:
         report_data: ReportData,
         output_path: str,
         post_processor_names: Optional[Sequence[str]] = None,
+        critical_processor_names: Optional[Sequence[str]] = None,
     ) -> str:
         """
         渲染模板并保存
@@ -128,6 +129,7 @@ class TemplateRenderer:
                 context,
                 template_path,
                 processor_names=post_processor_names,
+                critical_processor_names=critical_processor_names,
             )
 
             # 验证生成的文件可以被正常打开
@@ -171,6 +173,7 @@ class TemplateRenderer:
         context: dict,
         template_path: str,
         processor_names: Optional[Sequence[str]] = None,
+        critical_processor_names: Optional[Sequence[str]] = None,
     ) -> None:
         """Run post-render processors and keep an execution report."""
         processor_context = ProcessorContext(
@@ -191,10 +194,15 @@ class TemplateRenderer:
             processors=len(self.last_processor_report),
             errors=len(errors),
         )
+        critical_names = frozenset(
+            CRITICAL_DOCX_PROCESSOR_NAMES
+            if critical_processor_names is None
+            else critical_processor_names
+        )
         critical_errors = [
             row
             for row in errors
-            if row.get("name") in CRITICAL_DOCX_PROCESSOR_NAMES
+            if row.get("name") in critical_names
         ]
         if critical_errors:
             summary = "; ".join(
