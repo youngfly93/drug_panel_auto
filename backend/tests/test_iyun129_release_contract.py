@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -163,6 +164,12 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert '[[ "$process_cmdline" == *uvicorn* ]]' in start
     assert 'HEALTH_STABLE_CHECKS="${HEALTH_STABLE_CHECKS:-2}"' in start
     assert 'previous_release="$(validate_release "$previous_release")"' in start
+    assert 'SWITCH_LOCK_FILE="${SWITCH_LOCK_FILE:-$RUNTIME_DIR/run/' in start
+    assert '"$FLOCK_BIN" -x 9' in start
+    assert "9>&- &" in start
+    assert '"$FLOCK_BIN" -n -x 9' in watchdog
+    assert "watchdog skip deployment switch lock held" in watchdog
+    assert "REPORTGEN_SWITCH_LOCK_HELD=1" in watchdog
     assert "os.kill(pid, signal.SIGKILL)" in start
     assert "uvicorn processes did not terminate" in start
     assert start.count('. "$DEPLOYMENT_ENV"') >= 2
@@ -317,6 +324,7 @@ def test_runtime_start_rejects_fast_toc_before_process_stop(tmp_path: Path) -> N
             "STORAGE_DIR": str(storage),
             "VENV_DIR": str(venv),
             "RELEASE_DIR": str(release),
+            "FLOCK_BIN": "true",
         },
         capture_output=True,
         text=True,
@@ -326,6 +334,73 @@ def test_runtime_start_rejects_fast_toc_before_process_stop(tmp_path: Path) -> N
     assert process.returncode != 0
     assert "REPORTGEN_FAST_TOC must be disabled" in process.stderr
     assert not (runtime / "reportgen-web.pid").exists()
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="flock test is Linux-only")
+def test_watchdog_skips_during_release_switch(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    lock_file = runtime / "run" / "reportgen-web.switch.lock"
+    watchdog_log = runtime / "logs" / "watchdog.log"
+    lock_file.parent.mkdir(parents=True)
+
+    holder = subprocess.Popen(
+        [
+            "bash",
+            "-c",
+            'exec 9> "$1"; flock -x 9; printf ready > "$2"; sleep 10',
+            "synthetic-lock-holder",
+            str(lock_file),
+            str(tmp_path / "ready"),
+        ]
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while not (tmp_path / "ready").exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert (tmp_path / "ready").exists()
+
+        result = subprocess.run(
+            ["bash", str(ROOT / "scripts/iyun62_watchdog.sh")],
+            env={
+                **os.environ,
+                "RUNTIME_DIR": str(runtime),
+                "SWITCH_LOCK_FILE": str(lock_file),
+                "DEPLOYMENT_ENV": str(tmp_path / "missing-deployment.env"),
+            },
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "watchdog skip deployment switch lock held" in watchdog_log.read_text(
+            encoding="utf-8"
+        )
+        assert "watchdog begin" not in watchdog_log.read_text(encoding="utf-8")
+    finally:
+        holder.terminate()
+        holder.wait(timeout=5)
+
+
+def test_watchdog_fails_closed_without_switch_lock_command(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/iyun62_watchdog.sh")],
+        env={
+            **os.environ,
+            "RUNTIME_DIR": str(runtime),
+            "FLOCK_BIN": str(tmp_path / "missing-flock"),
+            "DEPLOYMENT_ENV": str(tmp_path / "missing-deployment.env"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+    assert result.returncode != 0
+    assert "watchdog fail missing switch-lock command=" in (
+        runtime / "logs" / "watchdog.log"
+    ).read_text(encoding="utf-8")
 
 
 def test_release_cli_runs_all_required_regression_suites_by_default() -> None:
@@ -478,6 +553,7 @@ def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
         )
         pid = int((runtime / "reportgen-web.pid").read_text(encoding="utf-8"))
         assert Path(f"/proc/{pid}/cwd").resolve() == good
+        assert not Path(f"/proc/{pid}/fd/9").exists()
     finally:
         pid_file = runtime / "reportgen-web.pid"
         if pid_file.exists():

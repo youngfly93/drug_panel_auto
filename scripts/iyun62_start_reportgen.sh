@@ -36,8 +36,30 @@ ENV_FILE="$RUNTIME_DIR/.env.prod"
 LOG_FILE="$LOG_DIR/uvicorn.log"
 PID_FILE="$RUNTIME_DIR/reportgen-web.pid"
 CURRENT_RELEASE_FILE="$RUNTIME_DIR/current_release"
+SWITCH_LOCK_FILE="${SWITCH_LOCK_FILE:-$RUNTIME_DIR/run/reportgen-web.switch.lock}"
+FLOCK_BIN="${FLOCK_BIN:-flock}"
 
-mkdir -p "$LOG_DIR" "$STORAGE_DIR"/{uploads,reports,previews,db,signatures,reference_reports}
+mkdir -p "$LOG_DIR" "$RUNTIME_DIR/run" \
+    "$STORAGE_DIR"/{uploads,reports,previews,db,signatures,reference_reports}
+
+acquire_switch_lock() {
+    # A watchdog that invokes this script already owns descriptor 9. Reusing
+    # the inherited descriptor avoids self-deadlock while keeping one lock for
+    # the complete stop -> health validation -> commit/rollback transition.
+    if [ "${REPORTGEN_SWITCH_LOCK_HELD:-0}" = "1" ] && \
+            [ -e "/proc/$$/fd/9" ]; then
+        return 0
+    fi
+    if ! command -v "$FLOCK_BIN" >/dev/null 2>&1; then
+        echo "Missing required switch-lock command: $FLOCK_BIN" >&2
+        return 1
+    fi
+    exec 9> "$SWITCH_LOCK_FILE"
+    "$FLOCK_BIN" -x 9
+    export REPORTGEN_SWITCH_LOCK_HELD=1
+}
+
+acquire_switch_lock
 
 if [ -z "${RELEASE_DIR:-}" ] && [ -f "$CURRENT_RELEASE_FILE" ]; then
     read -r RELEASE_DIR < "$CURRENT_RELEASE_FILE"
@@ -223,7 +245,7 @@ start_release() {
         --host "$HOST" \
         --port "$PORT" \
         --app-dir backend \
-        >> "$LOG_FILE" 2>&1 &
+        >> "$LOG_FILE" 2>&1 9>&- &
 
     STARTED_PID=$!
     echo "$STARTED_PID" > "$PID_FILE"

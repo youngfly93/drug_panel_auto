@@ -41,8 +41,10 @@ START_SCRIPT="$RUNTIME_DIR/start_reportgen.sh"
 CURRENT_RELEASE_FILE="$RUNTIME_DIR/current_release"
 CLOUDFLARED_PID_FILE="$RUNTIME_DIR/cloudflared.pid"
 TUNNEL_FAIL_COUNT_FILE="$RUNTIME_DIR/tunnel_fail_count"
+SWITCH_LOCK_FILE="${SWITCH_LOCK_FILE:-$RUNTIME_DIR/run/reportgen-web.switch.lock}"
+FLOCK_BIN="${FLOCK_BIN:-flock}"
 
-mkdir -p "$LOG_DIR"
+mkdir -p "$LOG_DIR" "$RUNTIME_DIR/run"
 
 rotate_log() {
     if [ -f "$LOG_FILE" ]; then
@@ -55,6 +57,21 @@ rotate_log() {
 
 log() {
     printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE"
+}
+
+acquire_switch_lock() {
+    if ! command -v "$FLOCK_BIN" >/dev/null 2>&1; then
+        log "watchdog fail missing switch-lock command=$FLOCK_BIN"
+        return 1
+    fi
+    exec 9> "$SWITCH_LOCK_FILE"
+    if ! "$FLOCK_BIN" -n -x 9; then
+        log "watchdog skip deployment switch lock held"
+        return 2
+    fi
+    # start_reportgen.sh inherits descriptor 9 when watchdog performs a
+    # recovery. It must reuse the lock instead of trying to acquire it again.
+    export REPORTGEN_SWITCH_LOCK_HELD=1
 }
 
 http_code() {
@@ -257,7 +274,17 @@ check_libreoffice() {
 }
 
 main() {
+    local lock_status
     rotate_log
+    if acquire_switch_lock; then
+        :
+    else
+        lock_status=$?
+        if [ "$lock_status" -eq 2 ]; then
+            return 0
+        fi
+        return "$lock_status"
+    fi
     log "watchdog begin"
     ensure_web || true
     if [ "$MANAGE_TUNNEL" = "1" ]; then
