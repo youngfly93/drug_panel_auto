@@ -16,12 +16,16 @@ export RUNTIME_DIR="${RUNTIME_DIR:-$APP_ROOT/reportgen-web-runtime}"
 export STORAGE_DIR="${STORAGE_DIR:-$APP_ROOT/reportgen-web-storage}"
 export VENV_DIR="${VENV_DIR:-$APP_ROOT/reportgen-web-venv}"
 export BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
+export DEPLOY_REF="${DEPLOY_REF:-$(git rev-parse HEAD)}"
 export PORT="${PORT:-18082}"
 export LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
 export PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/healthz}"
 export TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
 export RG_WEB_DOCS_ENABLED="${RG_WEB_DOCS_ENABLED:-0}"
 export RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
+export ORIGIN_REMOTE="${ORIGIN_REMOTE:-origin}"
+export ORIGIN_MAIN_REF="${ORIGIN_MAIN_REF:-$ORIGIN_REMOTE/main}"
+export REQUIRE_ORIGIN_MAIN_REACHABILITY="${REQUIRE_ORIGIN_MAIN_REACHABILITY:-1}"
 
 # iyun129 has a dedicated cloudflared watchdog; the Web watchdog must not race
 # it by trying to manage the same tunnel.
@@ -49,6 +53,16 @@ if [ -n "$(git status --porcelain)" ]; then
     echo "Working tree is dirty; freeze the candidate before iyun129 deployment." >&2
     git status --short
     exit 1
+fi
+resolved_ref="$(git rev-parse "$DEPLOY_REF")"
+if [ "$REQUIRE_ORIGIN_MAIN_REACHABILITY" = "1" ]; then
+    git fetch --prune "$ORIGIN_REMOTE" main
+    git rev-parse --verify "$ORIGIN_MAIN_REF" >/dev/null
+    if ! git merge-base --is-ancestor "$resolved_ref" "$ORIGIN_MAIN_REF"; then
+        echo "Deployment candidate is not reachable from $ORIGIN_MAIN_REF: $resolved_ref" >&2
+        echo "Merge and push the reviewed candidate to origin/main before production deployment." >&2
+        exit 1
+    fi
 fi
 if [ "$REQUIRE_HISTORICAL_GOLDEN" = "1" ] && \
         [ ! -f "$HISTORICAL_GOLDEN_MANIFEST" ]; then

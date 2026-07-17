@@ -52,6 +52,12 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert 'backup_archive="${backup_output##*$' in wrapper
     assert "test -f '$backup_archive.manifest.json'" in wrapper
     assert "RG_WEB_CORS_ORIGINS" in wrapper
+    assert "REQUIRE_ORIGIN_MAIN_REACHABILITY:-1" in wrapper
+    assert 'git fetch --prune "$ORIGIN_REMOTE" main' in wrapper
+    assert 'git merge-base --is-ancestor "$resolved_ref" "$ORIGIN_MAIN_REF"' in wrapper
+    assert wrapper.index("git merge-base --is-ancestor") < wrapper.index(
+        "RUN_REMOTE_BACKUP"
+    )
 
     alerts = _read("scripts/iyun62_alerts.sh")
     assert "OPS_LOGIN_URL" in alerts
@@ -65,6 +71,72 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert "--protocol http2" in cloudflared_start
     assert "cloudflared_tunnel_ha_connections" in cloudflared_start
     assert "cloudflared_tunnel_ha_connections" in cloudflared_watchdog
+
+
+def test_iyun129_wrapper_rejects_commit_not_reachable_from_origin_main(
+    tmp_path: Path,
+) -> None:
+    origin = tmp_path / "origin.git"
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "--bare", str(origin)], check=True, capture_output=True)
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    git("config", "user.name", "Synthetic Release Test")
+    git("config", "user.email", "release-test@example.invalid")
+    (repo / "scripts").mkdir()
+    (repo / "scripts/iyun62_deploy_clean.sh").write_text(
+        "#!/usr/bin/env bash\nexit 99\n",
+        encoding="utf-8",
+    )
+    git("add", "scripts/iyun62_deploy_clean.sh")
+    git("commit", "-m", "synthetic main")
+    git("branch", "-M", "main")
+    git("remote", "add", "origin", str(origin))
+    git("push", "-u", "origin", "main")
+    origin_main = git("rev-parse", "HEAD")
+
+    git("switch", "-c", "candidate")
+    (repo / "candidate.txt").write_text("candidate\n", encoding="utf-8")
+    git("add", "candidate.txt")
+    git("commit", "-m", "unmerged candidate")
+    candidate = git("rev-parse", "HEAD")
+
+    common_env = {
+        **os.environ,
+        "RUN_REMOTE_BACKUP": "0",
+    }
+    blocked = subprocess.run(
+        ["bash", str(ROOT / "scripts/iyun129_deploy_clean.sh")],
+        cwd=repo,
+        env={**common_env, "DEPLOY_REF": candidate},
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert blocked.returncode != 0
+    assert "not reachable from origin/main" in blocked.stderr
+
+    reachable = subprocess.run(
+        ["bash", str(ROOT / "scripts/iyun129_deploy_clean.sh")],
+        cwd=repo,
+        env={**common_env, "DEPLOY_REF": origin_main},
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert reachable.returncode != 0
+    assert "not reachable from origin/main" not in reachable.stderr
+    assert "Historical golden manifest is missing" in reachable.stderr
 
 
 def test_runtime_control_is_configured_and_failure_safe() -> None:

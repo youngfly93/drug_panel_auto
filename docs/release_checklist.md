@@ -138,6 +138,11 @@ process-cwd validation pass twice consecutively.
 If the candidate fails, the start script attempts to restore the previous
 release and exits non-zero.
 
+Before any backup or production-side mutation, the iyun129 wrapper fetches the
+latest `origin/main` and rejects a `DEPLOY_REF` that is not reachable from that
+ref. A review branch or server-local commit must therefore be merged and pushed
+to `origin/main` before it can become a production release.
+
 Production `.env.prod` must keep `REPORTGEN_FAST_TOC`,
 `REPORTGEN_SKIP_FINAL_LO_REFRESH`, and
 `REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS` disabled. These shortcuts omit the
