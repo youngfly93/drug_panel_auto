@@ -468,7 +468,9 @@ def main() -> int:
 
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output_json:
-        Path(args.output_json).write_text(rendered + "\n", encoding="utf-8")
+        output_json = Path(args.output_json)
+        output_json.parent.mkdir(parents=True, exist_ok=True)
+        output_json.write_text(rendered + "\n", encoding="utf-8")
     print(rendered)
     return 0 if result["status"] == "PASS" else 1
 

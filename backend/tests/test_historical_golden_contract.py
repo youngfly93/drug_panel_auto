@@ -372,6 +372,26 @@ def test_committed_historical_contract_registry_passes() -> None:
     assert result["registry"]["contracts"][0]["medical_uat_status"] == "blocked"
 
 
+def test_contract_registry_cli_creates_output_parent(tmp_path) -> None:
+    output_json = tmp_path / "nested" / "contracts.json"
+    process = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/check_historical_golden_release.py"),
+            "--contracts-only",
+            "--output-json",
+            str(output_json),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert process.returncode == 0, process.stdout + process.stderr
+    assert json.loads(output_json.read_text(encoding="utf-8"))["status"] == "PASS"
+
+
 def test_candidate_renderer_fingerprint_is_explicit_and_complete() -> None:
     assert _candidate_renderer_fingerprint(
         {
