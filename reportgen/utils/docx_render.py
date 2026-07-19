@@ -8,11 +8,13 @@ Dependencies (system):
   - Poppler: `pdftoppm`
 
 Notes:
-  - LibreOffice headless on macOS 25.x can crash while bootstrapping a fresh
-    temporary profile, which triggers a GUI crash reporter. macOS therefore
-    uses the system profile by default; set REPORTGEN_LIBREOFFICE_PROFILE_MODE
-    to "isolated" to force per-run profile isolation.
+  - Every isolated profile is pre-seeded with ReportGen's deterministic CJK
+    font substitutions before LibreOffice starts. This prevents a missing
+    Word font from changing fallback families and pagination between runs.
   - The renderer copies input to an isolated ASCII filename.
+  - The LibreOffice user profile stays on the host temporary filesystem even
+    when report artifacts live on an external volume; macOS LibreOffice can
+    abort while bootstrapping a profile directly on removable storage.
   - Set REPORTGEN_RENDER_TMPDIR, or pass tmp_dir, when the system temp volume is
     small or unreliable.
 """
@@ -28,6 +30,11 @@ import tempfile
 import warnings
 from pathlib import Path
 from typing import List, Optional, Sequence
+
+from reportgen.utils.libreoffice_profile import (
+    font_substitution_fingerprint,
+    initialize_libreoffice_profile,
+)
 
 
 class DocxRenderError(RuntimeError):
@@ -131,7 +138,53 @@ def _libreoffice_profile_mode() -> str:
             RuntimeWarning,
             stacklevel=2,
         )
-    return "system" if platform.system() == "Darwin" else "isolated"
+    return "isolated"
+
+
+def _command_version(command: str, *args: str) -> str:
+    try:
+        process = subprocess.run(
+            [command, *args],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return "unavailable"
+    lines = (process.stdout or process.stderr).strip().splitlines()
+    return lines[0] if lines else "unknown"
+
+
+def renderer_fingerprint() -> dict[str, object]:
+    """Return the actual DOCX visual-render stack used on this host."""
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    pdftoppm = shutil.which("pdftoppm")
+    profile_mode = _libreoffice_profile_mode()
+    result: dict[str, object] = {
+        "platform": platform.system(),
+        "machine": platform.machine(),
+        "engine": Path(soffice).name if soffice else "none",
+        "engine_version": (
+            _command_version(soffice, "--version") if soffice else "unavailable"
+        ),
+        "profile_mode": profile_mode,
+        "pdf_renderer": Path(pdftoppm).name if pdftoppm else "none",
+        "pdf_renderer_version": (
+            _command_version(pdftoppm, "-v") if pdftoppm else "unavailable"
+        ),
+    }
+    if profile_mode == "isolated":
+        result.update(font_substitution_fingerprint(require_available=False))
+    else:
+        result.update(
+            {
+                "font_substitution_profile": "unmanaged-system-profile",
+                "font_substitution_profile_sha256": "",
+                "font_substitutions": {},
+            }
+        )
+    return result
 
 
 def _isolated_profile_convert_cmd(
@@ -199,7 +252,7 @@ def _docx_to_pdf(
     profile_dir: Path,
     timeout_seconds: int,
 ) -> Path:
-    """Convert the staged DOCX to PDF, falling back for macOS LO crashes."""
+    """Convert the staged DOCX to PDF with an explicit renderer profile."""
     if _libreoffice_profile_mode() == "system":
         _run_checked(
             _system_profile_convert_cmd(
@@ -212,46 +265,18 @@ def _docx_to_pdf(
         )
         return _find_pdf_output(workdir)
 
+    initialize_libreoffice_profile(profile_dir, require_available=True)
     convert_cmd = _isolated_profile_convert_cmd(
         soffice=soffice,
         tmp_docx=tmp_docx,
         workdir=workdir,
         profile_dir=profile_dir,
     )
-    try:
-        _run_checked(
-            convert_cmd,
-            timeout_seconds=timeout_seconds,
-            stage="docx_to_pdf",
-        )
-    except DocxRenderError as isolated_error:
-        # LibreOffice on macOS 25.x can abort while bootstrapping a fresh
-        # per-run profile. The system profile path is less isolated, but it
-        # keeps visual QA available instead of failing a valid DOCX render.
-        fallback_cmd = _system_profile_convert_cmd(
-            soffice=soffice,
-            tmp_docx=tmp_docx,
-            workdir=workdir,
-        )
-        try:
-            _run_checked(
-                fallback_cmd,
-                timeout_seconds=timeout_seconds,
-                stage="docx_to_pdf_fallback",
-            )
-        except DocxRenderError as fallback_error:
-            fallback_error.stderr = (
-                (fallback_error.stderr or "")
-                + "\n\nIsolated LibreOffice profile stderr:\n"
-                + (isolated_error.stderr or "")
-            )
-            raise fallback_error from isolated_error
-        warnings.warn(
-            "LibreOffice isolated-profile DOCX render failed; retried with "
-            "the system profile.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
+    _run_checked(
+        convert_cmd,
+        timeout_seconds=timeout_seconds,
+        stage="docx_to_pdf",
+    )
 
     return _find_pdf_output(workdir)
 
@@ -291,10 +316,11 @@ def render_docx_to_pngs(
     tmp_root = _render_tmp_root(output_dir, tmp_dir=tmp_dir)
     with tempfile.TemporaryDirectory(
         prefix="reportgen_render_", dir=str(tmp_root)
-    ) as workdir_str:
+    ) as workdir_str, tempfile.TemporaryDirectory(
+        prefix="reportgen_lo_profile_"
+    ) as profile_dir_str:
         workdir = Path(workdir_str)
-        profile_dir = workdir / "lo_profile"
-        profile_dir.mkdir(parents=True, exist_ok=True)
+        profile_dir = Path(profile_dir_str)
 
         tmp_docx = workdir / "input.docx"
         shutil.copy2(docx_path, tmp_docx)

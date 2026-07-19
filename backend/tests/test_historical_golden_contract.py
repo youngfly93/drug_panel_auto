@@ -9,16 +9,23 @@ from pathlib import Path
 import pytest
 import yaml
 from docx import Document
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from reportgen.core.historical_golden_contract import (
     load_historical_golden_contract,
     validate_historical_golden_docx,
 )
+from scripts import check_historical_golden_release as release_gate
+from scripts.attest_historical_golden_manifest import attest_manifest
 from scripts.check_historical_golden_release import (
     _candidate_renderer_fingerprint,
+    _required_sha256,
     _sha256_files,
 )
 
-ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = (
     ROOT
     / "panels"
@@ -370,21 +377,171 @@ def test_candidate_renderer_fingerprint_is_explicit_and_complete() -> None:
         {
             "candidate_renderer": {
                 "platform": "Linux",
+                "machine": "x86_64",
                 "engine": "LibreOffice",
                 "version": "7.3.7.2",
+                "profile_mode": "isolated",
+                "pdf_renderer": "pdftoppm",
+                "pdf_renderer_version": "pdftoppm 22.02.0",
+                "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+                "font_substitution_profile_sha256": "a" * 64,
                 "evidence": "production-equivalent visual QA",
             }
         }
     ) == {
         "platform": "Linux",
+        "machine": "x86_64",
         "engine": "LibreOffice",
         "version": "7.3.7.2",
+        "profile_mode": "isolated",
+        "pdf_renderer": "pdftoppm",
+        "pdf_renderer_version": "pdftoppm 22.02.0",
+        "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+        "font_substitution_profile_sha256": "a" * 64,
         "evidence": "production-equivalent visual QA",
     }
     with pytest.raises(ValueError, match="missing required fields"):
         _candidate_renderer_fingerprint(
             {"candidate_renderer": {"platform": "Linux", "engine": "LibreOffice"}}
         )
+
+
+def test_release_candidate_attestation_requires_explicit_sha256() -> None:
+    digest = "a" * 64
+    assert _required_sha256({"candidate_sha256": digest}, "candidate_sha256") == digest
+    with pytest.raises(ValueError, match="explicit 64-character SHA256"):
+        _required_sha256({}, "candidate_sha256")
+    with pytest.raises(ValueError, match="explicit 64-character SHA256"):
+        _required_sha256({"candidate_sha256": "latest"}, "candidate_sha256")
+
+
+def test_manifest_gate_binds_candidate_and_qa_to_current_revision(
+    tmp_path, monkeypatch
+) -> None:
+    revision = "1" * 40
+    reference = tmp_path / "reference.docx"
+    candidate = tmp_path / "candidate.docx"
+    qa = tmp_path / "candidate.qa.json"
+    reference.write_bytes(b"reviewed-reference")
+    candidate.write_bytes(b"generated-candidate")
+
+    def file_sha(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    qa.write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "build_provenance": {
+                    "source_revision": revision,
+                    "source_kind": "release_revision_file",
+                    "source_dirty": False,
+                },
+                "metrics": {"output_sha256": file_sha(candidate)},
+                "checks": {
+                    "visual_render": {
+                        "status": "PASS",
+                        "requested": "all",
+                        "required": True,
+                        "renderer_fingerprint": {
+                            "platform": "Linux",
+                            "machine": "x86_64",
+                            "engine": "soffice",
+                            "engine_version": "LibreOffice 24.2",
+                            "profile_mode": "isolated",
+                            "pdf_renderer": "pdftoppm",
+                            "pdf_renderer_version": "pdftoppm 24.02.0",
+                            "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+                            "font_substitution_profile_sha256": "a" * 64,
+                        },
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    contract = tmp_path / "contract.yaml"
+    contract.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "1.0",
+                "case_alias": "case_a",
+                "panel_id": "crc_358_msi",
+                "privacy": {"contains_phi": False},
+                "source": {"reference_docx_sha256": file_sha(reference)},
+                "medical_uat": {"status": "approved", "blockers": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "manifest.yaml"
+    payload = {
+        "source_revision": revision,
+        "cases": [
+            {
+                "case_alias": "case_a",
+                "contract": str(contract),
+                "reference_docx": str(reference),
+                "candidate_docx": str(candidate),
+                "candidate_qa": str(qa),
+                "candidate_source_revision": revision,
+                "candidate_sha256": file_sha(candidate),
+                "candidate_qa_sha256": file_sha(qa),
+                "candidate_renderer": {
+                    "platform": "Linux",
+                    "machine": "x86_64",
+                    "engine": "soffice",
+                    "version": "LibreOffice 24.2",
+                    "profile_mode": "isolated",
+                    "pdf_renderer": "pdftoppm",
+                    "pdf_renderer_version": "pdftoppm 24.02.0",
+                    "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+                    "font_substitution_profile_sha256": "a" * 64,
+                },
+            }
+        ],
+    }
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    attested = attest_manifest(manifest, revision)
+    assert attested["cases"][0]["candidate_sha256"] == file_sha(candidate)
+    assert attested["cases"][0]["candidate_renderer"]["platform"] == "Linux"
+
+    monkeypatch.setattr(release_gate, "_current_revision", lambda: revision)
+    monkeypatch.setattr(
+        release_gate,
+        "validate_historical_golden_docx",
+        lambda **_kwargs: {
+            "status": "PASS",
+            "docx_sha256": file_sha(candidate),
+            "reference": {"docx_sha256": file_sha(reference)},
+        },
+    )
+    monkeypatch.setattr(
+        release_gate,
+        "compare_reports",
+        lambda _options: {"status": "PASS", "issues": []},
+    )
+    monkeypatch.setattr(
+        release_gate,
+        "_panel_hashes",
+        lambda *_args: {"rules_sha256": "a" * 64, "knowledge_sha256": "b" * 64},
+    )
+
+    passed = release_gate.run_manifest_gate(manifest, tmp_path / "out-pass")
+    assert passed["status"] == "PASS"
+
+    payload["cases"][0]["candidate_source_revision"] = "0" * 40
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    stale = release_gate.run_manifest_gate(manifest, tmp_path / "out-stale")
+    assert stale["status"] == "FAIL"
+    assert any("candidate_source_revision" in item for item in stale["errors"])
+
+    payload["cases"][0]["candidate_source_revision"] = revision
+    payload["cases"][0]["candidate_sha256"] = "f" * 64
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    changed = release_gate.run_manifest_gate(manifest, tmp_path / "out-changed")
+    assert changed["status"] == "FAIL"
+    assert any("candidate_sha256" in item for item in changed["errors"])
 
 
 def test_release_hash_ignores_macos_filesystem_metadata(tmp_path) -> None:

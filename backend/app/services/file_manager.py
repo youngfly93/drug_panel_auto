@@ -2,17 +2,94 @@
 
 import hashlib
 import json
+import os
 import re
 import uuid
 from datetime import date, datetime
 from pathlib import Path
+from typing import BinaryIO
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile, status
 
 from app.config import settings
 
 ALLOWED_SIGNATURE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_FEEDBACK_EXTENSIONS = {".docx", ".doc", ".pdf", ".txt", ".md"}
+UPLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+class UploadLimitExceeded(HTTPException):
+    """HTTP 413 raised while streaming an upload beyond its configured limit."""
+
+    def __init__(self, *, max_bytes: int, scope: str = "单个文件") -> None:
+        max_mb = max_bytes / 1024 / 1024
+        super().__init__(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"{scope}超过允许大小（上限 {max_mb:g} MB）",
+        )
+
+
+def max_upload_bytes() -> int:
+    """Return the configured per-file limit in bytes."""
+    return max(0, int(settings.max_upload_size_mb * 1024 * 1024))
+
+
+def max_batch_upload_bytes() -> int:
+    """Return the configured aggregate batch limit in bytes."""
+    return max(0, int(settings.max_batch_upload_size_mb * 1024 * 1024))
+
+
+def safe_client_filename(filename: str | None, default: str) -> str:
+    """Reduce an untrusted browser filename to one local path component."""
+    value = str(filename or "").replace("\\", "/")
+    name = value.rsplit("/", 1)[-1]
+    name = re.sub(r"[\x00-\x1f\x7f]", "", name).strip()
+    if name in {"", ".", ".."}:
+        name = default
+    return name
+
+
+def write_upload_stream(
+    fileobj: BinaryIO,
+    dest_path: Path,
+    *,
+    max_bytes: int | None = None,
+    scope: str = "单个文件",
+) -> tuple[int, str]:
+    """Atomically stream one upload with a hard byte limit and SHA-256."""
+    limit = max_upload_bytes() if max_bytes is None else max(0, int(max_bytes))
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    part_path = dest_path.with_name(f".{dest_path.name}.{uuid.uuid4().hex}.part")
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with part_path.open("xb") as handle:
+            while chunk := fileobj.read(UPLOAD_CHUNK_SIZE):
+                size += len(chunk)
+                if size > limit:
+                    raise UploadLimitExceeded(max_bytes=limit, scope=scope)
+                digest.update(chunk)
+                handle.write(chunk)
+        os.replace(part_path, dest_path)
+    finally:
+        part_path.unlink(missing_ok=True)
+    return size, digest.hexdigest()
+
+
+def _safe_destination(dest_dir: Path, filename: str) -> Path:
+    candidate = (dest_dir / filename).resolve()
+    try:
+        candidate.relative_to(dest_dir.resolve())
+    except ValueError as exc:  # defensive: safe_client_filename should already prevent this
+        raise ValueError("Path traversal detected") from exc
+    return candidate
+
+
+def _remove_empty_upload_dir(dest_dir: Path) -> None:
+    try:
+        dest_dir.rmdir()
+    except OSError:
+        pass
 
 
 def save_upload_with_digest(file: UploadFile) -> tuple[str, Path, int, str]:
@@ -22,16 +99,16 @@ def save_upload_with_digest(file: UploadFile) -> tuple[str, Path, int, str]:
     dest_dir = settings.upload_dir / today / upload_id
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    dest_path = dest_dir / (file.filename or "upload.xlsx")
-    digest = hashlib.sha256()
-    size = 0
-    with open(dest_path, "wb") as f:
-        while chunk := file.file.read(8192):
-            size += len(chunk)
-            digest.update(chunk)
-            f.write(chunk)
+    filename = safe_client_filename(file.filename, "upload.xlsx")
+    dest_path = _safe_destination(dest_dir, filename)
+    try:
+        size, digest = write_upload_stream(file.file, dest_path)
+    except Exception:
+        dest_path.unlink(missing_ok=True)
+        _remove_empty_upload_dir(dest_dir)
+        raise
 
-    return upload_id, dest_path, size, digest.hexdigest()
+    return upload_id, dest_path, size, digest
 
 
 def save_upload(file: UploadFile) -> tuple[str, Path, int]:
@@ -50,9 +127,11 @@ def get_upload_path(stored_path: str) -> Path:
     # Security: ensure path is under storage
     resolved = p.resolve()
     storage_resolved = settings.storage_root.resolve()
-    if not str(resolved).startswith(str(storage_resolved)):
-        raise ValueError("Path traversal detected")
-    return p
+    try:
+        resolved.relative_to(storage_resolved)
+    except ValueError as exc:
+        raise ValueError("Path traversal detected") from exc
+    return resolved
 
 
 def ensure_report_dir(task_id: str) -> Path:
@@ -80,11 +159,11 @@ def save_signature_upload(file: UploadFile) -> tuple[Path, int]:
 
     dest_path = dest_dir / f"{uuid.uuid4()}{suffix}"
 
-    size = 0
-    with open(dest_path, "wb") as f:
-        while chunk := file.file.read(8192):
-            size += len(chunk)
-            f.write(chunk)
+    try:
+        size, _digest = write_upload_stream(file.file, dest_path)
+    except Exception:
+        dest_path.unlink(missing_ok=True)
+        raise
 
     return dest_path, size
 
@@ -126,11 +205,11 @@ def save_feedback_upload(
     stem = _safe_component(Path(file.filename or "feedback").stem) or "feedback"
     dest_path = dest_dir / f"{stem}_{stamp}{suffix}"
 
-    size = 0
-    with open(dest_path, "wb") as f:
-        while chunk := file.file.read(8192):
-            size += len(chunk)
-            f.write(chunk)
+    try:
+        size, _digest = write_upload_stream(file.file, dest_path)
+    except Exception:
+        dest_path.unlink(missing_ok=True)
+        raise
 
     meta = {
         "original_filename": file.filename,

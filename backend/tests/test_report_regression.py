@@ -6731,6 +6731,9 @@ def test_underlines_and_styles_does_not_swallow_toc_convergence_failure(
     assert "underlines_and_styles" in critical_docx_processor_names(
         "crc_358_msi"
     )
+    assert "final_refresh_cleanup" in critical_docx_processor_names(
+        "crc_358_msi"
+    )
     assert "underlines_and_styles" not in critical_docx_processor_names(
         "endometrial_29"
     )
@@ -6805,6 +6808,35 @@ def test_fast_toc_skips_final_libreoffice_refresh(monkeypatch):
         "2. 靶向药物相关检测结果" in headings
         for _name, headings in sequence
     )
+
+
+def test_fast_toc_is_blocked_for_deterministic_production_panel(monkeypatch):
+    monkeypatch.setenv("REPORTGEN_FAST_TOC", "1")
+    renderer = TemplateRenderer(log_level="ERROR")
+    for name in (
+        "_normalize_final_section_layout",
+        "_cleanup_section_spacing",
+        "_remove_standalone_page_breaks_before_pathway_tables",
+        "_compact_gene_list_tables",
+        "_normalize_quality_control_tables",
+        "_optimize_variant_table_layout",
+        "_cleanup_trailing_blank_page",
+        "_remove_blank_page_breaks_before_headings",
+    ):
+        monkeypatch.setattr(renderer, name, lambda *_args, **_kwargs: None)
+
+    with pytest.raises(RuntimeError, match="禁止跳过最终 LibreOffice"):
+        _run_final_refresh_cleanup(
+            SimpleNamespace(
+                renderer=renderer,
+                output_path="report.docx",
+                template_context={"_require_deterministic_layout": True},
+                logger=SimpleNamespace(
+                    info=lambda *_args, **_kwargs: None,
+                    warning=lambda *_args, **_kwargs: None,
+                ),
+            )
+        )
 
 
 def test_final_refresh_recleans_heading_breaks_after_native_refresh(monkeypatch):
@@ -6937,6 +6969,26 @@ def test_fast_toc_skips_static_toc_pdf_detection(tmp_path, monkeypatch):
     renderer._populate_static_toc_page_numbers(str(docx_path), {})
 
     assert calls["set_update_fields"] == 1
+
+
+def test_static_toc_missing_tools_blocks_deterministic_panel(tmp_path, monkeypatch):
+    docx_path = tmp_path / "report.docx"
+    Document().save(docx_path)
+    renderer = TemplateRenderer(log_level="ERROR")
+    monkeypatch.delenv("REPORTGEN_FAST_TOC", raising=False)
+    monkeypatch.delenv("REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS", raising=False)
+    monkeypatch.setattr(
+        renderer,
+        "_document_contains_toc_or_static_toc",
+        lambda *_args: True,
+    )
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+
+    with pytest.raises(RuntimeError, match="缺少目录分页工具"):
+        renderer._populate_static_toc_page_numbers(
+            str(docx_path),
+            {"_require_deterministic_layout": True},
+        )
 
 
 def test_static_toc_page_numbers_converge_after_toc_rebuild(tmp_path, monkeypatch):
@@ -7714,7 +7766,7 @@ def test_docx_render_uses_configured_tmp_dir_and_timeout(tmp_path, monkeypatch):
     assert pngs == [output_dir / "source-1.png"]
 
 
-def test_docx_render_falls_back_to_system_profile(tmp_path, monkeypatch):
+def test_docx_render_does_not_hide_isolated_profile_failure(tmp_path, monkeypatch):
     docx_path = tmp_path / "source.docx"
     Document().save(docx_path)
     output_dir = tmp_path / "pages"
@@ -7735,31 +7787,18 @@ def test_docx_render_falls_back_to_system_profile(tmp_path, monkeypatch):
                 command=cmd,
                 stderr="profile crash",
             )
-        if stage == "docx_to_pdf_fallback":
-            assert not any("UserInstallation" in part for part in cmd)
-            outdir = Path(cmd[cmd.index("--outdir") + 1])
-            (outdir / "input.pdf").write_bytes(b"%PDF-1.4\n")
-        elif stage == "pdf_to_png":
-            prefix = Path(cmd[-1])
-            prefix.parent.mkdir(parents=True, exist_ok=True)
-            Path(f"{prefix}-1.png").write_bytes(b"png")
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(docx_render, "_run_checked", fake_run)
     monkeypatch.setenv("REPORTGEN_LIBREOFFICE_PROFILE_MODE", "isolated")
 
-    with pytest.warns(RuntimeWarning, match="system profile"):
-        pngs = docx_render.render_docx_to_pngs(docx_path, output_dir=output_dir)
+    with pytest.raises(docx_render.DocxRenderError, match="isolated profile failed"):
+        docx_render.render_docx_to_pngs(docx_path, output_dir=output_dir)
 
-    assert [call[0] for call in calls] == [
-        "docx_to_pdf",
-        "docx_to_pdf_fallback",
-        "pdf_to_png",
-    ]
-    assert pngs == [output_dir / "source-1.png"]
+    assert [call[0] for call in calls] == ["docx_to_pdf"]
 
 
-def test_docx_render_uses_system_profile_by_default_on_macos(tmp_path, monkeypatch):
+def test_docx_render_uses_isolated_profile_by_default_on_macos(tmp_path, monkeypatch):
     docx_path = tmp_path / "source.docx"
     Document().save(docx_path)
     output_dir = tmp_path / "pages"
@@ -7776,8 +7815,8 @@ def test_docx_render_uses_system_profile_by_default_on_macos(tmp_path, monkeypat
 
     def fake_run(cmd, *, timeout_seconds, stage):
         calls.append((stage, list(cmd)))
-        if stage == "docx_to_pdf_system":
-            assert not any("UserInstallation" in part for part in cmd)
+        if stage == "docx_to_pdf":
+            assert any("UserInstallation" in part for part in cmd)
             outdir = Path(cmd[cmd.index("--outdir") + 1])
             (outdir / "input.pdf").write_bytes(b"%PDF-1.4\n")
         elif stage == "pdf_to_png":
@@ -7790,7 +7829,7 @@ def test_docx_render_uses_system_profile_by_default_on_macos(tmp_path, monkeypat
 
     pngs = docx_render.render_docx_to_pngs(docx_path, output_dir=output_dir)
 
-    assert [call[0] for call in calls] == ["docx_to_pdf_system", "pdf_to_png"]
+    assert [call[0] for call in calls] == ["docx_to_pdf", "pdf_to_png"]
     assert pngs == [output_dir / "source-1.png"]
 
 

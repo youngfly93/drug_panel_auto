@@ -57,9 +57,12 @@ class Settings(BaseSettings):
     default_admin_username: str = "admin"
     default_admin_password: str = "admin123"
     docs_enabled: bool = True
+    business_timezone: str = "Asia/Shanghai"
 
     # --- Upload ---
     max_upload_size_mb: int = 100
+    max_batch_upload_size_mb: int = 100
+    max_batch_files: int = 50
 
     # --- Worker ---
     max_workers: int = 2

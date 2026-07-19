@@ -1,6 +1,6 @@
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -76,7 +76,7 @@ def test_recover_interrupted_single_task_requeues_from_private_request(
             status="running",
             project_type="crc_358_msi",
             context_json_path=str(request_path),
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
     )
     db.commit()
@@ -180,7 +180,7 @@ def test_recover_interrupted_batch_requeues_unfinished_rows(tmp_path, monkeypatc
             total_files=3,
             completed_files=1,
             failed_files=0,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
     )
     db.add_all(
@@ -280,7 +280,7 @@ def test_recover_preflight_batch_requeues_without_touching_completed_rows(
             total_files=3,
             completed_files=1,
             failed_files=0,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
     )
     db.add_all(

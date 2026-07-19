@@ -15,7 +15,7 @@
             :field="field"
             :model-value="formData[field.key]"
             :error="errors[field.key]"
-            @update:model-value="formData[field.key] = $event"
+            @update:model-value="updateField(field.key, $event)"
           />
         </el-col>
       </el-row>
@@ -35,6 +35,14 @@ const props = defineProps<{
   errors: Record<string, string>
   loading: boolean
 }>()
+
+const emit = defineEmits<{
+  updateField: [key: string, value: unknown]
+}>()
+
+function updateField(key: string, value: unknown) {
+  emit('updateField', key, value)
+}
 
 // Hide the "computed" group by default (collapsible in future)
 const visibleGroups = computed(() => {

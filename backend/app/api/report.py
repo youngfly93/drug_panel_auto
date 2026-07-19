@@ -4,7 +4,6 @@ import base64
 import json
 import os
 import re
-import shutil
 import time
 import uuid
 import zipfile
@@ -32,10 +31,18 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal, get_db
-from app.dependencies import get_bridge
+from app.dependencies import (
+    TASK_PRIVILEGED_ROLES,
+    get_bridge,
+    require_reviewer,
+    require_user,
+    user_can_access_task,
+    user_can_access_upload,
+)
 from app.models.audit import AuditLog
 from app.models.task import Task, TaskResult
 from app.models.upload import Upload
+from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.report import (
     GenerateRequest,
@@ -45,7 +52,11 @@ from app.schemas.report import (
 )
 from app.services import clinical_info_service as clinical_svc
 from app.services import reference_report_service as diff_svc
-from app.services.audit_log import audit_event_payload, record_audit_event
+from app.services.audit_log import (
+    audit_event_payload,
+    record_audit_event,
+    request_operator,
+)
 from app.services.batch_lifecycle import (
     BATCH_ACTIVE_STATUSES,
     empty_batch_status_counts,
@@ -53,9 +64,12 @@ from app.services.batch_lifecycle import (
     working_file_count,
 )
 from app.services.file_manager import (
+    UploadLimitExceeded,
     ensure_report_dir,
+    safe_client_filename,
     save_feedback_upload,
     save_upload,
+    write_upload_stream,
 )
 from app.services.generation_preflight import (
     required_dates_error_message,
@@ -65,6 +79,7 @@ from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_recovery import write_single_generation_request
+from app.time_utils import utc_now_naive
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 download_logger = get_logger("reportgen-web.download")
@@ -77,6 +92,7 @@ def upload_report_feedback(
     file: UploadFile = File(...),
     note: str = Form(""),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
 ):
     """报告组反馈上传：按样本号归档到 storage/feedback/<sample_id>/。
 
@@ -88,9 +104,12 @@ def upload_report_feedback(
             status_code=400, detail="反馈文件仅支持 DOCX/DOC/PDF/TXT/MD 格式"
         )
 
-    sample_id = task_id
     task = db.query(Task).filter(Task.id == task_id).first()
-    output_path = getattr(task, "output_path", None) if task else None
+    if task is None or not user_can_access_task(current_user, task):
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    sample_id = task_id
+    output_path = task.output_path
     if output_path:
         summary_path = Path(output_path).with_suffix(".summary.json")
         try:
@@ -324,6 +343,7 @@ def _complete_file_generation_task(
     template_name: Optional[str],
     strict_mode: bool,
     template_contract_mode: str,
+    reference_gate_mode: str = "available",
     qa_visual_render: Optional[str],
     qa_visual_render_required: Optional[bool],
     qa_visual_render_dpi: Optional[int],
@@ -341,7 +361,7 @@ def _complete_file_generation_task(
         return
 
     task.status = "running"
-    task.started_at = task.started_at or datetime.utcnow()
+    task.started_at = task.started_at or utc_now_naive()
     db.commit()
 
     try:
@@ -370,23 +390,22 @@ def _complete_file_generation_task(
         warnings = list(result.get("warnings", []) or [])
         if success and task.output_path:
             try:
-                diff_svc.run_auto_reference_diff(
+                _run_auto_reference_diff_with_gate(
                     db,
                     task,
-                    fail_on="fail",
-                    max_samples=50,
+                    reference_gate_mode=reference_gate_mode,
                 )
             except Exception as exc:
                 warnings.append(f"自动基准对比失败: {exc}")
         task.errors = json.dumps(result.get("errors", []), ensure_ascii=False)
         task.warnings = json.dumps(warnings, ensure_ascii=False)
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utc_now_naive()
         db.commit()
     except Exception as exc:
         task.status = "failed"
         task.failed_files = 1
         task.errors = json.dumps([str(exc)], ensure_ascii=False)
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utc_now_naive()
         db.commit()
     finally:
         db.close()
@@ -500,6 +519,63 @@ REVIEW_STATUSES = {
 }
 
 
+def _require_override_permission(override_gate: bool, user: User) -> None:
+    if override_gate and user.role not in TASK_PRIVILEGED_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="仅复核人或管理员可显式放行未通过门禁的报告",
+        )
+
+
+def _validated_reference_gate_mode(value: str | None, user: User) -> str:
+    try:
+        mode = diff_svc.normalize_reference_gate_mode(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if diff_svc.reference_is_required(mode) and user.role not in TASK_PRIVILEGED_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="仅复核人或管理员可启用金标准验收模式",
+        )
+    return mode
+
+
+def _effective_visual_gate_options(
+    reference_gate_mode: str,
+    qa_visual_render: str | None,
+    qa_visual_render_required: bool | None,
+) -> tuple[str | None, bool | None]:
+    if diff_svc.reference_is_required(reference_gate_mode):
+        return "all", True
+    return qa_visual_render, qa_visual_render_required
+
+
+def _run_auto_reference_diff_with_gate(
+    db: Session,
+    task: Task,
+    *,
+    reference_gate_mode: str,
+) -> dict | None:
+    required = diff_svc.reference_is_required(reference_gate_mode)
+    try:
+        return diff_svc.run_auto_reference_diff(
+            db,
+            task,
+            fail_on="fail",
+            max_samples=50,
+            require_reference=required,
+        )
+    except Exception as exc:
+        if not required:
+            raise
+        return diff_svc.write_reference_gate_failure(
+            task,
+            code="REFERENCE_GATE_EXECUTION_FAILED",
+            message=f"金标准验收门禁执行失败: {exc}",
+            task_id=task.id,
+        )
+
+
 def _task_artifact_dir(task: Task) -> Path:
     if task.task_type == "batch":
         return Path(task.output_path) if task.output_path else settings.report_dir / task.id
@@ -561,6 +637,48 @@ def _gate_issue(level: str, code: str, message: str, scope: str = "task") -> dic
 def _is_required_field_warning(message: object) -> bool:
     text = str(message or "")
     return "缺失必填字段" in text or "missing required" in text.lower()
+
+
+def _qa_has_full_visual_pass(qa_path: str | None) -> bool:
+    if not qa_path:
+        return False
+    try:
+        payload = json.loads(Path(qa_path).read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    visual = (payload.get("checks") or {}).get("visual_render") or {}
+    renderer = visual.get("renderer_fingerprint") or {}
+    required_renderer_fields = (
+        "platform",
+        "machine",
+        "engine",
+        "engine_version",
+        "profile_mode",
+        "pdf_renderer",
+        "pdf_renderer_version",
+        "font_substitution_profile",
+        "font_substitution_profile_sha256",
+    )
+    fingerprint_complete = all(
+        str(renderer.get(field) or "").strip()
+        not in {"", "none", "unavailable"}
+        for field in required_renderer_fields
+    )
+    font_profile_hash_valid = bool(
+        re.fullmatch(
+            r"[0-9a-f]{64}",
+            str(renderer.get("font_substitution_profile_sha256") or "").lower(),
+        )
+    )
+    return bool(
+        visual.get("status") == "PASS"
+        and visual.get("requested") == "all"
+        and visual.get("required") is True
+        and renderer.get("platform") == "Linux"
+        and renderer.get("profile_mode") == "isolated"
+        and fingerprint_complete
+        and font_profile_hash_valid
+    )
 
 
 def _quality_gate_payload(task: Task, db: Session) -> dict:
@@ -730,6 +848,30 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
     elif not diff_summary.get("diff_status"):
         issues.append(_gate_issue("warning", "DIFF_NOT_RUN", "未找到基准报告 Diff 结果。"))
 
+    if diff_summary.get("diff_require_reference"):
+        if task.task_type == "batch":
+            for row in rows:
+                if row.status != "completed":
+                    continue
+                validation = _load_json_dict(row.validation_summary)
+                if not _qa_has_full_visual_pass(validation.get("qa_report_file")):
+                    issues.append(
+                        _gate_issue(
+                            "blocker",
+                            "GOLDEN_VISUAL_QA_REQUIRED",
+                            f"{row.excel_filename} 未完成 Linux 全页阻断式视觉 QA。",
+                            f"file:{row.file_index}",
+                        )
+                    )
+        elif not _qa_has_full_visual_pass(metrics.get("qa_report_file")):
+            issues.append(
+                _gate_issue(
+                    "blocker",
+                    "GOLDEN_VISUAL_QA_REQUIRED",
+                    "金标准验收报告未完成 Linux 全页阻断式视觉 QA。",
+                )
+            )
+
     for warning in task_warnings:
         if _is_required_field_warning(warning):
             issues.append(_gate_issue("blocker", "REQUIRED_FIELD_MISSING", str(warning)))
@@ -744,7 +886,7 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
         "task_type": task.task_type,
         "status": "PASS" if blocker_count == 0 else "BLOCKED",
         "passed": blocker_count == 0,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": utc_now_naive().isoformat(),
         "blockers": blocker_count,
         "warnings": warning_count,
         "issues": issues,
@@ -754,6 +896,7 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
             for key in (
                 "diff_status",
                 "diff_gate_passed",
+                "diff_require_reference",
                 "diff_reference_id",
                 "diff_reference_name",
                 "diff_report_file",
@@ -1049,10 +1192,20 @@ def generate_report(
     request: Request,
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
+    current_user: User = Depends(require_user),
 ):
     """Generate a single report (synchronous, 2-5s)."""
+    reference_gate_mode = _validated_reference_gate_mode(
+        req.reference_gate_mode,
+        current_user,
+    )
+    qa_visual_render, qa_visual_render_required = _effective_visual_gate_options(
+        reference_gate_mode,
+        req.qa_visual_render,
+        req.qa_visual_render_required,
+    )
     upload = db.query(Upload).filter(Upload.id == req.upload_id).first()
-    if not upload:
+    if not upload or not user_can_access_upload(current_user, upload):
         raise HTTPException(status_code=404, detail="上传记录不存在")
 
     task_id = str(uuid.uuid4())
@@ -1083,6 +1236,7 @@ def generate_report(
     # Create task record
     task = Task(
         id=task_id,
+        user_id=current_user.id,
         upload_id=req.upload_id,
         task_type="single",
         status="running",
@@ -1092,7 +1246,7 @@ def generate_report(
             if clinical_payload
             else None
         ),
-        started_at=datetime.utcnow(),
+        started_at=utc_now_naive(),
     )
     db.add(task)
     db.commit()
@@ -1109,7 +1263,8 @@ def generate_report(
             "template_name": req.template_name,
             "strict_mode": req.strict_mode,
             "template_contract_mode": req.template_contract_mode,
-            "qa_visual_render": req.qa_visual_render,
+            "reference_gate_mode": reference_gate_mode,
+            "qa_visual_render": qa_visual_render,
             "status": "running",
         },
     )
@@ -1125,8 +1280,8 @@ def generate_report(
             project_name=effective_project_name,
             strict_mode=req.strict_mode,
             template_contract_mode=req.template_contract_mode,
-            qa_visual_render=req.qa_visual_render,
-            qa_visual_render_required=req.qa_visual_render_required,
+            qa_visual_render=qa_visual_render,
+            qa_visual_render_required=qa_visual_render_required,
             qa_visual_render_dpi=req.qa_visual_render_dpi,
             qa_visual_render_timeout_seconds=req.qa_visual_render_timeout_seconds,
         )
@@ -1139,17 +1294,16 @@ def generate_report(
         auto_diff_result = None
         if success and task.output_path:
             try:
-                auto_diff_result = diff_svc.run_auto_reference_diff(
+                auto_diff_result = _run_auto_reference_diff_with_gate(
                     db,
                     task,
-                    fail_on="fail",
-                    max_samples=50,
+                    reference_gate_mode=reference_gate_mode,
                 )
             except Exception as exc:
                 warnings.append(f"自动基准对比失败: {exc}")
         task.errors = json.dumps(result.get("errors", []), ensure_ascii=False)
         task.warnings = json.dumps(warnings, ensure_ascii=False)
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utc_now_naive()
         db.commit()
         diff_summary = diff_svc.report_diff_summary(task.output_path)
 
@@ -1168,7 +1322,7 @@ def generate_report(
     except Exception as e:
         task.status = "failed"
         task.errors = json.dumps([str(e)], ensure_ascii=False)
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utc_now_naive()
         db.commit()
         return ApiResponse(
             success=False,
@@ -1191,15 +1345,29 @@ def generate_report_from_file(
     template_name: Optional[str] = Form(None),
     strict_mode: bool = Form(False),
     template_contract_mode: str = Form("warn"),
+    reference_gate_mode: str = Form("available"),
     qa_visual_render: Optional[str] = Form(None),
     qa_visual_render_required: Optional[bool] = Form(None),
     qa_visual_render_dpi: Optional[int] = Form(None),
     qa_visual_render_timeout_seconds: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
+    current_user: User = Depends(require_user),
 ):
     """Generate a report from Excel in one request for stateless previews."""
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+    reference_gate_mode = _validated_reference_gate_mode(
+        reference_gate_mode,
+        current_user,
+    )
+    qa_visual_render, qa_visual_render_required = _effective_visual_gate_options(
+        reference_gate_mode,
+        qa_visual_render,
+        qa_visual_render_required,
+    )
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="缺少 Excel 文件名")
+    original_filename = safe_client_filename(file.filename, "upload.xlsx")
+    if not original_filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx 格式文件")
 
     try:
@@ -1218,7 +1386,7 @@ def generate_report_from_file(
         try:
             excel_data = bridge.read_excel(str(stored_path))
             detect = bridge.detect_project_type(
-                str(Path(stored_path).parent / (file.filename or "upload.xlsx")),
+                str(Path(stored_path).parent / original_filename),
                 excel_data=excel_data,
             )
             detected_project_type = detect.get("project_type")
@@ -1233,7 +1401,7 @@ def generate_report_from_file(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
-        lookup_sample_id=clinical_svc.project_code_from_filename(file.filename),
+        lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
     )
     _raise_required_dates_if_missing(
         bridge,
@@ -1247,6 +1415,7 @@ def generate_report_from_file(
     output_dir = ensure_report_dir(task_id)
     task = Task(
         id=task_id,
+        user_id=current_user.id,
         task_type="single",
         status="running",
         project_type=detected_project_type,
@@ -1255,7 +1424,7 @@ def generate_report_from_file(
             if clinical_payload
             else None
         ),
-        started_at=datetime.utcnow(),
+        started_at=utc_now_naive(),
     )
     db.add(task)
     db.commit()
@@ -1272,6 +1441,7 @@ def generate_report_from_file(
             "template_name": template_name,
             "strict_mode": strict_mode,
             "template_contract_mode": template_contract_mode,
+            "reference_gate_mode": reference_gate_mode,
             "qa_visual_render": qa_visual_render,
             "status": "running",
         },
@@ -1302,17 +1472,16 @@ def generate_report_from_file(
         auto_diff_result = None
         if success and task.output_path:
             try:
-                auto_diff_result = diff_svc.run_auto_reference_diff(
+                auto_diff_result = _run_auto_reference_diff_with_gate(
                     db,
                     task,
-                    fail_on="fail",
-                    max_samples=50,
+                    reference_gate_mode=reference_gate_mode,
                 )
             except Exception as exc:
                 warnings.append(f"自动基准对比失败: {exc}")
         task.errors = json.dumps(result.get("errors", []), ensure_ascii=False)
         task.warnings = json.dumps(warnings, ensure_ascii=False)
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utc_now_naive()
         db.commit()
         diff_summary = diff_svc.report_diff_summary(task.output_path)
 
@@ -1332,7 +1501,7 @@ def generate_report_from_file(
     except Exception as e:
         task.status = "failed"
         task.errors = json.dumps([str(e)], ensure_ascii=False)
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utc_now_naive()
         db.commit()
         return ApiResponse(
             success=False,
@@ -1355,15 +1524,29 @@ def generate_report_from_file_async(
     template_name: Optional[str] = Form(None),
     strict_mode: bool = Form(False),
     template_contract_mode: str = Form("warn"),
+    reference_gate_mode: str = Form("available"),
     qa_visual_render: Optional[str] = Form(None),
     qa_visual_render_required: Optional[bool] = Form(None),
     qa_visual_render_dpi: Optional[int] = Form(None),
     qa_visual_render_timeout_seconds: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
+    current_user: User = Depends(require_user),
 ):
     """Start file-based report generation and return immediately."""
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+    reference_gate_mode = _validated_reference_gate_mode(
+        reference_gate_mode,
+        current_user,
+    )
+    qa_visual_render, qa_visual_render_required = _effective_visual_gate_options(
+        reference_gate_mode,
+        qa_visual_render,
+        qa_visual_render_required,
+    )
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="缺少 Excel 文件名")
+    original_filename = safe_client_filename(file.filename, "upload.xlsx")
+    if not original_filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx 格式文件")
 
     try:
@@ -1382,7 +1565,7 @@ def generate_report_from_file_async(
         try:
             excel_data = bridge.read_excel(str(stored_path))
             detect = bridge.detect_project_type(
-                str(Path(stored_path).parent / (file.filename or "upload.xlsx")),
+                str(Path(stored_path).parent / original_filename),
                 excel_data=excel_data,
             )
             detected_project_type = detect.get("project_type")
@@ -1397,7 +1580,7 @@ def generate_report_from_file_async(
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
-        lookup_sample_id=clinical_svc.project_code_from_filename(file.filename),
+        lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
     )
     _raise_required_dates_if_missing(
         bridge,
@@ -1411,6 +1594,7 @@ def generate_report_from_file_async(
     output_dir = ensure_report_dir(task_id)
     task = Task(
         id=task_id,
+        user_id=current_user.id,
         upload_id=upload_id,
         task_type="single",
         status="pending",
@@ -1433,6 +1617,7 @@ def generate_report_from_file_async(
             "template_name": template_name,
             "strict_mode": strict_mode,
             "template_contract_mode": template_contract_mode,
+            "reference_gate_mode": reference_gate_mode,
             "qa_visual_render": qa_visual_render,
             "qa_visual_render_required": qa_visual_render_required,
             "qa_visual_render_dpi": qa_visual_render_dpi,
@@ -1455,6 +1640,7 @@ def generate_report_from_file_async(
             "template_name": template_name,
             "strict_mode": strict_mode,
             "template_contract_mode": template_contract_mode,
+            "reference_gate_mode": reference_gate_mode,
             "qa_visual_render": qa_visual_render,
             "status": "pending",
         },
@@ -1471,6 +1657,7 @@ def generate_report_from_file_async(
         template_name=template_name,
         strict_mode=strict_mode,
         template_contract_mode=template_contract_mode,
+        reference_gate_mode=reference_gate_mode,
         qa_visual_render=qa_visual_render,
         qa_visual_render_required=qa_visual_render_required,
         qa_visual_render_dpi=qa_visual_render_dpi,
@@ -1741,6 +1928,7 @@ def update_review_state(
     req: ReviewStateUpdate,
     request: Request,
     db: Session = Depends(get_db),
+    reviewer: User = Depends(require_reviewer),
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -1759,12 +1947,13 @@ def update_review_state(
         )
 
     state = _load_review_state(task)
-    now = datetime.utcnow().isoformat()
+    now = utc_now_naive().isoformat()
+    actor = request_operator(request)
     event = {
         "status": req.status,
         "status_label": REVIEW_STATUSES[req.status],
         "updated_at": now,
-        "updated_by": req.operator or "未登录操作员",
+        "updated_by": actor,
         "note": req.note or "",
         "override_gate": bool(req.override_gate),
         "gate_status": gate["status"],
@@ -1786,7 +1975,7 @@ def update_review_state(
         details={
             "gate_blockers": gate["blockers"],
             "gate_status": gate["status"],
-            "operator": req.operator or "未登录操作员",
+            "operator": actor,
             "override_gate": bool(req.override_gate),
             "project_type": task.project_type,
             "review_status": req.status,
@@ -1807,7 +1996,9 @@ def download_batch_item_report(
     override_gate: bool = Query(
         False, description="复核人显式放行：QA FAIL 时仍允许下载交付"
     ),
+    current_user: User = Depends(require_user),
 ):
+    _require_override_permission(override_gate, current_user)
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -1858,7 +2049,9 @@ def download_batch_reports_zip(
         False, description="配合 qa=all：复核人显式放行，打包含 QA FAIL 的报告"
     ),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
 ):
+    _require_override_permission(override_gate, current_user)
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -1958,6 +2151,7 @@ def download_audit_package(
     request: Request,
     include_failed: bool = Query(True),
     db: Session = Depends(get_db),
+    _current_user: User = Depends(require_user),
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -1975,7 +2169,7 @@ def download_audit_package(
     prepare_started = time.perf_counter()
     manifest = {
         "schema_version": "1.0",
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": utc_now_naive().isoformat(),
         "task": {
             "id": task.id,
             "task_type": task.task_type,
@@ -2200,8 +2394,13 @@ def diff_report_against_reference(
     diff_dir.mkdir(parents=True, exist_ok=True)
     reference_path = diff_dir / "reference.docx"
     try:
-        with reference_path.open("wb") as fh:
-            shutil.copyfileobj(reference.file, fh)
+        write_upload_stream(
+            reference.file,
+            reference_path,
+            scope="临时对比基准文件",
+        )
+    except UploadLimitExceeded:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"基准报告保存失败: {exc}") from exc
     finally:
@@ -2218,7 +2417,7 @@ def diff_report_against_reference(
         max_samples=max_samples,
         reference_metadata={
             "source": "uploaded",
-            "name": reference.filename,
+            "name": safe_client_filename(reference.filename, "reference.docx"),
             "active": False,
         },
     )
@@ -2230,15 +2429,22 @@ def diff_report_against_registered_reference(
     task_id: str,
     fail_on: str = Query("fail", pattern="^(fail|warn)$"),
     max_samples: int = Query(50, ge=1, le=200),
+    reference_gate_mode: str = Query("available", pattern="^(available|required)$"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
 ):
     """Compare a generated report against the active panel/case reference report."""
+    reference_gate_mode = _validated_reference_gate_mode(
+        reference_gate_mode,
+        current_user,
+    )
     task = _get_single_report_task(task_id, db)
     result = diff_svc.run_auto_reference_diff(
         db,
         task,
         fail_on=fail_on,
         max_samples=max_samples,
+        require_reference=diff_svc.reference_is_required(reference_gate_mode),
     )
     if result is None:
         raise HTTPException(status_code=404, detail="未找到匹配的启用基准报告")
@@ -2250,9 +2456,15 @@ def diff_batch_report_against_registered_references(
     task_id: str,
     fail_on: str = Query("fail", pattern="^(fail|warn)$"),
     max_samples: int = Query(50, ge=1, le=200),
+    reference_gate_mode: str = Query("available", pattern="^(available|required)$"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
 ):
     """Run reference diff for every generated report in a batch task."""
+    reference_gate_mode = _validated_reference_gate_mode(
+        reference_gate_mode,
+        current_user,
+    )
     task = _get_report_task_with_output(task_id, db)
     if task.task_type != "batch":
         raise HTTPException(status_code=400, detail="仅批量任务支持该接口")
@@ -2271,6 +2483,7 @@ def diff_batch_report_against_registered_references(
         batch_report,
         fail_on=fail_on,
         max_samples=max_samples,
+        require_reference=diff_svc.reference_is_required(reference_gate_mode),
     )
     return ApiResponse(data=result)
 
@@ -2379,8 +2592,10 @@ def _download_report_response(
     task_id: str,
     db: Session,
     request: Request,
+    current_user: User,
     override_gate: bool = False,
 ) -> FileResponse:
+    _require_override_permission(override_gate, current_user)
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -2430,8 +2645,9 @@ def head_download_report(
     task_id: str,
     request: Request,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
 ):
-    return _download_report_response(task_id, db, request)
+    return _download_report_response(task_id, db, request, current_user)
 
 
 @router.get("/{task_id}/download")
@@ -2442,5 +2658,12 @@ def download_report(
     override_gate: bool = Query(
         False, description="复核人显式放行：QA FAIL 时仍允许下载交付"
     ),
+    current_user: User = Depends(require_user),
 ):
-    return _download_report_response(task_id, db, request, override_gate=override_gate)
+    return _download_report_response(
+        task_id,
+        db,
+        request,
+        current_user,
+        override_gate=override_gate,
+    )

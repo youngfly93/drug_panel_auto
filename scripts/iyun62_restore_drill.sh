@@ -89,6 +89,15 @@ hash_file() {
     fi
 }
 
+file_size() {
+    local path="$1"
+    if stat -c '%s' "$path" >/dev/null 2>&1; then
+        stat -c '%s' "$path"
+    else
+        stat -f '%z' "$path"
+    fi
+}
+
 if [ -z "$ARCHIVE" ]; then
     ARCHIVE="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'reportgen-web-backup-*.tar.gz' -printf '%T@ %p\n' 2>/dev/null | sort -rn | awk 'NR==1 {sub(/^[^ ]+ /, ""); print}')"
 fi
@@ -117,14 +126,42 @@ chmod 700 "$drill_dir" 2>/dev/null || true
 log "restore_drill begin archive=$archive_base full=$RESTORE_DRILL_FULL"
 
 expected_sha=""
-if [ -f "$ARCHIVE.sha256" ]; then
-    expected_sha="$(awk '{print $1}' "$ARCHIVE.sha256")"
+if [ ! -f "$ARCHIVE.sha256" ]; then
+    echo "Checksum sidecar missing for $archive_base" >&2
+    exit 1
+fi
+expected_sha="$(awk '{print $1}' "$ARCHIVE.sha256")"
+if [[ ! "$expected_sha" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    echo "Checksum sidecar is invalid for $archive_base" >&2
+    exit 1
 fi
 actual_sha="$(hash_file "$ARCHIVE")"
-if [ -n "$expected_sha" ] && [ "$expected_sha" != "$actual_sha" ]; then
+if [ "$expected_sha" != "$actual_sha" ]; then
     echo "Checksum mismatch for $archive_base" >&2
     exit 1
 fi
+if [ ! -f "$sidecar_manifest" ]; then
+    echo "Backup manifest sidecar missing for $archive_base" >&2
+    exit 1
+fi
+ARCHIVE="$ARCHIVE" SIDECAR_MANIFEST="$sidecar_manifest" ACTUAL_SHA="$actual_sha" \
+python3 - <<'PY'
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+archive = Path(os.environ["ARCHIVE"])
+manifest = json.loads(Path(os.environ["SIDECAR_MANIFEST"]).read_text(encoding="utf-8"))
+declared = manifest.get("archive") or {}
+if declared.get("filename") != archive.name:
+    raise SystemExit("Backup manifest filename does not match archive")
+if declared.get("sha256") != os.environ["ACTUAL_SHA"]:
+    raise SystemExit("Backup manifest SHA256 does not match archive")
+if int(declared.get("bytes") or -1) != archive.stat().st_size:
+    raise SystemExit("Backup manifest byte count does not match archive")
+PY
 
 tar_stats_json="$(
     TAR_ARCHIVE="$ARCHIVE" python3 - <<'PY'
@@ -251,7 +288,7 @@ fi
 
 REPORT_PATH="$report_path" \
 ARCHIVE_BASENAME="$archive_base" \
-ARCHIVE_BYTES="$(stat -c '%s' "$ARCHIVE")" \
+ARCHIVE_BYTES="$(file_size "$ARCHIVE")" \
 ARCHIVE_SHA256="$actual_sha" \
 MANIFEST_PATH="$manifest_path" \
 TAR_STATS_JSON="$tar_stats_json" \

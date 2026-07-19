@@ -14,6 +14,8 @@ from app.config import settings
 from app.database import Base, get_db
 from app.dependencies import get_current_user, require_admin, require_user
 from app.main import create_app
+from app.models.audit import AuditLog
+from app.models.task import Task
 from app.ws import progress as progress_ws
 
 
@@ -134,6 +136,182 @@ def test_authenticated_user_can_read_task_stats(tmp_path: Path) -> None:
     assert response.json()["data"]["total"] == 0
 
 
+def _role_scoped_client(
+    tmp_path: Path,
+    *,
+    user_id: int,
+    role: str,
+) -> tuple[TestClient, sessionmaker]:
+    engine = create_engine(
+        f"sqlite:///{tmp_path / f'role-{user_id}-{role}.sqlite'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine)
+
+    def override_db():
+        db = session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app = FastAPI()
+    app.include_router(api_router)
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=user_id,
+        username=f"user-{user_id}",
+        display_name=f"User {user_id}",
+        role=role,
+        is_active=True,
+    )
+    return TestClient(app), session_factory
+
+
+def _seed_role_scope_tasks(session_factory: sessionmaker) -> None:
+    db = session_factory()
+    try:
+        db.add_all(
+            [
+                Task(
+                    id="owned-task",
+                    user_id=1,
+                    task_type="single",
+                    status="completed",
+                ),
+                Task(
+                    id="other-task",
+                    user_id=2,
+                    task_type="single",
+                    status="completed",
+                ),
+                Task(
+                    id="legacy-task",
+                    user_id=None,
+                    task_type="single",
+                    status="completed",
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_operator_only_sees_and_reads_owned_tasks(tmp_path: Path) -> None:
+    client, session_factory = _role_scoped_client(
+        tmp_path,
+        user_id=1,
+        role="operator",
+    )
+    _seed_role_scope_tasks(session_factory)
+
+    with client:
+        listed = client.get("/api/v1/tasks")
+        own = client.get("/api/v1/tasks/owned-task")
+        other = client.get("/api/v1/tasks/other-task")
+        legacy = client.get("/api/v1/reports/legacy-task")
+
+    assert {row["id"] for row in listed.json()["data"]["items"]} == {"owned-task"}
+    assert own.status_code == 200
+    assert other.status_code == 404
+    assert legacy.status_code == 404
+
+
+def test_reviewer_can_read_cross_operator_and_legacy_tasks(tmp_path: Path) -> None:
+    client, session_factory = _role_scoped_client(
+        tmp_path,
+        user_id=9,
+        role="reviewer",
+    )
+    _seed_role_scope_tasks(session_factory)
+
+    with client:
+        listed = client.get("/api/v1/tasks")
+        other = client.get("/api/v1/tasks/other-task")
+        legacy = client.get("/api/v1/reports/legacy-task")
+
+    assert {row["id"] for row in listed.json()["data"]["items"]} == {
+        "owned-task",
+        "other-task",
+        "legacy-task",
+    }
+    assert other.status_code == 200
+    assert legacy.status_code == 200
+
+
+def test_operator_cannot_review_or_mutate_reference_library(tmp_path: Path) -> None:
+    client, session_factory = _role_scoped_client(
+        tmp_path,
+        user_id=1,
+        role="operator",
+    )
+    _seed_role_scope_tasks(session_factory)
+    report_path = tmp_path / "owned.docx"
+    report_path.write_bytes(b"synthetic-report")
+    report_path.with_suffix(".qa.json").write_text('{"status":"FAIL"}')
+    db = session_factory()
+    try:
+        db.query(Task).filter(Task.id == "owned-task").update(
+            {Task.output_path: str(report_path)}
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    with client:
+        review = client.post(
+            "/api/v1/reports/owned-task/review-state",
+            json={"status": "reviewed", "operator": "spoofed-admin"},
+        )
+        reference = client.post(
+            "/api/v1/reference-reports",
+            data={"panel_id": "crc_358_msi", "case_id": "SYNTHETIC"},
+            files={"file": ("reference.docx", b"synthetic", "application/octet-stream")},
+        )
+        reference_list = client.get("/api/v1/reference-reports")
+        blocked_download = client.get("/api/v1/reports/owned-task/download")
+        override_download = client.get(
+            "/api/v1/reports/owned-task/download",
+            params={"override_gate": True},
+        )
+
+    assert review.status_code == 403
+    assert reference.status_code == 403
+    assert reference_list.status_code == 403
+    assert blocked_download.status_code == 409
+    assert override_download.status_code == 403
+
+
+def test_knowledge_manager_reference_write_uses_authenticated_audit_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "storage_root", tmp_path / "storage")
+    client, session_factory = _role_scoped_client(
+        tmp_path,
+        user_id=4,
+        role="knowledge_manager",
+    )
+
+    with client:
+        response = client.post(
+            "/api/v1/reference-reports",
+            data={"panel_id": "crc_358_msi", "case_id": "SYNTHETIC"},
+            files={"file": ("reference.docx", b"synthetic", "application/octet-stream")},
+        )
+
+    assert response.status_code == 200
+    db = session_factory()
+    try:
+        event = db.query(AuditLog).filter(AuditLog.action == "reference.created").one()
+        assert event.user_id == 4
+        assert '"operator": "User 4"' in event.details
+    finally:
+        db.close()
+
+
 def test_production_can_disable_api_documentation(monkeypatch) -> None:
     monkeypatch.setattr(settings, "docs_enabled", False)
     app = create_app()
@@ -167,15 +345,38 @@ def test_admin_routes_reject_authenticated_non_admin_users(path: str) -> None:
         assert client.get(path).status_code == 403
 
 
-def _websocket_client(monkeypatch, *, valid_token: bool) -> TestClient:
+def _websocket_client(
+    monkeypatch,
+    *,
+    valid_token: bool,
+    task_owner_id: int | None = 1,
+    authenticated_user_id: int = 1,
+    authenticated_role: str = "operator",
+) -> TestClient:
     app = FastAPI()
     app.include_router(progress_ws.router)
-    app.dependency_overrides[get_db] = lambda: SimpleNamespace()
+
+    class FakeQuery:
+        def filter(self, *_args):
+            return self
+
+        def first(self):
+            if task_owner_id is None:
+                return None
+            return SimpleNamespace(user_id=task_owner_id)
+
+    app.dependency_overrides[get_db] = lambda: SimpleNamespace(
+        query=lambda _model: FakeQuery()
+    )
 
     def authenticate(token, _db):
         if not valid_token or token != "synthetic-token":
             raise HTTPException(status_code=401, detail="Invalid token")
-        return SimpleNamespace(id=1, is_active=True)
+        return SimpleNamespace(
+            id=authenticated_user_id,
+            role=authenticated_role,
+            is_active=True,
+        )
 
     monkeypatch.setattr(progress_ws, "authenticate_access_token", authenticate)
     return TestClient(app)
@@ -198,3 +399,30 @@ def test_websocket_rejects_invalid_token(monkeypatch) -> None:
                 websocket.send_json({"type": "authenticate", "token": "bad-token"})
                 websocket.receive_json()
     assert exc_info.value.code == 4401
+
+
+def test_websocket_rejects_another_operators_task(monkeypatch) -> None:
+    with _websocket_client(
+        monkeypatch,
+        valid_token=True,
+        task_owner_id=1,
+        authenticated_user_id=2,
+    ) as client:
+        with pytest.raises(WebSocketDisconnect) as exc_info:
+            with client.websocket_connect("/ws/tasks/synthetic/progress") as websocket:
+                websocket.send_json({"type": "authenticate", "token": "synthetic-token"})
+                websocket.receive_json()
+    assert exc_info.value.code == 4403
+
+
+def test_websocket_reviewer_can_observe_any_task(monkeypatch) -> None:
+    with _websocket_client(
+        monkeypatch,
+        valid_token=True,
+        task_owner_id=1,
+        authenticated_user_id=2,
+        authenticated_role="reviewer",
+    ) as client:
+        with client.websocket_connect("/ws/tasks/synthetic/progress") as websocket:
+            websocket.send_json({"type": "authenticate", "token": "synthetic-token"})
+            assert websocket.receive_json()["type"] == "authenticated"

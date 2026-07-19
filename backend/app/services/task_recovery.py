@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -18,6 +17,7 @@ from app.services.batch_lifecycle import (
     BATCH_ITEM_ACTIVE_STATUSES,
 )
 from app.services.generation_queue import submit_generation_job
+from app.time_utils import utc_now_naive
 
 SINGLE_IN_FLIGHT_STATUSES = {"pending", "running"}
 TERMINAL_STATUSES = {"completed", "failed", "partial_failed", "cancelled"}
@@ -45,7 +45,7 @@ def write_single_generation_request(*, task_id: str, payload: dict[str, Any]) ->
     path.parent.mkdir(parents=True, exist_ok=True)
     body = {
         "schema_version": "1.0",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": utc_now_naive().isoformat(),
         **payload,
     }
     path.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -89,7 +89,7 @@ def _is_under(path: Path, parent: Path) -> bool:
 
 
 def _fail_task(db: Session, task: Task, reason: str) -> None:
-    now = datetime.utcnow()
+    now = utc_now_naive()
     task.status = "failed"
     task.completed_at = task.completed_at or now
     if task.started_at and task.completed_at:
@@ -167,12 +167,16 @@ def _recover_single_task(db: Session, task: Task, bridge: Any) -> str:
             "template_name",
             "strict_mode",
             "template_contract_mode",
+            "reference_gate_mode",
             "qa_visual_render",
             "qa_visual_render_required",
             "qa_visual_render_dpi",
             "qa_visual_render_timeout_seconds",
         )
     }
+    job_kwargs["reference_gate_mode"] = (
+        job_kwargs.get("reference_gate_mode") or "available"
+    )
     job_kwargs["bridge"] = bridge
     submit_generation_job(_complete_file_generation_task, **job_kwargs)
     return "requeued"
@@ -251,7 +255,7 @@ def _recover_batch_task(db: Session, task: Task, bridge: Any) -> str:
             task.status = "partial_failed"
         else:
             task.status = "failed" if task.failed_files else "completed"
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utc_now_naive()
         task.warnings = _append_json_list(
             task.warnings,
             RECOVERY_MESSAGE,
@@ -286,6 +290,7 @@ def _recover_batch_task(db: Session, task: Task, bridge: Any) -> str:
         project_name=inputs.get("project_name"),
         template_name=inputs.get("template_name"),
         template_contract_mode=inputs.get("template_contract_mode") or "warn",
+        reference_gate_mode=inputs.get("reference_gate_mode") or "available",
         bridge=bridge,
     )
     return "requeued"
@@ -300,7 +305,7 @@ def recover_interrupted_tasks(
     global _last_recovery_summary
     summary: dict[str, Any] = {
         "ran": True,
-        "checked_at": datetime.utcnow().isoformat(),
+        "checked_at": utc_now_naive().isoformat(),
         "scanned": 0,
         "requeued": 0,
         "failed": 0,

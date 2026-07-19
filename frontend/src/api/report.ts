@@ -8,6 +8,7 @@ export interface GenerateRequest {
   template_name?: string | null
   strict_mode?: boolean
   template_contract_mode?: string
+  reference_gate_mode?: 'available' | 'required'
   qa_visual_render?: 'none' | 'first' | 'all' | null
   qa_visual_render_required?: boolean | null
   qa_visual_render_dpi?: number | null
@@ -304,6 +305,9 @@ function buildReportFileForm(file: File, req: Omit<GenerateRequest, 'upload_id'>
   if (req.strict_mode !== undefined) form.append('strict_mode', String(req.strict_mode))
   if (req.template_contract_mode) {
     form.append('template_contract_mode', req.template_contract_mode)
+  }
+  if (req.reference_gate_mode) {
+    form.append('reference_gate_mode', req.reference_gate_mode)
   }
   if (req.qa_visual_render) form.append('qa_visual_render', req.qa_visual_render)
   if (req.qa_visual_render_required !== undefined && req.qa_visual_render_required !== null) {
@@ -629,6 +633,9 @@ export const reportApi = {
     if (req.template_contract_mode) {
       form.append('template_contract_mode', req.template_contract_mode)
     }
+    if (req.reference_gate_mode) {
+      form.append('reference_gate_mode', req.reference_gate_mode)
+    }
     const { data } = await client.post('/reports/batch-files', form, {
       headers: { 'Idempotency-Key': idempotencyKey },
       // Multipart 上传时间与服务端建档时间不同；服务端必须在接收后秒回。
@@ -680,7 +687,6 @@ export const reportApi = {
     taskId: string,
     req: {
       status: 'draft' | 'reviewed' | 'delivered' | 'rejected' | string
-      operator?: string | null
       note?: string | null
       override_gate?: boolean
     },
@@ -808,7 +814,7 @@ export const reportApi = {
     } catch (error: any) {
       const message = await buildApiErrorMessage(error, '报告下载失败')
       const suffix = retries > 1 ? `（已重试 ${retries} 次）` : ''
-      throw new Error(`${message}${suffix}`)
+      throw new Error(`${message}${suffix}`, { cause: error })
     }
   },
 

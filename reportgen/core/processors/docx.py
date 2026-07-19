@@ -198,6 +198,9 @@ def _run_toc_refresh(ctx: ProcessorContext) -> None:
 
 
 def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
+    require_deterministic_layout = bool(
+        ctx.template_context.get("_require_deterministic_layout")
+    )
     heading_cleanup_targets = (
         "基因变异解析",
         "靶向药物/免疫用药提示解析",
@@ -246,6 +249,10 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
     if _env_truthy("REPORTGEN_FAST_TOC") or _env_truthy(
         "REPORTGEN_SKIP_FINAL_LO_REFRESH"
     ):
+        if require_deterministic_layout:
+            raise RuntimeError(
+                "生产 Panel 禁止跳过最终 LibreOffice 目录刷新"
+            )
         try:
             ctx.renderer._set_update_fields(ctx.output_path)
         except Exception:
@@ -265,6 +272,10 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
             ctx.renderer._set_update_fields(ctx.output_path)
         except Exception as refresh_err:
             ctx.logger.warning("最终目录页码刷新失败", error=str(refresh_err))
+            if require_deterministic_layout:
+                raise RuntimeError(
+                    f"生产 Panel 的 LibreOffice 目录刷新失败: {refresh_err}"
+                ) from refresh_err
     # LibreOffice can recreate template-owned blank page-break paragraphs while
     # refreshing TOC fields. Re-run the narrow exact-heading cleanup after the
     # refresh, before the final TOC fallback pagination is detected.

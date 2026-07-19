@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from collections import Counter, defaultdict
@@ -17,6 +18,7 @@ from statistics import mean
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
+from reportgen.utils.libreoffice_profile import FONT_SUBSTITUTION_PROFILE
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -53,6 +55,10 @@ DISK_WARNING_PERCENT = 80
 DISK_DANGER_PERCENT = 90
 BACKUP_WARNING_HOURS = 30
 BACKUP_DANGER_HOURS = 48
+RESTORE_DRILL_WARNING_HOURS = 35 * 24
+RESTORE_DRILL_DANGER_HOURS = 45 * 24
+WATCHDOG_DANGER_MINUTES = 5
+RECENT_FAILURE_HOURS = 24
 DOWNLOAD_SLOW_WARNING_MS = 30_000
 LOAD_TEST_MIN_UNITS = 10
 LOAD_TEST_PASS_RATE = 98.0
@@ -207,6 +213,82 @@ def _libreoffice_listener_status() -> dict[str, Any]:
     return {"checked": True, "running": result.returncode == 0}
 
 
+def _renderer_fingerprint_status(runtime_dir: Path) -> dict[str, Any]:
+    path = runtime_dir / "renderer_fingerprint.json"
+    if not path.is_file():
+        return {"available": False}
+    try:
+        payload = json.loads(_read_text(path, max_bytes=16 * 1024))
+    except Exception:
+        return {"available": False, "error": "invalid_renderer_fingerprint"}
+    allowed = {
+        key: payload.get(key)
+        for key in (
+            "platform",
+            "machine",
+            "engine",
+            "engine_version",
+            "profile_mode",
+            "pdf_renderer",
+            "pdf_renderer_version",
+            "font_substitution_profile",
+            "font_substitution_profile_sha256",
+            "zh_font_match",
+            "zh_font_match_sha256",
+        )
+    }
+    return {"available": True, **allowed}
+
+
+def _alert_delivery_status(runtime_dir: Path) -> dict[str, Any]:
+    """Report whether a webhook is configured without exposing its value."""
+    if str(os.environ.get("RG_WEB_ALERT_WEBHOOK_URL") or "").strip():
+        return {"configured": True, "source": "environment"}
+    for filename in ("alerts.env", ".env.prod"):
+        path = runtime_dir / filename
+        for raw_line in _read_text(path, max_bytes=64 * 1024).splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() not in {"ALERT_WEBHOOK_URL", "RG_WEB_ALERT_WEBHOOK_URL"}:
+                continue
+            if value.strip().strip("'\""):
+                return {"configured": True, "source": filename}
+    return {"configured": False, "source": None}
+
+
+def _restore_drill_status(log_dir: Path) -> dict[str, Any]:
+    try:
+        reports = sorted(
+            log_dir.glob("restore-drill-*.json"),
+            key=lambda candidate: candidate.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        reports = []
+    if not reports:
+        return {"available": False, "status": "MISSING", "modified_at": None}
+    latest = reports[0]
+    payload = _load_json(latest)
+    modified_at = datetime.fromtimestamp(
+        latest.stat().st_mtime,
+        timezone.utc,
+    ).isoformat()
+    full_extract = ((payload.get("checks") or {}).get("full_extract") or {})
+    return {
+        "available": True,
+        "status": str(payload.get("status") or "UNKNOWN").upper(),
+        "modified_at": modified_at,
+        "age_hours": round(_hours_since(modified_at) or 0.0, 2),
+        "full_extract": bool(full_extract.get("enabled")),
+        "sqlite_integrity": str(
+            (((payload.get("checks") or {}).get("sqlite") or {}).get("integrity_check"))
+            or ""
+        ),
+    }
+
+
 def _task_counts(db: Session) -> dict[str, Any]:
     rows = db.query(Task.status, func.count(Task.id)).group_by(Task.status).all()
     raw_by_status = {
@@ -231,11 +313,22 @@ def _task_counts(db: Session) -> dict[str, Any]:
     by_status["running"] = sum(
         raw_by_status.get(status, 0) for status in BATCH_WORKING_STATUSES
     )
+    recent_failure_cutoff = _utc_naive_now() - timedelta(hours=RECENT_FAILURE_HOURS)
+    failed_recent = int(
+        db.query(func.count(Task.id))
+        .filter(
+            Task.status.in_(["failed", "partial_failed"]),
+            Task.created_at >= recent_failure_cutoff,
+        )
+        .scalar()
+        or 0
+    )
     return {
         "total": total,
         "by_status": by_status,
         "by_stage": raw_by_status,
         "failed_total": by_status.get("failed", 0) + by_status.get("partial_failed", 0),
+        "failed_recent_24h": failed_recent,
     }
 
 
@@ -1053,6 +1146,77 @@ def _ops_alerts(snapshot: dict[str, Any]) -> list[dict[str, str | None]]:
     task_counts = snapshot["tasks"]["counts"]
     latest_backup = snapshot["backups"]["latest"]
 
+    instance_lock = runtime["instance_lock"]
+    if instance_lock.get("enabled") and not instance_lock.get("acquired"):
+        alerts.append(
+            _alert(
+                "runtime.instance_lock.missing",
+                "danger",
+                "运行实例",
+                "生产单实例锁未持有",
+                "SQLite 与进程内任务队列可能被多个 Web 进程同时使用。",
+                threshold="enabled=true and acquired=true",
+            )
+        )
+
+    renderer = runtime["renderer_fingerprint"]
+    if not renderer.get("available"):
+        alerts.append(
+            _alert(
+                "renderer.fingerprint.missing",
+                "danger",
+                "渲染环境",
+                "缺少生产渲染器指纹",
+                "无法证明当前实例具备确定性的 Linux LibreOffice/Poppler 渲染栈。",
+                threshold="renderer fingerprint available",
+            )
+        )
+    elif (
+        renderer.get("platform") != "Linux"
+        or renderer.get("profile_mode") != "isolated"
+        or renderer.get("font_substitution_profile")
+        != FONT_SUBSTITUTION_PROFILE
+        or not re.fullmatch(
+            r"[0-9a-f]{64}",
+            str(renderer.get("font_substitution_profile_sha256") or "").lower(),
+        )
+    ):
+        alerts.append(
+            _alert(
+                "renderer.fingerprint.invalid",
+                "danger",
+                "渲染环境",
+                "生产渲染器指纹不完整",
+                "Linux 隔离 profile 或固定 CJK 字体替换表未通过指纹校验。",
+                threshold="Linux + isolated + attested CJK font profile",
+            )
+        )
+
+    if not runtime["alert_delivery"]["configured"]:
+        alerts.append(
+            _alert(
+                "alerts.delivery.unconfigured",
+                "danger",
+                "告警投递",
+                "外部告警 Webhook 未配置",
+                "巡检仍会写本机日志，但生产异常无法主动送达报告组或运维人员。",
+                threshold="webhook configured",
+            )
+        )
+
+    recovery = runtime["task_recovery"]
+    if int(recovery.get("failed") or 0) > 0 or recovery.get("errors"):
+        alerts.append(
+            _alert(
+                "tasks.recovery.failed",
+                "danger",
+                "任务恢复",
+                "启动恢复存在失败任务",
+                f"最近恢复失败 {int(recovery.get('failed') or 0)} 个，请检查任务队列。",
+                threshold="failed=0",
+            )
+        )
+
     for key, label in (("web", "Web 服务"), ("tunnel", "公网隧道")):
         current = watchdog[key]["status"]
         if current == "fail":
@@ -1077,6 +1241,19 @@ def _ops_alerts(snapshot: dict[str, Any]) -> list[dict[str, str | None]]:
                     threshold="status=warn",
                 )
             )
+
+    watchdog_age = _hours_since(watchdog.get("last_event_at"))
+    if watchdog_age is None or watchdog_age * 60 > WATCHDOG_DANGER_MINUTES:
+        alerts.append(
+            _alert(
+                "watchdog.stale",
+                "danger",
+                "Watchdog",
+                "Watchdog 巡检记录过期",
+                "一分钟巡检没有在预期窗口内留下新记录。",
+                threshold=f"<= {WATCHDOG_DANGER_MINUTES}min",
+            )
+        )
 
     libreoffice_running = runtime["libreoffice_listener"]["running"]
     libreoffice_status = watchdog["libreoffice"]["status"]
@@ -1142,16 +1319,32 @@ def _ops_alerts(snapshot: dict[str, Any]) -> list[dict[str, str | None]]:
             )
         )
 
-    failed_total = int(task_counts.get("failed_total") or 0)
-    if failed_total > 0:
+    database_active = int(task_counts.get("by_status", {}).get("pending") or 0) + int(
+        task_counts.get("by_status", {}).get("running") or 0
+    )
+    in_process_active = queued + int(queue.get("active") or 0)
+    if database_active > in_process_active:
         alerts.append(
             _alert(
-                "tasks.failed",
+                "tasks.queue_state.mismatch",
+                "danger",
+                "任务",
+                "数据库任务与执行队列不一致",
+                f"数据库活动任务 {database_active} 个，当前执行/排队 {in_process_active} 个。",
+                threshold="database active <= in-process active",
+            )
+        )
+
+    failed_recent = int(task_counts.get("failed_recent_24h") or 0)
+    if failed_recent > 0:
+        alerts.append(
+            _alert(
+                "tasks.failed.recent",
                 "warning",
                 "任务",
-                "存在失败或部分失败任务",
-                f"累计失败/部分失败 {failed_total} 个，请在任务队列中复核。",
-                threshold="failed_total > 0",
+                "近 24 小时存在失败任务",
+                f"近 24 小时失败/部分失败 {failed_recent} 个，请在任务队列中复核。",
+                threshold="failed_recent_24h > 0",
             )
         )
 
@@ -1239,6 +1432,67 @@ def _ops_alerts(snapshot: dict[str, Any]) -> list[dict[str, str | None]]:
                 threshold="cleanup complete",
             )
         )
+    else:
+        cleanup_age = _hours_since(runtime["maintenance"]["last_cleanup_at"])
+        if cleanup_age is None or cleanup_age > BACKUP_DANGER_HOURS:
+            alerts.append(
+                _alert(
+                    "maintenance.cleanup.stale",
+                    "warning",
+                    "维护",
+                    "清理任务记录过期",
+                    "最近清理超过 48 小时或时间无法解析，请检查定时任务。",
+                    threshold=f"<= {BACKUP_DANGER_HOURS}h",
+                )
+            )
+
+    restore_drill = runtime["restore_drill"]
+    if not restore_drill.get("available"):
+        alerts.append(
+            _alert(
+                "restore_drill.missing",
+                "danger",
+                "恢复演练",
+                "没有恢复演练证据",
+                "备份存在不等于可恢复；请运行非破坏性恢复演练并保存 PASS 记录。",
+                threshold="latest restore drill PASS",
+            )
+        )
+    elif restore_drill.get("status") != "PASS":
+        alerts.append(
+            _alert(
+                "restore_drill.failed",
+                "danger",
+                "恢复演练",
+                "最近恢复演练未通过",
+                "请先修复备份完整性或 SQLite 恢复问题，再进行生产变更。",
+                threshold="status=PASS",
+            )
+        )
+    else:
+        drill_age = float(restore_drill.get("age_hours") or 0.0)
+        if drill_age > RESTORE_DRILL_DANGER_HOURS:
+            alerts.append(
+                _alert(
+                    "restore_drill.stale",
+                    "danger",
+                    "恢复演练",
+                    "恢复演练已经过期",
+                    f"最近恢复演练约 {drill_age / 24:.1f} 天前完成。",
+                    threshold=f"<= {RESTORE_DRILL_DANGER_HOURS / 24:.0f}d",
+                )
+            )
+        elif drill_age > RESTORE_DRILL_WARNING_HOURS:
+            alerts.append(
+                _alert(
+                    "restore_drill.warning",
+                    "warning",
+                    "恢复演练",
+                    "恢复演练即将过期",
+                    f"最近恢复演练约 {drill_age / 24:.1f} 天前完成。",
+                    threshold=f"<= {RESTORE_DRILL_WARNING_HOURS / 24:.0f}d",
+                )
+            )
 
     return alerts
 
@@ -1254,13 +1508,15 @@ def ops_status(
     log_dir = runtime_dir / "logs"
     storage_root = settings.storage_root
     data = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "generated_at": _now_iso(),
         "deployment": _read_current_release(runtime_dir),
         "runtime": {
             "runtime_dir_present": runtime_dir.exists(),
             "instance_lock": runtime_instance_lock_status(),
             "libreoffice_listener": _libreoffice_listener_status(),
+            "renderer_fingerprint": _renderer_fingerprint_status(runtime_dir),
+            "alert_delivery": _alert_delivery_status(runtime_dir),
             "generation_queue": queue_stats(),
             "generation_limits": {
                 "process_isolation": bool(settings.generation_process_isolation),
@@ -1269,6 +1525,7 @@ def ops_status(
             "task_recovery": last_recovery_summary(),
             "watchdog": _watchdog_status(log_dir / "watchdog.log"),
             "maintenance": _maintenance_status(log_dir / "maintenance.log"),
+            "restore_drill": _restore_drill_status(log_dir),
         },
         "storage": {
             "disk": _disk_usage(storage_root),
@@ -1287,6 +1544,7 @@ def ops_status(
         "downloads": _download_diagnostics(
             log_dir / "uvicorn.log",
             event_limit=download_event_limit,
+            since=datetime.now(timezone.utc) - timedelta(hours=24),
         ),
         "retention": _retention_policy(),
         "backups": _backup_status(_backup_dir()),

@@ -1,15 +1,17 @@
 """Excel upload and preview endpoints."""
 
 import json
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_bridge
+from app.dependencies import get_bridge, require_user
 from app.models.upload import Upload
+from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.excel import (
     DetectResult,
@@ -19,8 +21,8 @@ from app.schemas.excel import (
     SingleValuesResponse,
     UploadResponse,
 )
-from app.services.file_manager import save_upload
 from app.services import clinical_info_service as clinical_svc
+from app.services.file_manager import safe_client_filename, save_upload
 from app.services.reportgen_bridge import ReportGenBridge
 
 router = APIRouter(prefix="/excel", tags=["excel"])
@@ -41,9 +43,13 @@ def upload_excel(
     file: UploadFile,
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
+    current_user: User = Depends(require_user),
 ):
     # Validate extension
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="缺少 Excel 文件名")
+    original_filename = safe_client_filename(file.filename, "upload.xlsx")
+    if not original_filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx 格式文件")
 
     # Save to disk
@@ -61,7 +67,7 @@ def upload_excel(
     # Detect project type using ORIGINAL filename (not UUID stored path)
     # This is critical: upstream ProjectDetector matches keywords in filename
     detect = bridge.detect_project_type(
-        str(Path(stored_path).parent / (file.filename or "upload.xlsx")),
+        str(Path(stored_path).parent / original_filename),
         excel_data=excel_data,
     )
 
@@ -71,7 +77,8 @@ def upload_excel(
     # Persist upload record
     record = Upload(
         id=upload_id,
-        original_filename=file.filename,
+        user_id=current_user.id,
+        original_filename=original_filename,
         stored_path=str(stored_path),
         file_size_bytes=file_size,
         sheet_names=json.dumps(sheet_names, ensure_ascii=False),
@@ -86,7 +93,7 @@ def upload_excel(
     return ApiResponse(
         data=UploadResponse(
             upload_id=upload_id,
-            original_filename=file.filename,
+            original_filename=original_filename,
             file_size_bytes=file_size,
             sheet_names=sheet_names,
             detected_project_type=detect.get("project_type"),
@@ -103,7 +110,10 @@ def inspect_excel(
     bridge: ReportGenBridge = Depends(get_bridge),
 ):
     """Inspect Excel content in one request for stateless preview deployments."""
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="缺少 Excel 文件名")
+    original_filename = safe_client_filename(file.filename, "upload.xlsx")
+    if not original_filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx 格式文件")
 
     upload_id, stored_path, file_size = save_upload(file)
@@ -121,13 +131,13 @@ def inspect_excel(
         for name in sheet_names
     ]
     detect = bridge.detect_project_type(
-        str(Path(stored_path).parent / (file.filename or "upload.xlsx")),
+        str(Path(stored_path).parent / original_filename),
         excel_data=excel_data,
     )
     validation_warnings = bridge.validate_excel_data(excel_data)
 
     single_values = bridge.get_mapped_clinical_fields(excel_data)
-    filename_project_code = clinical_svc.project_code_from_filename(file.filename)
+    filename_project_code = clinical_svc.project_code_from_filename(original_filename)
     sample_id = str(single_values.get("sample_id") or "").strip()
     lookup_sample_id = filename_project_code or sample_id
     enrichment = None
@@ -177,7 +187,7 @@ def inspect_excel(
 
     upload = UploadResponse(
         upload_id=upload_id,
-        original_filename=file.filename,
+        original_filename=original_filename,
         file_size_bytes=file_size,
         sheet_names=sheet_names,
         detected_project_type=detect.get("project_type"),

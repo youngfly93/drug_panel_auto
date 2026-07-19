@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.dependencies import TASK_PRIVILEGED_ROLES, require_user, user_can_access_task
 from app.models.task import Task, TaskResult
+from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.services import reference_report_service as diff_svc
 from app.services.batch_lifecycle import (
@@ -22,6 +24,11 @@ from app.services.batch_lifecycle import (
     pending_file_count,
     working_file_count,
 )
+from app.time_utils import (
+    business_day_start_utc_naive,
+    local_datetime_to_utc_naive,
+    utc_now_naive,
+)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -31,6 +38,20 @@ REVIEW_STATUSES = {
     "delivered": "已交付",
     "rejected": "退回修改",
 }
+
+
+def _scoped_task_query(db: Session, user: User):
+    query = db.query(Task)
+    if user.role not in TASK_PRIVILEGED_ROLES:
+        query = query.filter(Task.user_id == user.id)
+    return query
+
+
+def _get_scoped_task(db: Session, user: User, task_id: str) -> Task:
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task is None or not user_can_access_task(user, task):
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return task
 
 
 def _qa_sidecar_path(output_path: Optional[str]) -> Optional[Path]:
@@ -142,11 +163,7 @@ def _json_list(value: Optional[str]) -> list:
 def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
-    normalized = value.strip().replace("Z", "+00:00")
-    parsed = datetime.fromisoformat(normalized)
-    if parsed.tzinfo is not None:
-        parsed = parsed.astimezone().replace(tzinfo=None)
-    return parsed
+    return local_datetime_to_utc_naive(value, settings.business_timezone)
 
 
 def _task_item(task: Task, db: Session) -> dict:
@@ -216,8 +233,9 @@ def list_tasks(
     page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
 ):
-    query = db.query(Task).order_by(Task.created_at.desc())
+    query = _scoped_task_query(db, current_user).order_by(Task.created_at.desc())
     if status:
         if status == "running":
             query = query.filter(Task.status.in_(list(BATCH_WORKING_STATUSES)))
@@ -268,21 +286,25 @@ def list_tasks(
 
 
 @router.get("/stats", response_model=ApiResponse)
-def task_stats(db: Session = Depends(get_db)):
-    total = db.query(Task).count()
-    completed = db.query(Task).filter(Task.status == "completed").count()
-    failed = db.query(Task).filter(Task.status.in_(["failed", "partial_failed"])).count()
-    running = db.query(Task).filter(
+def task_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    tasks = _scoped_task_query(db, current_user)
+    total = tasks.count()
+    completed = tasks.filter(Task.status == "completed").count()
+    failed = tasks.filter(Task.status.in_(["failed", "partial_failed"])).count()
+    running = tasks.filter(
         Task.status.in_(list(BATCH_WORKING_STATUSES))
     ).count()
-    pending = db.query(Task).filter(
+    pending = tasks.filter(
         Task.status.in_(list(BATCH_QUEUED_STATUSES))
     ).count()
-    partial_failed = db.query(Task).filter(Task.status == "partial_failed").count()
-    cancelled = db.query(Task).filter(Task.status == "cancelled").count()
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    today_total = db.query(Task).filter(Task.created_at >= today_start).count()
-    all_items = [_task_item(task, db) for task in db.query(Task).all()]
+    partial_failed = tasks.filter(Task.status == "partial_failed").count()
+    cancelled = tasks.filter(Task.status == "cancelled").count()
+    today_start = business_day_start_utc_naive(settings.business_timezone)
+    today_total = tasks.filter(Task.created_at >= today_start).count()
+    all_items = [_task_item(task, db) for task in tasks.all()]
     needs_attention = sum(1 for item in all_items if _needs_attention(item))
     awaiting_review = sum(
         1
@@ -307,10 +329,12 @@ def task_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/{task_id}", response_model=ApiResponse)
-def get_task(task_id: str, db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+def get_task(
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    task = _get_scoped_task(db, current_user, task_id)
     qa_report_file, qa_status = _load_qa_summary(task.output_path)
     stage_results_file, generation_id = _load_stage_results_summary(
         task.output_path,
@@ -352,10 +376,12 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{task_id}", response_model=ApiResponse)
-def cancel_task(task_id: str, db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+def cancel_task(
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    task = _get_scoped_task(db, current_user, task_id)
     task_is_active = (
         task.status in BATCH_ACTIVE_STATUSES
         if task.task_type == "batch"
@@ -381,7 +407,7 @@ def cancel_task(task_id: str, db: Session = Depends(get_db)):
         warnings.append("用户已取消批量任务；当前正在生成的文件会完成本轮后停止后续文件。")
         task.warnings = json.dumps(warnings, ensure_ascii=False)
     task.status = "cancelled"
-    task.completed_at = task.completed_at or datetime.utcnow()
+    task.completed_at = task.completed_at or utc_now_naive()
     if task.started_at and task.completed_at:
         task.duration_seconds = (task.completed_at - task.started_at).total_seconds()
     db.commit()

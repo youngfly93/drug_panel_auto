@@ -8,6 +8,7 @@ export interface ReferenceReport {
   original_filename: string
   checksum_sha256: string
   active: boolean
+  formal_golden_verified: boolean
   notes?: string | null
   created_at?: string | null
   updated_at?: string | null

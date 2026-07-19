@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import signal
+import sqlite3
 import subprocess
 import sys
 import textwrap
@@ -175,6 +178,14 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert start.count('. "$DEPLOYMENT_ENV"') >= 2
     assert "REPORTGEN_FAST_TOC" in start
     assert "must be disabled for production report generation" in start
+    assert "REPORTGEN_REQUIRE_RENDER_STACK=1" in deploy
+    assert "Missing required report-render command" in start
+    assert "import uno" in start
+    assert "renderer_fingerprint.json" in start
+    assert "zh_font_match_sha256" in start
+    assert "font_substitution_fingerprint" in start
+    assert "require_available=True" in start
+    assert "REPORTGEN_LO_LOCK_FILE" in deploy
     assert start.index(
         "must be disabled for production report generation"
     ) < start.index("stop_existing\nif start_release")
@@ -213,9 +224,22 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
 
     backup = _read("scripts/iyun62_backup.sh")
     restore = _read("scripts/iyun62_restore_drill.sh")
+    maintenance_installer = _read("scripts/iyun62_install_maintenance.sh")
+    alerts_installer = _read("scripts/iyun62_install_alerts.sh")
+    iyun129_maintenance = _read("scripts/iyun129_install_maintenance.sh")
+    iyun129_alerts = _read("scripts/iyun129_install_alerts.sh")
     assert '"patient_info.yaml"' in backup
     assert "reference_reports patient_info.yaml" in backup
     assert '"patient_info.yaml"' in restore
+    assert "RESTORE_DRILL_SCHEDULE" in maintenance_installer
+    assert "restore_drill.sh run" in maintenance_installer
+    assert "APP_ROOT=$APP_ROOT" in alerts_installer
+    assert "PORT=$PORT" in alerts_installer
+    assert "OPS_URL=$CRON_OPS_URL" in alerts_installer
+    assert "SSH_HOST:-iyun129" in iyun129_maintenance
+    assert "reportgen-web-storage" in iyun129_maintenance
+    assert "SSH_HOST:-iyun129" in iyun129_alerts
+    assert "PORT:-18082" in iyun129_alerts
 
 
 @pytest.mark.parametrize(
@@ -421,8 +445,89 @@ def test_github_qa_installs_linux_renderer_before_running_gate() -> None:
     assert install_index < version_index < gate_index
     assert "fonts-noto-cjk" in workflow
     assert "poppler-utils" in workflow
+    assert "python3-uno" in workflow
     assert "pdfinfo -v" in workflow
     assert "pdftotext -v" in workflow
+    assert "pdftoppm -v" in workflow
+    assert "font_substitution_fingerprint" in workflow
+    assert "--render all" in workflow
+    assert "--render-required" in workflow
+    assert "python -m pytest backend/tests -q" in workflow
+    assert "npm run lint" in workflow
+    assert "npm audit --audit-level=moderate" in workflow
+    assert "npm run build" in workflow
+
+
+def test_restore_drill_requires_attested_archive_and_restores_sqlite(tmp_path: Path) -> None:
+    staging = tmp_path / "staging"
+    (staging / "meta").mkdir(parents=True)
+    (staging / "db").mkdir()
+    database = staging / "db" / "reportgen_web.sqlite"
+    connection = sqlite3.connect(database)
+    connection.execute("CREATE TABLE audit_logs (id INTEGER PRIMARY KEY)")
+    connection.commit()
+    connection.close()
+    (staging / "meta" / "manifest.pre.json").write_text(
+        json.dumps({"created_at": "synthetic", "revision": "a" * 40}),
+        encoding="utf-8",
+    )
+
+    backup_dir = tmp_path / "backups"
+    runtime_dir = tmp_path / "runtime"
+    backup_dir.mkdir()
+    archive = backup_dir / "reportgen-web-backup-20260719_010101.tar.gz"
+    subprocess.run(
+        ["tar", "-czf", str(archive), "-C", str(staging), "meta", "db"],
+        check=True,
+    )
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    archive.with_suffix(archive.suffix + ".sha256").write_text(
+        f"{digest}  {archive.name}\n",
+        encoding="utf-8",
+    )
+    archive.with_suffix(archive.suffix + ".manifest.json").write_text(
+        json.dumps(
+            {
+                "created_at": "synthetic",
+                "revision": "a" * 40,
+                "archive": {
+                    "filename": archive.name,
+                    "bytes": archive.stat().st_size,
+                    "sha256": digest,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {
+        **os.environ,
+        "APP_ROOT": str(tmp_path),
+        "RUNTIME_DIR": str(runtime_dir),
+        "BACKUP_DIR": str(backup_dir),
+    }
+    script = ROOT / "scripts/iyun62_restore_drill.sh"
+    passed = subprocess.run(
+        ["bash", str(script), "--archive", str(archive)],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert passed.returncode == 0, passed.stderr
+    reports = list((runtime_dir / "logs").glob("restore-drill-*.json"))
+    assert len(reports) == 1
+    report = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert report["status"] == "PASS"
+    assert report["checks"]["sqlite"]["integrity_check"] == "ok"
+
+    archive.with_suffix(archive.suffix + ".sha256").unlink()
+    rejected = subprocess.run(
+        ["bash", str(script), "--archive", str(archive)],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert rejected.returncode != 0
+    assert "Checksum sidecar missing" in rejected.stderr
 
 
 def test_report_group_checklist_covers_audit_followups() -> None:
@@ -449,7 +554,12 @@ def test_report_group_checklist_covers_audit_followups() -> None:
         "scripts/iyun129_release.sh",
         "scripts/iyun129_start_cloudflared.sh",
         "scripts/iyun129_watchdog_cloudflared.sh",
+        "scripts/iyun129_install_alerts.sh",
+        "scripts/iyun129_install_maintenance.sh",
         "scripts/iyun62_alerts.sh",
+        "scripts/iyun62_install_alerts.sh",
+        "scripts/iyun62_install_maintenance.sh",
+        "scripts/iyun62_restore_drill.sh",
     ],
 )
 def test_release_shell_scripts_parse(relative: str) -> None:
@@ -523,6 +633,7 @@ def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
         "VENV_DIR": str(venv),
         "PORT": port,
         "HEALTH_TIMEOUT_SECONDS": "2",
+        "REPORTGEN_REQUIRE_RENDER_STACK": "0",
     }
     script = ROOT / "scripts/iyun62_start_reportgen.sh"
 

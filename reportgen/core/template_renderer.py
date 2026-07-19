@@ -11,10 +11,6 @@ from typing import Any, Optional, Sequence
 
 from docx import Document
 
-from reportgen.docx_sections import (
-    find_reference_section_bounds,
-    inspect_structural_marker,
-)
 from reportgen.core.processors import (
     CRITICAL_DOCX_PROCESSOR_NAMES,
     ProcessorContext,
@@ -27,8 +23,14 @@ from reportgen.core.template_contract import (
     validate_contract,
     validate_declared_contract,
 )
+from reportgen.docx_sections import (
+    find_reference_section_bounds,
+    inspect_structural_marker,
+)
 from reportgen.models.report_data import ReportData
+from reportgen.utils.libreoffice_profile import initialize_libreoffice_profile
 from reportgen.utils.logger import get_logger
+from reportgen.utils.process_lock import exclusive_file_lock
 from reportgen.utils.validators import validate_docx_file
 
 
@@ -3632,8 +3634,8 @@ class TemplateRenderer:
         - 基因简介：size=10.5pt
         - 药物标题：bold=True, color=FF0000
         """
-        from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
 
         doc = Document(file_path)
         content_cfg = self._report_content_config(context)
@@ -5264,9 +5266,10 @@ class TemplateRenderer:
         Merges are derived only from adjacent rendered values, so the method is
         case-agnostic and safe for variable row counts.
         """
+        import re
+
         from docx.oxml import OxmlElement
         from docx.oxml.ns import qn
-        import re
 
         doc = Document(file_path)
         changed = False
@@ -5727,6 +5730,9 @@ class TemplateRenderer:
         import os
         import shutil
 
+        require_deterministic_layout = bool(
+            (context or {}).get("_require_deterministic_layout")
+        )
         fast_toc = str(os.environ.get("REPORTGEN_FAST_TOC") or "").strip().lower()
         skip_static = str(
             os.environ.get("REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS") or ""
@@ -5738,6 +5744,10 @@ class TemplateRenderer:
             "y",
             "on",
         }:
+            if require_deterministic_layout:
+                raise RuntimeError(
+                    "生产 Panel 禁止跳过目录缓存页码构建"
+                )
             try:
                 self._set_update_fields(file_path)
             except Exception:
@@ -5750,6 +5760,8 @@ class TemplateRenderer:
             return
 
         if not self._document_contains_toc_or_static_toc(file_path):
+            if require_deterministic_layout:
+                raise RuntimeError("生产 Panel 报告缺少可刷新的目录结构")
             self.logger.debug("文档不包含目录，跳过目录页码构建", output=file_path)
             return
 
@@ -5757,6 +5769,19 @@ class TemplateRenderer:
         pdftotext = shutil.which("pdftotext")
         pdfinfo = shutil.which("pdfinfo")
         if not soffice or not pdftotext or not pdfinfo:
+            if require_deterministic_layout:
+                missing = [
+                    name
+                    for name, available in (
+                        ("LibreOffice", soffice),
+                        ("pdftotext", pdftotext),
+                        ("pdfinfo", pdfinfo),
+                    )
+                    if not available
+                ]
+                raise RuntimeError(
+                    "生产 Panel 缺少目录分页工具: " + ", ".join(missing)
+                )
             self.logger.debug(
                 "缺少 PDF 布局工具，跳过目录缓存页码构建",
                 soffice=bool(soffice),
@@ -5782,6 +5807,8 @@ class TemplateRenderer:
             pdfinfo=pdfinfo,
         )
         if not detected_numbers:
+            if require_deterministic_layout:
+                raise RuntimeError("生产 Panel 未能从最终 PDF 解析目录页码")
             return
 
         max_passes = 3
@@ -5789,6 +5816,8 @@ class TemplateRenderer:
             if not self._write_static_toc_page_numbers(
                 file_path, detected_numbers, context
             ):
+                if require_deterministic_layout:
+                    raise RuntimeError("生产 Panel 无法写入目录 PAGEREF 缓存页码")
                 return
 
             visible_numbers = self._read_static_toc_page_numbers(file_path)
@@ -6460,6 +6489,7 @@ class TemplateRenderer:
             input_dir.mkdir(parents=True, exist_ok=True)
             output_dir.mkdir(parents=True, exist_ok=True)
             profile_dir.mkdir(parents=True, exist_ok=True)
+            initialize_libreoffice_profile(profile_dir, require_available=True)
             tmp_input = input_dir / "input.docx"
             shutil.copy2(file_path, tmp_input)
 
@@ -6775,8 +6805,8 @@ class TemplateRenderer:
 
     def _set_update_fields(self, file_path: str) -> None:
         """设置 docx 的 updateFields 属性，让 Word 打开时自动刷新目录/页码域。"""
-        from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
 
         doc = Document(file_path)
         settings = doc.settings.element
@@ -6801,8 +6831,8 @@ class TemplateRenderer:
         ``PAGEREF`` 按读者当前版式重算。这两个标志在 Word 中本就是默认行为，
         因此保留在交付的 docx 里是安全的。
         """
-        from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
 
         doc = Document(file_path)
         settings = doc.settings.element
@@ -7031,9 +7061,19 @@ class TemplateRenderer:
             if persistent_port is not None:
                 port = persistent_port
                 profile_dir = None
+                lock_path = Path(
+                    os.environ.get(
+                        "REPORTGEN_LO_LOCK_FILE",
+                        "/tmp/reportgen_lo_listener.lock",
+                    )
+                )
+                stack.enter_context(exclusive_file_lock(lock_path))
             else:
                 profile_dir = stack.enter_context(
                     tempfile.TemporaryDirectory(prefix="reportgen_lo_profile_")
+                )
+                initialize_libreoffice_profile(
+                    Path(profile_dir), require_available=True
                 )
                 probe_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 probe_sock.bind(("127.0.0.1", 0))
@@ -7195,6 +7235,9 @@ class TemplateRenderer:
             output_dir = Path(tmp_dir) / "output"
             input_dir.mkdir(parents=True, exist_ok=True)
             output_dir.mkdir(parents=True, exist_ok=True)
+            initialize_libreoffice_profile(
+                Path(profile_dir), require_available=True
+            )
 
             tmp_input = input_dir / "input.docx"
             shutil.copy2(file_path, tmp_input)

@@ -5,8 +5,13 @@ set -euo pipefail
 
 SSH_HOST="${SSH_HOST:-iyun-server}"
 APP_ROOT="${APP_ROOT:-/media/desk16/iyun6208/apps}"
+LEGACY_APP_DIR="${LEGACY_APP_DIR:-$APP_ROOT/reportgen-web}"
 RUNTIME_DIR="${RUNTIME_DIR:-$APP_ROOT/reportgen-web-runtime}"
+STORAGE_DIR="${STORAGE_DIR:-$LEGACY_APP_DIR/storage}"
+RELEASES_DIR="${RELEASES_DIR:-$APP_ROOT/reportgen-web-releases}"
+BACKUP_DIR="${BACKUP_DIR:-$APP_ROOT/reportgen-web-backups}"
 CRON_SCHEDULE="${CRON_SCHEDULE:-17 2 * * *}"
+RESTORE_DRILL_SCHEDULE="${RESTORE_DRILL_SCHEDULE:-41 3 3 * *}"
 BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 RELEASE_KEEP_COUNT="${RELEASE_KEEP_COUNT:-8}"
 PREVIEW_KEEP_DAYS="${PREVIEW_KEEP_DAYS:-7}"
@@ -16,7 +21,7 @@ REPORT_KEEP_DAYS="${REPORT_KEEP_DAYS:-180}"
 ZIP_KEEP_DAYS="${ZIP_KEEP_DAYS:-14}"
 AUDIT_LOG_KEEP_DAYS="${AUDIT_LOG_KEEP_DAYS:-365}"
 
-if [ ! -f "scripts/iyun62_backup.sh" ]; then
+if [ ! -f "scripts/iyun62_backup.sh" ] || [ ! -f "scripts/iyun62_restore_drill.sh" ]; then
     echo "Run this script from the reportgen-web repository root." >&2
     exit 1
 fi
@@ -24,7 +29,8 @@ fi
 echo "== Upload maintenance script =="
 ssh "$SSH_HOST" "mkdir -p '$RUNTIME_DIR/logs'"
 rsync -az scripts/iyun62_backup.sh "$SSH_HOST:$RUNTIME_DIR/backup.sh"
-ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/backup.sh'"
+rsync -az scripts/iyun62_restore_drill.sh "$SSH_HOST:$RUNTIME_DIR/restore_drill.sh"
+ssh "$SSH_HOST" "chmod +x '$RUNTIME_DIR/backup.sh' '$RUNTIME_DIR/restore_drill.sh'"
 
 echo "== Install crontab =="
 ssh "$SSH_HOST" "set -euo pipefail
@@ -50,13 +56,14 @@ for line in lines:
         continue
     if skip:
         continue
-    if 'reportgen-web-runtime/backup.sh' in line:
+    if 'reportgen-web-runtime/backup.sh' in line or 'reportgen-web-runtime/restore_drill.sh' in line:
         continue
     out.append(line)
 
 block = [
     '# BEGIN reportgen-web-maintenance',
-    '$CRON_SCHEDULE BACKUP_KEEP_DAYS=$BACKUP_KEEP_DAYS RELEASE_KEEP_COUNT=$RELEASE_KEEP_COUNT PREVIEW_KEEP_DAYS=$PREVIEW_KEEP_DAYS LOG_KEEP_DAYS=$LOG_KEEP_DAYS UPLOAD_KEEP_DAYS=$UPLOAD_KEEP_DAYS REPORT_KEEP_DAYS=$REPORT_KEEP_DAYS ZIP_KEEP_DAYS=$ZIP_KEEP_DAYS AUDIT_LOG_KEEP_DAYS=$AUDIT_LOG_KEEP_DAYS $RUNTIME_DIR/backup.sh all >/dev/null 2>&1',
+    '$CRON_SCHEDULE APP_ROOT=$APP_ROOT LEGACY_APP_DIR=$LEGACY_APP_DIR RUNTIME_DIR=$RUNTIME_DIR STORAGE_DIR=$STORAGE_DIR RELEASES_DIR=$RELEASES_DIR BACKUP_DIR=$BACKUP_DIR BACKUP_KEEP_DAYS=$BACKUP_KEEP_DAYS RELEASE_KEEP_COUNT=$RELEASE_KEEP_COUNT PREVIEW_KEEP_DAYS=$PREVIEW_KEEP_DAYS LOG_KEEP_DAYS=$LOG_KEEP_DAYS UPLOAD_KEEP_DAYS=$UPLOAD_KEEP_DAYS REPORT_KEEP_DAYS=$REPORT_KEEP_DAYS ZIP_KEEP_DAYS=$ZIP_KEEP_DAYS AUDIT_LOG_KEEP_DAYS=$AUDIT_LOG_KEEP_DAYS $RUNTIME_DIR/backup.sh all >/dev/null 2>&1',
+    '$RESTORE_DRILL_SCHEDULE APP_ROOT=$APP_ROOT RUNTIME_DIR=$RUNTIME_DIR BACKUP_DIR=$BACKUP_DIR $RUNTIME_DIR/restore_drill.sh run >/dev/null 2>&1',
     '# END reportgen-web-maintenance',
 ]
 if out and out[-1].strip():

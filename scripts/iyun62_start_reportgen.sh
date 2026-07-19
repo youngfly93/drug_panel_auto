@@ -220,6 +220,65 @@ for unsafe_toc_flag in \
     esac
 done
 
+# A healthy HTTP process is not sufficient for a clinical report service: CRC
+# pagination and full visual UAT require one reproducible Linux LibreOffice +
+# Poppler + python3-uno stack. Validate it before stopping the known-good
+# process, and persist the exact engine/font fingerprint for audit evidence.
+if [ "${REPORTGEN_REQUIRE_RENDER_STACK:-1}" = "1" ]; then
+    for render_command in soffice pdftotext pdfinfo pdftoppm fc-match; do
+        if ! command -v "$render_command" >/dev/null 2>&1; then
+            echo "Missing required report-render command: $render_command" >&2
+            exit 1
+        fi
+    done
+    if [ ! -x /usr/bin/python3 ] || ! /usr/bin/python3 -c 'import uno' >/dev/null 2>&1; then
+        echo "Missing required python3-uno runtime for deterministic TOC refresh." >&2
+        exit 1
+    fi
+    renderer_version="$(soffice --version | head -n 1)"
+    pdf_renderer_version="$(pdftoppm -v 2>&1 | head -n 1)"
+    zh_font_match="$(fc-match 'sans-serif:lang=zh-cn' | head -n 1)"
+    if [ -z "$renderer_version" ] || [ -z "$pdf_renderer_version" ] || [ -z "$zh_font_match" ]; then
+        echo "Unable to fingerprint the production report-render stack." >&2
+        exit 1
+    fi
+    PYTHONPATH="$RELEASE_DIR${PYTHONPATH:+:$PYTHONPATH}" \
+    "$VENV_DIR/bin/python" - \
+        "$RUNTIME_DIR/renderer_fingerprint.json.next" \
+        "$renderer_version" \
+        "$pdf_renderer_version" \
+        "$zh_font_match" <<'PY'
+import hashlib
+import json
+import platform
+import sys
+from pathlib import Path
+
+from reportgen.utils.libreoffice_profile import font_substitution_fingerprint
+
+target, engine_version, pdf_version, font_match = sys.argv[1:]
+payload = {
+    "schema_version": "1.0",
+    "platform": platform.system(),
+    "machine": platform.machine(),
+    "engine": "soffice",
+    "engine_version": engine_version,
+    "profile_mode": "isolated",
+    "pdf_renderer": "pdftoppm",
+    "pdf_renderer_version": pdf_version,
+    "zh_font_match": font_match,
+    "zh_font_match_sha256": hashlib.sha256(font_match.encode("utf-8")).hexdigest(),
+}
+payload.update(font_substitution_fingerprint(require_available=True))
+Path(target).write_text(
+    json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
+    mv -f "$RUNTIME_DIR/renderer_fingerprint.json.next" \
+        "$RUNTIME_DIR/renderer_fingerprint.json"
+fi
+
 export RG_WEB_STORAGE_ROOT="$STORAGE_DIR"
 export RG_WEB_RUNTIME_DIR="$RUNTIME_DIR"
 export RG_WEB_BACKUP_DIR="$BACKUP_DIR"
@@ -227,6 +286,7 @@ export RG_WEB_BACKUP_DIR="$BACKUP_DIR"
 # and the report generator on the same external registry instead of reading or
 # mutating config/patient_info.yaml inside an immutable release.
 export REPORTGEN_PATIENT_INFO_PATH="${REPORTGEN_PATIENT_INFO_PATH:-$STORAGE_DIR/patient_info.yaml}"
+export REPORTGEN_LO_LOCK_FILE="${REPORTGEN_LO_LOCK_FILE:-$RUNTIME_DIR/run/libreoffice-listener.lock}"
 
 STARTED_PID=""
 LAST_HEALTH_CODE="000"

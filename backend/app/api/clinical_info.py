@@ -6,15 +6,15 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from app.schemas.clinical_info import (
     ClinicalFormSchema,
-    PatientEnrichment,
     PatientDefaults,
+    PatientEnrichment,
     PatientInfo,
     ProjectInfo,
     SignatureUploadResponse,
 )
 from app.schemas.common import ApiResponse
 from app.services import clinical_info_service as svc
-from app.services.file_manager import save_signature_upload
+from app.services.file_manager import safe_client_filename, save_signature_upload
 
 router = APIRouter(tags=["clinical-info"])
 
@@ -39,6 +39,7 @@ def list_patients():
 def upload_signature_image(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="缺少签名图片文件名")
+    original_filename = safe_client_filename(file.filename, "signature.png")
     if file.content_type and not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="签名图片必须是图片格式")
     try:
@@ -48,7 +49,7 @@ def upload_signature_image(file: UploadFile = File(...)):
     return ApiResponse(
         data=SignatureUploadResponse(
             stored_path=str(stored_path),
-            original_filename=file.filename,
+            original_filename=original_filename,
             file_size_bytes=file_size,
         )
     )

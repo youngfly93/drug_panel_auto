@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import authenticate_access_token
+from app.dependencies import authenticate_access_token, user_can_access_task
+from app.models.task import Task
 
 router = APIRouter()
 
@@ -47,11 +48,19 @@ async def task_progress_ws(
         token = auth_message.get("token")
         if not isinstance(token, str) or not token:
             raise ValueError("bearer token required")
-        authenticate_access_token(token, db)
+        user = authenticate_access_token(token, db)
     except (asyncio.TimeoutError, HTTPException, ValueError, json.JSONDecodeError):
         await websocket.close(code=4401, reason="Not authenticated")
         return
     except WebSocketDisconnect:
+        return
+
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task is None:
+        await websocket.close(code=4404, reason="Task not found")
+        return
+    if not user_can_access_task(user, task):
+        await websocket.close(code=4403, reason="Forbidden")
         return
 
     _connections[task_id].append(websocket)

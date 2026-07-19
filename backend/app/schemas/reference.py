@@ -14,6 +14,7 @@ class ReferenceReportOut(BaseModel):
     original_filename: str
     checksum_sha256: str
     active: bool
+    formal_golden_verified: bool = False
     notes: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

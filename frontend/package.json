@@ -7,23 +7,28 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext .vue,.ts,.tsx"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.0",
-    "axios": "^1.7.0",
+    "axios": "^1.18.1",
     "element-plus": "^2.9.0",
     "pinia": "^2.1.0",
     "vue": "^3.4.0",
     "vue-router": "^4.3.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.5.0",
     "@vitejs/plugin-vue": "^5.0.0",
+    "eslint": "^10.7.0",
+    "eslint-plugin-vue": "^10.9.2",
+    "globals": "^17.7.0",
     "typescript": "~5.6.0",
     "unplugin-auto-import": "^0.17.0",
     "unplugin-vue-components": "^0.27.0",
-    "vite": "^6.0.0",
+    "typescript-eslint": "^8.64.0",
+    "vite": "^6.4.3",
     "vue-tsc": "^2.0.0"
   }
 }

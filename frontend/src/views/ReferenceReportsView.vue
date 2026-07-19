@@ -3,13 +3,13 @@
     <div class="page-head">
       <div>
         <h2>基准报告库</h2>
-        <p>按 panel 和 case 维护可自动命中的正确报告。</p>
+        <p>普通基准用于日常回归；正式金标准须由脱敏契约校验后注册，才能用于阻断验收。</p>
       </div>
       <el-button :icon="Refresh" @click="fetchReferences">刷新</el-button>
     </div>
 
-    <section class="reference-panel">
-      <div class="panel-title">新增基准报告</div>
+    <section v-if="canManageReferences" class="reference-panel">
+      <div class="panel-title">新增普通回归基准</div>
       <el-form class="upload-form" label-width="92px">
         <el-form-item label="Panel ID" required>
           <el-select v-model="form.panel_id" filterable allow-create placeholder="选择或输入 panel">
@@ -71,6 +71,13 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="验收资格" width="120">
+          <template #default="{ row }">
+            <el-tag :type="row.formal_golden_verified ? 'success' : 'info'" size="small">
+              {{ row.formal_golden_verified ? '正式金标准' : '普通基准' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="original_filename" label="文件" min-width="210" show-overflow-tooltip />
         <el-table-column label="校验值" width="120">
           <template #default="{ row }">
@@ -88,7 +95,7 @@
               下载
             </el-button>
             <el-button
-              v-if="!row.active"
+              v-if="canManageReferences && !row.active"
               text
               type="primary"
               size="small"
@@ -96,7 +103,11 @@
             >
               启用
             </el-button>
-            <el-popconfirm title="确认删除该基准报告?" @confirm="deleteReference(row.id)">
+            <el-popconfirm
+              v-if="canManageReferences"
+              title="确认删除该基准报告?"
+              @confirm="deleteReference(row.id)"
+            >
               <template #reference>
                 <el-button text type="danger" size="small">删除</el-button>
               </template>
@@ -109,11 +120,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Refresh, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { referenceApi, type ReferenceReport } from '@/api/reference'
+import { useAuthStore } from '@/stores/auth'
 
+const authStore = useAuthStore()
+const canManageReferences = computed(() =>
+  ['admin', 'knowledge_manager'].includes(authStore.user?.role || ''),
+)
 const references = ref<ReferenceReport[]>([])
 const loading = ref(false)
 const uploading = ref(false)

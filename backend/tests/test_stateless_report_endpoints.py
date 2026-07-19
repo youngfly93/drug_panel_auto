@@ -29,7 +29,8 @@ from app.api import report as report_api  # noqa: E402
 from app.api import task as task_api  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
-from app.dependencies import get_bridge  # noqa: E402
+from app.dependencies import get_bridge, get_current_user  # noqa: E402
+from app.models.task import Task  # noqa: E402
 from app.services import clinical_info_service as clinical_svc  # noqa: E402
 from app.services import generation_preflight  # noqa: E402
 from app.services.reportgen_bridge import ReportGenBridge  # noqa: E402
@@ -254,7 +255,7 @@ class StageBridge(FakeBridge):
         return super().generate_report(**kwargs)
 
 
-def _client(tmp_path, monkeypatch, bridge=None):
+def _client(tmp_path, monkeypatch, bridge=None, *, role="reviewer"):
     bridge = bridge or FakeBridge()
     monkeypatch.setattr(settings, "storage_root", tmp_path)
     monkeypatch.setattr(settings, "patient_enrichment_process_isolation", False)
@@ -299,7 +300,30 @@ def _client(tmp_path, monkeypatch, bridge=None):
     app.include_router(task_api.router, prefix="/api/v1")
     app.dependency_overrides[get_bridge] = lambda: bridge
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=1,
+        username=f"synthetic-{role}",
+        display_name=f"Synthetic {role.title()}",
+        role=role,
+        is_active=True,
+    )
     return TestClient(app)
+
+
+def _seed_owned_task(task_id: str) -> None:
+    db = report_api.SessionLocal()
+    try:
+        db.add(
+            Task(
+                id=task_id,
+                user_id=1,
+                task_type="single",
+                status="completed",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
 
 
 def test_report_group_feedback_upload_is_archived_with_metadata(
@@ -308,6 +332,7 @@ def test_report_group_feedback_upload_is_archived_with_metadata(
 ):
     task_id = "synthetic-feedback-task"
     with _client(tmp_path, monkeypatch) as client:
+        _seed_owned_task(task_id)
         response = client.post(
             f"/api/v1/reports/{task_id}/feedback",
             files={
@@ -346,6 +371,19 @@ def test_report_group_feedback_rejects_unsafe_extension(tmp_path, monkeypatch):
     assert not (tmp_path / "feedback").exists()
 
 
+def test_report_group_feedback_rejects_oversize_without_partial(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "max_upload_size_mb", 0)
+    with _client(tmp_path, monkeypatch) as client:
+        _seed_owned_task("synthetic-feedback-task")
+        response = client.post(
+            "/api/v1/reports/synthetic-feedback-task/feedback",
+            files={"file": ("feedback.docx", b"x", "application/octet-stream")},
+        )
+
+    assert response.status_code == 413
+    assert not any(path.is_file() for path in (tmp_path / "feedback").rglob("*"))
+
+
 def test_inspect_excel_returns_sheet_and_field_payload(tmp_path, monkeypatch):
     with _client(tmp_path, monkeypatch) as client:
         response = client.post(
@@ -360,6 +398,18 @@ def test_inspect_excel_returns_sheet_and_field_payload(tmp_path, monkeypatch):
     assert data["single_values"]["sample_id"] == "CASE001"
     assert data["preview_summary"]["preview"] is True
     assert data["preview_summary"]["variants"]["total"] == 1
+
+
+def test_inspect_excel_rejects_oversize_upload_and_cleans_partial(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "max_upload_size_mb", 0)
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/v1/excel/inspect",
+            files={"file": ("case.xlsx", b"x", "application/vnd.ms-excel")},
+        )
+
+    assert response.status_code == 413
+    assert not list((tmp_path / "uploads").rglob("*.xlsx"))
 
 
 def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
@@ -645,6 +695,42 @@ def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
     )
 
 
+def test_reference_gate_required_is_reviewer_only(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch, role="operator") as client:
+        response = client.post(
+            "/api/v1/reports/generate-file-async",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": '{"sample_id":"CASE001"}',
+                "project_type": "crc_358_msi",
+                "reference_gate_mode": "required",
+            },
+        )
+
+    assert response.status_code == 403
+    assert "金标准验收模式" in response.json()["detail"]
+
+
+def test_reference_gate_required_forces_full_visual_qa(tmp_path, monkeypatch):
+    bridge = FakeBridge()
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": '{"sample_id":"CASE001"}',
+                "project_type": "crc_358_msi",
+                "reference_gate_mode": "required",
+                "qa_visual_render": "none",
+                "qa_visual_render_required": "false",
+            },
+        )
+
+    assert response.status_code == 200
+    assert bridge.last_generate_kwargs["qa_visual_render"] == "all"
+    assert bridge.last_generate_kwargs["qa_visual_render_required"] is True
+
+
 def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     with _client(tmp_path, monkeypatch) as client:
         response = client.post(
@@ -706,6 +792,41 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert "batch_report.json" in names
     assert sum(name.startswith("reports/") for name in names) == 2
     assert sum(name.startswith("summaries/") for name in names) == 2
+
+
+def test_batch_files_rejects_too_many_files_before_saving(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "max_batch_files", 1)
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"one", "application/vnd.ms-excel")),
+                ("files", ("case2.xlsx", b"two", "application/vnd.ms-excel")),
+            ],
+        )
+
+    assert response.status_code == 413
+    assert "最多 1 个" in response.json()["detail"]
+    assert not (tmp_path / "uploads").exists()
+
+
+def test_batch_files_rejects_aggregate_size_and_cleans_saved_files(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "max_upload_size_mb", 1)
+    monkeypatch.setattr(settings, "max_batch_upload_size_mb", 0)
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                ("files", ("case1.xlsx", b"one", "application/vnd.ms-excel")),
+            ],
+        )
+
+    assert response.status_code == 413
+    assert "批量文件总大小" in response.json()["detail"]
+    assert not list((tmp_path / "uploads").rglob("*.xlsx"))
 
 
 def test_batch_files_fill_missing_report_date(tmp_path, monkeypatch):
@@ -1205,6 +1326,30 @@ def test_report_summary_endpoint_reads_sidecar(tmp_path, monkeypatch):
     assert summary["variants"]["total"] == 1
 
 
+def test_uploaded_diff_reference_rejects_oversize_without_partial(tmp_path, monkeypatch):
+    with _client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": '{"patient_name":"测试患者","sample_id":"CASE001"}',
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+            },
+        )
+        task_id = response.json()["data"]["task_id"]
+        monkeypatch.setattr(settings, "max_upload_size_mb", 0)
+        diff_response = client.post(
+            f"/api/v1/reports/{task_id}/diff",
+            files={"reference": ("reference.docx", b"x", "application/octet-stream")},
+        )
+
+    assert diff_response.status_code == 413
+    diff_dir = tmp_path / "reports" / task_id / "report_diff"
+    assert not list(diff_dir.rglob("*.part"))
+    assert not (diff_dir / "reference.docx").exists()
+
+
 def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
     with _client(tmp_path, monkeypatch) as client:
         response = client.post(
@@ -1243,6 +1388,8 @@ def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
     assert "report.generate_file_requested" in actions
     assert "review_state.updated" in actions
     assert "report.download_requested" in actions
+    assert all(item["user_id"] == 1 for item in audit_log)
+    assert all(item["operator"] == "Synthetic Reviewer" for item in audit_log)
     audit_log_text = audit_log_response.text
     assert "测试患者" not in audit_log_text
     assert "case.xlsx" not in audit_log_text
@@ -1304,7 +1451,7 @@ def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = task
 
-    def attempt(qa_status, override=False):
+    def attempt(qa_status, override=False, role="operator"):
         if qa_status is None:
             if qa.exists():
                 qa.unlink()
@@ -1319,14 +1466,19 @@ def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):
         ):
             try:
                 report_api._download_report_response(
-                    "t1", db, MagicMock(), override_gate=override
+                    "t1",
+                    db,
+                    MagicMock(),
+                    SimpleNamespace(id=1, role=role),
+                    override_gate=override,
                 )
                 return 200
             except HTTPException as exc:
                 return exc.status_code
 
     assert attempt("FAIL") == 409  # QA FAIL → 拦截
-    assert attempt("FAIL", override=True) == 200  # 复核人显式放行
+    assert attempt("FAIL", override=True) == 403  # 普通操作员不得越权放行
+    assert attempt("FAIL", override=True, role="reviewer") == 200
     assert attempt("PASS") == 200  # 正常报告不受影响
     assert attempt("WARN") == 200  # WARN 不拦
     assert attempt(None) == 200  # 无 QA 记录的历史任务不误伤
@@ -1342,7 +1494,7 @@ def test_batch_item_download_blocks_qa_fail(tmp_path):
     docx = tmp_path / "r.docx"
     docx.write_text("fake")
 
-    def attempt(qa_status, override=False):
+    def attempt(qa_status, override=False, role="operator"):
         row = SimpleNamespace(
             output_path=str(docx),
             excel_filename="case01.xlsx",
@@ -1356,14 +1508,20 @@ def test_batch_item_download_blocks_qa_fail(tmp_path):
         with patch.object(report_api, "_observed_file_response", return_value="OK"):
             try:
                 report_api.download_batch_item_report(
-                    "t1", 1, MagicMock(), db=db, override_gate=override
+                    "t1",
+                    1,
+                    MagicMock(),
+                    db=db,
+                    override_gate=override,
+                    current_user=SimpleNamespace(id=1, role=role),
                 )
                 return 200
             except HTTPException as exc:
                 return exc.status_code
 
     assert attempt("FAIL") == 409
-    assert attempt("FAIL", override=True) == 200
+    assert attempt("FAIL", override=True) == 403
+    assert attempt("FAIL", override=True, role="reviewer") == 200
     assert attempt("PASS") == 200
     assert attempt("WARN") == 200
     assert attempt(None) == 200

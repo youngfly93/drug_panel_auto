@@ -13,7 +13,7 @@ env:
 jobs:
   qa-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -24,10 +24,18 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pytest ruff lxml
+          python -m pip install -e "./backend[dev]"
 
       - name: Install Linux document renderer
         run: |
@@ -35,13 +43,40 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libreoffice-writer \
             fonts-noto-cjk \
-            poppler-utils
+            poppler-utils \
+            python3-uno
           soffice --version
           pdfinfo -v
           pdftotext -v
+          pdftoppm -v
+          /usr/bin/python3 -c 'import uno'
+          python -c 'from reportgen.utils.libreoffice_profile import font_substitution_fingerprint; print(font_substitution_fingerprint(require_available=True))'
+
+      - name: Run backend regression tests
+        env:
+          RG_WEB_UPSTREAM_ROOT: ${{ github.workspace }}
+        run: python -m pytest backend/tests -q
+
+      - name: Validate historical Golden contracts
+        run: |
+          python scripts/check_historical_golden_release.py \
+            --contracts-only \
+            --output-json tmp/ci_historical_golden_contracts.json
+
+      - name: Validate frontend
+        working-directory: frontend
+        run: |
+          npm ci --no-fund
+          npm run lint
+          npm audit --audit-level=moderate
+          npm run build
 
       - name: Run reportgen QA gate
-        run: python -m reportgen.cli qa gate --output-root tmp/ci_qa_gate
+        run: >-
+          python -m reportgen.cli qa gate
+          --output-root tmp/ci_qa_gate
+          --render all
+          --render-required
 
       - name: Upload QA gate artifacts
         if: always()

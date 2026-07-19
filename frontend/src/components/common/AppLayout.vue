@@ -33,11 +33,11 @@
           <el-icon><Reading /></el-icon>
           <span>知识库</span>
         </el-menu-item>
-        <el-menu-item index="/config">
+        <el-menu-item v-if="isAdmin" index="/config">
           <el-icon><Setting /></el-icon>
           <span>配置管理</span>
         </el-menu-item>
-        <el-menu-item index="/references">
+        <el-menu-item v-if="canReadReferences" index="/references">
           <el-icon><Document /></el-icon>
           <span>基准报告</span>
         </el-menu-item>
@@ -45,11 +45,11 @@
           <el-icon><List /></el-icon>
           <span>任务队列</span>
         </el-menu-item>
-        <el-menu-item index="/ops">
+        <el-menu-item v-if="isAdmin" index="/ops">
           <el-icon><Odometer /></el-icon>
           <span>生产状态</span>
         </el-menu-item>
-        <el-menu-item index="/load-test">
+        <el-menu-item v-if="isAdmin" index="/load-test">
           <el-icon><Odometer /></el-icon>
           <span>压测看板</span>
         </el-menu-item>
@@ -109,6 +109,10 @@ const windowWidth = ref(window.innerWidth)
 const MOBILE_BREAKPOINT = 768
 
 const isMobile = computed(() => windowWidth.value < MOBILE_BREAKPOINT)
+const isAdmin = computed(() => authStore.user?.role === 'admin')
+const canReadReferences = computed(() =>
+  ['admin', 'reviewer', 'knowledge_manager'].includes(authStore.user?.role || ''),
+)
 const sidebarWidth = computed(() => {
   if (isMobile.value) return '220px'
   return collapsed.value ? '64px' : '220px'

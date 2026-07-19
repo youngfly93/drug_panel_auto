@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
 
-
 SAFE_DETAIL_KEYS = {
     "download_kind",
     "duration_seconds",
@@ -62,13 +61,13 @@ def sanitize_details(details: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def request_operator(request: Request | None) -> str:
-    if not request:
-        return "未登录操作员"
-    for header in ("x-reportgen-operator", "x-operator", "x-user-name"):
-        value = (request.headers.get(header) or "").strip()
-        if value:
-            return value[:80]
-    return "未登录操作员"
+    """Resolve the immutable actor established by JWT authentication."""
+    user = getattr(getattr(request, "state", None), "current_user", None)
+    if user is None:
+        return "系统任务"
+    display_name = getattr(user, "display_name", None)
+    username = getattr(user, "username", None)
+    return str(display_name or username or f"user:{user.id}")[:80]
 
 
 def record_audit_event(
@@ -82,8 +81,12 @@ def record_audit_event(
 ) -> None:
     """Persist a best-effort audit event without leaking clinical payloads."""
     payload = sanitize_details(details)
-    payload.setdefault("operator", request_operator(request))
+    user = getattr(getattr(request, "state", None), "current_user", None)
+    # Never trust a request body/header supplied operator label. Authentication is
+    # the sole source of truth for both the display label and relational user id.
+    payload["operator"] = request_operator(request)
     event = AuditLog(
+        user_id=user.id if user is not None else None,
         action=action[:50],
         resource_type=resource_type[:50],
         resource_id=resource_id[:100],
@@ -111,7 +114,8 @@ def audit_event_payload(event: AuditLog) -> dict[str, Any]:
         "action": event.action,
         "resource_type": event.resource_type,
         "resource_id": event.resource_id,
+        "user_id": event.user_id,
         "created_at": event.created_at.isoformat() if event.created_at else None,
-        "operator": details.get("operator") or "未登录操作员",
+        "operator": details.get("operator") or "系统任务",
         "details": details,
     }

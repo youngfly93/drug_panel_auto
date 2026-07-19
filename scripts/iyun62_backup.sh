@@ -507,7 +507,10 @@ import sqlite3
 db_path = os.environ["DB_PATH"]
 keep_days = int(os.environ["AUDIT_LOG_KEEP_DAYS"])
 dry_run = os.environ.get("DRY_RUN") == "1"
-cutoff = (dt.datetime.utcnow() - dt.timedelta(days=keep_days)).strftime("%Y-%m-%d %H:%M:%S")
+cutoff = (
+    dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    - dt.timedelta(days=keep_days)
+).strftime("%Y-%m-%d %H:%M:%S")
 
 conn = sqlite3.connect(db_path)
 try:

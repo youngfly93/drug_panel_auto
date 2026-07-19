@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# 步骤: 历史金标准发布门禁
+# 上游: 脱敏契约 + 外部 reference/candidate DOCX + candidate QA
+# 输出: 历史金标准门禁 JSON 与逐病例 Diff 产物
+# 种子: 不适用（确定性校验）
 """Release gate for de-identified contracts and external historical reports."""
 
 from __future__ import annotations
@@ -54,6 +58,14 @@ def _sha256_files(paths: Iterable[Path]) -> str:
     return digest.hexdigest()
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _current_revision() -> str:
     return subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -89,17 +101,40 @@ def _candidate_renderer_fingerprint(case: dict[str, Any]) -> dict[str, str]:
     raw = case.get("candidate_renderer")
     if not isinstance(raw, dict):
         raise ValueError("candidate_renderer must be a mapping")
-    required = ("platform", "engine", "version")
+    required = (
+        "platform",
+        "machine",
+        "engine",
+        "version",
+        "profile_mode",
+        "pdf_renderer",
+        "pdf_renderer_version",
+        "font_substitution_profile",
+        "font_substitution_profile_sha256",
+    )
     result = {key: str(raw.get(key) or "").strip() for key in required}
     missing = [key for key, value in result.items() if not value]
     if missing:
         raise ValueError(
             "candidate_renderer is missing required fields: " + ", ".join(missing)
         )
+    if not re.fullmatch(
+        r"[0-9a-f]{64}", result["font_substitution_profile_sha256"].lower()
+    ):
+        raise ValueError(
+            "candidate_renderer font_substitution_profile_sha256 must be SHA256"
+        )
     evidence = str(raw.get("evidence") or "").strip()
     if evidence:
         result["evidence"] = evidence
     return result
+
+
+def _required_sha256(case: dict[str, Any], field: str) -> str:
+    value = str(case.get(field) or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ValueError(f"{field} must be an explicit 64-character SHA256")
+    return value
 
 
 def discover_contracts() -> list[Path]:
@@ -233,6 +268,21 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
     medical_blocked = False
     for case in cases:
         alias = str(case.get("case_alias") or "")
+        case_errors: list[str] = []
+        candidate_source_revision = str(
+            case.get("candidate_source_revision") or ""
+        ).strip()
+        if candidate_source_revision != current_revision:
+            case_errors.append("candidate_source_revision does not match HEAD")
+        try:
+            declared_candidate_sha = _required_sha256(case, "candidate_sha256")
+            declared_candidate_qa_sha = _required_sha256(
+                case,
+                "candidate_qa_sha256",
+            )
+        except ValueError as exc:
+            errors.append(f"{alias or 'unnamed'}: {exc}")
+            continue
         try:
             candidate_renderer = _candidate_renderer_fingerprint(case)
         except ValueError as exc:
@@ -277,10 +327,71 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
             )
         )
         qa_status = "MISSING"
+        qa_payload: dict[str, Any] = {}
         if candidate_qa and candidate_qa.is_file():
-            qa_status = str(json.loads(candidate_qa.read_text(encoding="utf-8")).get("status") or "")
+            qa_payload = json.loads(candidate_qa.read_text(encoding="utf-8"))
+            qa_status = str(qa_payload.get("status") or "")
         allowed_qa = set(case.get("allowed_qa_statuses") or ["PASS"])
-        case_errors: list[str] = []
+        actual_candidate_sha = str(contract_result.get("docx_sha256") or "")
+        actual_candidate_qa_sha = (
+            _sha256_file(candidate_qa)
+            if candidate_qa and candidate_qa.is_file()
+            else ""
+        )
+        if declared_candidate_sha != actual_candidate_sha:
+            case_errors.append("candidate_sha256 does not match candidate DOCX")
+        if declared_candidate_qa_sha != actual_candidate_qa_sha:
+            case_errors.append("candidate_qa_sha256 does not match candidate QA")
+        qa_build = qa_payload.get("build_provenance") or {}
+        qa_source_revision = str(qa_build.get("source_revision") or "").strip()
+        if qa_source_revision != current_revision:
+            case_errors.append("candidate QA source_revision does not match HEAD")
+        if qa_source_revision != candidate_source_revision:
+            case_errors.append(
+                "candidate_source_revision does not match candidate QA provenance"
+            )
+        if qa_build.get("source_dirty") is not False:
+            case_errors.append("candidate QA was not generated from a clean source tree")
+        qa_output_sha = str(
+            (qa_payload.get("metrics") or {}).get("output_sha256") or ""
+        ).strip()
+        if qa_output_sha != actual_candidate_sha:
+            case_errors.append("candidate QA output_sha256 does not match candidate DOCX")
+        visual_check = (qa_payload.get("checks") or {}).get("visual_render") or {}
+        if not (
+            visual_check.get("status") == "PASS"
+            and visual_check.get("requested") == "all"
+            and visual_check.get("required") is True
+        ):
+            case_errors.append("candidate QA requires full, blocking visual render PASS")
+        qa_renderer_raw = visual_check.get("renderer_fingerprint") or {}
+        qa_renderer = {
+            "platform": str(qa_renderer_raw.get("platform") or "").strip(),
+            "machine": str(qa_renderer_raw.get("machine") or "").strip(),
+            "engine": str(qa_renderer_raw.get("engine") or "").strip(),
+            "version": str(qa_renderer_raw.get("engine_version") or "").strip(),
+            "profile_mode": str(
+                qa_renderer_raw.get("profile_mode") or ""
+            ).strip(),
+            "pdf_renderer": str(
+                qa_renderer_raw.get("pdf_renderer") or ""
+            ).strip(),
+            "pdf_renderer_version": str(
+                qa_renderer_raw.get("pdf_renderer_version") or ""
+            ).strip(),
+            "font_substitution_profile": str(
+                qa_renderer_raw.get("font_substitution_profile") or ""
+            ).strip(),
+            "font_substitution_profile_sha256": str(
+                qa_renderer_raw.get("font_substitution_profile_sha256") or ""
+            ).strip(),
+        }
+        if qa_renderer.get("platform") != "Linux":
+            case_errors.append("candidate visual QA was not rendered on Linux")
+        if qa_renderer != candidate_renderer:
+            case_errors.append(
+                "candidate_renderer does not match candidate QA renderer fingerprint"
+            )
         if contract_result.get("status") != "PASS":
             case_errors.append("historical contract failed")
         if diff_result.get("status") == "FAIL":
@@ -300,8 +411,12 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
                 "medical_uat_status": medical_uat_status,
                 "medical_uat_blockers": medical_uat_blockers,
                 "candidate_renderer_fingerprint": candidate_renderer,
+                "candidate_qa_renderer_fingerprint": qa_renderer,
+                "candidate_source_revision": candidate_source_revision,
                 "reference_sha256": contract_result.get("reference", {}).get("docx_sha256"),
-                "candidate_sha256": contract_result.get("docx_sha256"),
+                "candidate_sha256": actual_candidate_sha,
+                "candidate_qa_sha256": actual_candidate_qa_sha,
+                "candidate_qa_build_provenance": qa_build,
                 "diff_warning_codes": sorted(
                     {
                         str(item.get("code"))

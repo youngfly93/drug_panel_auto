@@ -6,12 +6,16 @@ set -euo pipefail
 SSH_HOST="${SSH_HOST:-iyun-server}"
 APP_ROOT="${APP_ROOT:-/media/desk16/iyun6208/apps}"
 RUNTIME_DIR="${RUNTIME_DIR:-$APP_ROOT/reportgen-web-runtime}"
+PORT="${PORT:-8000}"
+OPS_URL="${OPS_URL:-http://127.0.0.1:$PORT/api/v1/admin/ops/status?recent_task_limit=5&download_event_limit=50}"
+OPS_LOGIN_URL="${OPS_LOGIN_URL:-http://127.0.0.1:$PORT/api/v1/auth/login}"
 CRON_SCHEDULE="${CRON_SCHEDULE:-*/5 * * * *}"
 ALERT_FORMAT="${ALERT_FORMAT:-auto}"
 ALERT_MIN_SEVERITY="${ALERT_MIN_SEVERITY:-warning}"
 ALERT_REPEAT_MINUTES="${ALERT_REPEAT_MINUTES:-60}"
 ALERT_SEND_RECOVERY="${ALERT_SEND_RECOVERY:-1}"
 ALERT_WEBHOOK_URL="${ALERT_WEBHOOK_URL:-${RG_WEB_ALERT_WEBHOOK_URL:-}}"
+CRON_OPS_URL="${OPS_URL//&/\\&}"
 
 if [ ! -f "scripts/iyun62_alerts.sh" ]; then
     echo "Run this script from the reportgen-web repository root." >&2
@@ -85,7 +89,7 @@ for line in lines:
 
 block = [
     '# BEGIN reportgen-web-alerts',
-    '$CRON_SCHEDULE $RUNTIME_DIR/alerts.sh check >/dev/null 2>&1',
+    '$CRON_SCHEDULE APP_ROOT=$APP_ROOT RUNTIME_DIR=$RUNTIME_DIR PORT=$PORT OPS_URL=$CRON_OPS_URL OPS_LOGIN_URL=$OPS_LOGIN_URL ALERT_MIN_SEVERITY=$ALERT_MIN_SEVERITY ALERT_REPEAT_MINUTES=$ALERT_REPEAT_MINUTES ALERT_SEND_RECOVERY=$ALERT_SEND_RECOVERY $RUNTIME_DIR/alerts.sh check >/dev/null 2>&1',
     '# END reportgen-web-alerts',
 ]
 if out and out[-1].strip():

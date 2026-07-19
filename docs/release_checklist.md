@@ -227,14 +227,43 @@ ssh iyun129 '
 uname -srmo
 soffice --version
 locale | sed -n "1,6p"
-for font in "SimSun" "宋体" "Times New Roman"; do fc-match "$font"; done
+for font in "Noto Sans CJK SC" "Noto Serif CJK SC" "Times New Roman"; do
+  fc-match "$font"
+done
 fc-list | LC_ALL=C sort | sha256sum
+cat /media/desk16/iy12922/apps/reportgen-web-runtime/renderer_fingerprint.json
 '
 ```
 
 The release evidence must include the exact Linux LibreOffice version and the
-DOCX/QA hashes. Final visual acceptance still requires Windows Word/WPS; a Mac
-LibreOffice PASS alone is not production-equivalent evidence.
+DOCX/QA hashes. The runtime and candidate QA fingerprints must carry the same
+`reportgen-cjk-font-substitution-v1` profile and its 64-character mapping hash;
+the isolated profile pins Word-only fonts to installed Noto CJK fonts without
+changing the font names stored in the delivered DOCX. Final visual acceptance
+still requires Windows Word/WPS; a Mac LibreOffice PASS alone is not
+production-equivalent evidence.
+
+For a formal historical-Golden release, generate every candidate from the
+frozen commit on the production-equivalent Linux renderer with
+`visual_render=all` and blocking visual QA enabled.  Then bind the candidate,
+its QA sidecar, the source commit, and the renderer fingerprint into the
+external manifest:
+
+```bash
+python scripts/attest_historical_golden_manifest.py \
+  --manifest .work/historical_golden_release_manifest.yaml
+
+REQUIRE_HISTORICAL_GOLDEN=1 \
+HISTORICAL_GOLDEN_MANIFEST=.work/historical_golden_release_manifest.yaml \
+make release-check
+```
+
+The attestation command intentionally refuses a dirty source tree.  It also
+rejects candidates whose QA is not a required full-page `PASS` on Linux, whose
+DOCX hash differs from the QA sidecar, or whose QA source revision differs from
+the frozen commit.  Do not hand-edit candidate hashes or renderer fields into
+the manifest.  An ordinary Web reference upload is useful for exploratory
+comparison but cannot satisfy the formal historical-Golden gate.
 
 ## 5. Rollback
 
@@ -276,6 +305,7 @@ Record these values in the release note or team message:
 - SHA-256 of `runtime/start_reportgen.sh`, `watchdog.sh`, and
   `deployment.env` (the environment file contains no secrets);
 - production renderer fingerprint and Golden DOCX/QA hashes;
+- attested historical-Golden manifest hash and gate JSON;
 - smoke test output;
 - previous and rollback release IDs.
 
@@ -298,4 +328,8 @@ Do not deploy if any of these are true:
 - the iyun129 deploy preflight fails;
 - `current_release`, release `REVISION`, process cwd, or intended SHA disagree;
 - no validated known-good rollback release is recorded;
+- the deterministic render-stack preflight or renderer fingerprint is missing,
+  or the candidate/runtime font-substitution profile hashes disagree;
+- a required historical-Golden candidate lacks Linux full-page visual QA,
+  source-revision provenance, or an attested manifest;
 - production smoke test cannot generate the synthetic CRC 358 golden report.

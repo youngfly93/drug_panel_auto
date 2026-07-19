@@ -9,6 +9,7 @@ the renderer falls back to spawning a fresh listener per call.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import shutil
@@ -17,6 +18,9 @@ import subprocess
 import threading
 from pathlib import Path
 from typing import Optional
+
+from reportgen.utils.libreoffice_profile import initialize_libreoffice_profile
+from reportgen.utils.process_lock import exclusive_file_lock
 
 _log = logging.getLogger("reportgen-web.lo-listener")
 
@@ -55,16 +59,26 @@ def start_listener(
         return
 
     if not _port_free(port):
-        _log.warning("port %d busy; persistent LO listener disabled (will fallback to per-call)", port)
+        _log.warning(
+            "port %d busy; persistent LO listener disabled (will fallback to per-call)",
+            port,
+        )
         return
 
     profile_root = profile_root or Path("/tmp/reportgen_lo_persistent_profile")
     profile_root.mkdir(parents=True, exist_ok=True)
+    try:
+        initialize_libreoffice_profile(profile_root, require_available=True)
+    except Exception as exc:
+        _log.warning(
+            "deterministic LibreOffice profile initialization failed: %s", exc
+        )
+        return
     _profile_dir = profile_root
 
     cmd = [
         soffice,
-        f"-env:UserInstallation=file://{profile_root.as_posix()}",
+        f"-env:UserInstallation={profile_root.resolve().as_uri()}",
         "--headless",
         "--nologo",
         "--nolockcheck",
@@ -83,7 +97,11 @@ def start_listener(
         return
 
     os.environ["REPORTGEN_LO_LISTENER_PORT"] = str(port)
-    _log.info("LibreOffice persistent listener started on port %d (pid %d)", port, _listener_proc.pid)
+    _log.info(
+        "LibreOffice persistent listener started on port %d (pid %d)",
+        port,
+        _listener_proc.pid,
+    )
 
 
 def stop_listener() -> None:
@@ -113,6 +131,17 @@ def is_alive() -> bool:
 def get_lock() -> threading.Lock:
     """Module-level lock to serialize concurrent UNO calls against the shared listener."""
     return _lock
+
+
+@contextlib.contextmanager
+def listener_access_lock():
+    """Serialize warmup and report refreshes across threads and worker processes."""
+    lock_path = Path(
+        os.environ.get("REPORTGEN_LO_LOCK_FILE", "/tmp/reportgen_lo_listener.lock")
+    )
+    with _lock:
+        with exclusive_file_lock(lock_path):
+            yield
 
 
 def warmup_async(*, port: int = _DEFAULT_PORT, timeout: float = 60.0) -> None:
@@ -167,25 +196,26 @@ def warmup_async(*, port: int = _DEFAULT_PORT, timeout: float = 60.0) -> None:
         start = time.time()
         deadline = start + timeout
         last_err = ""
-        while time.time() < deadline:
-            try:
-                proc = subprocess.run(
-                    [soffice_python, "-c", warmup_code],
-                    capture_output=True,
-                    text=True,
-                    timeout=min(30, deadline - time.time() + 1),
-                )
-                if proc.returncode == 0:
-                    _log.info(
-                        "LibreOffice listener warmup completed in %.1f s",
-                        time.time() - start,
+        with listener_access_lock():
+            while time.time() < deadline:
+                try:
+                    proc = subprocess.run(
+                        [soffice_python, "-c", warmup_code],
+                        capture_output=True,
+                        text=True,
+                        timeout=min(30, deadline - time.time() + 1),
                     )
-                    return
-                last_err = (proc.stderr or proc.stdout or "").strip().splitlines()
-                last_err = last_err[-1] if last_err else "unknown"
-            except subprocess.TimeoutExpired:
-                last_err = "subprocess timeout"
-            time.sleep(1)
+                    if proc.returncode == 0:
+                        _log.info(
+                            "LibreOffice listener warmup completed in %.1f s",
+                            time.time() - start,
+                        )
+                        return
+                    last_err = (proc.stderr or proc.stdout or "").strip().splitlines()
+                    last_err = last_err[-1] if last_err else "unknown"
+                except subprocess.TimeoutExpired:
+                    last_err = "subprocess timeout"
+                time.sleep(1)
         _log.warning("LO warmup did not complete in %.0fs: %s", timeout, last_err)
 
     t = threading.Thread(target=_do_warmup, name="lo-warmup", daemon=True)

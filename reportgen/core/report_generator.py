@@ -7,7 +7,8 @@
 import json
 import os
 import time
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -20,11 +21,11 @@ from reportgen.core.enhancer_registry import (
     normalize_project_type,
 )
 from reportgen.core.excel_reader import ExcelReader
+from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.field_provenance import (
     build_field_provenance_report,
     write_field_provenance_report,
 )
-from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.pipeline import (
     GenerationContext,
     GenerationPipeline,
@@ -916,6 +917,11 @@ class ReportGenerator:
             raise RuntimeError("Report data is unavailable before template contract.")
 
         state.template_context = self.template_renderer.build_context(state.report_data)
+        state.template_context["project_type"] = state.canonical_project_type
+        state.template_context["_require_deterministic_layout"] = (
+            state.canonical_project_type
+            in {"crc_301", "crc_301_msi", "crc_358", "crc_358_msi"}
+        )
         template_contract_spec = self._get_template_contract_spec(state.panel_package)
 
         state.template_contract_mode = str(

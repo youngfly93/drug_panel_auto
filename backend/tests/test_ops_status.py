@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -83,8 +84,43 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
+    (runtime_dir / "renderer_fingerprint.json").write_text(
+        json.dumps(
+            {
+                "platform": "Linux",
+                "machine": "x86_64",
+                "engine": "soffice",
+                "engine_version": "LibreOffice 24.2",
+                "profile_mode": "isolated",
+                "pdf_renderer": "pdftoppm",
+                "pdf_renderer_version": "pdftoppm 24.02.0",
+                "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+                "font_substitution_profile_sha256": "b" * 64,
+                "zh_font_match": "Noto Sans CJK SC",
+                "zh_font_match_sha256": "a" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_dir / "alerts.env").write_text(
+        "ALERT_WEBHOOK_URL=https://alerts.invalid/synthetic\n",
+        encoding="utf-8",
+    )
+    (runtime_dir / "logs" / "restore-drill-20260719_010101.json").write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "checks": {
+                    "sqlite": {"integrity_check": "ok"},
+                    "full_extract": {"enabled": False},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    now_iso = datetime.now(timezone.utc).isoformat()
     download_event = {
-        "timestamp": "2026-05-31T15:01:00",
+        "timestamp": now_iso,
         "event_type": "report_download_completed",
         "task_id": "task-sensitive",
         "task_type": "single",
@@ -155,7 +191,7 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     payload = response.json()
     assert payload["success"] is True
     data = payload["data"]
-    assert data["schema_version"] == "1.1"
+    assert data["schema_version"] == "1.2"
     assert data["deployment"]["release"] == "abcdef12"
     assert data["deployment"]["revision_short"] == "abcdef12"
     assert isinstance(data["alerts"], list)
@@ -174,6 +210,12 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     assert isinstance(data["runtime"]["generation_limits"]["process_isolation"], bool)
     assert data["runtime"]["generation_limits"]["timeout_seconds"] >= 1
     assert data["runtime"]["task_recovery"]["ran"] in {True, False}
+    assert data["runtime"]["renderer_fingerprint"]["available"] is True
+    assert data["runtime"]["renderer_fingerprint"][
+        "font_substitution_profile"
+    ] == "reportgen-cjk-font-substitution-v1"
+    assert data["runtime"]["alert_delivery"]["configured"] is True
+    assert data["runtime"]["restore_drill"]["status"] == "PASS"
     assert data["downloads"]["summary"]["completed"] == 1
     assert data["downloads"]["recent_terminal_events"][0]["task_id"] == "task-sensitive"
     assert data["downloads"]["recent_terminal_events"][0]["cf_ray_present"] is True
@@ -186,7 +228,35 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     assert "case.xlsx" not in response_text
     assert "secret-browser" not in response_text
     assert "203.0.113.10" not in response_text
+    assert "alerts.invalid" not in response_text
     assert str(tmp_path) not in response_text
+
+
+def test_ops_alerts_reject_unattested_renderer_font_profile(tmp_path, monkeypatch):
+    client, _SessionLocal, runtime_dir, _backup_dir = _client(tmp_path, monkeypatch)
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "renderer_fingerprint.json").write_text(
+        json.dumps(
+            {
+                "platform": "Linux",
+                "machine": "x86_64",
+                "engine": "soffice",
+                "engine_version": "LibreOffice 24.2",
+                "profile_mode": "isolated",
+                "pdf_renderer": "pdftoppm",
+                "pdf_renderer_version": "pdftoppm 24.02.0",
+                "font_substitution_profile": "unmanaged",
+                "font_substitution_profile_sha256": "not-a-sha",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    alert_ids = {alert["id"] for alert in response.json()["data"]["alerts"]}
+    assert "renderer.fingerprint.invalid" in alert_ids
 
 
 def test_ops_status_returns_threshold_alerts(tmp_path, monkeypatch):
@@ -214,12 +284,13 @@ def test_ops_status_returns_threshold_alerts(tmp_path, monkeypatch):
     )
     client, _SessionLocal, runtime_dir, _backup_dir = _client(tmp_path, monkeypatch)
     (runtime_dir / "logs").mkdir(parents=True)
+    now_iso = datetime.now(timezone.utc).isoformat()
     (runtime_dir / "logs" / "uvicorn.log").write_text(
         "\n".join(
             [
                 json.dumps(
                     {
-                        "timestamp": "2026-05-31T15:01:00",
+                        "timestamp": now_iso,
                         "event_type": "report_download_failed",
                         "task_id": "task-a",
                         "duration_ms": 1200,
@@ -227,7 +298,7 @@ def test_ops_status_returns_threshold_alerts(tmp_path, monkeypatch):
                 ),
                 json.dumps(
                     {
-                        "timestamp": "2026-05-31T15:02:00",
+                        "timestamp": now_iso,
                         "event_type": "report_download_slow",
                         "task_id": "task-b",
                         "duration_ms": 45_000,
@@ -250,6 +321,94 @@ def test_ops_status_returns_threshold_alerts(tmp_path, monkeypatch):
     assert "downloads.duration.high" in alert_ids
     assert "backup.missing" in alert_ids
     assert "maintenance.cleanup.missing" in alert_ids
+    assert "renderer.fingerprint.missing" in alert_ids
+    assert "alerts.delivery.unconfigured" in alert_ids
+    assert "restore_drill.missing" in alert_ids
+
+
+def test_ops_alerts_only_recent_failures_and_detects_orphaned_tasks(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        ops_api,
+        "queue_stats",
+        lambda: {
+            "max_workers": 2,
+            "queued": 0,
+            "active": 0,
+            "submitted_total": 0,
+            "finished_total": 0,
+        },
+    )
+    client, SessionLocal, runtime_dir, _backup_dir = _client(tmp_path, monkeypatch)
+    (runtime_dir / "logs").mkdir(parents=True)
+    db = SessionLocal()
+    db.add_all(
+        [
+            Task(
+                id="old-failure",
+                task_type="single",
+                status="failed",
+                total_files=1,
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None)
+                - timedelta(days=3),
+            ),
+            Task(
+                id="recent-failure",
+                task_type="single",
+                status="partial_failed",
+                total_files=1,
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None)
+                - timedelta(hours=2),
+            ),
+            Task(
+                id="orphaned-pending",
+                task_type="single",
+                status="pending",
+                total_files=1,
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            ),
+        ]
+    )
+    db.commit()
+    db.close()
+
+    with client:
+        response = client.get("/api/v1/admin/ops/status")
+
+    data = response.json()["data"]
+    assert data["tasks"]["counts"]["failed_total"] == 2
+    assert data["tasks"]["counts"]["failed_recent_24h"] == 1
+    alert_ids = {alert["id"] for alert in data["alerts"]}
+    assert "tasks.failed.recent" in alert_ids
+    assert "tasks.queue_state.mismatch" in alert_ids
+
+
+def test_restore_drill_status_marks_old_pass_as_stale(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    report = log_dir / "restore-drill-20260101_010101.json"
+    report.write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "checks": {
+                    "sqlite": {"integrity_check": "ok"},
+                    "full_extract": {"enabled": False},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    old = (
+        datetime.now(timezone.utc) - timedelta(hours=ops_api.RESTORE_DRILL_DANGER_HOURS + 1)
+    ).timestamp()
+    os.utime(report, (old, old))
+
+    status = ops_api._restore_drill_status(log_dir)
+    assert status["status"] == "PASS"
+    assert status["age_hours"] > ops_api.RESTORE_DRILL_DANGER_HOURS
 
 
 def test_load_test_summary_returns_sanitized_release_gate_payload(tmp_path, monkeypatch):

@@ -94,6 +94,7 @@
           <div class="gate-actions">
             <el-button :icon="Refresh" @click="refreshGate">刷新门禁</el-button>
             <el-button
+              v-if="canReview"
               type="success"
               plain
               :loading="reviewUpdating"
@@ -102,6 +103,7 @@
               标记已审核
             </el-button>
             <el-button
+              v-if="canReview"
               type="primary"
               :disabled="!qualityGate?.passed"
               :loading="reviewUpdating"
@@ -171,7 +173,7 @@
               </div>
               <p>{{ formatAuditMeta(item) }}</p>
             </div>
-            <el-tag size="small" type="info">{{ item.operator || '未登录操作员' }}</el-tag>
+            <el-tag size="small" type="info">{{ item.operator || '系统任务' }}</el-tag>
           </div>
         </div>
         <el-empty v-else description="暂无操作记录" :image-size="70" />
@@ -785,6 +787,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, Close, Download, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
 import {
   reportApi,
   type BatchResults,
@@ -799,7 +802,9 @@ import {
 } from '@/api/report'
 
 const route = useRoute()
+const authStore = useAuthStore()
 const taskId = String(route.params.id || '')
+const canReview = computed(() => ['reviewer', 'admin'].includes(authStore.user?.role || ''))
 
 const loading = ref(false)
 const rendering = ref(false)
@@ -1698,7 +1703,6 @@ async function markReviewState(status: 'reviewed' | 'delivered') {
   try {
     reviewState.value = await reportApi.updateReviewState(taskId, {
       status,
-      operator: '报告组',
     })
     qualityGate.value = await reportApi.getQualityGate(taskId)
     await fetchAuditTrail()

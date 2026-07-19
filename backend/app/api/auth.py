@@ -1,7 +1,5 @@
 """Authentication endpoints."""
 
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -10,6 +8,7 @@ from app.dependencies import create_access_token, pwd_context, require_user
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse, UserInfo
 from app.schemas.common import ApiResponse
+from app.time_utils import utc_now_naive
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -22,7 +21,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已禁用")
 
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = utc_now_naive()
     db.commit()
 
     token = create_access_token(user.id)

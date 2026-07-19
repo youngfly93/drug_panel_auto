@@ -8,7 +8,10 @@ patient case. Panel-specific assertions are enabled from project/report context.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
+import subprocess
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
@@ -21,14 +24,80 @@ from reportgen.core.pipeline.summary import summarize_stage_results
 from reportgen.core.processors import critical_docx_processor_names
 from reportgen.models.report_data import ReportData
 from reportgen.utils.artifacts import write_json
-from reportgen.utils.docx_render import render_docx_to_pngs
-
+from reportgen.utils.docx_render import render_docx_to_pngs, renderer_fingerprint
 
 PLACEHOLDER_RE = re.compile(
     r"(\{\{.*?\}\}|\{%.*?%\}|\{#.*?#\}|__[A-Z][A-Z0-9_]{2,}__)",
     re.DOTALL,
 )
 CRC_PROJECT_TYPES = {"crc_301", "crc_301_msi", "crc_358", "crc_358_msi"}
+
+
+def _file_sha256(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _build_provenance() -> dict[str, Any]:
+    """Identify the immutable release (or local Git tree) that produced QA."""
+    explicit = str(os.environ.get("REPORTGEN_SOURCE_REVISION") or "").strip()
+    if re.fullmatch(r"[0-9a-fA-F]{7,40}", explicit):
+        return {
+            "source_revision": explicit.lower(),
+            "source_kind": "environment",
+            "source_dirty": False,
+        }
+
+    source_file = Path(__file__).resolve()
+    for parent in source_file.parents:
+        revision_file = parent / "REVISION"
+        if not revision_file.is_file():
+            continue
+        revision = revision_file.read_text(encoding="utf-8").strip()
+        if re.fullmatch(r"[0-9a-fA-F]{7,40}", revision):
+            return {
+                "source_revision": revision.lower(),
+                "source_kind": "release_revision_file",
+                "source_dirty": False,
+            }
+
+    try:
+        revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=source_file.parent,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        dirty = bool(
+            subprocess.run(
+                ["git", "status", "--porcelain", "--untracked-files=normal"],
+                cwd=source_file.parent,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout.strip()
+        )
+        if re.fullmatch(r"[0-9a-fA-F]{40}", revision):
+            return {
+                "source_revision": revision.lower(),
+                "source_kind": "git_worktree",
+                "source_dirty": dirty,
+            }
+    except Exception:
+        pass
+    return {
+        "source_revision": None,
+        "source_kind": "unavailable",
+        "source_dirty": None,
+    }
 
 
 def build_docx_qa_report(
@@ -61,6 +130,7 @@ def build_docx_qa_report(
     checks: Dict[str, Any] = {}
     metrics: Dict[str, Any] = {
         "file_size_bytes": output_path.stat().st_size if output_path.exists() else None,
+        "output_sha256": _file_sha256(output_path),
     }
 
     def issue(level: str, code: str, message: str) -> None:
@@ -380,6 +450,7 @@ def _finalize_report(
         "project_name": project_name,
         "template_file": str(template_file) if template_file else None,
         "output_file": str(output_file),
+        "build_provenance": _build_provenance(),
         "field_provenance_file": str(field_provenance_file)
         if field_provenance_file
         else None,
@@ -497,6 +568,7 @@ def _build_visual_render_check(
     }
     if normalized_mode == "none":
         return result
+    result["renderer_fingerprint"] = renderer_fingerprint()
     if normalized_mode not in {"first", "all"}:
         result.update(
             {
@@ -865,7 +937,10 @@ def _inspect_reportgen_toc_fields(output_path: Path) -> Optional[Dict[str, Any]]
     actual reader-refreshable fields and their target bookmarks.
     """
     w_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-    qn = lambda tag: f"{{{w_ns}}}{tag}"
+
+    def qn(tag: str) -> str:
+        return f"{{{w_ns}}}{tag}"
+
     try:
         with ZipFile(output_path, "r") as zf:
             document_root = ET.fromstring(zf.read("word/document.xml"))

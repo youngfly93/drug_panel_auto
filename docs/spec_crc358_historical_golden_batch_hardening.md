@@ -106,7 +106,10 @@
 实施：
 
 - 新增通用注册/校验脚本，将外部 DOCX 写入现有参考报告库；
-- 注册记录包含 panel、外部 case ID、名称、SHA-256、active 状态和审核备注；
+- 正式注册必须同时提供版本库内脱敏契约；脚本校验 panel、外部 case ID、参考
+  DOCX SHA-256，并拒绝把脱敏 `case_alias` 当成运行时病例编号；
+- 注册记录包含 panel、外部 case ID、名称、SHA-256、active 状态和审核备注，并在
+  外部存储生成 `.golden.json` 凭据；普通 Web 上传基准不具备正式验收资格；
 - 同一 panel/case 仅允许一个 active 基准；
 - 新增脱敏契约 `crc358_reviewed_case_a`，用于无 PHI 的 CI/发布断言。
 
@@ -114,7 +117,8 @@
 
 - 测试数据库可注册、激活、查询并命中参考报告；
 - 真实 DOCX 和 Excel 不出现在 `git status` 的可提交清单中；
-- 自动 Diff 能按 panel + case ID 命中 active 基准。
+- 普通自动 Diff 可按 panel + case ID 命中 active 基准；金标准验收模式仅命中通过
+  契约、文件哈希和凭据复核的 active 正式金标准。
 
 ### S3 精确知识迁移
 
@@ -180,9 +184,21 @@
 实施：
 
 - 将脱敏契约断言加入 `make release-check`；
-- 候选报告存在 active 历史基准时，Diff `FAIL` 必须阻断交付；
+- 普通生成保持“有基准则比对”；报告组选择“金标准验收”后，每个病例都必须命中
+  正式金标准，缺基准、基准凭据失效、候选缺失或 Diff `FAIL` 均阻断交付；
 - 发布门禁记录 reference SHA、候选 SHA、Diff 状态、规则/知识哈希，并将“门禁运行
   环境指纹”与“候选报告实际渲染环境指纹”分开记录；
+- 候选 QA 必须记录生成源码 revision、干净状态和候选 DOCX SHA；外部 manifest
+  必须同时固定 `candidate_source_revision`、`candidate_sha256` 和
+  `candidate_qa_sha256`，且三方 revision 与发布 HEAD 完全一致；
+- 正式候选只能在 Linux 上执行阻断式全页视觉 QA；QA 必须记录 LibreOffice、
+  Poppler、隔离 profile 模式、机器架构及固定 CJK 字体替换表哈希，
+  候选 QA、外部 manifest 与生产运行指纹三者必须一致；随后使用
+  `scripts/attest_historical_golden_manifest.py` 从 QA 原始证据生成 manifest
+  凭据，禁止手工填写哈希或渲染器字段；
+- CRC301/358 目录刷新、最终 PAGEREF 缓存构建和样式收口属于关键处理器；生产
+  缺少 LibreOffice、python3-uno、Poppler 或启用了 FAST_TOC/skip 开关时必须
+  失败关闭，不能降级成“报告生成成功”；
 - 至少运行基准病例和第二个差异病例，防止患者特异硬编码。
 
 验收：
@@ -225,10 +241,13 @@
 
 ## 8. 当前工程验收证据
 
-- 完整后端回归：`462 passed, 1 skipped`；无功能失败；
-- 发布静态门禁：panel registry、knowledge release gate、受控 ruff 路径均 `PASS`；
-- 前端：`vue-tsc --noEmit` 与 Vite production build `PASS`；
-- Linux LibreOffice 候选：视觉 QA `PASS`、0 issue；历史脱敏契约 `PASS`；
+- 2026-07-20 冻结前完整后端回归：`544 passed, 4 skipped`；无功能失败；
+- 发布 QA 门禁：panel registry、knowledge release gate、受控 ruff、CRC358/CRC301/
+  肺甲基化 reference/candidate/repeat diff 均 `PASS`；
+- 前端：ESLint、`npm audit`（0 vulnerabilities）、`vue-tsc --noEmit` 与 Vite production
+  build 均 `PASS`；
+- macOS 受控字体 profile 修复后，同一 CRC358 候选连续 8 次均渲染为 69 页且目录映射
+  稳定；这只证明本地确定性，不代替冻结 commit 的 Linux 全页 QA 与正式 attestation；
 - 历史全文 Diff：0 个阻断错误，保留已登记的排序纠正与跨渲染样式警告；
 - 商品名根因回归：旧候选因 22/41 项被新门禁阻断；修复候选为 41/41，Linux
   LibreOffice 99 页视觉 QA `PASS`，目录、空白页和低内容页检查均 `PASS`；

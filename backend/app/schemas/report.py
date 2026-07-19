@@ -14,6 +14,7 @@ class GenerateRequest(BaseModel):
     template_name: Optional[str] = None
     strict_mode: bool = False
     template_contract_mode: str = "warn"
+    reference_gate_mode: str = "available"
     qa_visual_render: Optional[str] = None
     qa_visual_render_required: Optional[bool] = None
     qa_visual_render_dpi: Optional[int] = None
@@ -48,7 +49,6 @@ class GenerateResponse(BaseModel):
 
 class ReviewStateUpdate(BaseModel):
     status: str
-    operator: Optional[str] = None
     note: Optional[str] = None
     override_gate: bool = False
 

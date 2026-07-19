@@ -173,6 +173,9 @@ runtime_config="$tmp_dir/deployment.env.runtime"
     printf 'RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1\n'
     printf 'RG_WEB_DOCS_ENABLED=%q\n' "${RG_WEB_DOCS_ENABLED:-0}"
     printf 'RG_WEB_CORS_ORIGINS=%q\n' "${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
+    printf 'REPORTGEN_REQUIRE_RENDER_STACK=1\n'
+    printf 'REPORTGEN_LIBREOFFICE_PROFILE_MODE=isolated\n'
+    printf 'REPORTGEN_LO_LOCK_FILE=%q\n' "$RUNTIME_DIR/run/libreoffice-listener.lock"
 } > "$runtime_config"
 rsync -az "$runtime_config" "$SSH_HOST:$RUNTIME_DIR/deployment.env.next"
 ssh "$SSH_HOST" "set -euo pipefail

@@ -45,6 +45,12 @@
               :value="option.value"
             />
           </el-select>
+          <el-checkbox
+            v-if="canUseGoldenMode"
+            v-model="batchReferenceGateRequired"
+          >
+            金标准验收（未命中基准即阻断）
+          </el-checkbox>
           <el-button
             type="primary"
             :loading="batchGenerating"
@@ -360,6 +366,7 @@
         :form-data="form.formData"
         :errors="form.errors.value"
         :loading="form.loading.value"
+        @update-field="(key, value) => { form.formData[key] = value }"
       />
       <el-alert
         v-if="enrichmentMessage"
@@ -383,6 +390,13 @@
     <!-- Step 3: Generate -->
     <el-card v-if="excelStore.upload" shadow="hover">
       <template #header><strong>3. 生成报告</strong></template>
+      <el-checkbox
+        v-if="canUseGoldenMode"
+        v-model="singleReferenceGateRequired"
+        style="margin-right: 16px"
+      >
+        金标准验收（未命中基准即阻断）
+      </el-checkbox>
       <el-button type="primary" size="large" :loading="generating" @click="handleGenerate">
         {{ generating ? '提交中' : '生成报告' }}
       </el-button>
@@ -486,11 +500,13 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useExcelStore } from '@/stores/excel'
+import { useAuthStore } from '@/stores/auth'
 import { useDynamicForm } from '@/composables/useDynamicForm'
 import {
   reportApi,
   type BatchResultItem,
   type DownloadProgress,
+  type GenerateRequest,
   type GenerateResult,
   type TaskStatus,
 } from '@/api/report'
@@ -498,6 +514,7 @@ import DynamicClinicalForm from '@/components/clinical/DynamicClinicalForm.vue'
 import SheetPreview from '@/components/excel/SheetPreview.vue'
 
 const excelStore = useExcelStore()
+const authStore = useAuthStore()
 
 const projectType = ref<string | null>(null)
 const templateName = ref<string | null>(null)
@@ -522,6 +539,11 @@ const singleDownloadStatus = ref('')
 const batchTask = ref<TaskStatus | null>(null)
 const batchResultRows = ref<BatchResultItem[]>([])
 const batchIdempotencyKey = ref<string | null>(null)
+const singleReferenceGateRequired = ref(false)
+const batchReferenceGateRequired = ref(false)
+const canUseGoldenMode = computed(
+  () => authStore.user?.role === 'admin' || authStore.user?.role === 'reviewer',
+)
 let batchPollTimer: number | null = null
 let singlePollTimer: number | null = null
 
@@ -886,7 +908,7 @@ watch(
 )
 
 watch(
-  [batchProjectType, batchTemplateName],
+  [batchProjectType, batchTemplateName, batchReferenceGateRequired],
   () => {
     batchIdempotencyKey.value = null
   },
@@ -978,6 +1000,7 @@ async function startBatchGenerate() {
         project_name: null,
         template_name: batchTemplateName.value,
         template_contract_mode: 'warn',
+        reference_gate_mode: batchReferenceGateRequired.value ? 'required' : 'available',
       },
       batchIdempotencyKey.value,
     )
@@ -1142,11 +1165,12 @@ async function handleGenerate() {
   singleTask.value = null
   stopSinglePolling()
   try {
-    const payload = {
+    const payload: Omit<GenerateRequest, 'upload_id'> = {
       clinical_info: form.getCleanValues(),
       project_type: projectType.value,
       project_name: excelStore.upload.detected_project_name,
       template_name: templateName.value,
+      reference_gate_mode: singleReferenceGateRequired.value ? 'required' : 'available',
     }
     if (excelStore.sourceFile && generationMode === 'async') {
       const accepted = await reportApi.generateFromFileAsync(excelStore.sourceFile, payload)

@@ -27,7 +27,13 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal, get_db
-from app.dependencies import get_bridge, get_current_user
+from app.dependencies import (
+    TASK_PRIVILEGED_ROLES,
+    get_bridge,
+    require_user,
+    user_can_access_task,
+    user_can_access_upload,
+)
 from app.models.batch_submission import BatchSubmission
 from app.models.task import Task, TaskResult
 from app.models.upload import Upload
@@ -44,7 +50,10 @@ from app.services.batch_lifecycle import (
     empty_batch_status_counts,
 )
 from app.services.file_manager import (
+    UploadLimitExceeded,
     ensure_report_dir,
+    max_batch_upload_bytes,
+    safe_client_filename,
     save_upload_with_digest,
 )
 from app.services.generation_preflight import (
@@ -55,10 +64,24 @@ from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_manager import submit_batch_task
+from app.time_utils import utc_now_naive
 
 router = APIRouter(prefix="/reports", tags=["reports-batch"])
 
 IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
+
+
+def _validated_reference_gate_mode(value: str | None, user: User) -> str:
+    try:
+        mode = diff_svc.normalize_reference_gate_mode(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if diff_svc.reference_is_required(mode) and user.role not in TASK_PRIVILEGED_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="仅复核人或管理员可启用金标准验收模式",
+        )
+    return mode
 
 
 def _json_list(value: Optional[str]) -> list:
@@ -149,6 +172,7 @@ def _batch_request_digest(
     project_name: Optional[str],
     template_name: Optional[str],
     template_contract_mode: str,
+    reference_gate_mode: str = "available",
 ) -> str:
     canonical = {
         "files": [
@@ -165,6 +189,7 @@ def _batch_request_digest(
         "project_name": project_name,
         "template_name": template_name,
         "template_contract_mode": template_contract_mode,
+        "reference_gate_mode": reference_gate_mode,
     }
     encoded = json.dumps(
         canonical,
@@ -238,15 +263,17 @@ def _write_batch_inputs(
     project_name: Optional[str],
     template_name: Optional[str],
     template_contract_mode: str,
+    reference_gate_mode: str = "available",
 ) -> dict:
     payload = {
         "schema_version": "1.0",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": utc_now_naive().isoformat(),
         "task_id": task_id,
         "project_type": project_type,
         "project_name": project_name,
         "template_name": template_name,
         "template_contract_mode": template_contract_mode,
+        "reference_gate_mode": reference_gate_mode,
         "shared_clinical_info": shared_clinical_info,
         "items": items,
     }
@@ -305,7 +332,7 @@ def _write_batch_report(db: Session, task: Task) -> dict:
     rows = [_task_result_to_row(result, output_root) for result in results]
     counts = _batch_status_counts(results)
     payload = {
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": utc_now_naive().isoformat(),
         "task_id": task.id,
         "status": task.status,
         "inputs_count": task.total_files,
@@ -422,7 +449,7 @@ def _batch_terminal_counts(db: Session, task_id: str) -> tuple[int, int]:
 
 def _refresh_batch_counts(db: Session, task: Task, *, started_at: datetime) -> None:
     task.completed_files, task.failed_files = _batch_terminal_counts(db, task.id)
-    task.duration_seconds = (datetime.utcnow() - started_at).total_seconds()
+    task.duration_seconds = (utc_now_naive() - started_at).total_seconds()
 
 
 def _load_batch_task_fresh(db: Session, task_id: str) -> Task | None:
@@ -443,6 +470,7 @@ def _build_item_payload(
     template_name: Optional[str],
     output_dir: str,
     template_contract_mode: str,
+    reference_gate_mode: str = "available",
 ) -> tuple[dict, dict, Optional[str], Optional[str]]:
     clinical_payload = prepared["clinical_payload"]
     detected_project_type = prepared.get("project_type")
@@ -458,6 +486,12 @@ def _build_item_payload(
         project_name=detected_project_name,
         strict_mode=False,
         template_contract_mode=template_contract_mode,
+        qa_visual_render=(
+            "all" if diff_svc.reference_is_required(reference_gate_mode) else None
+        ),
+        qa_visual_render_required=(
+            True if diff_svc.reference_is_required(reference_gate_mode) else None
+        ),
     )
     summary = {
         "project_type": detected_project_type,
@@ -492,10 +526,11 @@ def _complete_batch_files_task(
     project_name: Optional[str],
     template_name: Optional[str],
     template_contract_mode: str,
+    reference_gate_mode: str = "available",
     bridge: ReportGenBridge,
 ) -> None:
     db = SessionLocal()
-    worker_started = datetime.utcnow()
+    worker_started = utc_now_naive()
     try:
         task = _load_batch_task_fresh(db, task_id)
         if not task:
@@ -551,7 +586,7 @@ def _complete_batch_files_task(
             )
             db.commit()
 
-            started = datetime.utcnow()
+            started = utc_now_naive()
             try:
                 prepared = _preflight_item_payload(
                     stored_path=item["stored_path"],
@@ -584,7 +619,7 @@ def _complete_batch_files_task(
                 prepared_items.append((item, prepared))
             except Exception as exc:
                 row.status = "failed"
-                row.duration_seconds = (datetime.utcnow() - started).total_seconds()
+                row.duration_seconds = (utc_now_naive() - started).total_seconds()
                 row.errors = json.dumps([str(exc)], ensure_ascii=False)
                 row.warnings = json.dumps([], ensure_ascii=False)
                 row.validation_summary = json.dumps(
@@ -612,7 +647,7 @@ def _complete_batch_files_task(
                     Task.completed_files: completed_files,
                     Task.failed_files: failed_files,
                     Task.duration_seconds: (
-                        datetime.utcnow() - started_at
+                        utc_now_naive() - started_at
                     ).total_seconds(),
                 },
                 synchronize_session=False,
@@ -643,7 +678,7 @@ def _complete_batch_files_task(
                 continue
             row.status = "generating"
             db.commit()
-            started = datetime.utcnow()
+            started = utc_now_naive()
             try:
                 result, validation_summary, _ptype, _pname = _build_item_payload(
                     stored_path=item["stored_path"],
@@ -652,6 +687,7 @@ def _complete_batch_files_task(
                     template_name=template_name,
                     output_dir=output_dir,
                     template_contract_mode=template_contract_mode,
+                    reference_gate_mode=reference_gate_mode,
                 )
                 row.status = "qa"
                 db.commit()
@@ -672,7 +708,7 @@ def _complete_batch_files_task(
                 )
             except Exception as exc:
                 row.status = "failed"
-                row.duration_seconds = (datetime.utcnow() - started).total_seconds()
+                row.duration_seconds = (utc_now_naive() - started).total_seconds()
                 row.errors = json.dumps([str(exc)], ensure_ascii=False)
                 row.warnings = json.dumps([], ensure_ascii=False)
                 row.validation_summary = json.dumps(
@@ -700,7 +736,7 @@ def _complete_batch_files_task(
                     Task.completed_files: completed_files,
                     Task.failed_files: failed_files,
                     Task.duration_seconds: (
-                        datetime.utcnow() - started_at
+                        utc_now_naive() - started_at
                     ).total_seconds(),
                 },
                 synchronize_session=False,
@@ -724,6 +760,9 @@ def _complete_batch_files_task(
                     batch_report,
                     fail_on="fail",
                     max_samples=50,
+                    require_reference=diff_svc.reference_is_required(
+                        reference_gate_mode
+                    ),
                 )
                 summary = diff_payload.get("summary") or {}
                 warnings.append(
@@ -734,10 +773,16 @@ def _complete_batch_files_task(
                     f"阻断{summary.get('blocked', 0)}"
                 )
             except Exception as exc:
+                if diff_svc.reference_is_required(reference_gate_mode):
+                    diff_svc.write_batch_reference_gate_failure(
+                        task,
+                        batch_report,
+                        message=f"金标准批量对比执行失败: {exc}",
+                    )
                 warnings.append(f"批量自动基准对比失败: {exc}")
 
         completed_files, failed_files = _batch_terminal_counts(db, task_id)
-        completed_at = datetime.utcnow()
+        completed_at = utc_now_naive()
         final_status = _resolve_batch_status(
             completed=completed_files,
             failed=failed_files,
@@ -769,7 +814,7 @@ def _complete_batch_files_task(
         task = _load_batch_task_fresh(db, task_id)
         if task and task.status != "cancelled":
             effective_started = task.started_at or worker_started
-            completed_at = datetime.utcnow()
+            completed_at = utc_now_naive()
             failed_transition = (
                 db.query(Task)
                 .filter(
@@ -866,7 +911,7 @@ async def _on_batch_complete(task_id: str, result: dict):
             task.status = "failed"
             task.errors = json.dumps([result.get("error", "Unknown error")], ensure_ascii=False)
 
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utc_now_naive()
         if task.started_at:
             task.duration_seconds = (task.completed_at - task.started_at).total_seconds()
         db.commit()
@@ -883,6 +928,7 @@ async def batch_generate(
     template_contract: str = "warn",
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_user),
 ):
     """
     Submit a batch generation task.
@@ -898,9 +944,12 @@ async def batch_generate(
     if upload_ids:
         for uid in upload_ids:
             upload = db.query(Upload).filter(Upload.id == uid).first()
-            if upload:
-                input_paths.append(upload.stored_path)
+            if not upload or not user_can_access_upload(current_user, upload):
+                raise HTTPException(status_code=404, detail="上传记录不存在")
+            input_paths.append(upload.stored_path)
     elif input_dir:
+        if current_user.role != "admin":
+            raise HTTPException(status_code=403, detail="仅管理员可从服务器目录创建批量任务")
         input_paths.append(input_dir)
     else:
         raise HTTPException(status_code=400, detail="请提供 upload_ids 或 input_dir")
@@ -912,9 +961,10 @@ async def batch_generate(
         id=task_id,
         task_type="batch",
         status="running",
+        user_id=current_user.id,
         project_type=project_type,
         total_files=total_files,
-        started_at=datetime.utcnow(),
+        started_at=utc_now_naive(),
     )
     db.add(task)
     db.commit()
@@ -949,26 +999,37 @@ def batch_generate_from_files(
     project_name: Optional[str] = Form(None),
     template_name: Optional[str] = Form(None),
     template_contract_mode: str = Form("warn"),
+    reference_gate_mode: str = Form("available"),
     idempotency_key_header: Optional[str] = Header(
         None,
         alias="Idempotency-Key",
     ),
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: User = Depends(require_user),
 ):
     """Persist a production batch and return before preflight/enrichment."""
     accept_started = time.perf_counter()
+    reference_gate_mode = _validated_reference_gate_mode(
+        reference_gate_mode,
+        current_user,
+    )
     idempotency_key = _normalized_idempotency_key(idempotency_key_header)
-    user_scope = f"user:{current_user.id}" if current_user else "anonymous"
+    user_scope = f"user:{current_user.id}"
     excel_files = [file for file in files if file.filename]
     if not excel_files:
         raise HTTPException(status_code=400, detail="请至少上传 1 个 Excel 文件")
+    if len(excel_files) > settings.max_batch_files:
+        raise HTTPException(
+            status_code=413,
+            detail=f"批量文件数超过上限（最多 {settings.max_batch_files} 个）",
+        )
     for file in excel_files:
-        if not file.filename.lower().endswith(".xlsx"):
-            raise HTTPException(status_code=400, detail=f"仅支持 .xlsx 文件: {file.filename}")
-        if file.filename.startswith("._") or file.filename.startswith("~$"):
-            raise HTTPException(status_code=400, detail=f"请移除临时文件: {file.filename}")
+        safe_name = safe_client_filename(file.filename, "upload.xlsx")
+        if not safe_name.lower().endswith(".xlsx"):
+            raise HTTPException(status_code=400, detail=f"仅支持 .xlsx 文件: {safe_name}")
+        if safe_name.startswith("._") or safe_name.startswith("~$"):
+            raise HTTPException(status_code=400, detail=f"请移除临时文件: {safe_name}")
 
     try:
         shared_clinical_info = json.loads(clinical_info or "{}")
@@ -981,19 +1042,28 @@ def batch_generate_from_files(
         raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
 
     items: list[dict] = []
+    batch_size = 0
+    batch_limit = max_batch_upload_bytes()
     try:
         for index, file in enumerate(excel_files, start=1):
             upload_id, stored_path, file_size, file_digest = save_upload_with_digest(file)
+            safe_name = safe_client_filename(file.filename, "upload.xlsx")
             items.append(
                 {
                     "index": index,
                     "upload_id": upload_id,
-                    "filename": file.filename,
+                    "filename": safe_name,
                     "stored_path": str(stored_path),
                     "file_size": file_size,
                     "sha256": file_digest,
                 }
             )
+            batch_size += file_size
+            if batch_size > batch_limit:
+                raise UploadLimitExceeded(
+                    max_bytes=batch_limit,
+                    scope="批量文件总大小",
+                )
     except Exception:
         _cleanup_uncommitted_batch(items)
         raise
@@ -1005,6 +1075,7 @@ def batch_generate_from_files(
         project_name=project_name,
         template_name=template_name,
         template_contract_mode=template_contract_mode,
+        reference_gate_mode=reference_gate_mode,
     )
     existing = (
         db.query(BatchSubmission)
@@ -1035,7 +1106,7 @@ def batch_generate_from_files(
         id=task_id,
         task_type="batch",
         status="queued",
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         project_type=project_type,
         output_path=str(output_dir),
         total_files=len(items),
@@ -1074,6 +1145,7 @@ def batch_generate_from_files(
             project_name=project_name,
             template_name=template_name,
             template_contract_mode=template_contract_mode,
+            reference_gate_mode=reference_gate_mode,
         )
         db.commit()
     except IntegrityError:
@@ -1118,6 +1190,7 @@ def batch_generate_from_files(
             "project_type": project_type,
             "template_name": template_name,
             "template_contract_mode": template_contract_mode,
+            "reference_gate_mode": reference_gate_mode,
             "status": "queued",
             "total_files": len(items),
         },
@@ -1134,6 +1207,7 @@ def batch_generate_from_files(
         project_name=project_name,
         template_name=template_name,
         template_contract_mode=template_contract_mode,
+        reference_gate_mode=reference_gate_mode,
         bridge=bridge,
     )
 
@@ -1159,10 +1233,11 @@ def retry_failed_batch_files(
     include_cancelled: bool = False,
     db: Session = Depends(get_db),
     bridge: ReportGenBridge = Depends(get_bridge),
+    current_user: User = Depends(require_user),
 ):
     """Retry failed rows in a file-based batch task."""
     task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
+    if not task or not user_can_access_task(current_user, task):
         raise HTTPException(status_code=404, detail="任务不存在")
     if task.task_type != "batch":
         raise HTTPException(status_code=400, detail="仅批量任务支持失败重试")
@@ -1257,6 +1332,7 @@ def retry_failed_batch_files(
         project_name=inputs.get("project_name"),
         template_name=inputs.get("template_name"),
         template_contract_mode=inputs.get("template_contract_mode") or "warn",
+        reference_gate_mode=inputs.get("reference_gate_mode") or "available",
         bridge=bridge,
     )
 

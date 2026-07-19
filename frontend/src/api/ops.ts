@@ -16,9 +16,34 @@ export interface OpsStatusPayload {
   }
   runtime: {
     runtime_dir_present: boolean
+    instance_lock: {
+      enabled: boolean
+      lock_file: string
+      acquired: boolean
+      pid: number | null
+    }
     libreoffice_listener: {
       checked: boolean
       running: boolean | null
+    }
+    renderer_fingerprint: {
+      available: boolean
+      error?: string
+      platform?: string
+      machine?: string
+      engine?: string
+      engine_version?: string
+      profile_mode?: string
+      pdf_renderer?: string
+      pdf_renderer_version?: string
+      font_substitution_profile?: string
+      font_substitution_profile_sha256?: string
+      zh_font_match?: string
+      zh_font_match_sha256?: string
+    }
+    alert_delivery: {
+      configured: boolean
+      source: string | null
     }
     generation_queue: {
       max_workers: number
@@ -60,6 +85,14 @@ export interface OpsStatusPayload {
       last_cleanup_at: string | null
       last_lock_notice_at: string | null
     }
+    restore_drill: {
+      available: boolean
+      status: string
+      modified_at: string | null
+      age_hours?: number
+      full_extract?: boolean
+      sqlite_integrity?: string
+    }
   }
   storage: {
     disk: {
@@ -79,6 +112,7 @@ export interface OpsStatusPayload {
       total: number
       by_status: Record<string, number>
       failed_total: number
+      failed_recent_24h: number
     }
     recent: Array<{
       id: string

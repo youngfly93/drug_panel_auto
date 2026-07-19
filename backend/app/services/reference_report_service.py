@@ -3,7 +3,6 @@
 import hashlib
 import json
 import re
-import shutil
 import sys
 import uuid
 from datetime import datetime
@@ -17,12 +16,16 @@ from app.config import settings
 from app.models.reference import ReferenceReport
 from app.models.task import Task
 from app.models.upload import Upload
+from app.services.file_manager import write_upload_stream
 
 _upstream = Path(str(settings.upstream_root))
 if str(_upstream) not in sys.path:
     sys.path.insert(0, str(_upstream))
 
-from reportgen.core.report_diff import (
+from reportgen.core.historical_golden_contract import (  # noqa: E402
+    load_historical_golden_contract,
+)
+from reportgen.core.report_diff import (  # noqa: E402
     ReportDiffOptions,
     compare_reports,
     write_report_diff_outputs,
@@ -31,6 +34,9 @@ from reportgen.core.report_diff import (
 ALLOWED_DIFF_ARTIFACTS = {"report_diff.json", "report_diff.md"}
 BATCH_DIFF_JSON = "batch_report_diff.json"
 BATCH_DIFF_MD = "batch_report_diff.md"
+REFERENCE_GATE_AVAILABLE = "available"
+REFERENCE_GATE_REQUIRED = "required"
+REFERENCE_GATE_MODES = {REFERENCE_GATE_AVAILABLE, REFERENCE_GATE_REQUIRED}
 CASE_ID_KEYS = (
     "case_id",
     "sample_id",
@@ -44,6 +50,17 @@ CASE_ID_KEYS = (
     "条码号",
     "报告编号",
 )
+
+
+def normalize_reference_gate_mode(value: str | None) -> str:
+    mode = str(value or REFERENCE_GATE_AVAILABLE).strip().lower()
+    if mode not in REFERENCE_GATE_MODES:
+        raise ValueError("reference_gate_mode must be 'available' or 'required'")
+    return mode
+
+
+def reference_is_required(value: str | None) -> bool:
+    return normalize_reference_gate_mode(value) == REFERENCE_GATE_REQUIRED
 
 
 def normalize_lookup(value: str | None) -> str:
@@ -68,6 +85,121 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def formal_golden_attestation_path(reference: ReferenceReport) -> Path:
+    return Path(reference.stored_path).with_suffix(".golden.json")
+
+
+def validate_formal_golden_registration(
+    *,
+    panel_id: str,
+    case_id: str,
+    reference_docx: str | Path,
+    contract_path: str | Path,
+) -> dict:
+    """Validate an external real case against a committed de-identified contract."""
+    source = Path(reference_docx).resolve()
+    contract_file = Path(contract_path).resolve()
+    registry_root = (settings.upstream_root / "panels").resolve()
+    try:
+        contract_file.relative_to(registry_root)
+    except ValueError as exc:
+        raise ValueError("金标准契约必须位于受版本控制的 panels/ 目录") from exc
+    if "golden_cases" not in contract_file.parts:
+        raise ValueError("金标准契约必须位于 panel 的 golden_cases/ 目录")
+    if not source.is_file() or source.suffix.lower() != ".docx":
+        raise ValueError("金标准报告必须是现存的 .docx 文件")
+
+    contract = load_historical_golden_contract(contract_file)
+    contract_panel = str(contract.get("panel_id") or "").strip()
+    case_alias = str(contract.get("case_alias") or "").strip()
+    if normalize_lookup(contract_panel) != normalize_lookup(panel_id):
+        raise ValueError("panel_id 与金标准契约不一致")
+    if normalize_lookup(case_id) == normalize_lookup(case_alias):
+        raise ValueError("case_id 必须使用外部真实病例编号，不能使用脱敏 case_alias")
+    expected_sha = str(
+        (contract.get("source") or {}).get("reference_docx_sha256") or ""
+    ).strip()
+    actual_sha = sha256_file(source)
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_sha):
+        raise ValueError("金标准契约缺少有效 reference_docx_sha256")
+    if actual_sha != expected_sha:
+        raise ValueError("金标准报告 SHA256 与脱敏契约不一致")
+    return {
+        "contract": contract,
+        "contract_path": contract_file,
+        "contract_sha256": sha256_file(contract_file),
+        "reference_sha256": actual_sha,
+    }
+
+
+def create_formal_golden_attestation(
+    reference: ReferenceReport,
+    *,
+    contract_path: str | Path,
+) -> dict:
+    validated = validate_formal_golden_registration(
+        panel_id=reference.panel_id,
+        case_id=reference.case_id,
+        reference_docx=reference.stored_path,
+        contract_path=contract_path,
+    )
+    contract = validated["contract"]
+    contract_file = validated["contract_path"]
+    relative_contract = contract_file.relative_to(settings.upstream_root.resolve())
+    payload = {
+        "schema_version": "1.0",
+        "reference_id": reference.id,
+        "panel_id": reference.panel_id,
+        "case_id": reference.case_id,
+        "case_alias": contract.get("case_alias"),
+        "contract": relative_contract.as_posix(),
+        "contract_sha256": validated["contract_sha256"],
+        "reference_sha256": validated["reference_sha256"],
+        "created_at": datetime.now().isoformat(),
+    }
+    path = formal_golden_attestation_path(reference)
+    temporary = path.with_suffix(path.suffix + ".part")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+    return payload
+
+
+def load_verified_formal_golden_attestation(
+    reference: ReferenceReport,
+) -> dict | None:
+    path = formal_golden_attestation_path(reference)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        contract_relative = Path(str(payload.get("contract") or ""))
+        if contract_relative.is_absolute():
+            return None
+        contract_path = (settings.upstream_root / contract_relative).resolve()
+        contract_path.relative_to((settings.upstream_root / "panels").resolve())
+        contract = load_historical_golden_contract(contract_path)
+        stored_path = Path(reference.stored_path)
+        checks = (
+            payload.get("schema_version") == "1.0",
+            payload.get("reference_id") == reference.id,
+            normalize_lookup(payload.get("panel_id"))
+            == normalize_lookup(reference.panel_id),
+            normalize_lookup(payload.get("case_id")) == normalize_lookup(reference.case_id),
+            payload.get("case_alias") == contract.get("case_alias"),
+            normalize_lookup(contract.get("panel_id"))
+            == normalize_lookup(reference.panel_id),
+            payload.get("contract_sha256") == sha256_file(contract_path),
+            payload.get("reference_sha256") == reference.checksum_sha256,
+            reference.checksum_sha256 == sha256_file(stored_path),
+            (contract.get("source") or {}).get("reference_docx_sha256")
+            == reference.checksum_sha256,
+        )
+    except Exception:
+        return None
+    return payload if all(checks) else None
 
 
 def report_diff_dir(output_path: Optional[str]) -> Optional[Path]:
@@ -146,6 +278,7 @@ def report_diff_summary(output_path: Optional[str]) -> dict:
             ),
             "diff_status": batch_payload.get("status"),
             "diff_gate_passed": gate.get("passed"),
+            "diff_require_reference": bool(gate.get("require_reference")),
             "diff_reference_id": None,
             "diff_reference_name": (
                 f"基准命中 {summary.get('matched_references', 0)}/"
@@ -162,6 +295,7 @@ def report_diff_summary(output_path: Optional[str]) -> dict:
             "diff_markdown_file": str(md_path) if md_path and md_path.exists() else None,
             "diff_status": None,
             "diff_gate_passed": None,
+            "diff_require_reference": False,
             "diff_reference_id": None,
             "diff_reference_name": None,
         }
@@ -172,6 +306,7 @@ def report_diff_summary(output_path: Optional[str]) -> dict:
         "diff_markdown_file": str(md_path) if md_path and md_path.exists() else None,
         "diff_status": payload.get("status"),
         "diff_gate_passed": gate.get("passed"),
+        "diff_require_reference": bool(gate.get("require_reference")),
         "diff_reference_id": reference.get("id"),
         "diff_reference_name": reference.get("name"),
     }
@@ -214,10 +349,11 @@ def find_active_reference(
     *,
     panel_id: str | None,
     case_id: str | None,
+    require_formal_golden: bool = False,
 ) -> ReferenceReport | None:
     if not panel_id or not case_id:
         return None
-    return (
+    reference = (
         db.query(ReferenceReport)
         .filter(
             func.lower(ReferenceReport.panel_id) == normalize_lookup(panel_id),
@@ -227,6 +363,9 @@ def find_active_reference(
         .order_by(ReferenceReport.created_at.desc())
         .first()
     )
+    if reference and require_formal_golden:
+        return reference if load_verified_formal_golden_attestation(reference) else None
+    return reference
 
 
 def create_reference_report(
@@ -256,8 +395,15 @@ def create_reference_report(
     )
     target_dir.mkdir(parents=True, exist_ok=True)
     stored_path = target_dir / filename
-    with stored_path.open("wb") as fh:
-        shutil.copyfileobj(fileobj, fh)
+    try:
+        _size, checksum = write_upload_stream(
+            fileobj,
+            stored_path,
+            scope="金标准文件",
+        )
+    except Exception:
+        stored_path.unlink(missing_ok=True)
+        raise
 
     if active:
         db.query(ReferenceReport).filter(
@@ -273,7 +419,7 @@ def create_reference_report(
         name=(name or Path(original_filename).stem).strip() or Path(original_filename).stem,
         original_filename=Path(original_filename).name,
         stored_path=str(stored_path),
-        checksum_sha256=sha256_file(stored_path),
+        checksum_sha256=checksum,
         active=active,
         notes=notes,
     )
@@ -297,10 +443,12 @@ def activate_reference_report(db: Session, reference: ReferenceReport) -> Refere
 
 def delete_reference_report(db: Session, reference: ReferenceReport) -> None:
     path = Path(reference.stored_path)
+    attestation_path = formal_golden_attestation_path(reference)
     db.delete(reference)
     db.commit()
     try:
         path.unlink(missing_ok=True)
+        attestation_path.unlink(missing_ok=True)
     except Exception:
         pass
 
@@ -342,14 +490,28 @@ def derive_reference_case_id_from_payload(
     return None
 
 
-def find_active_reference_for_task(db: Session, task: Task) -> ReferenceReport | None:
+def find_active_reference_for_task(
+    db: Session,
+    task: Task,
+    *,
+    require_formal_golden: bool = False,
+) -> ReferenceReport | None:
     if not task.project_type:
         return None
-    upload = db.query(Upload).filter(Upload.id == task.upload_id).first() if task.upload_id else None
+    upload = (
+        db.query(Upload).filter(Upload.id == task.upload_id).first()
+        if task.upload_id
+        else None
+    )
     case_id = derive_reference_case_id(task, upload)
     if not case_id:
         return None
-    return find_active_reference(db, panel_id=task.project_type, case_id=case_id)
+    return find_active_reference(
+        db,
+        panel_id=task.project_type,
+        case_id=case_id,
+        require_formal_golden=require_formal_golden,
+    )
 
 
 def compare_task_with_reference_path(
@@ -406,18 +568,89 @@ def run_auto_reference_diff(
     *,
     fail_on: str = "fail",
     max_samples: int = 50,
+    require_reference: bool = False,
 ) -> dict | None:
-    reference = find_active_reference_for_task(db, task)
-    if not reference:
-        return None
-    return compare_task_with_reference_path(
+    reference = find_active_reference_for_task(
+        db,
         task,
-        reference_docx=reference.stored_path,
-        task_id=task.id,
-        fail_on=fail_on,
-        max_samples=max_samples,
-        reference_report=reference,
+        require_formal_golden=require_reference,
     )
+    if not reference:
+        if require_reference:
+            return write_reference_gate_failure(
+                task,
+                code="REFERENCE_REQUIRED_NOT_FOUND",
+                message="金标准验收模式未找到与 Panel/病例编号匹配的启用基准报告",
+                fail_on=fail_on,
+                task_id=task.id,
+            )
+        return None
+    try:
+        result = compare_task_with_reference_path(
+            task,
+            reference_docx=reference.stored_path,
+            task_id=task.id,
+            fail_on=fail_on,
+            max_samples=max_samples,
+            reference_report=reference,
+        )
+    except Exception as exc:
+        if not require_reference:
+            raise
+        return write_reference_gate_failure(
+            task,
+            code="REFERENCE_DIFF_EXECUTION_FAILED",
+            message=f"金标准报告对比执行失败: {exc}",
+            fail_on=fail_on,
+            task_id=task.id,
+            reference_report=reference,
+        )
+    result.setdefault("gate", {})["require_reference"] = require_reference
+    diff_dir = report_diff_dir(task.output_path)
+    if diff_dir:
+        write_report_diff_outputs(result, diff_dir)
+    return result
+
+
+def write_reference_gate_failure(
+    task: Task,
+    *,
+    code: str,
+    message: str,
+    fail_on: str = "fail",
+    task_id: str | None = None,
+    reference_report: ReferenceReport | None = None,
+) -> dict:
+    """Persist a fail-closed artifact when required reference validation cannot run."""
+    diff_dir = report_diff_dir(task.output_path)
+    if not diff_dir:
+        raise ValueError("报告对比目录不可用")
+    payload = {
+        "schema_version": "1.0",
+        "generated_at": datetime.now().isoformat(),
+        "status": "FAIL",
+        "reference_docx": (
+            reference_report.stored_path if reference_report is not None else ""
+        ),
+        "candidate_docx": str(task.output_path or ""),
+        "summary": {"failures": 1, "warnings": 0, "text_similarity": None},
+        "sections": {},
+        "issues": [{"level": "error", "code": code, "message": message}],
+        "gate": {
+            "fail_on": fail_on,
+            "passed": False,
+            "require_reference": True,
+        },
+    }
+    if reference_report is not None:
+        payload["reference_report"] = reference_to_dict(reference_report)
+    if task_id:
+        payload["download_urls"] = {
+            "json": f"/api/v1/reports/{task_id}/diff/download/report_diff.json",
+            "markdown": f"/api/v1/reports/{task_id}/diff/download/report_diff.md",
+        }
+    write_report_diff_outputs(payload, diff_dir)
+    return payload
 
 
 def _resolve_batch_output_docx(output_root: Path, value: str | None) -> Path | None:
@@ -432,12 +665,28 @@ def _resolve_batch_output_docx(output_root: Path, value: str | None) -> Path | N
     return path
 
 
+def _batch_row_snapshot(row: dict) -> dict:
+    snapshot = row.get("patient_snapshot")
+    if isinstance(snapshot, dict) and snapshot:
+        return snapshot
+    validation = row.get("validation") or {}
+    if isinstance(validation, dict):
+        clinical_info = validation.get("clinical_info") or {}
+        if isinstance(clinical_info, dict):
+            return clinical_info
+    return {}
+
+
 def _panel_id_for_batch_row(task: Task, row: dict) -> str | None:
-    snapshot = row.get("patient_snapshot") or {}
+    validation = row.get("validation") or {}
+    validation_panel = (
+        validation.get("project_type") if isinstance(validation, dict) else None
+    )
+    snapshot = _batch_row_snapshot(row)
     return (
         str(snapshot.get("project_type")).strip()
         if snapshot.get("project_type")
-        else task.project_type
+        else str(validation_panel).strip() if validation_panel else task.project_type
     )
 
 
@@ -468,7 +717,10 @@ def _write_batch_diff_markdown(payload: dict, output_dir: Path) -> Path:
     for row in payload.get("items") or []:
         gate = row.get("gate_passed")
         lines.append(
-            "| {index} | {case_id} | {panel_id} | {status} | {gate} | {reference} | {report} |".format(
+            (
+                "| {index} | {case_id} | {panel_id} | {status} | {gate} | "
+                "{reference} | {report} |"
+            ).format(
                 index=row.get("index", ""),
                 case_id=row.get("case_id") or "-",
                 panel_id=row.get("panel_id") or "-",
@@ -483,6 +735,60 @@ def _write_batch_diff_markdown(payload: dict, output_dir: Path) -> Path:
     return path
 
 
+def write_batch_reference_gate_failure(
+    task: Task,
+    batch_report: dict,
+    *,
+    message: str,
+    fail_on: str = "fail",
+) -> dict:
+    """Persist a fail-closed batch artifact when required validation aborts."""
+    output_root = Path(str(task.output_path or batch_report.get("output_root"))).resolve()
+    diff_root = report_diff_dir(str(output_root))
+    if not diff_root:
+        raise ValueError("批量报告对比目录不可用")
+    diff_root.mkdir(parents=True, exist_ok=True)
+    total = len(batch_report.get("results") or [])
+    payload = {
+        "schema_version": "1.0",
+        "generated_at": datetime.now().isoformat(),
+        "task_id": task.id,
+        "status": "FAIL",
+        "gate": {
+            "fail_on": fail_on,
+            "passed": False,
+            "require_reference": True,
+        },
+        "summary": {
+            "total_reports": total,
+            "matched_references": 0,
+            "pass": 0,
+            "warn": 0,
+            "fail": total or 1,
+            "skip": 0,
+            "blocked": total or 1,
+        },
+        "issues": [
+            {
+                "level": "error",
+                "code": "BATCH_REFERENCE_GATE_EXECUTION_FAILED",
+                "message": message,
+            }
+        ],
+        "items": [],
+        "download_urls": {
+            "json": f"/api/v1/reports/{task.id}/diff/batch/download/{BATCH_DIFF_JSON}",
+            "markdown": f"/api/v1/reports/{task.id}/diff/batch/download/{BATCH_DIFF_MD}",
+        },
+    }
+    json_path = diff_root / BATCH_DIFF_JSON
+    md_path = _write_batch_diff_markdown(payload, diff_root)
+    payload["json_file"] = str(json_path)
+    payload["markdown_file"] = str(md_path)
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return payload
+
+
 def run_batch_reference_diff(
     db: Session,
     task: Task,
@@ -490,6 +796,7 @@ def run_batch_reference_diff(
     *,
     fail_on: str = "fail",
     max_samples: int = 50,
+    require_reference: bool = False,
 ) -> dict:
     output_root = Path(str(task.output_path or batch_report.get("output_root"))).resolve()
     diff_root = report_diff_dir(str(output_root))
@@ -504,7 +811,7 @@ def run_batch_reference_diff(
 
     for row in batch_report.get("results") or []:
         output_docx = _resolve_batch_output_docx(output_root, row.get("output_docx"))
-        snapshot = row.get("patient_snapshot") or {}
+        snapshot = _batch_row_snapshot(row)
         panel_id = _panel_id_for_batch_row(task, row)
         case_id = derive_reference_case_id_from_payload(
             snapshot,
@@ -526,14 +833,29 @@ def run_batch_reference_diff(
             "message": None,
         }
         if not output_docx:
-            item["message"] = "生成报告不存在，跳过对比"
-            skip_count += 1
+            item["status"] = "FAIL"
+            item["gate_passed"] = False
+            item["message"] = "生成报告不存在，无法执行对比"
+            fail_count += 1
+            blocked_count += 1
             items.append(item)
             continue
-        reference = find_active_reference(db, panel_id=panel_id, case_id=case_id)
+        reference = find_active_reference(
+            db,
+            panel_id=panel_id,
+            case_id=case_id,
+            require_formal_golden=require_reference,
+        )
         if not reference:
-            item["message"] = "未找到匹配的启用基准报告"
-            skip_count += 1
+            if require_reference:
+                item["status"] = "FAIL"
+                item["gate_passed"] = False
+                item["message"] = "金标准验收模式未找到匹配的启用基准报告"
+                fail_count += 1
+                blocked_count += 1
+            else:
+                item["message"] = "未找到匹配的启用基准报告"
+                skip_count += 1
             items.append(item)
             continue
 
@@ -603,7 +925,11 @@ def run_batch_reference_diff(
         "generated_at": datetime.now().isoformat(),
         "task_id": task.id,
         "status": status,
-        "gate": {"fail_on": fail_on, "passed": gate_passed},
+        "gate": {
+            "fail_on": fail_on,
+            "passed": gate_passed,
+            "require_reference": require_reference,
+        },
         "summary": {
             "total_reports": len(batch_report.get("results") or []),
             "matched_references": matched,

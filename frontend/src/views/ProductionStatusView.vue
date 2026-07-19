@@ -189,6 +189,10 @@
               <span>清理完成</span>
               <strong>{{ formatDate(status?.runtime.maintenance.last_cleanup_at) }}</strong>
             </div>
+            <div>
+              <span>恢复演练</span>
+              <strong>{{ formatDate(status?.runtime.restore_drill.modified_at) }}</strong>
+            </div>
           </div>
           <div class="retention-grid">
             <div v-for="item in retentionRows" :key="item.label">
@@ -264,15 +268,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   CircleCheckFilled,
-  Cpu,
   DataLine,
   Download,
   Files,
   FolderChecked,
   Odometer,
   Refresh,
-  Timer,
-  TrendCharts,
   WarningFilled,
 } from '@element-plus/icons-vue'
 import { opsApi, type OpsAlert, type OpsStatusPayload } from '@/api/ops'
@@ -314,6 +315,9 @@ const backupLabel = computed(() => {
 
 const overall = computed<{ tone: Tone; label: string }>(() => {
   if (!status.value) return { tone: 'info', label: '未加载' }
+  if (healthAlerts.value.some((alert) => alertTone(alert.severity) === 'danger')) {
+    return { tone: 'danger', label: '需要处理' }
+  }
   const watchdog = status.value.runtime.watchdog
   if (watchdog.web.status === 'fail' || watchdog.tunnel.status === 'fail') {
     return { tone: 'danger', label: '服务异常' }
@@ -322,7 +326,8 @@ const overall = computed<{ tone: Tone; label: string }>(() => {
     return { tone: 'danger', label: '需要处理' }
   }
   if (
-    watchdog.web.status !== 'ok'
+    healthAlerts.value.some((alert) => alertTone(alert.severity) === 'warning')
+    || watchdog.web.status !== 'ok'
     || watchdog.tunnel.status !== 'ok'
     || watchdog.libreoffice.status !== 'ok'
     || backupTone.value === 'warning'
@@ -354,7 +359,7 @@ const topSignals = computed<Array<{ label: string; value: string; meta: string; 
     label: '任务',
     value: `${status.value?.tasks.counts.total ?? 0}`,
     meta: `执行槽 ${queueStats.value.active}/${queueStats.value.max_workers} · 排队 ${queueStats.value.queued}`,
-    tone: (queueStats.value.queued || 0) > 0 ? 'warning' : (status.value?.tasks.counts.failed_total || 0) > 0 ? 'warning' : 'success',
+    tone: (queueStats.value.queued || 0) > 0 ? 'warning' : (status.value?.tasks.counts.failed_recent_24h || 0) > 0 ? 'warning' : 'success',
     icon: DataLine,
   },
   {
@@ -382,6 +387,14 @@ const topSignals = computed<Array<{ label: string; value: string; meta: string; 
 
 const runtimeRows = computed(() => {
   const runtime = status.value?.runtime
+  const renderer = runtime?.renderer_fingerprint
+  const rendererReady = Boolean(
+    renderer?.available
+    && renderer.platform === 'Linux'
+    && renderer.profile_mode === 'isolated'
+    && renderer.font_substitution_profile === 'reportgen-cjk-font-substitution-v1'
+    && /^[0-9a-f]{64}$/i.test(renderer.font_substitution_profile_sha256 || ''),
+  )
   return [
     {
       label: '生成队列',
@@ -411,6 +424,25 @@ const runtimeRows = computed(() => {
       meta: runtime?.libreoffice_listener.checked ? `listener ${runtime.libreoffice_listener.running ? 'running' : 'missing'}` : '未检测',
     },
     {
+      label: '渲染器指纹',
+      status: rendererReady ? 'ok' : 'fail',
+      meta: renderer?.available
+        ? `${renderer.engine_version || renderer.engine} · ${renderer.profile_mode || '-'} · ${renderer.font_substitution_profile || '字体 profile 缺失'}`
+        : '未记录',
+    },
+    {
+      label: '告警投递',
+      status: runtime?.alert_delivery.configured ? 'ok' : 'fail',
+      meta: runtime?.alert_delivery.configured ? `已配置（${runtime.alert_delivery.source || 'runtime'}）` : 'Webhook 未配置',
+    },
+    {
+      label: '恢复演练',
+      status: runtime?.restore_drill.status === 'PASS' ? 'ok' : 'fail',
+      meta: runtime?.restore_drill.available
+        ? `${runtime.restore_drill.status} · ${formatDate(runtime.restore_drill.modified_at)}`
+        : '没有演练证据',
+    },
+    {
       label: '磁盘巡检',
       status: runtime?.watchdog.disk.status || 'unknown',
       meta: `最近告警 ${formatDate(runtime?.watchdog.disk.last_at)}`,
@@ -427,7 +459,7 @@ const taskMetrics = computed(() => [
   { label: '总任务', value: status.value?.tasks.counts.total ?? 0 },
   { label: '执行中', value: queueStats.value.active },
   { label: '队列中', value: queueStats.value.queued },
-  { label: '失败', value: status.value?.tasks.counts.failed_total ?? 0 },
+  { label: '24h 失败', value: status.value?.tasks.counts.failed_recent_24h ?? 0 },
 ])
 
 const queueStats = computed(() => status.value?.runtime.generation_queue || {
