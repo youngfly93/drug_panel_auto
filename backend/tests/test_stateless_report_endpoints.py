@@ -1071,32 +1071,48 @@ def test_batch_configured_required_date_fails_only_affected_file(
 
 
 def test_batch_status_machine_exposes_all_background_stages(tmp_path, monkeypatch):
-    test_client = _client(tmp_path, monkeypatch, bridge=StageBridge())
+    test_client = _client(tmp_path, monkeypatch)
+    controlled_stages = ("preflight", "generating", "qa")
+    stage_entered = {stage: threading.Event() for stage in controlled_stages}
+    stage_release = {stage: threading.Event() for stage in controlled_stages}
+    observed_stages = set()
+    observed_lock = threading.Lock()
+    write_batch_report = batch_api._write_batch_report
 
-    def slow_diff(*_args, **_kwargs):
-        time.sleep(0.12)
-        return {"status": "PASS", "summary": {}}
+    def write_batch_report_with_stage_gate(db, task):
+        result = write_batch_report(db, task)
+        stage = task.status
+        if stage not in stage_entered:
+            return result
+        with observed_lock:
+            first_observation = stage not in observed_stages
+            observed_stages.add(stage)
+        if first_observation:
+            stage_entered[stage].set()
+            if not stage_release[stage].wait(timeout=2):
+                raise AssertionError(f"timed out waiting to release batch stage: {stage}")
+        return result
 
-    monkeypatch.setattr(batch_api.diff_svc, "run_batch_reference_diff", slow_diff)
-    observed = ["queued"]
+    monkeypatch.setattr(batch_api, "_write_batch_report", write_batch_report_with_stage_gate)
     with test_client as client:
         response = client.post(
             "/api/v1/reports/batch-files",
             files=[("files", ("case1.xlsx", b"placeholder", "application/vnd.ms-excel"))],
             data={"project_type": "crc_358_msi"},
         )
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "queued"
         task_id = response.json()["data"]["task_id"]
-        for _ in range(120):
+        observed = ["queued"]
+        for stage in controlled_stages:
+            assert stage_entered[stage].wait(timeout=2)
             status = client.get(f"/api/v1/reports/{task_id}").json()["data"]["status"]
-            if status != observed[-1]:
-                observed.append(status)
-            if status in BATCH_TERMINAL_STATUSES:
-                break
-            time.sleep(0.01)
+            observed.append(status)
+            stage_release[stage].set()
+        final_response = _wait_for_task_terminal(client, task_id)
+        observed.append(final_response.json()["data"]["status"])
 
-    expected = ["queued", "preflight", "generating", "qa", "completed"]
-    positions = [observed.index(status) for status in expected]
-    assert positions == sorted(positions)
+    assert observed == ["queued", "preflight", "generating", "qa", "completed"]
 
 
 def test_batch_fourteen_synthetic_files_complete(tmp_path, monkeypatch):
