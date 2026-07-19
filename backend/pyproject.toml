@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "Web platform for genomic panel report automation"
 requires-python = ">=3.9"
 dependencies = [
-    "fastapi>=0.104.0",
+    "fastapi==0.136.3",
+    "starlette==1.2.1",
     "uvicorn[standard]>=0.24.0",
     "sqlalchemy>=2.0.0",
     "alembic>=1.12.0",

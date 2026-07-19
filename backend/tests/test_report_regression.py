@@ -7803,6 +7803,7 @@ def test_docx_render_uses_isolated_profile_by_default_on_macos(tmp_path, monkeyp
     Document().save(docx_path)
     output_dir = tmp_path / "pages"
     calls = []
+    profile_initializations = []
 
     monkeypatch.delenv("REPORTGEN_LIBREOFFICE_PROFILE_MODE", raising=False)
     monkeypatch.delenv("REPORTGEN_RENDER_PROFILE_MODE", raising=False)
@@ -7811,6 +7812,13 @@ def test_docx_render_uses_isolated_profile_by_default_on_macos(tmp_path, monkeyp
         docx_render,
         "_which_or_raise",
         lambda name, *, hint: f"/bin/{name}",
+    )
+    monkeypatch.setattr(
+        docx_render,
+        "initialize_libreoffice_profile",
+        lambda profile_dir, *, require_available: profile_initializations.append(
+            (Path(profile_dir), require_available)
+        ),
     )
 
     def fake_run(cmd, *, timeout_seconds, stage):
@@ -7830,6 +7838,8 @@ def test_docx_render_uses_isolated_profile_by_default_on_macos(tmp_path, monkeyp
     pngs = docx_render.render_docx_to_pngs(docx_path, output_dir=output_dir)
 
     assert [call[0] for call in calls] == ["docx_to_pdf", "pdf_to_png"]
+    assert len(profile_initializations) == 1
+    assert profile_initializations[0][1] is True
     assert pngs == [output_dir / "source-1.png"]
 
 
