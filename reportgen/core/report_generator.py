@@ -1118,6 +1118,7 @@ class ReportGenerator:
             critical_processor_names=critical_docx_processor_names(
                 state.canonical_project_type
             ),
+            template_context=state.template_context,
         )
         state.processor_report = list(
             getattr(self.template_renderer, "last_processor_report", []) or []

@@ -59,9 +59,7 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert "REQUIRE_ORIGIN_MAIN_REACHABILITY:-1" in wrapper
     assert 'git fetch --prune "$ORIGIN_REMOTE" main' in wrapper
     assert 'git merge-base --is-ancestor "$resolved_ref" "$ORIGIN_MAIN_REF"' in wrapper
-    assert wrapper.index("git merge-base --is-ancestor") < wrapper.index(
-        "RUN_REMOTE_BACKUP"
-    )
+    assert wrapper.index("git merge-base --is-ancestor") < wrapper.index("RUN_REMOTE_BACKUP")
 
     alerts = _read("scripts/iyun62_alerts.sh")
     assert "OPS_LOGIN_URL" in alerts
@@ -155,9 +153,7 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert "wait_public_health" in deploy
     assert "PUBLIC_HEALTH_RETRIES" in deploy
     assert "PUBLIC_HEALTH_RETRY_INTERVAL_SECONDS" in deploy
-    assert deploy.index("Restart Cloudflare connector") < deploy.rindex(
-        "wait_public_health"
-    )
+    assert deploy.index("Restart Cloudflare connector") < deploy.rindex("wait_public_health")
     assert 'DEPLOYMENT_ENV="${DEPLOYMENT_ENV:-$RUNTIME_DIR/deployment.env}"' in start
     assert start.index('if start_release "$RELEASE_DIR"; then') < start.index(
         'write_current_release "$RELEASE_DIR"'
@@ -186,9 +182,9 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert "font_substitution_fingerprint" in start
     assert "require_available=True" in start
     assert "REPORTGEN_LO_LOCK_FILE" in deploy
-    assert start.index(
-        "must be disabled for production report generation"
-    ) < start.index("stop_existing\nif start_release")
+    assert start.index("must be disabled for production report generation") < start.index(
+        "stop_existing\nif start_release"
+    )
     assert "RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1" in deploy
     assert "backend/app/api/health.py" in deploy
     assert "TUNNEL_METRICS_URL" in deploy
@@ -198,14 +194,8 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert "check_historical_golden_release.py" in release_check
     assert "REQUIRE_HISTORICAL_GOLDEN" in release_check
     assert 'MANAGE_TUNNEL="${MANAGE_TUNNEL:-1}"' in watchdog
-    assert (
-        'log "tunnel ok connector_connections=$connections external_manager"'
-        in watchdog
-    )
-    assert (
-        'log "tunnel fail connector_connections=${connections:-0} external_manager"'
-        in watchdog
-    )
+    assert 'log "tunnel ok connector_connections=$connections external_manager"' in watchdog
+    assert 'log "tunnel fail connector_connections=${connections:-0} external_manager"' in watchdog
     assert "/api/v1/healthz" in start
     assert "LEGACY_LOCAL_HEALTH_URL" in start
     assert 'if [ ! -f "$expected_cwd/backend/app/api/health.py" ]' in start
@@ -270,7 +260,7 @@ def test_release_status_uses_endpoint_supported_by_current_release(
 
     fake_ssh = fake_bin / "ssh"
     fake_ssh.write_text(
-        "#!/usr/bin/env bash\nshift\nexec \"$@\"\n",
+        '#!/usr/bin/env bash\nshift\nexec "$@"\n',
         encoding="utf-8",
     )
     fake_readlink = fake_bin / "readlink"
@@ -458,6 +448,21 @@ def test_github_qa_installs_linux_renderer_before_running_gate() -> None:
     assert "npm run build" in workflow
 
 
+def test_release_gate_uses_the_same_exact_ruff_pin_locally_and_in_ci() -> None:
+    requirements = _read("requirements-qa.txt")
+    workflow = _read(".github/workflows/reportgen-qa.yml")
+    makefile = _read("Makefile")
+    backend_project = _read("backend/pyproject.toml")
+    gate = _read("reportgen/core/qa_gate.py")
+
+    assert "ruff==0.15.8" in requirements
+    assert "-r requirements-qa.txt" in workflow
+    assert "pip install -r requirements-qa.txt" in makefile
+    assert '"ruff==0.15.8"' in backend_project
+    assert "QA_ENV_MISSING_DEPENDENCY" in gate
+    assert '"qa_toolchain"' in gate
+
+
 def test_restore_drill_requires_attested_archive_and_restores_sqlite(tmp_path: Path) -> None:
     staging = tmp_path / "staging"
     (staging / "meta").mkdir(parents=True)
@@ -535,8 +540,7 @@ def test_report_group_checklist_covers_audit_followups() -> None:
 
     assert "已跟踪源码/测试/fixture" in checklist
     assert (
-        "BPI-KB-01 高风险 provisional 可无痕交付 | "
-        "RG-F13–F14、RG-I03–I06、SYN-FANCA-01"
+        "BPI-KB-01 高风险 provisional 可无痕交付 | RG-F13–F14、RG-I03–I06、SYN-FANCA-01"
     ) in checklist
     assert "BPI-KB-02 测试/历史疑似真实样本号 | RG-A04–A05、RG-A07" in checklist
     assert "renderer_fingerprint" in checklist
@@ -581,9 +585,7 @@ def test_embedded_python_blocks_compile(relative: str) -> None:
         compile(block, f"{relative}:embedded", "exec")
 
 
-@pytest.mark.skipif(
-    not Path("/proc").is_dir(), reason="runtime switch uses Linux /proc"
-)
+@pytest.mark.skipif(not Path("/proc").is_dir(), reason="runtime switch uses Linux /proc")
 def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
     releases = tmp_path / "releases"
     runtime = tmp_path / "runtime"
@@ -600,9 +602,7 @@ def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
     (good / "REVISION").write_text("1" * 40 + "\n", encoding="utf-8")
     (bad / "REVISION").write_text("2" * 40 + "\n", encoding="utf-8")
     (bad / "FAIL_START").write_text("1\n", encoding="utf-8")
-    (runtime / ".env.prod").write_text(
-        "RG_WEB_SECRET_KEY=synthetic-test-only\n", encoding="utf-8"
-    )
+    (runtime / ".env.prod").write_text("RG_WEB_SECRET_KEY=synthetic-test-only\n", encoding="utf-8")
 
     (venv / "bin" / "python").symlink_to(sys.executable)
     fake_uvicorn = venv / "bin" / "uvicorn"
@@ -646,9 +646,7 @@ def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
             timeout=20,
         )
         assert first.returncode == 0, first.stderr
-        assert (runtime / "current_release").read_text(encoding="utf-8").strip() == str(
-            good
-        )
+        assert (runtime / "current_release").read_text(encoding="utf-8").strip() == str(good)
 
         failed = subprocess.run(
             ["bash", str(script)],
@@ -659,9 +657,7 @@ def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
         )
         assert failed.returncode != 0
         assert "Attempting automatic rollback" in failed.stderr
-        assert (runtime / "current_release").read_text(encoding="utf-8").strip() == str(
-            good
-        )
+        assert (runtime / "current_release").read_text(encoding="utf-8").strip() == str(good)
         pid = int((runtime / "reportgen-web.pid").read_text(encoding="utf-8"))
         assert Path(f"/proc/{pid}/cwd").resolve() == good
         assert not Path(f"/proc/{pid}/fd/9").exists()

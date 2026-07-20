@@ -354,3 +354,17 @@ drug_sections:
   drug_name: 依维莫司（Everolimus）
   relation: 该样本检出KRAS基因c.34G>T，p.G12C错义突变，为已知激活突变，对蛋白功能有重要影响。临床前研究表明，含有KRAS突变的结肠癌细胞系对依维莫司不敏感[29285035，28544747]。因此，该患者可能对依维莫司的治疗负相关。依维莫司已获FDA批准，用于治疗乳腺癌、神经内分泌瘤、肾癌等疾病，并已获NMPA批准，用于治疗肾癌、室管膜下巨细胞型星形细胞瘤。
   clinical: 临床前研究表明，含有KRAS突变的结肠癌细胞系对依维莫司不敏感[29285035，28544747]。在转移性癌症患者中，携带KRAS突变的患者接受依维莫司治疗后对依维莫司缺乏疗效，12例具有KRAS突变的肿瘤患者中11例均出现疾病进展，而31例KRAS野生型患者中仅16例患者未从依维莫司治疗中获益[20664172]。
+  review_status: superseded
+  runtime_eligible: false
+  review_basis: primary_source_attribution_correction_20260720
+  evidence_as_of: '2026-07-20'
+  secondary_review_status: superseded_pending_report_group_acknowledgement
+  superseded_by: crc358_kras_g12c_everolimus_correction_20260720
+  superseded_reason: PMID 29285035 is breast-cancer evidence and PMID 28544747 is a biliary-tract-cancer cell-line study; neither supports the historical colorectal attribution.
+  source_refs:
+  - type: pubmed
+    id: PMID:29285035
+    url: https://pubmed.ncbi.nlm.nih.gov/29285035/
+  - type: pubmed
+    id: PMID:28544747
+    url: https://pubmed.ncbi.nlm.nih.gov/28544747/

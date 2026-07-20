@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -219,7 +220,11 @@ def build_docx_qa_report(
         "brace_counts": brace_counts,
     }
     if placeholder_count:
-        issue("error", "UNRENDERED_PLACEHOLDER", "Rendered DOCX still contains template placeholders.")
+        issue(
+            "error",
+            "UNRENDERED_PLACEHOLDER",
+            "Rendered DOCX still contains template placeholders.",
+        )
 
     empty_numbered = [
         _paragraph_location(p) for p in paragraphs if _is_empty_numbered_paragraph(p)
@@ -230,7 +235,11 @@ def build_docx_qa_report(
         "locations": empty_numbered[:10],
     }
     if empty_numbered:
-        issue("error", "EMPTY_NUMBERED_PARAGRAPH", "Rendered DOCX contains visible empty bullet/numbered paragraphs.")
+        issue(
+            "error",
+            "EMPTY_NUMBERED_PARAGRAPH",
+            "Rendered DOCX contains visible empty bullet/numbered paragraphs.",
+        )
 
     toc = _inspect_toc(paragraphs, output_path=output_path)
     checks["toc_page_numbers"] = toc
@@ -247,6 +256,7 @@ def build_docx_qa_report(
         timeout_seconds=visual_render_timeout_seconds,
         output_dir=visual_render_output_dir,
         tmp_dir=visual_render_tmp_dir,
+        expected_sparse_pages=_visual_expected_sparse_page_specs(context),
     )
     for visual_issue in _visual_render_issues(checks["visual_render"]):
         issue(**visual_issue)
@@ -283,9 +293,7 @@ def build_docx_qa_report(
     ]
     critical_names = critical_docx_processor_names(project_type)
     critical_processor_errors = [
-        row
-        for row in processor_errors
-        if row.get("name") in critical_names
+        row for row in processor_errors if row.get("name") in critical_names
     ]
     checks["post_processors"] = {
         "status": (
@@ -476,16 +484,10 @@ def _template_contract_check(
     missing_paths = list(template_contract.get("missing_paths") or [])
     missing_lists = list(template_contract.get("missing_lists") or [])
     missing_row_fields = dict(template_contract.get("missing_row_fields") or {})
-    missing_required_variables = list(
-        declared.get("missing_required_variables") or []
-    )
+    missing_required_variables = list(declared.get("missing_required_variables") or [])
     missing_required_lists = list(declared.get("missing_required_lists") or [])
-    missing_required_markers = list(
-        declared.get("missing_required_markers") or []
-    )
-    duplicate_required_markers = list(
-        declared.get("duplicate_required_markers") or []
-    )
+    missing_required_markers = list(declared.get("missing_required_markers") or [])
+    duplicate_required_markers = list(declared.get("duplicate_required_markers") or [])
     missing_required_tables = list(declared.get("missing_required_tables") or [])
     table_errors = dict(declared.get("table_errors") or {})
 
@@ -555,6 +557,7 @@ def _build_visual_render_check(
     timeout_seconds: int,
     output_dir: Optional[str],
     tmp_dir: Optional[str],
+    expected_sparse_pages: Optional[Iterable[Mapping[str, Any]]] = None,
 ) -> Dict[str, Any]:
     normalized_mode = str(mode or "none").strip().lower()
     result: Dict[str, Any] = {
@@ -586,6 +589,11 @@ def _build_visual_render_check(
     )
     first_page = 1 if normalized_mode == "first" else None
     last_page = 1 if normalized_mode == "first" else None
+    expected_sparse_specs = [
+        dict(spec)
+        for spec in (expected_sparse_pages or [])
+        if isinstance(spec, Mapping)
+    ]
 
     try:
         pngs = render_docx_to_pngs(
@@ -594,7 +602,7 @@ def _build_visual_render_check(
             dpi=int(dpi),
             first_page=first_page,
             last_page=last_page,
-            keep_pdf=False,
+            keep_pdf=bool(expected_sparse_specs),
             timeout_seconds=int(timeout_seconds),
             tmp_dir=Path(tmp_dir) if tmp_dir else None,
         )
@@ -635,7 +643,22 @@ def _build_visual_render_check(
         )
         return result
 
-    pixel_check = _inspect_rendered_png_pages(pngs)
+    page_texts: Dict[int, str] = {}
+    page_text_error: Optional[str] = None
+    if expected_sparse_specs:
+        pdf_path = render_dir / f"{output_path.stem}.pdf"
+        page_texts, page_text_error = _extract_pdf_page_texts(pdf_path, pngs)
+        result["page_text_extraction"] = {
+            "status": "PASS" if page_text_error is None else "FAIL",
+            "page_count": len(page_texts),
+            "error": page_text_error,
+        }
+
+    pixel_check = _inspect_rendered_png_pages(
+        pngs,
+        page_texts=page_texts,
+        expected_sparse_pages=expected_sparse_specs,
+    )
     result["pixel_check"] = pixel_check
     if pixel_check["status"] in {"WARN", "FAIL"}:
         result.update(
@@ -649,7 +672,12 @@ def _build_visual_render_check(
     result.update(
         {
             "status": "PASS",
-            "message": "Visual render produced inspectable PNG pages.",
+            "message": (
+                "Visual render produced inspectable PNG pages; reviewed "
+                "semantic sparse-page exceptions were recorded."
+                if pixel_check.get("expected_sparse_pages")
+                else "Visual render produced inspectable PNG pages."
+            ),
         }
     )
     return result
@@ -666,7 +694,9 @@ def _visual_render_issues(check: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
     if isinstance(pixel_check, Mapping):
         if pixel_check.get("blank_pages"):
             code = "VISUAL_RENDER_BLANK_PAGES"
-        elif pixel_check.get("low_content_pages"):
+        elif pixel_check.get("unexpected_low_content_pages") or pixel_check.get(
+            "low_content_pages"
+        ):
             code = "VISUAL_RENDER_LOW_CONTENT"
         elif pixel_check.get("unreadable_pages"):
             code = "VISUAL_RENDER_UNREADABLE_PAGES"
@@ -708,14 +738,21 @@ def _blank_page_detection_check(
         }
 
     blank_pages = list(pixel_check.get("blank_pages") or [])
-    low_content_pages = list(pixel_check.get("low_content_pages") or [])
+    low_content_pages = list(
+        pixel_check.get("unexpected_low_content_pages")
+        or pixel_check.get("low_content_pages")
+        or []
+    )
     unreadable_pages = list(pixel_check.get("unreadable_pages") or [])
+    expected_sparse_pages = list(pixel_check.get("expected_sparse_pages") or [])
     if blank_pages or low_content_pages or unreadable_pages:
         return {
             "status": visual_check.get("status") or "WARN",
             "message": "Visual page inspection found blank or low-content page images.",
             "blank_pages": blank_pages,
             "low_content_pages": low_content_pages,
+            "unexpected_low_content_pages": low_content_pages,
+            "expected_sparse_pages": expected_sparse_pages,
             "unreadable_pages": unreadable_pages,
             "thresholds": pixel_check.get("thresholds") or {},
         }
@@ -723,11 +760,82 @@ def _blank_page_detection_check(
         "status": "PASS",
         "message": "Visual page inspection did not find blank rendered pages.",
         "checked_pages": pixel_check.get("checked_pages") or 0,
+        "expected_sparse_pages": expected_sparse_pages,
         "thresholds": pixel_check.get("thresholds") or {},
     }
 
 
-def _inspect_rendered_png_pages(pngs: Iterable[Path]) -> Dict[str, Any]:
+def _visual_expected_sparse_page_specs(
+    context: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    panel_style = context.get("panel_style")
+    if not isinstance(panel_style, Mapping):
+        return []
+    visual_qa = panel_style.get("visual_qa")
+    if not isinstance(visual_qa, Mapping):
+        return []
+    specs = visual_qa.get("expected_sparse_pages")
+    if not isinstance(specs, list):
+        return []
+    return [dict(spec) for spec in specs if isinstance(spec, Mapping)]
+
+
+def _rendered_page_number(path: Path) -> int:
+    match = re.search(r"-(\d+)\.png$", path.name)
+    return int(match.group(1)) if match else 0
+
+
+def _extract_pdf_page_texts(
+    pdf_path: Path,
+    pngs: Iterable[Path],
+) -> tuple[Dict[int, str], Optional[str]]:
+    """Extract page text for semantic sparse-page classification.
+
+    Raw page text is intentionally kept in memory and never written to the QA
+    JSON because reports can contain patient information.
+    """
+    command = shutil.which("pdftotext")
+    if not command:
+        return {}, "pdftotext is unavailable"
+    if not pdf_path.is_file():
+        return {}, f"Rendered PDF is unavailable: {pdf_path.name}"
+
+    texts: Dict[int, str] = {}
+    for path in pngs:
+        page_number = _rendered_page_number(Path(path))
+        if page_number <= 0:
+            continue
+        try:
+            process = subprocess.run(
+                [
+                    command,
+                    "-layout",
+                    "-f",
+                    str(page_number),
+                    "-l",
+                    str(page_number),
+                    str(pdf_path),
+                    "-",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except Exception as exc:
+            return texts, f"pdftotext failed: {exc}"
+        if process.returncode != 0:
+            return texts, "pdftotext returned a non-zero exit code"
+        texts[page_number] = process.stdout or ""
+    return texts, None
+
+
+def _inspect_rendered_png_pages(
+    pngs: Iterable[Path],
+    *,
+    page_texts: Optional[Mapping[int, str]] = None,
+    expected_sparse_pages: Optional[Iterable[Mapping[str, Any]]] = None,
+) -> Dict[str, Any]:
     thresholds = {
         "blank_nonwhite_ratio": 0.001,
         "blank_dark_ratio": 0.0002,
@@ -768,32 +876,92 @@ def _inspect_rendered_png_pages(pngs: Iterable[Path]) -> Dict[str, Any]:
     low_content_pages = list(
         dict.fromkeys(low_content_pages + interior_body_low_content_pages)
     )
-    if unreadable or blank_pages or low_content_pages:
+    low_content_pages = [path for path in low_content_pages if path not in blank_pages]
+
+    expected_specs = [
+        dict(spec)
+        for spec in (expected_sparse_pages or [])
+        if isinstance(spec, Mapping)
+    ]
+    spec_match_counts: Dict[str, int] = {}
+    accepted_sparse_pages: List[Dict[str, Any]] = []
+    unexpected_low_content_pages: List[str] = []
+    normalized_page_texts = {
+        int(page): re.sub(r"\s+", "", str(text or ""))
+        for page, text in (page_texts or {}).items()
+    }
+    for path in low_content_pages:
+        page_number = _rendered_page_number(Path(path))
+        page_text = normalized_page_texts.get(page_number, "")
+        accepted_spec: Optional[Dict[str, Any]] = None
+        for index, spec in enumerate(expected_specs):
+            required_text = [
+                re.sub(r"\s+", "", str(value or ""))
+                for value in (spec.get("required_text") or [])
+                if str(value or "").strip()
+            ]
+            if not required_text or not all(
+                marker in page_text for marker in required_text
+            ):
+                continue
+            spec_id = str(spec.get("id") or f"expected_sparse_{index + 1}")
+            try:
+                max_matches = max(1, int(spec.get("max_matches", 1)))
+            except (TypeError, ValueError):
+                max_matches = 1
+            if spec_match_counts.get(spec_id, 0) >= max_matches:
+                continue
+            spec_match_counts[spec_id] = spec_match_counts.get(spec_id, 0) + 1
+            accepted_spec = {
+                "id": spec_id,
+                "path": path,
+                "page_number": page_number,
+                "required_text_count": len(required_text),
+            }
+            break
+        if accepted_spec is None:
+            unexpected_low_content_pages.append(path)
+        else:
+            accepted_sparse_pages.append(accepted_spec)
+
+    if unreadable or blank_pages or unexpected_low_content_pages:
         parts: List[str] = []
         if unreadable:
             parts.append(f"{len(unreadable)} rendered PNG page(s) could not be read")
         if blank_pages:
             parts.append(f"{len(blank_pages)} rendered page(s) look blank")
-        if low_content_pages:
-            parts.append(f"{len(low_content_pages)} rendered page(s) look low-content")
+        if unexpected_low_content_pages:
+            parts.append(
+                f"{len(unexpected_low_content_pages)} rendered page(s) look "
+                "unexpectedly low-content"
+            )
         return {
             "status": "WARN",
             "message": "; ".join(parts) + ".",
             "checked_pages": len(pages),
             "pages": pages,
             "blank_pages": blank_pages,
-            "low_content_pages": low_content_pages,
+            "low_content_pages": unexpected_low_content_pages,
+            "unexpected_low_content_pages": unexpected_low_content_pages,
+            "expected_sparse_pages": accepted_sparse_pages,
             "unreadable_pages": unreadable,
             "thresholds": thresholds,
         }
 
     return {
         "status": "PASS",
-        "message": "Rendered PNG pixel checks passed.",
+        "message": (
+            "Rendered PNG pixel checks passed with reviewed semantic sparse-page "
+            "exceptions."
+            if accepted_sparse_pages
+            else "Rendered PNG pixel checks passed."
+        ),
         "checked_pages": len(pages),
         "pages": pages,
         "blank_pages": [],
         "low_content_pages": [],
+        "unexpected_low_content_pages": [],
+        "expected_sparse_pages": accepted_sparse_pages,
         "unreadable_pages": [],
         "thresholds": thresholds,
     }
@@ -807,20 +975,15 @@ def _rendered_png_page_metrics(
     with image_module.open(path) as image:
         original_size = [int(image.width), int(image.height)]
         sampled = image.convert("RGBA")
-        body_top = int(
-            image.height * float(thresholds["body_crop_top_fraction"])
-        )
+        body_top = int(image.height * float(thresholds["body_crop_top_fraction"]))
         body_bottom = int(
-            image.height
-            * (1.0 - float(thresholds["body_crop_bottom_fraction"]))
+            image.height * (1.0 - float(thresholds["body_crop_bottom_fraction"]))
         )
         body_sampled = sampled.crop((0, body_top, image.width, body_bottom))
         sampled.thumbnail((300, 300))
         body_sampled.thumbnail((300, 300))
         sampled_data = getattr(sampled, "get_flattened_data", sampled.getdata)
-        body_data = getattr(
-            body_sampled, "get_flattened_data", body_sampled.getdata
-        )
+        body_data = getattr(body_sampled, "get_flattened_data", body_sampled.getdata)
         pixels = list(sampled_data())
         body_pixels = list(body_data())
 
@@ -830,27 +993,19 @@ def _rendered_png_page_metrics(
         1 for red, green, blue, _alpha in visible if min(red, green, blue) < 248
     )
     dark_count = sum(
-        1
-        for red, green, blue, _alpha in visible
-        if (red + green + blue) / 3 < 210
+        1 for red, green, blue, _alpha in visible if (red + green + blue) / 3 < 210
     )
     body_visible = [pixel for pixel in body_pixels if pixel[3] > 10]
     body_visible_count = len(body_visible) or 1
     body_dark_count = sum(
-        1
-        for red, green, blue, _alpha in body_visible
-        if (red + green + blue) / 3 < 210
+        1 for red, green, blue, _alpha in body_visible if (red + green + blue) / 3 < 210
     )
     nonwhite_ratio = nonwhite_count / visible_count
     dark_ratio = dark_count / visible_count
-    blank = (
-        nonwhite_ratio < float(thresholds["blank_nonwhite_ratio"])
-        and dark_ratio < float(thresholds["blank_dark_ratio"])
-    )
-    low_content = (
-        not blank
-        and dark_ratio < float(thresholds["low_content_dark_ratio"])
-    )
+    blank = nonwhite_ratio < float(
+        thresholds["blank_nonwhite_ratio"]
+    ) and dark_ratio < float(thresholds["blank_dark_ratio"])
+    low_content = not blank and dark_ratio < float(thresholds["low_content_dark_ratio"])
     body_dark_ratio = body_dark_count / body_visible_count
     body_low_content = body_dark_ratio < float(
         thresholds["body_low_content_dark_ratio"]
@@ -967,8 +1122,7 @@ def _inspect_reportgen_toc_fields(output_path: Path) -> Optional[Dict[str, Any]]
         if name.startswith("_ReportGenToc_"):
             bookmark_ids[name] = node.get(qn("id")) or ""
     bookmark_end_ids = {
-        node.get(qn("id")) or ""
-        for node in document_root.iter(qn("bookmarkEnd"))
+        node.get(qn("id")) or "" for node in document_root.iter(qn("bookmarkEnd"))
     }
     unique_anchors = set(anchors)
     missing_bookmarks = sorted(unique_anchors - set(bookmark_ids))
@@ -1042,7 +1196,10 @@ def _inspect_toc(
     page_like = [
         line
         for line in toc_lines
-        if re.search(r"(第[一二三四五六七八九十]+部分|\d+(?:\.\d+)+|[一二三四五六七八九十]+、).*\d+\s*$", line)
+        if re.search(
+            r"(第[一二三四五六七八九十]+部分|\d+(?:\.\d+)+|[一二三四五六七八九十]+、).*\d+\s*$",
+            line,
+        )
     ]
     if not toc_lines:
         return {"status": "WARN", "line_count": 0, "message": "TOC area is empty."}
@@ -1080,7 +1237,9 @@ def _inspect_tables(doc) -> Dict[str, Any]:
         if all(token in compact_preview for token in ("突变位点", "潜在获益")):
             summary["targeted_drug_tip_tables"].append(entry)
 
-        if all(token in compact_preview for token in ("基因突变信息", "潜在获益靶向药物")):
+        if all(
+            token in compact_preview for token in ("基因突变信息", "潜在获益靶向药物")
+        ):
             summary["variant_summary_tables"].append(entry)
 
         has_detail_header = all(
@@ -1133,18 +1292,25 @@ def _build_table_checks(
         "variant_detail_table_shape": {
             "status": "FAIL"
             if table_metrics.get("bad_variant_detail_tables")
-            else status_for(len(table_metrics.get("variant_detail_tables") or []), crc and has_variants),
+            else status_for(
+                len(table_metrics.get("variant_detail_tables") or []),
+                crc and has_variants,
+            ),
             "tables": table_metrics.get("variant_detail_tables") or [],
             "bad_tables": table_metrics.get("bad_variant_detail_tables") or [],
             "required": crc and has_variants,
         },
         "variant_summary_table_present": {
-            "status": status_for(len(table_metrics.get("variant_summary_tables") or []), crc),
+            "status": status_for(
+                len(table_metrics.get("variant_summary_tables") or []), crc
+            ),
             "tables": table_metrics.get("variant_summary_tables") or [],
             "required": crc,
         },
         "targeted_drug_tip_table_present": {
-            "status": status_for(len(table_metrics.get("targeted_drug_tip_tables") or []), crc),
+            "status": status_for(
+                len(table_metrics.get("targeted_drug_tip_tables") or []), crc
+            ),
             "tables": table_metrics.get("targeted_drug_tip_tables") or [],
             "required": crc,
         },
@@ -1318,9 +1484,9 @@ def _is_variant_detail_style_table(table: Any) -> bool:
         return False
     row0 = _compact(" ".join(cell.text for cell in table.rows[0].cells))
     row1 = _compact(" ".join(cell.text for cell in table.rows[1].cells))
-    return all(token in row0 for token in ("基因名称", "基因突变信息", "靶向药物信息")) and all(
-        token in row1 for token in ("转录本号", "潜在获益靶向药物")
-    )
+    return all(
+        token in row0 for token in ("基因名称", "基因突变信息", "靶向药物信息")
+    ) and all(token in row1 for token in ("转录本号", "潜在获益靶向药物"))
 
 
 def _is_biomarker_style_table(table: Any) -> bool:
@@ -1362,8 +1528,12 @@ def _check_variant_summary_table_style(
                     row_idx=row_idx,
                     col_idx=col_idx,
                     table_name="variant_summary_table",
-                    expected_color=expected["link_color"] if link_cell else expected["body_font_color"],
-                    expected_underline=expected["link_underline"] if link_cell else False,
+                    expected_color=expected["link_color"]
+                    if link_cell
+                    else expected["body_font_color"],
+                    expected_underline=expected["link_underline"]
+                    if link_cell
+                    else False,
                 )
             )
     return failures
@@ -1422,8 +1592,12 @@ def _check_variant_detail_table_style(
                     row_idx=row_idx,
                     col_idx=col_idx,
                     table_name="variant_detail_table",
-                    expected_color=expected["link_color"] if link_cell else expected["body_font_color"],
-                    expected_underline=expected["link_underline"] if link_cell else False,
+                    expected_color=expected["link_color"]
+                    if link_cell
+                    else expected["body_font_color"],
+                    expected_underline=expected["link_underline"]
+                    if link_cell
+                    else False,
                 )
             )
     return failures
@@ -1620,9 +1794,7 @@ def _build_business_checks(
 
     total_count = _as_int(context.get("total_variants_count"))
     drug_count = _as_int(context.get("drug_related_count"))
-    targeted_or_immune_count = _as_int(
-        context.get("targeted_or_immune_related_count")
-    )
+    targeted_or_immune_count = _as_int(context.get("targeted_or_immune_related_count"))
 
     if total_count is not None:
         expected = f"本次共检出体细胞变异：{total_count}个"
@@ -1639,10 +1811,7 @@ def _build_business_checks(
         }
 
     if targeted_or_immune_count is not None:
-        expected = (
-            "与靶向/免疫药物相关的变异："
-            f"{targeted_or_immune_count}个"
-        )
+        expected = f"与靶向/免疫药物相关的变异：{targeted_or_immune_count}个"
         checks["targeted_or_immune_related_count_text"] = {
             "status": "PASS" if _compact(expected) in compact_text else "FAIL",
             "expected": expected,
@@ -1658,6 +1827,19 @@ def _build_business_checks(
         checks["targeted_drug_brand_mapping"] = {
             "status": "WARN" if brand_warnings else "PASS",
             "warning_codes": brand_warnings,
+        }
+
+    raw_drug_consistency = context.get("drug_analysis_consistency")
+    if isinstance(raw_drug_consistency, Mapping):
+        checks["drug_analysis_consistency"] = {
+            "status": (
+                "PASS" if raw_drug_consistency.get("status") == "PASS" else "FAIL"
+            ),
+            "expected_item_count": raw_drug_consistency.get("expected_item_count", 0),
+            "rendered_item_count": raw_drug_consistency.get("rendered_item_count", 0),
+            "missing": list(raw_drug_consistency.get("missing") or []),
+            "unexpected": list(raw_drug_consistency.get("unexpected") or []),
+            "duplicates": list(raw_drug_consistency.get("duplicates") or []),
         }
 
     tmb_status = str(context.get("tmb_status") or "").strip()
@@ -1686,6 +1868,9 @@ def _business_issues(checks: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
         ),
         "targeted_drug_brand_mapping": (
             "Targeted drug brand mapping requires explicit configuration review."
+        ),
+        "drug_analysis_consistency": (
+            "Part-2 drug table and Part-3 drug analysis are inconsistent."
         ),
         "tmb_status_text": "TMB status from context was not found in rendered text.",
         "msi_status_text": "MSI status from context was not found in rendered text.",

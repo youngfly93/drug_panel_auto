@@ -72,6 +72,10 @@ reviewed_part3_overlay: "rules/reviewed_part3_knowledge.yaml"
 reviewed_part3_overlay_additions:
   # 脱敏的历史报告组终版迁移层；仅按基因+精确 HGVS 命中，不含病例标识。
   - "rules/reviewed_part3_crc358_reviewed_case_a.yaml"
+  # 对历史迁移知识的受治理纠正层；保留旧记录但只让纠正后的条目进入运行时。
+  - "rules/reviewed_part3_corrections_20260720.yaml"
+  # 固定蛋白/结构域字段的一审候选层；不包含药物结论，待报告组二审。
+  - "rules/reviewed_part3_domain_overlay_20260720.yaml"
 
 input_contract:
   required_tables:

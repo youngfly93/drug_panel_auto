@@ -21,12 +21,17 @@ from pathlib import Path
 from typing import Mapping
 from xml.sax.saxutils import escape
 
-FONT_SUBSTITUTION_PROFILE = "reportgen-cjk-font-substitution-v1"
+FONT_SUBSTITUTION_PROFILE = "reportgen-cjk-font-substitution-v2"
 
 
 def _platform_default_fonts(system_name: str) -> tuple[str, str]:
     if system_name == "Darwin":
-        return "Hiragino Sans GB", "Songti SC"
+        # LibreOffice 25 on macOS can select the Interface/partial face behind
+        # ``Hiragino Sans GB`` during Word-font substitution.  The PDF text
+        # layer stays correct but common Chinese glyphs render as squares.
+        # Arial Unicode MS is installed on the qualified report workstation
+        # and was verified with the full legal-notice glyph probe.
+        return "Arial Unicode MS", "Songti SC"
     # Production and CI install fonts-noto-cjk.  Fail closed when that
     # prerequisite is absent instead of silently selecting a different font.
     return "Noto Sans CJK SC", "Noto Serif CJK SC"
@@ -132,22 +137,25 @@ def _registry_xml(substitutions: Mapping[str, str]) -> str:
                 ]
             )
         )
-    return "".join(
-        [
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            '<oor:items xmlns:oor="http://openoffice.org/2001/registry">',
-            '<item oor:path="/org.openoffice.Office.Common/Font/Substitution">',
-            '<prop oor:name="Replacement" oor:op="fuse"><value>true</value></prop>',
-            "</item>",
-            '<item oor:path="/org.openoffice.Office.Common/Font/Substitution/FontPairs">',
-            *nodes,
-            "</item>",
-            '<item oor:path="/org.openoffice.Office.Common/Misc">',
-            '<prop oor:name="FirstRun" oor:op="fuse"><value>false</value></prop>',
-            "</item>",
-            "</oor:items>",
-        ]
-    ) + "\n"
+    return (
+        "".join(
+            [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                '<oor:items xmlns:oor="http://openoffice.org/2001/registry">',
+                '<item oor:path="/org.openoffice.Office.Common/Font/Substitution">',
+                '<prop oor:name="Replacement" oor:op="fuse"><value>true</value></prop>',
+                "</item>",
+                '<item oor:path="/org.openoffice.Office.Common/Font/Substitution/FontPairs">',
+                *nodes,
+                "</item>",
+                '<item oor:path="/org.openoffice.Office.Common/Misc">',
+                '<prop oor:name="FirstRun" oor:op="fuse"><value>false</value></prop>',
+                "</item>",
+                "</oor:items>",
+            ]
+        )
+        + "\n"
+    )
 
 
 def initialize_libreoffice_profile(

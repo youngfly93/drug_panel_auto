@@ -131,8 +131,8 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
             "hla_tail",
             "尾部HLA表移除失败",
             lambda c: c.renderer._remove_trailing_hla_table(c.output_path),
-            enabled_predicate=lambda c: not c.renderer._truthy(
-                c.template_context.get("show_hla_table")
+            enabled_predicate=lambda c: (
+                not c.renderer._truthy(c.template_context.get("show_hla_table"))
             ),
         ),
         FunctionProcessor(
@@ -169,7 +169,7 @@ def _run_gene_list_and_qc(ctx: ProcessorContext) -> None:
 
 
 def _run_variant_tables(ctx: ProcessorContext) -> None:
-    ctx.renderer._fit_tables_to_page_width(ctx.output_path)
+    ctx.renderer._fit_tables_to_page_width(ctx.output_path, ctx.template_context)
     ctx.renderer._optimize_variant_table_layout(ctx.output_path)
     ctx.renderer._restore_reviewed_vertical_cell_merges(ctx.output_path)
 
@@ -182,6 +182,7 @@ def _run_toc_refresh(ctx: ProcessorContext) -> None:
     # keep set_update_fields (cheap XML flag, no LO process). Saves ~6 s per
     # report. Set REPORTGEN_KEEP_EARLY_TOC_REFRESH=1 to restore old behavior.
     import os
+
     try:
         ctx.renderer._set_update_fields(ctx.output_path)
     except Exception:
@@ -190,7 +191,9 @@ def _run_toc_refresh(ctx: ProcessorContext) -> None:
         try:
             ctx.renderer._refresh_fields_with_native_engine(ctx.output_path)
         except Exception as refresh_err:
-            ctx.logger.warning("目录页码刷新失败，将继续最终刷新兜底", error=str(refresh_err))
+            ctx.logger.warning(
+                "目录页码刷新失败，将继续最终刷新兜底", error=str(refresh_err)
+            )
         try:
             ctx.renderer._set_update_fields(ctx.output_path)
         except Exception:
@@ -219,9 +222,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
     )
 
     def enforce_configured_page_breaks() -> None:
-        enforce = getattr(
-            ctx.renderer, "_enforce_page_break_before_headings", None
-        )
+        enforce = getattr(ctx.renderer, "_enforce_page_break_before_headings", None)
         if forced_page_break_headings and callable(enforce):
             enforce(ctx.output_path, forced_page_break_headings)
 
@@ -233,9 +234,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         ctx.output_path,
         ("第三部分：基因变异及相应靶向/免疫药物解析",),
     )
-    ctx.renderer._remove_standalone_page_breaks_before_pathway_tables(
-        ctx.output_path
-    )
+    ctx.renderer._remove_standalone_page_breaks_before_pathway_tables(ctx.output_path)
     ctx.renderer._compact_gene_list_tables(ctx.output_path, ctx.template_context)
     ctx.renderer._normalize_quality_control_tables(ctx.output_path)
     ctx.renderer._optimize_variant_table_layout(ctx.output_path)
@@ -250,9 +249,7 @@ def _run_final_refresh_cleanup(ctx: ProcessorContext) -> None:
         "REPORTGEN_SKIP_FINAL_LO_REFRESH"
     ):
         if require_deterministic_layout:
-            raise RuntimeError(
-                "生产 Panel 禁止跳过最终 LibreOffice 目录刷新"
-            )
+            raise RuntimeError("生产 Panel 禁止跳过最终 LibreOffice 目录刷新")
         try:
             ctx.renderer._set_update_fields(ctx.output_path)
         except Exception:
@@ -334,14 +331,17 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     except Exception as recolor_err:
         ctx.logger.warning("第三部分装饰符回黑失败", error=str(recolor_err))
     report_content = ctx.template_context.get("report_content") or {}
-    force_breaks = getattr(
-        ctx.renderer, "_enforce_page_break_before_headings", None
-    )
+    force_breaks = getattr(ctx.renderer, "_enforce_page_break_before_headings", None)
     configured_headings = tuple(
         report_content.get("force_page_break_before_headings") or ()
     )
     if configured_headings and callable(force_breaks):
         force_breaks(ctx.output_path, configured_headings)
+    normalize_legal_notice = getattr(
+        ctx.renderer, "_normalize_legal_notice_style", None
+    )
+    if callable(normalize_legal_notice):
+        normalize_legal_notice(ctx.output_path, ctx.template_context)
     # These are final-output normalizers. They intentionally run after all
     # LibreOffice/TOC refreshes and after other python-docx saves so the direct
     # reference font and floating back-cover coordinates are the final state.
@@ -350,9 +350,7 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     )
     if callable(normalize_references):
         normalize_references(ctx.output_path, ctx.template_context)
-    normalize_back_cover = getattr(
-        ctx.renderer, "_normalize_back_cover_artwork", None
-    )
+    normalize_back_cover = getattr(ctx.renderer, "_normalize_back_cover_artwork", None)
     if callable(normalize_back_cover):
         normalize_back_cover(ctx.output_path, ctx.template_context)
     # Pagination must be finalized only after every layout-affecting normalizer

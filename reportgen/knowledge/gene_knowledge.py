@@ -45,6 +45,10 @@ class GeneKnowledgeProvider:
         # 索引缓存（基因名 -> 数据行）
         self._gene_intro_cache: Dict[str, str] = {}
         self._gene_analysis_cache: Dict[str, str] = {}
+        # Stable protein/domain statements are kept independently from the
+        # replaceable gene/variant narrative.  Otherwise a reviewed overlay can
+        # silently discard the only copy of fixed structural knowledge.
+        self._gene_fixed_domain_cache: Dict[str, str] = {}
         self._reviewed_gene_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._reviewed_gene_section_overrides: Dict[str, Dict[str, str]] = {}
         # gene-level (variant-agnostic) Part-3 overrides; lower precedence than
@@ -237,7 +241,8 @@ class GeneKnowledgeProvider:
                 section = {
                     k: self._norm_text(v)
                     for k, v in row.items()
-                    if k in {"intro", "mutation_analysis"} and self._norm_text(v)
+                    if k in {"intro", "mutation_analysis", "fixed_domain_text"}
+                    and self._norm_text(v)
                 }
                 if not section:
                     continue
@@ -246,16 +251,24 @@ class GeneKnowledgeProvider:
                 )
                 if key:
                     # variant-level override (gene + c_hgvs[+ p_hgvs])
-                    self._reviewed_gene_section_overrides[key] = section
+                    self._reviewed_gene_section_overrides[key] = {
+                        **self._reviewed_gene_section_overrides.get(key, {}),
+                        **section,
+                    }
                 else:
                     # gene-level override (gene only, no c_hgvs): applies to ANY
                     # variant of this gene. Lets a panel curate cancer-specific
                     # wording (e.g. lung) without listing every variant.
                     gene_key = self._hgvs_key(row.get("gene"))
                     if gene_key:
-                        self._gene_level_section_overrides.setdefault(
-                            gene_key, section
+                        existing = self._gene_level_section_overrides.setdefault(
+                            gene_key, {}
                         )
+                        # Additional overlays may enrich an existing gene row
+                        # with an independently governed fixed-domain field, but
+                        # must not replace earlier reviewed prose by accident.
+                        for field, value in section.items():
+                            existing.setdefault(field, value)
 
             for row in data.get("drug_sections") or []:
                 if not isinstance(row, dict):
@@ -448,20 +461,29 @@ class GeneKnowledgeProvider:
 
             gene_upper = gene.upper()
 
-            # 缓存基因简介。部分处理后的知识库会把“蛋白结构域”自动摘要
-            # 拼到简介末尾；终版报告把这类内容放在“基因变异解析”段。
+            reviewed = self._extract_reviewed_analysis_fields(row, df.columns)
+
+            # 缓存基因简介。部分处理后的知识库会把稳定的蛋白结构域摘要
+            # 拼到简介末尾；将其拆到独立缓存，避免后续 overlay 整段覆盖。
             intro = self._norm_text(row.get(intro_col))
             if intro and gene_upper not in self._gene_intro_cache:
-                self._gene_intro_cache[gene_upper] = self._strip_intro_domain_tail(
+                intro_body, intro_domain_text = self._split_intro_domain_tail(
                     gene_upper, intro
                 )
+                self._gene_intro_cache[gene_upper] = intro_body or intro
+
+                fixed_domain_text = self._merge_fixed_domain_texts(
+                    reviewed.get("domain_text", ""),
+                    intro_domain_text,
+                )
+                if fixed_domain_text:
+                    self._gene_fixed_domain_cache[gene_upper] = fixed_domain_text
 
             # 缓存基因变异解析
             analysis = self._norm_text(row.get(analysis_col))
             if analysis and gene_upper not in self._gene_analysis_cache:
                 self._gene_analysis_cache[gene_upper] = analysis
 
-            reviewed = self._extract_reviewed_analysis_fields(row, df.columns)
             if reviewed and gene_upper not in self._reviewed_gene_analysis_cache:
                 self._reviewed_gene_analysis_cache[gene_upper] = reviewed
 
@@ -488,19 +510,91 @@ class GeneKnowledgeProvider:
         }
         return {k: v for k, v in fields.items() if v and v.lower() != "nan"}
 
-    def _strip_intro_domain_tail(self, gene: str, intro: str) -> str:
+    def _split_intro_domain_tail(self, gene: str, intro: str) -> tuple[str, str]:
         lines = [line.strip() for line in str(intro).splitlines() if line.strip()]
-        if len(lines) <= 1:
-            return intro
-        kept = []
+        kept: List[str] = []
+        fixed: List[str] = []
         for line in lines:
-            if (
-                line.upper().startswith(f"{gene}基因".upper())
-                and "编码的蛋白全长" in line
-            ):
+            # Do not require a gene-name prefix: ERBB2's only fixed statement
+            # starts with the generic “基因编码…”.
+            if "编码的蛋白全长" in line:
+                # A few legacy rows use the context-dependent generic subject
+                # “基因编码…”.  Once the sentence is moved into an independent
+                # fixed-domain block that subject becomes ambiguous, so restore
+                # the owning gene name without changing the medical statement.
+                if line.startswith("基因编码"):
+                    line = f"{gene}{line}"
+                fixed.append(line)
                 continue
             kept.append(line)
-        return "\n".join(kept) if kept else intro
+        return "\n".join(kept), "\n".join(fixed)
+
+    def _strip_intro_domain_tail(self, gene: str, intro: str) -> str:
+        """Backward-compatible wrapper used by legacy callers/tests."""
+        body, _ = self._split_intro_domain_tail(gene, intro)
+        return body or intro
+
+    @staticmethod
+    def _merge_fixed_domain_texts(*values: str) -> str:
+        """Merge complementary stable domain statements without repetition."""
+        statements: List[str] = []
+        seen: set[str] = set()
+        for value in values:
+            for line in str(value or "").splitlines():
+                text = line.strip()
+                key = re.sub(r"[\s，,。.;；]", "", text).casefold()
+                if not text or key in seen:
+                    continue
+                seen.add(key)
+                statements.append(text.rstrip("。."))
+
+        if not statements:
+            return ""
+
+        pattern = re.compile(
+            r"^(.*?编码的蛋白全长(?:为)?\s*\d+\s*(?:个|位)?氨基酸)"
+            r"[，,]?\s*主要包含(.+)$"
+        )
+        parsed = [pattern.match(item) for item in statements]
+        if all(parsed):
+            prefixes = [
+                re.sub(r"\s+", "", match.group(1)).casefold()
+                for match in parsed
+                if match is not None
+            ]
+            if len(set(prefixes)) == 1:
+                tails: List[str] = []
+                tail_seen: set[str] = set()
+                for match in parsed:
+                    assert match is not None
+                    tail = match.group(2).strip().rstrip("。.")
+                    tail_key = re.sub(r"[\s，,。.;；]", "", tail).casefold()
+                    if tail_key not in tail_seen:
+                        tail_seen.add(tail_key)
+                        tails.append(tail)
+                return f"{parsed[0].group(1)}，主要包含{'；'.join(tails)}。"
+
+        return "\n".join(f"{item}。" for item in statements)
+
+    @staticmethod
+    def _compose_fixed_domain_analysis(
+        fixed_domain_text: str, mutation_analysis: str
+    ) -> str:
+        """Make the fixed structural statement survive replace-style overlays."""
+        fixed = str(fixed_domain_text or "").strip()
+        analysis = str(mutation_analysis or "").strip()
+        if not fixed:
+            return analysis
+
+        # Replace any older fixed-domain sentence with the canonical merged
+        # statement. Variant-specific domain/consequence sentences are kept.
+        cleaned = re.sub(
+            r"[^。\n]*编码的蛋白全长[^。\n]*(?:。|$)",
+            "",
+            analysis,
+        )
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+        return f"{fixed}\n{cleaned}" if cleaned else fixed
 
     def _protein_position(self, p_hgvs: str) -> Optional[int]:
         match = re.search(r"p\.[A-Za-z*]{1,3}(\d+)", str(p_hgvs or ""))
@@ -936,6 +1030,31 @@ class GeneKnowledgeProvider:
             self.load()
         return self._drug_full_cache.get(gene.upper(), [])
 
+    def has_reviewed_drug_analysis_contract(
+        self, variant: Dict[str, Any]
+    ) -> bool:
+        """Whether an exact/gene-level reviewed Part-3 drug rule owns a row.
+
+        The legacy workbook contains broad narratives that have not all been
+        migrated to exact variant contracts.  Cross-section blocking is safe
+        only for reviewed overlay entries whose scope is explicit; otherwise a
+        synthetic or legacy Part-2 row can be falsely treated as a missing
+        reviewed Part-3 interpretation.
+        """
+        if not self._loaded:
+            self.load()
+        variant_key = self._variant_key_from_row(variant)
+        gene = self._hgvs_key(variant.get("gene"))
+        for direction in ("benefit", "caution"):
+            if variant_key and (
+                variant_key,
+                direction,
+            ) in self._reviewed_drug_section_overrides:
+                return True
+            if gene and (gene, direction) in self._gene_level_drug_overrides:
+                return True
+        return False
+
     def list_drug_narrative_entries(self) -> List[Dict[str, str]]:
         """List base Part 3 drug-narrative rows with their owning gene."""
         if not self._loaded:
@@ -1123,6 +1242,15 @@ class GeneKnowledgeProvider:
             reviewed_override.get("mutation_analysis") or mutation_analysis
         )
 
+        fixed_domain_text = self._merge_fixed_domain_texts(
+            self._gene_fixed_domain_cache.get(gene.upper(), ""),
+            gene_override.get("fixed_domain_text", ""),
+            reviewed_override.get("fixed_domain_text", ""),
+        )
+        mutation_analysis = self._compose_fixed_domain_analysis(
+            fixed_domain_text, mutation_analysis
+        )
+
         return {
             "gene": gene,
             "header": header,
@@ -1130,6 +1258,7 @@ class GeneKnowledgeProvider:
             "intro": intro,
             "mutation_desc": mutation_desc,
             "mutation_analysis": mutation_analysis,
+            "fixed_domain_text": fixed_domain_text,
             "has_drug": has_drug,
         }
 
@@ -1477,7 +1606,210 @@ class GeneKnowledgeProvider:
                                     }
                                 )
 
-        return self._apply_reviewed_drug_section_overrides(variants, sections)
+        reviewed_sections = self._apply_reviewed_drug_section_overrides(
+            variants, sections
+        )
+        return self._coalesce_overlapping_drug_sections(reviewed_sections)
+
+    @staticmethod
+    def _split_drug_items(value: Any) -> List[str]:
+        text = str(value or "").strip()
+        if not text or text in {"-", "--", "—", "无", "未检出"}:
+            return []
+        return [
+            item.strip()
+            for item in re.split(r"[、\n；;]+", text)
+            if item.strip()
+        ]
+
+    @staticmethod
+    def _canonical_drug_item(value: Any) -> str:
+        """Normalize one displayed drug/combination for cross-section QA."""
+        text = str(value or "").strip()
+        text = re.sub(r"[（(]\s*[A-Da-d]\s*[)）]", "", text)
+        # Parenthetical English names are aliases of the adjacent Chinese drug,
+        # not additional combination members.
+        text = re.sub(r"[（(][^()（）\r\n]+[)）]", "", text)
+        text = text.replace("＋", "+")
+        components = [
+            re.sub(r"[\s_\-]+", "", part).casefold()
+            for part in text.split("+")
+            if re.sub(r"[\s_\-]+", "", part)
+        ]
+        # Combination order does not change the semantic drug set.
+        return "+".join(sorted(components))
+
+    @classmethod
+    def _drug_item_map(cls, value: Any) -> Dict[str, str]:
+        result: Dict[str, str] = {}
+        for item in cls._split_drug_items(value):
+            key = cls._canonical_drug_item(item)
+            if key:
+                result.setdefault(key, item)
+        return result
+
+    @staticmethod
+    def _merge_unique_analysis_text(existing: str, addition: str) -> str:
+        """Preserve unique evidence sentences while collapsing duplicate blocks."""
+        sentences: List[str] = []
+        seen: set[str] = set()
+        for value in (existing, addition):
+            for sentence in re.split(r"(?<=。)\s*|\n+", str(value or "")):
+                text = sentence.strip()
+                key = re.sub(r"\s+", "", text).casefold()
+                if text and key not in seen:
+                    seen.add(key)
+                    sentences.append(text)
+        return "".join(sentences)
+
+    @classmethod
+    def _coalesce_overlapping_drug_sections(
+        cls, sections: List[Dict[str, str]]
+    ) -> List[Dict[str, str]]:
+        """Merge strict-subset drug blocks for the same exact variant/direction."""
+        rows = [dict(section) for section in sections]
+        groups: Dict[tuple[str, str, str, str], List[int]] = {}
+        token_sets: Dict[int, set[str]] = {}
+        for index, row in enumerate(rows):
+            group_key = (
+                str(row.get("gene") or "").strip().upper(),
+                re.sub(r"\s+", "", str(row.get("c_hgvs") or "")).upper(),
+                re.sub(r"\s+", "", str(row.get("p_hgvs") or "")).upper(),
+                str(row.get("drug_type") or "benefit").strip().lower(),
+            )
+            groups.setdefault(group_key, []).append(index)
+            token_sets[index] = set(cls._drug_item_map(row.get("drug_name")).keys())
+
+        dropped: set[int] = set()
+        for indices in groups.values():
+            # Largest reviewed block is the anchor; equal/subset blocks merge
+            # their unique evidence into it and disappear as duplicate headings.
+            ordered = sorted(indices, key=lambda idx: (-len(token_sets[idx]), idx))
+            for source in ordered:
+                if source in dropped or not token_sets[source]:
+                    continue
+                target = next(
+                    (
+                        candidate
+                        for candidate in ordered
+                        if candidate != source
+                        and candidate not in dropped
+                        and token_sets[source] <= token_sets[candidate]
+                        and (
+                            len(token_sets[source]) < len(token_sets[candidate])
+                            or candidate < source
+                        )
+                    ),
+                    None,
+                )
+                if target is None:
+                    continue
+                for field in ("relation", "clinical"):
+                    rows[target][field] = cls._merge_unique_analysis_text(
+                        rows[target].get(field, ""), rows[source].get(field, "")
+                    )
+                dropped.add(source)
+
+        return [row for index, row in enumerate(rows) if index not in dropped]
+
+    def build_drug_analysis_consistency(
+        self,
+        variants: List[Dict[str, Any]],
+        sections: List[Dict[str, str]],
+    ) -> Dict[str, Any]:
+        """Compare every table drug with the exact Part-3 variant/direction."""
+        expected: Dict[tuple[str, str], Dict[str, str]] = {}
+        labels: Dict[tuple[str, str], Dict[str, str]] = {}
+        for variant in variants:
+            variant_key = self._variant_key_from_row(variant)
+            if not variant_key:
+                continue
+            for direction, field in (
+                ("benefit", "benefit_drugs"),
+                ("caution", "caution_drugs"),
+            ):
+                key = (variant_key, direction)
+                source = variant.get(f"{field}_full") or variant.get(field)
+                items = self._drug_item_map(source)
+                if items:
+                    expected[key] = items
+                    labels[key] = {
+                        "gene": str(variant.get("gene") or "").upper(),
+                        "c_hgvs": str(
+                            variant.get("cHGVS") or variant.get("c_hgvs") or ""
+                        ),
+                        "p_hgvs": str(
+                            variant.get("pHGVS") or variant.get("p_hgvs") or ""
+                        ),
+                        "direction": direction,
+                    }
+
+        rendered: Dict[tuple[str, str], Dict[str, str]] = {}
+        occurrences: Dict[tuple[str, str], Dict[str, int]] = {}
+        for section in sections:
+            variant_key = self._variant_key(
+                section.get("gene"),
+                section.get("c_hgvs"),
+                section.get("p_hgvs"),
+            )
+            direction = str(section.get("drug_type") or "benefit").lower()
+            key = (variant_key, direction)
+            if not variant_key:
+                continue
+            for token, original in self._drug_item_map(
+                section.get("drug_name")
+            ).items():
+                rendered.setdefault(key, {}).setdefault(token, original)
+                counts = occurrences.setdefault(key, {})
+                counts[token] = counts.get(token, 0) + 1
+
+        missing: List[Dict[str, Any]] = []
+        unexpected: List[Dict[str, Any]] = []
+        duplicates: List[Dict[str, Any]] = []
+        for key in sorted(set(expected) | set(rendered)):
+            expected_items = expected.get(key, {})
+            rendered_items = rendered.get(key, {})
+            label = labels.get(
+                key,
+                {"variant_key": key[0], "direction": key[1]},
+            )
+            missing_tokens = sorted(set(expected_items) - set(rendered_items))
+            unexpected_tokens = sorted(set(rendered_items) - set(expected_items))
+            duplicate_tokens = sorted(
+                token
+                for token, count in occurrences.get(key, {}).items()
+                if count > 1
+            )
+            if missing_tokens:
+                missing.append(
+                    {
+                        **label,
+                        "drugs": [expected_items[token] for token in missing_tokens],
+                    }
+                )
+            if unexpected_tokens:
+                unexpected.append(
+                    {
+                        **label,
+                        "drugs": [rendered_items[token] for token in unexpected_tokens],
+                    }
+                )
+            if duplicate_tokens:
+                duplicates.append(
+                    {
+                        **label,
+                        "drugs": [rendered_items[token] for token in duplicate_tokens],
+                    }
+                )
+
+        return {
+            "status": "PASS" if not (missing or unexpected or duplicates) else "FAIL",
+            "expected_item_count": sum(len(items) for items in expected.values()),
+            "rendered_item_count": sum(len(items) for items in rendered.values()),
+            "missing": missing,
+            "unexpected": unexpected,
+            "duplicates": duplicates,
+        }
 
     def _variant_display_from_row(self, row: Dict[str, Any]) -> str:
         c_hgvs = self._norm_text(row.get("cHGVS") or row.get("c_hgvs"))

@@ -167,6 +167,19 @@ def test_historical_overlay_is_deidentified_and_explicitly_pending_reconfirmatio
     assert data["replace_variant_drug_sections"] is True
     assert len(data["gene_sections"]) == 11
     assert len(data["drug_sections"]) == 18
+    superseded = next(
+        row
+        for row in data["drug_sections"]
+        if row.get("gene") == "KRAS"
+        and row.get("p_hgvs") == "p.G12C"
+        and row.get("type") == "caution"
+        and "依维莫司" in str(row.get("drug_name") or "")
+    )
+    assert superseded["review_status"] == "superseded"
+    assert superseded["runtime_eligible"] is False
+    assert superseded["superseded_by"] == (
+        "crc358_kras_g12c_everolimus_correction_20260720"
+    )
     assert re.search(r"\bLZ\d{6}\b", raw_text, flags=re.IGNORECASE) is None
 
 

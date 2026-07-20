@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib.metadata as importlib_metadata
+import json
+import os
+import re
 import subprocess
 import sys
 import time
-import json
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -40,15 +42,22 @@ DEFAULT_PYTEST_ARGS = (
 )
 DEFAULT_RUFF_PATHS = (
     "reportgen/cli.py",
+    "reportgen/core/processors/docx.py",
+    "reportgen/core/qa_report.py",
     "reportgen/core/qa_gate.py",
     "reportgen/core/golden_case.py",
     "reportgen/core/legacy_reference.py",
     "reportgen/core/report_diff.py",
+    "reportgen/core/report_generator.py",
+    "reportgen/core/template_bridge_358.py",
+    "reportgen/core/template_renderer.py",
+    "reportgen/knowledge/gene_knowledge.py",
     "reportgen/knowledge/governance.py",
     "reportgen/knowledge/release_gate.py",
     "scripts/check_knowledge_release_ready.py",
     "reportgen/panels/loader.py",
     "reportgen/panels/validation.py",
+    "reportgen/utils/libreoffice_profile.py",
 )
 
 
@@ -91,15 +100,26 @@ def run_quality_gate(options: Optional[QualityGateOptions] = None) -> dict[str, 
     steps.append(_run_knowledge_validation(project_root, output_root=output_root))
 
     if opts.run_lint:
-        steps.append(
-            _run_command_step(
-                "ruff_check",
-                [sys.executable, "-m", "ruff", "check", *opts.ruff_paths],
-                cwd=project_root,
-                logs_dir=output_root / "logs",
+        toolchain_step = _run_qa_toolchain_check(project_root)
+        steps.append(toolchain_step)
+        if toolchain_step["status"] == "PASS":
+            steps.append(
+                _run_command_step(
+                    "ruff_check",
+                    [sys.executable, "-m", "ruff", "check", *opts.ruff_paths],
+                    cwd=project_root,
+                    logs_dir=output_root / "logs",
+                )
             )
-        )
+        else:
+            steps.append(
+                _skipped_step(
+                    "ruff_check",
+                    "QA toolchain contract failed; lint was not executed.",
+                )
+            )
     else:
+        steps.append(_skipped_step("qa_toolchain", "lint step disabled"))
         steps.append(_skipped_step("ruff_check", "lint step disabled"))
 
     if opts.run_pytest:
@@ -214,6 +234,100 @@ def _run_panel_validation(project_root: Path, *, fail_on_warn: bool) -> dict[str
         }
     except Exception as exc:
         return _exception_step("panel_validate", started, exc)
+
+
+def _run_qa_toolchain_check(project_root: Path) -> dict[str, Any]:
+    """Verify the interpreter has the repository-pinned release tooling."""
+    started = time.perf_counter()
+    requirements_file = project_root / "requirements-qa.txt"
+    result: dict[str, Any] = {
+        "name": "qa_toolchain",
+        "duration_seconds": 0.0,
+        "python_executable": sys.executable,
+        "python_version": sys.version.split()[0],
+        "requirements_file": str(requirements_file),
+    }
+    if not requirements_file.is_file():
+        result.update(
+            {
+                "status": "FAIL",
+                "issues": [
+                    {
+                        "level": "error",
+                        "code": "QA_ENV_REQUIREMENTS_MISSING",
+                        "message": "requirements-qa.txt is missing.",
+                    }
+                ],
+            }
+        )
+        result["duration_seconds"] = round(time.perf_counter() - started, 3)
+        return result
+
+    requirement_text = requirements_file.read_text(encoding="utf-8")
+    match = re.search(r"(?mi)^\s*ruff\s*==\s*([^\s#]+)", requirement_text)
+    if not match:
+        result.update(
+            {
+                "status": "FAIL",
+                "issues": [
+                    {
+                        "level": "error",
+                        "code": "QA_ENV_RUFF_PIN_MISSING",
+                        "message": "requirements-qa.txt must contain an exact Ruff pin.",
+                    }
+                ],
+            }
+        )
+        result["duration_seconds"] = round(time.perf_counter() - started, 3)
+        return result
+
+    required_version = match.group(1)
+    try:
+        installed_version = importlib_metadata.version("ruff")
+    except importlib_metadata.PackageNotFoundError:
+        installed_version = None
+    result.update(
+        {
+            "required_ruff_version": required_version,
+            "installed_ruff_version": installed_version,
+        }
+    )
+    if installed_version is None:
+        result.update(
+            {
+                "status": "FAIL",
+                "issues": [
+                    {
+                        "level": "error",
+                        "code": "QA_ENV_MISSING_DEPENDENCY",
+                        "message": (
+                            "Ruff is not installed in the QA interpreter; run "
+                            "'python -m pip install -r requirements-qa.txt'."
+                        ),
+                    }
+                ],
+            }
+        )
+    elif installed_version != required_version:
+        result.update(
+            {
+                "status": "FAIL",
+                "issues": [
+                    {
+                        "level": "error",
+                        "code": "QA_ENV_VERSION_MISMATCH",
+                        "message": (
+                            f"Ruff {installed_version} is installed but "
+                            f"{required_version} is required."
+                        ),
+                    }
+                ],
+            }
+        )
+    else:
+        result.update({"status": "PASS", "issues": []})
+    result["duration_seconds"] = round(time.perf_counter() - started, 3)
+    return result
 
 
 def _run_knowledge_validation(
@@ -464,15 +578,11 @@ def _select_legacy_reference_profiles(
         for profile in _load_legacy_reference_profiles(project_root)
     }
     requested = [
-        str(panel).strip()
-        for panel in opts.legacy_panels
-        if str(panel).strip()
+        str(panel).strip() for panel in opts.legacy_panels if str(panel).strip()
     ]
     if not requested:
         return [
-            profile
-            for profile in profiles.values()
-            if bool(profile.get("enabled"))
+            profile for profile in profiles.values() if bool(profile.get("enabled"))
         ]
 
     selected: list[dict[str, Any]] = []
@@ -493,16 +603,10 @@ def _select_current_output_profiles(
         profile["panel_id"]: profile
         for profile in _load_current_output_profiles(project_root)
     }
-    requested = [
-        str(panel).strip()
-        for panel in opts.panels
-        if str(panel).strip()
-    ]
+    requested = [str(panel).strip() for panel in opts.panels if str(panel).strip()]
     if not requested:
         return [
-            profile
-            for profile in profiles.values()
-            if bool(profile.get("enabled"))
+            profile for profile in profiles.values() if bool(profile.get("enabled"))
         ]
     return [
         profiles[panel]
@@ -536,7 +640,9 @@ def _legacy_reference_profile_from_package(package: PanelPackage) -> dict[str, A
         "sample_count": int(raw.get("sample_count") or 5),
         "required_features": _severity_map(raw.get("required_features") or {}),
         "required_sections": _severity_map(raw.get("required_sections") or {}),
-        "require_table_shapes": _severity(raw.get("require_table_shapes"), default="warn"),
+        "require_table_shapes": _severity(
+            raw.get("require_table_shapes"), default="warn"
+        ),
         "privacy_checks": _severity_map(raw.get("privacy_checks") or {}),
         "qa_profile_file": str(package.resolve_qa_profile_file()),
     }
@@ -552,7 +658,9 @@ def _current_output_profile_from_package(package: PanelPackage) -> dict[str, Any
         "source": str(raw.get("source") or "golden_reference"),
         "required_features": _severity_map(raw.get("required_features") or {}),
         "required_sections": _severity_map(raw.get("required_sections") or {}),
-        "require_table_shapes": _severity(raw.get("require_table_shapes"), default="warn"),
+        "require_table_shapes": _severity(
+            raw.get("require_table_shapes"), default="warn"
+        ),
         "privacy_checks": _severity_map(raw.get("privacy_checks") or {}),
         "qa_profile_file": str(package.resolve_qa_profile_file()),
     }
@@ -744,7 +852,9 @@ def _audit_legacy_reference_output(
     selected_samples = manifest.get("selected_samples") or []
     for sample in selected_samples:
         issues.extend(_audit_legacy_reference_sample(sample, profile=profile))
-    issues.extend(_audit_legacy_reference_privacy(output_root=output_root, profile=profile))
+    issues.extend(
+        _audit_legacy_reference_privacy(output_root=output_root, profile=profile)
+    )
     return issues
 
 

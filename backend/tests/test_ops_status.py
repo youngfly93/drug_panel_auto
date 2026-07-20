@@ -94,7 +94,7 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
                 "profile_mode": "isolated",
                 "pdf_renderer": "pdftoppm",
                 "pdf_renderer_version": "pdftoppm 24.02.0",
-                "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+                "font_substitution_profile": "reportgen-cjk-font-substitution-v2",
                 "font_substitution_profile_sha256": "b" * 64,
                 "zh_font_match": "Noto Sans CJK SC",
                 "zh_font_match_sha256": "a" * 64,
@@ -203,17 +203,16 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     assert data["runtime"]["generation_queue"]["max_workers"] >= 1
     assert data["runtime"]["generation_queue"]["queued"] >= 0
     assert data["runtime"]["generation_queue"]["active"] >= 0
-    assert data["runtime"]["instance_lock"]["lock_file"] == (
-        "reportgen-web.instance.lock"
-    )
+    assert data["runtime"]["instance_lock"]["lock_file"] == ("reportgen-web.instance.lock")
     assert "path" not in data["runtime"]["instance_lock"]
     assert isinstance(data["runtime"]["generation_limits"]["process_isolation"], bool)
     assert data["runtime"]["generation_limits"]["timeout_seconds"] >= 1
     assert data["runtime"]["task_recovery"]["ran"] in {True, False}
     assert data["runtime"]["renderer_fingerprint"]["available"] is True
-    assert data["runtime"]["renderer_fingerprint"][
-        "font_substitution_profile"
-    ] == "reportgen-cjk-font-substitution-v1"
+    assert (
+        data["runtime"]["renderer_fingerprint"]["font_substitution_profile"]
+        == "reportgen-cjk-font-substitution-v2"
+    )
     assert data["runtime"]["alert_delivery"]["configured"] is True
     assert data["runtime"]["restore_drill"]["status"] == "PASS"
     assert data["downloads"]["summary"]["completed"] == 1
@@ -351,16 +350,14 @@ def test_ops_alerts_only_recent_failures_and_detects_orphaned_tasks(
                 task_type="single",
                 status="failed",
                 total_files=1,
-                created_at=datetime.now(timezone.utc).replace(tzinfo=None)
-                - timedelta(days=3),
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=3),
             ),
             Task(
                 id="recent-failure",
                 task_type="single",
                 status="partial_failed",
                 total_files=1,
-                created_at=datetime.now(timezone.utc).replace(tzinfo=None)
-                - timedelta(hours=2),
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=2),
             ),
             Task(
                 id="orphaned-pending",
@@ -509,7 +506,9 @@ def test_load_test_summary_returns_sanitized_release_gate_payload(tmp_path, monk
                 excel_filename="Bob-secret.xlsx",
                 status="failed",
                 duration_seconds=20.0,
-                errors=json.dumps(["Bob secret.xlsx template rendering failed"], ensure_ascii=False),
+                errors=json.dumps(
+                    ["Bob secret.xlsx template rendering failed"], ensure_ascii=False
+                ),
             ),
         ]
     )
@@ -550,17 +549,12 @@ def test_load_test_summary_returns_sanitized_release_gate_payload(tmp_path, monk
     assert any(item["reason"] == "Excel 数据问题" for item in data["failure_reasons"])
     assert any(item["reason"] == "模板渲染错误" for item in data["failure_reasons"])
     assert any(
-        item["reason"] == "QA: 报告日期缺失或未进入模板上下文"
-        for item in data["failure_reasons"]
+        item["reason"] == "QA: 报告日期缺失或未进入模板上下文" for item in data["failure_reasons"]
     )
     assert any(
-        item["reason"] == "QA: 收样日期缺失或未进入模板上下文"
-        for item in data["failure_reasons"]
+        item["reason"] == "QA: 收样日期缺失或未进入模板上下文" for item in data["failure_reasons"]
     )
-    assert any(
-        item["reason"] == "QA: DOCX 表格样式规则失败"
-        for item in data["failure_reasons"]
-    )
+    assert any(item["reason"] == "QA: DOCX 表格样式规则失败" for item in data["failure_reasons"])
 
     response_text = response.text
     assert "SensitivePatient" not in response_text

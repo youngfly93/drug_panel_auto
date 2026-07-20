@@ -12,14 +12,10 @@ from reportgen.utils.libreoffice_profile import (
 
 
 def test_platform_font_substitution_targets_are_explicit() -> None:
-    darwin = deterministic_font_substitutions(
-        system_name="Darwin", require_available=False
-    )
-    linux = deterministic_font_substitutions(
-        system_name="Linux", require_available=False
-    )
+    darwin = deterministic_font_substitutions(system_name="Darwin", require_available=False)
+    linux = deterministic_font_substitutions(system_name="Linux", require_available=False)
 
-    assert darwin["微软雅黑"] == "Hiragino Sans GB"
+    assert darwin["微软雅黑"] == "Arial Unicode MS"
     assert darwin["宋体"] == "Songti SC"
     assert linux["微软雅黑"] == "Noto Sans CJK SC"
     assert linux["宋体"] == "Noto Serif CJK SC"
@@ -41,7 +37,7 @@ def test_profile_initializer_pins_print_font_substitutions(tmp_path: Path) -> No
         str(fingerprint["font_substitution_profile_sha256"]),
     )
     assert "微软雅黑" in content
-    assert "Hiragino Sans GB" in content
+    assert "Arial Unicode MS" in content
     assert "宋体" in content
     assert "Songti SC" in content
     assert '<prop oor:name="Replacement"' in content
@@ -50,14 +46,8 @@ def test_profile_initializer_pins_print_font_substitutions(tmp_path: Path) -> No
 
 
 def test_font_profile_hash_changes_when_mapping_changes(monkeypatch) -> None:
-    first = font_substitution_fingerprint(
-        system_name="Linux", require_available=False
-    )
+    first = font_substitution_fingerprint(system_name="Linux", require_available=False)
     monkeypatch.setenv("REPORTGEN_LO_SANS_CJK_FONT", "Pinned Sans")
-    second = font_substitution_fingerprint(
-        system_name="Linux", require_available=False
-    )
+    second = font_substitution_fingerprint(system_name="Linux", require_available=False)
 
-    assert first["font_substitution_profile_sha256"] != second[
-        "font_substitution_profile_sha256"
-    ]
+    assert first["font_substitution_profile_sha256"] != second["font_substitution_profile_sha256"]

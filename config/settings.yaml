@@ -431,6 +431,13 @@ extensions:
 report_content:
   consultation_phone: "022-87190699"
   consultation_line_template: "咨询电话：{phone}。"
+  # 法律声明页的中文字体必须写入 w:eastAsia；只设置 ascii/hAnsi 会在
+  # Linux/macOS LibreOffice 中落入错误字体并显示方框字。
+  legal_notice_style:
+    marker: "检测结果仅对本次送检样本负责"
+    # SimSun is present on Windows and has deterministic Songti/Noto Serif CJK
+    # substitutions in the isolated LibreOffice profiles used on macOS/Linux.
+    font_name: "宋体"
   show_hla_table: false
   part3_variant_scope: "summary_variants"
   part3_reference_variant_scope: "summary_variants"
@@ -438,6 +445,13 @@ report_content:
   reference_style:
     font_name: "Calibri"
     font_size_pt: 10.5
+    line_spacing: 1.0
+    space_before_pt: 0
+    space_after_pt: 0
+    keep_with_next: false
+    keep_together: false
+    widow_control: false
+    page_break_before: false
   # 末页整页图在模板中以稳定的替代说明“报告末页”标识。
   # 使用绝对目标坐标而不是逐次左移，保证重复后处理不会累计漂移。
   back_cover_artwork:
@@ -448,6 +462,7 @@ report_content:
   # 标题自身的 pageBreakBefore 属性不会在标题已落在新页时
   # 额外制造空白页，也能经受 Word/LibreOffice 的目录刷新。
   force_page_break_before_headings:
+    - "2. 靶向药物相关检测结果"
     - "2.3 NCCN 推荐临床常规靶向药物相关基因检测结果（不限于本癌种）"
     - "结肠癌NCCN指南（2022 V1）和直肠癌NCCN指南（2022 V1）"
     - "3. 阅读说明"
@@ -529,7 +544,10 @@ report_content:
         - "邮箱：marvel@marvelbio.com"
         - "网站：www.marvelbio.com"
   gene_list_table_style:
-    row_height_cm: 0.88
+    # 358 genes occupy 52 data rows. 0.88 cm left the final one-cell row on
+    # an otherwise empty third page in LibreOffice; 0.84 cm keeps the reviewed
+    # 10.5 pt type while allowing the list to close in two pages.
+    row_height_cm: 0.84
     header_font_size: 14.0
     body_font_size: 10.5
 

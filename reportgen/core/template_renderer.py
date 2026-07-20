@@ -61,6 +61,7 @@ class TemplateRenderer:
         output_path: str,
         post_processor_names: Optional[Sequence[str]] = None,
         critical_processor_names: Optional[Sequence[str]] = None,
+        template_context: Optional[dict[str, Any]] = None,
     ) -> str:
         """
         渲染模板并保存
@@ -102,8 +103,15 @@ class TemplateRenderer:
             # 加载模板
             doc = DocxTemplate(template_path)
 
-            # 获取模板上下文
-            context = self.build_context(report_data)
+            # Reuse the exact context that passed the generator's template
+            # contract when supplied. Rebuilding here used to drop private
+            # release-gate fields such as ``_require_deterministic_layout`` and
+            # silently let production CRC reports bypass the TOC gate.
+            context = (
+                self._normalize_template_context(template_context)
+                if template_context is not None
+                else self.build_context(report_data)
+            )
 
             self.logger.debug(
                 "模板上下文",
@@ -201,11 +209,7 @@ class TemplateRenderer:
             if critical_processor_names is None
             else critical_processor_names
         )
-        critical_errors = [
-            row
-            for row in errors
-            if row.get("name") in critical_names
-        ]
+        critical_errors = [row for row in errors if row.get("name") in critical_names]
         if critical_errors:
             summary = "; ".join(
                 f"{row.get('name')}: {row.get('error') or row.get('warning_message') or 'failed'}"
@@ -477,9 +481,8 @@ class TemplateRenderer:
             next_idx = idx + 1
 
             for line in lines[1:]:
-                if (
-                    next_idx < len(paragraphs)
-                    and is_empty_numbered_placeholder(paragraphs[next_idx])
+                if next_idx < len(paragraphs) and is_empty_numbered_placeholder(
+                    paragraphs[next_idx]
                 ):
                     cursor = paragraphs[next_idx]
                     set_text(cursor, line)
@@ -487,9 +490,8 @@ class TemplateRenderer:
                 else:
                     cursor = insert_numbered_after(cursor, line)
 
-            while (
-                next_idx < len(paragraphs)
-                and is_empty_numbered_placeholder(paragraphs[next_idx])
+            while next_idx < len(paragraphs) and is_empty_numbered_placeholder(
+                paragraphs[next_idx]
             ):
                 remove_paragraph(paragraphs[next_idx])
                 next_idx += 1
@@ -553,7 +555,11 @@ class TemplateRenderer:
 
         for paragraph in doc.paragraphs:
             text = paragraph.text or ""
-            if "对委托人" not in text or "DNA" not in text or "基因进行检测" not in text:
+            if (
+                "对委托人" not in text
+                or "DNA" not in text
+                or "基因进行检测" not in text
+            ):
                 continue
 
             in_fill = False
@@ -621,13 +627,18 @@ class TemplateRenderer:
                 changed = True
 
         for paragraph in doc.element.xpath(".//w:p"):
-            paragraph_text = "".join(node.text or "" for node in paragraph.xpath(".//w:t"))
+            paragraph_text = "".join(
+                node.text or "" for node in paragraph.xpath(".//w:t")
+            )
             if not (
                 (
                     "尊敬的" in paragraph_text
                     and ("先生" in paragraph_text or "女士" in paragraph_text)
                 )
-                or ("感谢您选择本机构" in paragraph_text and "检测项目" in paragraph_text)
+                or (
+                    "感谢您选择本机构" in paragraph_text
+                    and "检测项目" in paragraph_text
+                )
             ):
                 continue
 
@@ -901,6 +912,7 @@ class TemplateRenderer:
             may continue a previous list and render "3. 基因变异解析" instead of
             the reviewed "1. 基因变异解析".
             """
+
             def paragraph_num_id(paragraph) -> str | None:
                 p_pr = paragraph._p.pPr
                 if p_pr is None:
@@ -909,11 +921,7 @@ class TemplateRenderer:
                 if num_pr is None:
                     return None
                 num_id_elem = num_pr.find(qn("w:numId"))
-                return (
-                    num_id_elem.get(qn("w:val"))
-                    if num_id_elem is not None
-                    else None
-                )
+                return num_id_elem.get(qn("w:val")) if num_id_elem is not None else None
 
             used_all = {
                 num_id
@@ -954,7 +962,9 @@ class TemplateRenderer:
             for num in nroot.findall(w_num):
                 num_id = num.get(w_num_id)
                 abstract_ref = num.find(w_abstract_num_id)
-                abstract_id = abstract_ref.get(w_val) if abstract_ref is not None else None
+                abstract_id = (
+                    abstract_ref.get(w_val) if abstract_ref is not None else None
+                )
                 abstract = abstract_by_id.get(abstract_id)
                 if not num_id or abstract is None:
                     continue
@@ -1154,7 +1164,9 @@ class TemplateRenderer:
                 set_ind_xml(paragraph, left=420, hanging=420)
                 set_spacing(paragraph, before=200, after=0)
                 set_keep_next(paragraph, True)
-                style_runs(paragraph, bold=True, underline=False, size=12, color="FF0000")
+                style_runs(
+                    paragraph, bold=True, underline=False, size=12, color="FF0000"
+                )
                 awaiting_drug_names = True
                 changed = True
                 continue
@@ -1165,9 +1177,11 @@ class TemplateRenderer:
             ):
                 ensure_num_pr(paragraph, 12)
                 set_ind_xml(paragraph, left=420, hanging=420)
-                set_spacing(paragraph, before=200, after=0)
+                set_spacing(paragraph, before=200, after=200)
                 set_keep_next(paragraph, True)
-                style_runs(paragraph, bold=True, underline=True, size=12, color="0000FF")
+                style_runs(
+                    paragraph, bold=True, underline=True, size=12, color="0000FF"
+                )
                 changed = True
                 continue
 
@@ -1188,7 +1202,7 @@ class TemplateRenderer:
             # indent and both-side alignment for gene/drug analyses.
             paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             set_ind_xml(paragraph, first_line=420, first_line_chars=200)
-            set_spacing(paragraph, after=0)
+            set_spacing(paragraph, after=200)
             set_keep_next(paragraph, False)
             style_runs(paragraph, bold=False, underline=False, size=10.5)
             changed = True
@@ -1237,7 +1251,9 @@ class TemplateRenderer:
         def is_variant_summary_table(table) -> bool:
             if len(table.columns) != 4 or not table.rows:
                 return False
-            header = " ".join(cell.text.replace("\n", "") for cell in table.rows[0].cells)
+            header = " ".join(
+                cell.text.replace("\n", "") for cell in table.rows[0].cells
+            )
             return (
                 "基因" in header
                 and "突变位点" in header
@@ -1686,9 +1702,7 @@ class TemplateRenderer:
         if changed:
             doc.save(file_path)
 
-    def _apply_targeted_drug_brand_summary(
-        self, file_path: str, context: dict
-    ) -> None:
+    def _apply_targeted_drug_brand_summary(self, file_path: str, context: dict) -> None:
         """Render the targeted-drug brand note for slim golden-template chains.
 
         CRC golden templates deliberately skip the broad ``report_content``
@@ -1734,10 +1748,7 @@ class TemplateRenderer:
 
         brand_summary = str(context.get("targeted_drug_brand_summary") or "").strip()
         if brand_summary:
-            desired = (
-                "2.上表涉及的已上市的药物名称及对应的商品名称："
-                f"{brand_summary}"
-            )
+            desired = f"2.上表涉及的已上市的药物名称及对应的商品名称：{brand_summary}"
         else:
             desired = "2.上表未涉及可汇总商品名的已上市药物。"
         if (targeted.text or "") == desired:
@@ -1853,6 +1864,7 @@ class TemplateRenderer:
 
         from docx.oxml import OxmlElement
         from docx.oxml.ns import qn
+        from docx.shared import Pt
 
         def normalized_status(value) -> str:
             return str(value or "").strip().upper()
@@ -1876,16 +1888,14 @@ class TemplateRenderer:
         def has_known(field: str) -> bool:
             status = normalized_status(context.get(field))
             return bool(
-                status
-                and status not in {"未检测", "NOT DETECTED", "NA", "N/A", "NONE"}
+                status and status not in {"未检测", "NOT DETECTED", "NA", "N/A", "NONE"}
             )
 
         def has_conflict() -> bool:
             tmb_positive = has_tmb_h()
             msi_positive = has_msi_h()
-            return (
-                (tmb_positive and has_known("msi_status") and not msi_positive)
-                or (msi_positive and has_known("tmb_status") and not tmb_positive)
+            return (tmb_positive and has_known("msi_status") and not msi_positive) or (
+                msi_positive and has_known("tmb_status") and not tmb_positive
             )
 
         def set_paragraph_text(paragraph, text: str) -> bool:
@@ -1943,9 +1953,10 @@ class TemplateRenderer:
                     base = re.sub(r"\s+。", "。", note_text).rstrip()
                     if base and not base.endswith("。"):
                         base += "。"
-                    changed = set_paragraph_text(
-                        immune_note2, base + tmb_h_sentence
-                    ) or changed
+                    changed = (
+                        set_paragraph_text(immune_note2, base + tmb_h_sentence)
+                        or changed
+                    )
             elif has_sentence:
                 new_text = re.sub(
                     r"\s+。", "。", tmb_h_sentence_re.sub("", note_text)
@@ -1981,9 +1992,34 @@ class TemplateRenderer:
             match = re.match(r"^\s*(\d+)\s*[.\．]", joined)
             if match and match.group(1) != str(target_num):
                 body = re.sub(r"^\s*\d+\s*[.\．]\s*", "", joined, count=1)
-                changed = set_paragraph_text(
-                    immune_drugnames, f"{target_num}. {body}"
-                ) or changed
+                changed = (
+                    set_paragraph_text(immune_drugnames, f"{target_num}. {body}")
+                    or changed
+                )
+
+            # This reviewed note can contain many approved drug/brand pairs.
+            # Keep it compact enough to close with the biomarker table; without
+            # an explicit note style, two trailing lines were stranded on an
+            # otherwise empty page immediately before the forced Part-2 page.
+            note_style = self._panel_style_config(context, "biomarker_table")
+            note_font_size = self._float_config(note_style.get("note_font_size"), 8.0)
+            note_line_spacing = self._float_config(
+                note_style.get("note_line_spacing"), 1.0
+            )
+            fmt = immune_drugnames.paragraph_format
+            if fmt.space_before is None or fmt.space_before.pt != 0:
+                fmt.space_before = Pt(0)
+                changed = True
+            if fmt.space_after is None or fmt.space_after.pt != 0:
+                fmt.space_after = Pt(0)
+                changed = True
+            if fmt.line_spacing != note_line_spacing:
+                fmt.line_spacing = note_line_spacing
+                changed = True
+            for run in immune_drugnames.runs:
+                if run.font.size is None or run.font.size.pt != note_font_size:
+                    run.font.size = Pt(note_font_size)
+                    changed = True
 
         return changed
 
@@ -2095,7 +2131,9 @@ class TemplateRenderer:
                 if space_after_pt is not None:
                     spacing.set(qn("w:after"), str(int(float(space_after_pt) * 20)))
                 if line_spacing_multiple is not None:
-                    spacing.set(qn("w:line"), str(int(float(line_spacing_multiple) * 240)))
+                    spacing.set(
+                        qn("w:line"), str(int(float(line_spacing_multiple) * 240))
+                    )
                     spacing.set(qn("w:lineRule"), "auto")
                 get_ppr().append(spacing)
             if ppr is not None:
@@ -2316,18 +2354,21 @@ class TemplateRenderer:
 
         def has_known_tmb() -> bool:
             status = normalized_status(context.get("tmb_status"))
-            return bool(status and status not in {"未检测", "NOT DETECTED", "NA", "N/A", "NONE"})
+            return bool(
+                status and status not in {"未检测", "NOT DETECTED", "NA", "N/A", "NONE"}
+            )
 
         def has_known_msi() -> bool:
             status = normalized_status(context.get("msi_status"))
-            return bool(status and status not in {"未检测", "NOT DETECTED", "NA", "N/A", "NONE"})
+            return bool(
+                status and status not in {"未检测", "NOT DETECTED", "NA", "N/A", "NONE"}
+            )
 
         def has_immune_biomarker_conflict() -> bool:
             tmb_positive = has_tmb_h()
             msi_positive = has_msi_h()
-            return (
-                (tmb_positive and has_known_msi() and not msi_positive)
-                or (msi_positive and has_known_tmb() and not tmb_positive)
+            return (tmb_positive and has_known_msi() and not msi_positive) or (
+                msi_positive and has_known_tmb() and not tmb_positive
             )
 
         def compact_date(text: str) -> str:
@@ -2382,9 +2423,12 @@ class TemplateRenderer:
                     for cell in row.cells:
                         if sample_id and sample_id in cell.text:
                             for p in cell.paragraphs:
-                                changed = replace_in_runs(
-                                    p, lambda s: s.replace(sample_id, project_code)
-                                ) or changed
+                                changed = (
+                                    replace_in_runs(
+                                        p, lambda s: s.replace(sample_id, project_code)
+                                    )
+                                    or changed
+                                )
                     break
 
         # 301/358 report body should reflect the selected project gene count.
@@ -2393,21 +2437,34 @@ class TemplateRenderer:
         if panel_match:
             panel_count = panel_match.group(1)
             for paragraph in doc.paragraphs:
-                if "与肿瘤密切相关的" in (paragraph.text or "") and "个基因" in paragraph.text:
+                if (
+                    "与肿瘤密切相关的" in (paragraph.text or "")
+                    and "个基因" in paragraph.text
+                ):
                     # The numeric token is split into its own run in the template.
                     for run in paragraph.runs:
                         if run.text.strip().isdigit():
                             run.text = re.sub(r"\d+", panel_count, run.text)
                             changed = True
-                    changed = replace_in_runs(
-                        paragraph,
-                        lambda s: re.sub(r"与肿瘤密切相关的\d+个基因", f"与肿瘤密切相关的{panel_count}个基因", s),
-                    ) or changed
+                    changed = (
+                        replace_in_runs(
+                            paragraph,
+                            lambda s: re.sub(
+                                r"与肿瘤密切相关的\d+个基因",
+                                f"与肿瘤密切相关的{panel_count}个基因",
+                                s,
+                            ),
+                        )
+                        or changed
+                    )
 
-        changed = self._apply_targeted_drug_brand_summary_to_doc(
-            doc,
-            context,
-        ) or changed
+        changed = (
+            self._apply_targeted_drug_brand_summary_to_doc(
+                doc,
+                context,
+            )
+            or changed
+        )
 
         # Immune-table conditional footnotes (TMB-H sentence / biomarker-conflict
         # note) + numbering. Extracted so the golden-template chain (which skips
@@ -2418,7 +2475,9 @@ class TemplateRenderer:
         # were requested to be removed from this location.
         remove_markers = ("送检医院", "病理号", "平均深度", "Q30", "覆盖度")
         for table in doc.tables:
-            if not any("项目编码" in cell.text for row in table.rows for cell in row.cells):
+            if not any(
+                "项目编码" in cell.text for row in table.rows for cell in row.cells
+            ):
                 continue
             for row in list(table.rows):
                 row_text = " ".join(cell.text for cell in row.cells)
@@ -2459,11 +2518,15 @@ class TemplateRenderer:
         # template. The inserted paragraphs are configured under
         # settings.report_content.patient_letter.
         letter_text = "\n".join(p.text or "" for p in iter_all_paragraphs(doc))
-        letter_cfg = content_cfg.get("patient_letter") if isinstance(content_cfg, dict) else {}
+        letter_cfg = (
+            content_cfg.get("patient_letter") if isinstance(content_cfg, dict) else {}
+        )
         letter_cfg = letter_cfg if isinstance(letter_cfg, dict) else {}
         greeting_specs = self._paragraph_specs(letter_cfg.get("after_greeting"))
         modern_specs = self._paragraph_specs(letter_cfg.get("after_modern_medicine"))
-        configured_letter_text = "\n".join(text for text, _ in greeting_specs + modern_specs)
+        configured_letter_text = "\n".join(
+            text for text, _ in greeting_specs + modern_specs
+        )
         has_configured_letter = bool(configured_letter_text) and all(
             text and text in letter_text
             for text, _ in greeting_specs + modern_specs
@@ -2516,7 +2579,9 @@ class TemplateRenderer:
         # Restore configured company-introduction tail pages after the NGS method
         # limitation section.
         full_text = "\n".join(p.text or "" for p in iter_all_paragraphs(doc))
-        tail_cfg = content_cfg.get("tail_content") if isinstance(content_cfg, dict) else {}
+        tail_cfg = (
+            content_cfg.get("tail_content") if isinstance(content_cfg, dict) else {}
+        )
         tail_cfg = tail_cfg if isinstance(tail_cfg, dict) else {}
         tail_marker = str(tail_cfg.get("marker_text") or "").strip()
         tail_anchor = str(tail_cfg.get("anchor_text") or "").strip()
@@ -2804,7 +2869,11 @@ class TemplateRenderer:
         ]
         for tbl in list(doc.tables):
             if len(tbl.rows) <= 1:  # 只有表头，无数据行
-                header_text = " ".join(c.text.strip() for c in tbl.rows[0].cells) if tbl.rows else ""
+                header_text = (
+                    " ".join(c.text.strip() for c in tbl.rows[0].cells)
+                    if tbl.rows
+                    else ""
+                )
                 for markers, name in cnv_fusion_markers:
                     if all(m in header_text for m in markers):
                         tbl._tbl.getparent().remove(tbl._tbl)
@@ -2815,7 +2884,9 @@ class TemplateRenderer:
             removed += tables_removed  # ensure save happens
 
         if removed or tables_removed:
-            self.logger.debug("移除空白表格行", removed_rows=removed, removed_tables=tables_removed)
+            self.logger.debug(
+                "移除空白表格行", removed_rows=removed, removed_tables=tables_removed
+            )
             doc.save(file_path)
 
     def _cleanup_cover_artifacts(self, file_path: str) -> None:
@@ -2910,7 +2981,7 @@ class TemplateRenderer:
         if last_content_idx is None:
             return
 
-        trailing = children[last_content_idx + 1:content_end]
+        trailing = children[last_content_idx + 1 : content_end]
         if any(not is_ignorable_tail_element(elem) for elem in trailing):
             return
 
@@ -3025,8 +3096,7 @@ class TemplateRenderer:
 
         def has_page_break(elem) -> bool:
             return any(
-                (br.get(w_type) or br.get("type")) == "page"
-                for br in elem.iter(w_br)
+                (br.get(w_type) or br.get("type")) == "page" for br in elem.iter(w_br)
             ) or any(elem.iter(w_last_rendered_page_break))
 
         def is_blank_paragraph(elem) -> bool:
@@ -3234,9 +3304,7 @@ class TemplateRenderer:
         labels_kept = 0
 
         def element_text(element) -> str:
-            return "".join(
-                node.text or "" for node in element.iter(qn("w:t"))
-            ).strip()
+            return "".join(node.text or "" for node in element.iter(qn("w:t"))).strip()
 
         def is_pathway_table(element) -> bool:
             if element.tag != qn("w:tbl"):
@@ -3250,9 +3318,7 @@ class TemplateRenderer:
         def is_standalone_page_break(element) -> bool:
             if element.tag != qn("w:p") or element_text(element):
                 return False
-            if any(element.iter(qn("w:drawing"))) or any(
-                element.iter(qn("w:pict"))
-            ):
+            if any(element.iter(qn("w:drawing"))) or any(element.iter(qn("w:pict"))):
                 return False
             if any(element.iter(qn("w:sectPr"))):
                 return False
@@ -3276,9 +3342,7 @@ class TemplateRenderer:
             """
             if element.tag != qn("w:p") or element_text(element):
                 return False
-            if any(element.iter(qn("w:drawing"))) or any(
-                element.iter(qn("w:pict"))
-            ):
+            if any(element.iter(qn("w:drawing"))) or any(element.iter(qn("w:pict"))):
                 return False
             return not any(element.iter(qn("w:sectPr")))
 
@@ -3546,7 +3610,11 @@ class TemplateRenderer:
 
         with ZipFile(file_path, "r") as zin:
             document_xml = zin.read("word/document.xml")
-            other_entries = [(info, zin.read(info.filename)) for info in zin.infolist() if info.filename != "word/document.xml"]
+            other_entries = [
+                (info, zin.read(info.filename))
+                for info in zin.infolist()
+                if info.filename != "word/document.xml"
+            ]
 
         root = ET.fromstring(document_xml)
         removed = 0
@@ -3581,7 +3649,11 @@ class TemplateRenderer:
                         sectpr = copy.deepcopy(current_sectpr)
                         break
 
-                if sectpr is not None and prev_idx >= 0 and children[prev_idx].tag == w_p:
+                if (
+                    sectpr is not None
+                    and prev_idx >= 0
+                    and children[prev_idx].tag == w_p
+                ):
                     target_p = children[prev_idx]
                     target_ppr = target_p.find(w_ppr)
                     if target_ppr is None:
@@ -3662,17 +3734,20 @@ class TemplateRenderer:
         def has_following_paragraph(prefix: str) -> bool:
             current = placeholder_para._element.getnext()
             while current is not None:
-                if (
-                    current.tag == qn("w:p")
-                    and element_text(current).strip().startswith(prefix)
-                ):
+                if current.tag == qn("w:p") and element_text(
+                    current
+                ).strip().startswith(prefix):
                     return True
                 current = current.getnext()
             return False
 
         amino_table_element = None
         previous = placeholder_para._element.getprevious()
-        if previous is not None and previous.tag == qn("w:tbl") and "氨基酸缩写" in element_text(previous):
+        if (
+            previous is not None
+            and previous.tag == qn("w:tbl")
+            and "氨基酸缩写" in element_text(previous)
+        ):
             amino_table_element = previous
             amino_table_element.getparent().remove(amino_table_element)
 
@@ -3855,7 +3930,7 @@ class TemplateRenderer:
             "justify": True,
             "first_line_twips": 420,
             "first_line_chars": 200,
-            "spacing_after": 0,
+            "spacing_after": 200,
         }
         label_options = {
             "bold": True,
@@ -3883,7 +3958,8 @@ class TemplateRenderer:
 
             # 变异标题：bold, 12pt, red/blue, 前缀圆点 "● "
             current = add_para_after(
-                current, header,
+                current,
+                header,
                 bold=True,
                 size=12,
                 color=header_color,
@@ -3899,32 +3975,27 @@ class TemplateRenderer:
             # 基因简介（紧跟标题，无多余空行）
             intro = section.get("intro", "")
             if intro:
-                current = add_para_after(
-                    current, "基因简介：", **label_options
-                )
+                current = add_para_after(current, "基因简介：", **label_options)
                 current = add_text_block(current, intro, **body_options)
 
             # 基因变异说明
             desc = section.get("mutation_desc", "")
             if desc:
-                current = add_para_after(
-                    current, "基因变异说明：", **label_options
-                )
+                current = add_para_after(current, "基因变异说明：", **label_options)
                 current = add_text_block(current, desc, **body_options)
 
             # 基因变异解析
             analysis = section.get("mutation_analysis", "")
             if analysis:
-                current = add_para_after(
-                    current, "基因变异解析：", **label_options
-                )
+                current = add_para_after(current, "基因变异解析：", **label_options)
                 current = add_text_block(current, analysis, **body_options)
 
         # === 靶向药物解析 ===
         if benefit_sections or caution_sections:
             current = add_para_after(current, "")
             current = add_para_after(
-                current, "靶向药物/免疫用药提示解析",
+                current,
+                "靶向药物/免疫用药提示解析",
                 bold=True,
                 size=12,
                 justify=True,
@@ -3935,7 +4006,8 @@ class TemplateRenderer:
         # 获益药物
         if benefit_sections:
             current = add_para_after(
-                current, "潜在获益靶向/免疫药物解析",
+                current,
+                "潜在获益靶向/免疫药物解析",
                 bold=True,
                 size=12,
                 spacing_before=200,
@@ -3960,7 +4032,9 @@ class TemplateRenderer:
                     current = add_para_after(
                         current,
                         header,
-                        bold=True, size=12, color="FF0000",
+                        bold=True,
+                        size=12,
+                        color="FF0000",
                         justify=True,
                         spacing_before=200,
                         left_twips=420,
@@ -3979,6 +4053,7 @@ class TemplateRenderer:
                         underline=True,
                         justify=True,
                         spacing_before=200,
+                        spacing_after=200,
                         left_twips=420,
                         hanging_twips=420,
                         num_id=12,
@@ -4002,7 +4077,8 @@ class TemplateRenderer:
         # 负相关药物
         if caution_sections:
             current = add_para_after(
-                current, "潜在负相关靶向/免疫药物解析",
+                current,
+                "潜在负相关靶向/免疫药物解析",
                 bold=True,
                 size=12,
                 spacing_before=200,
@@ -4026,7 +4102,9 @@ class TemplateRenderer:
                     current = add_para_after(
                         current,
                         header,
-                        bold=True, size=12, color="FF0000",
+                        bold=True,
+                        size=12,
+                        color="FF0000",
                         justify=True,
                         spacing_before=200,
                         left_twips=420,
@@ -4045,6 +4123,7 @@ class TemplateRenderer:
                         underline=True,
                         justify=True,
                         spacing_before=200,
+                        spacing_after=200,
                         left_twips=420,
                         hanging_twips=420,
                         num_id=12,
@@ -4071,8 +4150,10 @@ class TemplateRenderer:
         # static final reference section after Part 3.
         if references and not has_static_reference_section:
             current = add_para_after(
-                current, "参考文献",
-                bold=True, size=12,
+                current,
+                "参考文献",
+                bold=True,
+                size=12,
             )
             current = add_para_after(current, "")
             for ref in references:
@@ -4103,15 +4184,67 @@ class TemplateRenderer:
             references=len(references),
         )
 
-    def _normalize_reference_section_style(
-        self, file_path: str, context: dict
-    ) -> None:
-        """Apply the configured font to reference entries, excluding the heading.
+    def _normalize_legal_notice_style(self, file_path: str, context: dict) -> None:
+        """Bind the fixed legal notice to an explicit East Asian font.
+
+        Word templates can carry only ``ascii``/``hAnsi`` font attributes on
+        Chinese runs.  LibreOffice then selects a platform-dependent fallback
+        and may render the legal notice as square glyphs.  Match the notice by
+        configured semantic text (never by page number) and write all three
+        font attributes so the final DOCX is renderer-independent.
+        """
+        from docx.oxml.ns import qn
+
+        content_cfg = self._report_content_config(context)
+        style_cfg = content_cfg.get("legal_notice_style")
+        if not isinstance(style_cfg, dict):
+            return
+
+        marker = str(style_cfg.get("marker") or "").strip()
+        font_name = str(style_cfg.get("font_name") or "").strip()
+        consultation_line = str(context.get("consultation_line") or "").strip()
+        if not marker or not font_name:
+            return
+
+        doc = Document(file_path)
+        font_attrs = tuple(qn(f"w:{name}") for name in ("ascii", "hAnsi", "eastAsia"))
+        changed_runs = 0
+        matched_paragraphs = 0
+        for paragraph in doc.paragraphs:
+            text = (paragraph.text or "").strip()
+            is_notice = marker in text
+            is_consultation = bool(consultation_line) and text == consultation_line
+            if not (is_notice or is_consultation):
+                continue
+            matched_paragraphs += 1
+            for run in paragraph.runs:
+                r_pr = run._element.get_or_add_rPr()
+                r_fonts = r_pr.rFonts
+                if r_fonts is not None and all(
+                    r_fonts.get(attr) == font_name for attr in font_attrs
+                ):
+                    continue
+                self._set_run_font_name(run, font_name)
+                changed_runs += 1
+
+        if changed_runs:
+            doc.save(file_path)
+            self.logger.debug(
+                "已规范法律声明页中文字体",
+                font=font_name,
+                paragraphs=matched_paragraphs,
+                runs=changed_runs,
+            )
+
+    def _normalize_reference_section_style(self, file_path: str, context: dict) -> None:
+        """Apply configured run and paragraph style to reference entries.
 
         The reviewed CRC template stores reference entries in the ``Normal``
         style, whose effective font can vary between Word and LibreOffice.
         Direct run formatting is therefore used for the bounded reference list
-        only.  Heading and following QC/method/company sections are untouched.
+        only.  Paragraph spacing is also made explicit so a template's inherited
+        1.3-line spacing cannot strand the final references on a sparse page.
+        Heading and following QC/method/company sections are untouched.
         """
         from docx.oxml.ns import qn
         from docx.shared import Pt
@@ -4129,6 +4262,13 @@ class TemplateRenderer:
         font_size_pt = self._float_config(font_size_raw, 10.5)
         if font_size_pt <= 0:
             return
+        line_spacing = self._float_config(style_cfg.get("line_spacing"), 1.0)
+        space_before_pt = self._float_config(style_cfg.get("space_before_pt"), 0.0)
+        space_after_pt = self._float_config(style_cfg.get("space_after_pt"), 0.0)
+        keep_with_next = self._bool_config(style_cfg.get("keep_with_next"), False)
+        keep_together = self._bool_config(style_cfg.get("keep_together"), False)
+        widow_control = self._bool_config(style_cfg.get("widow_control"), False)
+        page_break_before = self._bool_config(style_cfg.get("page_break_before"), False)
 
         doc = Document(file_path)
         start, end = find_reference_section_bounds(doc.paragraphs)
@@ -4136,10 +4276,37 @@ class TemplateRenderer:
             return
 
         changed_runs = 0
+        changed_paragraphs = 0
         font_attrs = tuple(qn(f"w:{name}") for name in ("ascii", "hAnsi", "eastAsia"))
         for paragraph in doc.paragraphs[start + 1 : end]:
             if not (paragraph.text or "").strip():
                 continue
+            fmt = paragraph.paragraph_format
+            paragraph_changed = False
+
+            if fmt.line_spacing != line_spacing:
+                fmt.line_spacing = line_spacing
+                paragraph_changed = True
+            for attr, target_pt in (
+                ("space_before", space_before_pt),
+                ("space_after", space_after_pt),
+            ):
+                current = getattr(fmt, attr)
+                if current is None or abs(current.pt - target_pt) >= 0.01:
+                    setattr(fmt, attr, Pt(target_pt))
+                    paragraph_changed = True
+            for attr, target in (
+                ("keep_with_next", keep_with_next),
+                ("keep_together", keep_together),
+                ("widow_control", widow_control),
+                ("page_break_before", page_break_before),
+            ):
+                if getattr(fmt, attr) != target:
+                    setattr(fmt, attr, target)
+                    paragraph_changed = True
+            if paragraph_changed:
+                changed_paragraphs += 1
+
             for run_element in paragraph._p.iter(qn("w:r")):
                 run = Run(run_element, paragraph)
                 r_pr = run._element.get_or_add_rPr()
@@ -4158,13 +4325,14 @@ class TemplateRenderer:
                 run.font.size = Pt(font_size_pt)
                 changed_runs += 1
 
-        if changed_runs:
+        if changed_runs or changed_paragraphs:
             doc.save(file_path)
             self.logger.debug(
                 "已规范参考文献正文样式",
                 font=font_name,
                 size_pt=font_size_pt,
                 runs=changed_runs,
+                paragraphs=changed_paragraphs,
             )
 
     def _normalize_back_cover_artwork(self, file_path: str, context: dict) -> None:
@@ -4183,20 +4351,16 @@ class TemplateRenderer:
         if not isinstance(cover_cfg, dict):
             return
 
-        description_marker = str(
-            cover_cfg.get("description_marker") or ""
-        ).strip()
-        horizontal_alignment = str(
-            cover_cfg.get("horizontal_alignment") or ""
-        ).strip().lower()
+        description_marker = str(cover_cfg.get("description_marker") or "").strip()
+        horizontal_alignment = (
+            str(cover_cfg.get("horizontal_alignment") or "").strip().lower()
+        )
         offset_raw = cover_cfg.get("horizontal_offset_cm")
         if not description_marker or (
             horizontal_alignment != "page_left" and offset_raw is None
         ):
             return
-        relative_from = str(
-            cover_cfg.get("horizontal_relative_from") or ""
-        ).strip()
+        relative_from = str(cover_cfg.get("horizontal_relative_from") or "").strip()
 
         wp_anchor = qn("wp:anchor")
         wp_doc_pr = qn("wp:docPr")
@@ -4207,9 +4371,7 @@ class TemplateRenderer:
         if horizontal_alignment == "page_left":
             if not doc.sections:
                 return
-            inset_cm = self._float_config(
-                cover_cfg.get("page_left_inset_cm"), 0.0
-            )
+            inset_cm = self._float_config(cover_cfg.get("page_left_inset_cm"), 0.0)
             # The final-page drawing is positioned relative to the text column.
             # Negating the final section's left margin aligns its nearly-A4-width
             # image to the physical page edge without encoding a template-specific
@@ -4225,7 +4387,10 @@ class TemplateRenderer:
         changed = 0
         for anchor in doc.element.body.iter(wp_anchor):
             doc_pr = anchor.find(wp_doc_pr)
-            if doc_pr is None or (doc_pr.get("descr") or "").strip() != description_marker:
+            if (
+                doc_pr is None
+                or (doc_pr.get("descr") or "").strip() != description_marker
+            ):
                 continue
             position_h = anchor.find(wp_position_h)
             pos_offset = (
@@ -4290,9 +4455,7 @@ class TemplateRenderer:
         # 把原静态参考文献也解析进映射（KB 优先、静态补缺），使静态附录章节
         # （诊疗知识/信号通路等）引用的 PMID 仍能保留全文，不退化为无标题兜底。
         existing = [
-            p
-            for p in paragraphs[ref_idx + 1 : ref_end_idx]
-            if (p.text or "").strip()
+            p for p in paragraphs[ref_idx + 1 : ref_end_idx] if (p.text or "").strip()
         ]
         for paragraph in existing:
             entry = (paragraph.text or "").strip()
@@ -4370,7 +4533,7 @@ class TemplateRenderer:
             set_para_text(Paragraph(new_el, existing[0]._parent), refs[i])
 
         # 引用少于静态条目 → 删除多余静态条目
-        for paragraph in existing[len(refs):]:
+        for paragraph in existing[len(refs) :]:
             paragraph._p.getparent().remove(paragraph._p)
 
         doc.save(file_path)
@@ -4483,14 +4646,18 @@ class TemplateRenderer:
             "reviewer": str(context.get("reviewer_signature_image_path") or "").strip(),
         }
         role_paths = {
-            role: path for role, path in role_paths.items() if path and Path(path).exists()
+            role: path
+            for role, path in role_paths.items()
+            if path and Path(path).exists()
         }
 
         def paragraph_text(paragraph) -> str:
             return "".join(paragraph.xpath(".//w:t/text()", namespaces=ns))
 
         def drawing_offset(drawing, fallback: int) -> tuple[int, int]:
-            offsets = drawing.xpath(".//wp:positionH/wp:posOffset/text()", namespaces=ns)
+            offsets = drawing.xpath(
+                ".//wp:positionH/wp:posOffset/text()", namespaces=ns
+            )
             try:
                 return int(offsets[0]), fallback
             except Exception:
@@ -4535,7 +4702,10 @@ class TemplateRenderer:
             if extension in existing:
                 return
             elem = etree.SubElement(
-                root, f"{{{ns['ct']}}}Default", Extension=extension, ContentType=content_type
+                root,
+                f"{{{ns['ct']}}}Default",
+                Extension=extension,
+                ContentType=content_type,
             )
             root.append(elem)
 
@@ -4589,7 +4759,9 @@ class TemplateRenderer:
 
         def remove_drawing(drawing) -> None:
             drawing_container = drawing.getparent()
-            run = drawing_container.getparent() if drawing_container is not None else None
+            run = (
+                drawing_container.getparent() if drawing_container is not None else None
+            )
             if run is not None and run.tag.endswith("}r"):
                 parent = run.getparent()
                 if parent is not None:
@@ -4604,7 +4776,9 @@ class TemplateRenderer:
             if parent is not None:
                 parent.remove(drawing)
 
-        for role, (_, drawing, blip) in zip(("detector", "reviewer"), drawing_blips[:2]):
+        for role, (_, drawing, blip) in zip(
+            ("detector", "reviewer"), drawing_blips[:2]
+        ):
             image_path = role_paths.get(role)
             if not image_path:
                 remove_drawing(drawing)
@@ -4767,9 +4941,7 @@ class TemplateRenderer:
         report_date = str(
             context.get("report_date_dot") or context.get("report_date") or ""
         ).strip()
-        report_date = re.sub(
-            r"\b(\d{4})-(\d{2})-(\d{2})\b", r"\1.\2.\3", report_date
-        )
+        report_date = re.sub(r"\b(\d{4})-(\d{2})-(\d{2})\b", r"\1.\2.\3", report_date)
         add_text(f"        报告日期：{report_date}")
 
         doc.save(file_path)
@@ -4847,7 +5019,9 @@ class TemplateRenderer:
             append_run(paragraph, text)
             return paragraph
 
-        def set_anchor_offset(anchor, x: int | None = None, y: int | None = None) -> None:
+        def set_anchor_offset(
+            anchor, x: int | None = None, y: int | None = None
+        ) -> None:
             position_h = anchor.find(wp_position_h)
             if position_h is not None and x is not None:
                 pos = position_h.find(wp_pos_offset)
@@ -4889,7 +5063,9 @@ class TemplateRenderer:
             report_date = date_match.group(1).strip() if date_match else ""
             if not report_date:
                 report_date = str(context.get("report_date") or "").strip()
-            report_date = re.sub(r"\b(\d{4})-(\d{2})-(\d{2})\b", r"\1.\2.\3", report_date)
+            report_date = re.sub(
+                r"\b(\d{4})-(\d{2})-(\d{2})\b", r"\1.\2.\3", report_date
+            )
 
             date_text = f"报告日期：{report_date}" if report_date else "报告日期："
             replace_para_text(
@@ -4948,7 +5124,11 @@ class TemplateRenderer:
                     changed = True
 
             next_elem = children[idx + 1] if idx + 1 < len(children) else None
-            if next_elem is not None and next_elem.tag == w_p and para_text(next_elem).startswith("报告日期："):
+            if (
+                next_elem is not None
+                and next_elem.tag == w_p
+                and para_text(next_elem).startswith("报告日期：")
+            ):
                 body.remove(next_elem)
             changed = True
             break
@@ -4973,8 +5153,21 @@ class TemplateRenderer:
 
         self.logger.debug("已稳定签名区布局")
 
-    def _fit_tables_to_page_width(self, file_path: str) -> None:
-        """缩放超宽表格，使其不超过正文版心。"""
+    def _fit_tables_to_page_width(
+        self,
+        file_path: str,
+        context: dict | None = None,
+    ) -> None:
+        """Keep tables inside the text area and widen the reviewed 2.1 table.
+
+        The legacy behavior only shrank over-wide tables.  The report-group
+        feedback also requires the nine-column variant-detail table to use the
+        available text width when a template copy carries a narrower grid.
+        Expansion is deliberately limited to that table's structural headers
+        and is controlled by the panel style contract; unrelated tables retain
+        their authored widths.
+        """
+        from docx.oxml import OxmlElement
         from docx.oxml.ns import qn
 
         doc = Document(file_path)
@@ -4995,8 +5188,33 @@ class TemplateRenderer:
             return
 
         max_width = max(2000, min(content_widths))
-        namespaces = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        namespaces = {
+            "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        }
+        detail_style = self._panel_style_config(context, "variant_detail_table")
+        expand_detail = self._bool_config(
+            detail_style.get("fit_to_content_width"),
+            False,
+        )
+        minimum_ratio = self._float_config(
+            detail_style.get("minimum_content_width_ratio"),
+            0.98,
+        )
+        minimum_ratio = min(1.0, max(0.1, minimum_ratio))
         scaled = 0
+
+        def is_variant_detail_table(table) -> bool:
+            if len(table.columns) != 9 or len(table.rows) < 2:
+                return False
+            row0 = " ".join(cell.text.replace("\n", "") for cell in table.rows[0].cells)
+            row1 = " ".join(cell.text.replace("\n", "") for cell in table.rows[1].cells)
+            return (
+                "基因名称" in row0
+                and "基因突变信息" in row0
+                and "靶向药物信息" in row0
+                and "转录本号" in row1
+                and "潜在获益靶向药物" in row1
+            )
 
         for table in doc.tables:
             tbl = table._tbl
@@ -5008,17 +5226,38 @@ class TemplateRenderer:
             grid = tbl.find(qn("w:tblGrid"))
             grid_cols = [] if grid is None else grid.findall(qn("w:gridCol"))
             grid_width = sum(int(col.get(qn("w:w")) or 0) for col in grid_cols)
-            table_width = int(tbl_w.get(qn("w:w")) or 0) if tbl_w is not None else 0
+            table_width = 0
+            if tbl_w is not None and tbl_w.get(qn("w:type")) in (None, "dxa"):
+                table_width = int(tbl_w.get(qn("w:w")) or 0)
             current_width = max(grid_width, table_width)
 
-            if current_width <= 0 or current_width <= max_width:
+            if current_width <= 0:
+                continue
+
+            is_detail = is_variant_detail_table(table)
+            should_shrink = current_width > max_width
+            should_expand = (
+                expand_detail
+                and is_detail
+                and current_width < int(max_width * minimum_ratio)
+            )
+            if not should_shrink and not should_expand:
                 continue
 
             ratio = max_width / current_width
 
-            if tbl_w is not None:
-                tbl_w.set(qn("w:type"), "dxa")
-                tbl_w.set(qn("w:w"), str(max_width))
+            if tbl_w is None:
+                tbl_w = OxmlElement("w:tblW")
+                tbl_pr.insert(0, tbl_w)
+            tbl_w.set(qn("w:type"), "dxa")
+            tbl_w.set(qn("w:w"), str(max_width))
+
+            if should_expand:
+                layout = tbl_pr.find(qn("w:tblLayout"))
+                if layout is None:
+                    layout = OxmlElement("w:tblLayout")
+                    tbl_pr.append(layout)
+                layout.set(qn("w:type"), "fixed")
 
             for col in grid_cols:
                 original = int(col.get(qn("w:w")) or 0)
@@ -5037,7 +5276,9 @@ class TemplateRenderer:
 
         if scaled:
             doc.save(file_path)
-            self.logger.debug("已压缩超宽表格", scaled=scaled, max_width=max_width)
+            self.logger.debug(
+                "已适配表格至版心宽度", scaled=scaled, max_width=max_width
+            )
 
     def _optimize_variant_table_layout(self, file_path: str) -> None:
         """Reflow the 2.1 variant table into a readable portrait-page layout."""
@@ -5283,7 +5524,9 @@ class TemplateRenderer:
                     node.text or ""
                     for node in tc.findall(
                         ".//w:t",
-                        {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"},
+                        {
+                            "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                        },
                     )
                 )
             )
@@ -5348,12 +5591,8 @@ class TemplateRenderer:
         def merge_runs(table, *, start_row: int, columns: tuple[int, ...]) -> None:
             if len(table.rows) <= start_row:
                 return
-            physical_rows = [
-                row._tr.tc_lst for row in table.rows[start_row:]
-            ]
-            if any(
-                len(row_cells) <= max(columns) for row_cells in physical_rows
-            ):
+            physical_rows = [row._tr.tc_lst for row in table.rows[start_row:]]
+            if any(len(row_cells) <= max(columns) for row_cells in physical_rows):
                 return
             cells_by_column = {
                 column: [row_cells[column] for row_cells in physical_rows]
@@ -5382,13 +5621,9 @@ class TemplateRenderer:
             if not table.rows:
                 continue
             header = " ".join(cell.text for row in table.rows[:2] for cell in row.cells)
-            if all(
-                term in header for term in ("基因名称", "转录本号", "染色体")
-            ):
+            if all(term in header for term in ("基因名称", "转录本号", "染色体")):
                 merge_runs(table, start_row=2, columns=(0, 1, 2))
-            elif all(
-                term in header for term in ("检测基因", "检测内容", "检测结果")
-            ):
+            elif all(term in header for term in ("检测基因", "检测内容", "检测结果")):
                 merge_runs(table, start_row=1, columns=(0,))
 
         if changed:
@@ -5654,9 +5889,13 @@ class TemplateRenderer:
                 cx = emu_value(extent, f"{{{ns_wp}}}cx") or emu_value(extent, "cx")
                 cy = emu_value(extent, f"{{{ns_wp}}}cy") or emu_value(extent, "cy")
                 position_h = anchor.find(wp_position_h)
-                pos_offset = position_h.find(wp_pos_offset) if position_h is not None else None
+                pos_offset = (
+                    position_h.find(wp_pos_offset) if position_h is not None else None
+                )
                 position_v = anchor.find(wp_position_v)
-                v_pos_offset = position_v.find(wp_pos_offset) if position_v is not None else None
+                v_pos_offset = (
+                    position_v.find(wp_pos_offset) if position_v is not None else None
+                )
                 if pos_offset is None:
                     continue
 
@@ -5664,14 +5903,18 @@ class TemplateRenderer:
                     if pos_offset.text != str(line_offset_emu):
                         pos_offset.text = str(line_offset_emu)
                         changed += 1
-                    if v_pos_offset is not None and v_pos_offset.text != str(line_offset_top_emu):
+                    if v_pos_offset is not None and v_pos_offset.text != str(
+                        line_offset_top_emu
+                    ):
                         v_pos_offset.text = str(line_offset_top_emu)
                         changed += 1
                 elif "椭圆" in name and cx <= 200000 and cy <= 200000:
                     if pos_offset.text != str(circle_offset_emu):
                         pos_offset.text = str(circle_offset_emu)
                         changed += 1
-                    if v_pos_offset is not None and v_pos_offset.text != str(circle_offset_top_emu):
+                    if v_pos_offset is not None and v_pos_offset.text != str(
+                        circle_offset_top_emu
+                    ):
                         v_pos_offset.text = str(circle_offset_top_emu)
                         changed += 1
 
@@ -5679,9 +5922,17 @@ class TemplateRenderer:
                 style = shape.get("style") or ""
                 height = style_pt(style, "height")
                 width = style_pt(style, "width")
-                if shape.tag == v_line and height and width and height >= 200 and width <= 5:
+                if (
+                    shape.tag == v_line
+                    and height
+                    and width
+                    and height >= 200
+                    and width <= 5
+                ):
                     new_style = set_style_pt(style, "margin-left", line_margin_left_pt)
-                    new_style = set_style_pt(new_style, "margin-top", line_margin_top_pt)
+                    new_style = set_style_pt(
+                        new_style, "margin-top", line_margin_top_pt
+                    )
                 elif (
                     shape.tag == v_shape
                     and height
@@ -5689,8 +5940,12 @@ class TemplateRenderer:
                     and 3 <= height <= 12
                     and 3 <= width <= 12
                 ):
-                    new_style = set_style_pt(style, "margin-left", circle_margin_left_pt)
-                    new_style = set_style_pt(new_style, "margin-top", circle_margin_top_pt)
+                    new_style = set_style_pt(
+                        style, "margin-left", circle_margin_left_pt
+                    )
+                    new_style = set_style_pt(
+                        new_style, "margin-top", circle_margin_top_pt
+                    )
                 else:
                     continue
                 if new_style != style:
@@ -5734,9 +5989,11 @@ class TemplateRenderer:
             (context or {}).get("_require_deterministic_layout")
         )
         fast_toc = str(os.environ.get("REPORTGEN_FAST_TOC") or "").strip().lower()
-        skip_static = str(
-            os.environ.get("REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS") or ""
-        ).strip().lower()
+        skip_static = (
+            str(os.environ.get("REPORTGEN_SKIP_STATIC_TOC_PAGE_NUMBERS") or "")
+            .strip()
+            .lower()
+        )
         if fast_toc in {"1", "true", "yes", "y", "on"} or skip_static in {
             "1",
             "true",
@@ -5745,9 +6002,7 @@ class TemplateRenderer:
             "on",
         }:
             if require_deterministic_layout:
-                raise RuntimeError(
-                    "生产 Panel 禁止跳过目录缓存页码构建"
-                )
+                raise RuntimeError("生产 Panel 禁止跳过目录缓存页码构建")
             try:
                 self._set_update_fields(file_path)
             except Exception:
@@ -5779,9 +6034,7 @@ class TemplateRenderer:
                     )
                     if not available
                 ]
-                raise RuntimeError(
-                    "生产 Panel 缺少目录分页工具: " + ", ".join(missing)
-                )
+                raise RuntimeError("生产 Panel 缺少目录分页工具: " + ", ".join(missing))
             self.logger.debug(
                 "缺少 PDF 布局工具，跳过目录缓存页码构建",
                 soffice=bool(soffice),
@@ -5790,8 +6043,11 @@ class TemplateRenderer:
             )
             return
 
-        # Keep the cached preview reasonably close to Word/WPS. Exact cross-reader
-        # agreement is provided by the PAGEREF fields, not by this PDF probe.
+        # Keep Word/WPS compatibility flags in the delivered document.  The
+        # disposable LibreOffice probe removes ``usePrinterMetrics`` because a
+        # headless macOS process has no stable printer metric source; leaving
+        # it enabled made byte-identical documents randomly differ by a page.
+        # Exact cross-reader agreement is still provided by the PAGEREF fields.
         self._set_word_compat_pagination(file_path)
 
         # Rebuilding the TOC itself can change pagination (for example when an
@@ -5846,9 +6102,7 @@ class TemplateRenderer:
             for label, number in detected_numbers.items()
             if label in visible_numbers and visible_numbers.get(label) != number
         }
-        raise RuntimeError(
-            f"目录页码在 {max_passes} 轮后仍未收敛: {mismatches}"
-        )
+        raise RuntimeError(f"目录页码在 {max_passes} 轮后仍未收敛: {mismatches}")
 
     def _read_static_toc_page_numbers(self, file_path: str) -> dict[str, int]:
         """Read the visible cached TOC numbers from DOCX XML."""
@@ -5981,9 +6235,7 @@ class TemplateRenderer:
             0,
             int(
                 round(
-                    self._float_config(
-                        style_cfg.get("content_top_padding_pt"), 0.0
-                    )
+                    self._float_config(style_cfg.get("content_top_padding_pt"), 0.0)
                     * 20
                 )
             ),
@@ -6031,7 +6283,13 @@ class TemplateRenderer:
                 ),
                 (
                     "第四部分：附录",
-                    ["常见问题解答", "结直肠癌诊疗知识", "癌症相关信号通路", "基因检测列表", "参考文献"],
+                    [
+                        "常见问题解答",
+                        "结直肠癌诊疗知识",
+                        "癌症相关信号通路",
+                        "基因检测列表",
+                        "参考文献",
+                    ],
                 ),
             ]
 
@@ -6192,7 +6450,9 @@ class TemplateRenderer:
                         return add_bookmark_to_paragraph(target, label)
 
                 candidate_labels = toc_target_aliases.get(label, [label])
-                candidate_norms = [normalize_label(candidate) for candidate in candidate_labels]
+                candidate_norms = [
+                    normalize_label(candidate) for candidate in candidate_labels
+                ]
                 candidate_norms = [value for value in candidate_norms if value]
 
                 fallback_para = None
@@ -6314,9 +6574,7 @@ class TemplateRenderer:
                 if number is not None:
                     para.append(make_run(tab=True))
                     if anchor:
-                        para.append(
-                            make_field_run(field_char_type="begin", dirty=True)
-                        )
+                        para.append(make_field_run(field_char_type="begin", dirty=True))
                         para.append(
                             make_field_run(instruction=f" PAGEREF {anchor} \\h ")
                         )
@@ -6364,9 +6622,7 @@ class TemplateRenderer:
                         None,
                         section=True,
                         before_twips=(
-                            content_top_padding_twips
-                            if first_visible_toc_entry
-                            else 0
+                            content_top_padding_twips if first_visible_toc_entry else 0
                         ),
                     )
                 )
@@ -6446,6 +6702,100 @@ class TemplateRenderer:
             standalone="yes",
         )
 
+    def _stabilize_pdf_layout_probe_settings(self, settings_xml: bytes) -> bytes:
+        """Remove settings that make a disposable headless PDF probe unstable.
+
+        ``usePrinterMetrics`` remains valuable in the delivered Word document,
+        but headless LibreOffice on macOS can select different printer metrics
+        across identical conversions.  The resulting one-page oscillation is
+        a probe artifact, not a document change.  PDF probes therefore use
+        LibreOffice's printer-independent layout while the delivery keeps the
+        original Word compatibility contract.
+        """
+        settings_xml = self._remove_update_fields_setting(settings_xml)
+        try:
+            from lxml import etree
+        except Exception:
+            return settings_xml
+
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        root = etree.fromstring(settings_xml)
+        changed = False
+        for elem in root.xpath(".//w:usePrinterMetrics", namespaces=ns):
+            parent = elem.getparent()
+            if parent is not None:
+                parent.remove(elem)
+                changed = True
+        if not changed:
+            return settings_xml
+        return etree.tostring(
+            root,
+            xml_declaration=True,
+            encoding="UTF-8",
+            standalone="yes",
+        )
+
+    def _freeze_fields_for_pdf_layout_probe(self, file_path: str) -> None:
+        """Freeze cached fields in the disposable DOCX used by the PDF probe.
+
+        LibreOffice refreshes dirty ``PAGEREF`` fields while opening a DOCX,
+        and its headless macOS printer metrics are not stable.  During TOC
+        convergence either behavior can replace or shift the layout we are
+        trying to measure.  The probe copy therefore removes automatic field
+        refresh and ``usePrinterMetrics``, clears dirty flags and locks
+        field-begin nodes.  This helper is deliberately called only for a
+        temporary copy; the delivered report keeps dirty, reader-refreshable
+        fields and Word-compatible printer metrics.
+        """
+        import shutil
+        from zipfile import ZIP_DEFLATED, ZipFile
+
+        try:
+            from lxml import etree
+        except Exception as exc:
+            raise RuntimeError("目录 PDF 探针无法冻结域：缺少 lxml") from exc
+
+        word_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        ns = {"w": word_ns}
+        source = Path(file_path)
+        fd, tmp_name = tempfile.mkstemp(
+            suffix=".docx",
+            prefix=f"{source.stem}_field_probe_",
+            dir=str(source.parent),
+        )
+        os.close(fd)
+        tmp_path = Path(tmp_name)
+        try:
+            with ZipFile(source, "r") as zin, ZipFile(
+                tmp_path, "w", compression=ZIP_DEFLATED
+            ) as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+                    if item.filename == "word/settings.xml":
+                        data = self._stabilize_pdf_layout_probe_settings(data)
+                    elif item.filename == "word/document.xml":
+                        root = etree.fromstring(data)
+                        for field_char in root.xpath(
+                            ".//w:fldChar", namespaces=ns
+                        ):
+                            field_char.attrib.pop(f"{{{word_ns}}}dirty", None)
+                        for field_begin in root.xpath(
+                            './/w:fldChar[@w:fldCharType="begin"]',
+                            namespaces=ns,
+                        ):
+                            field_begin.set(f"{{{word_ns}}}fldLock", "true")
+                        data = etree.tostring(
+                            root,
+                            xml_declaration=True,
+                            encoding="UTF-8",
+                            standalone="yes",
+                        )
+                    zout.writestr(item, data)
+            shutil.move(str(tmp_path), str(source))
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
+
     def _detect_toc_page_numbers_from_pdf_layout(
         self,
         *,
@@ -6492,6 +6842,7 @@ class TemplateRenderer:
             initialize_libreoffice_profile(profile_dir, require_available=True)
             tmp_input = input_dir / "input.docx"
             shutil.copy2(file_path, tmp_input)
+            self._freeze_fields_for_pdf_layout_probe(str(tmp_input))
 
             cmd = [
                 soffice,
@@ -6575,7 +6926,8 @@ class TemplateRenderer:
 
         toc_page = next(
             (
-                page for page, text in normalized_pages.items()
+                page
+                for page, text in normalized_pages.items()
                 if "目录" in text and "第一部分" in text and "参考文献" in text
             ),
             None,
@@ -6585,7 +6937,8 @@ class TemplateRenderer:
 
         content_start = next(
             (
-                page for page in range(toc_page + 1, page_count + 1)
+                page
+                for page in range(toc_page + 1, page_count + 1)
                 if "患者信息" in normalized_pages.get(page, "")
                 and "检测内容" in normalized_pages.get(page, "")
             ),
@@ -6608,12 +6961,15 @@ class TemplateRenderer:
                 )
 
         return page_numbers
+
     @staticmethod
     def _extract_pdf_footer_page_number(page_text: str) -> int | None:
         """Return the visible report-page footer number from one PDF text page."""
         import re
 
-        lines = [line.strip() for line in (page_text or "").splitlines() if line.strip()]
+        lines = [
+            line.strip() for line in (page_text or "").splitlines() if line.strip()
+        ]
         for text in reversed(lines[-12:]):
             if re.fullmatch(r"\d{1,3}", text):
                 return int(text)
@@ -6630,9 +6986,7 @@ class TemplateRenderer:
         content_cfg = self._report_content_config(context)
         style_cfg = content_cfg.get("gene_list_table_style")
         style_cfg = style_cfg if isinstance(style_cfg, dict) else {}
-        border_color = self._hex_color_config(
-            style_cfg.get("border_color"), "BEBEBE"
-        )
+        border_color = self._hex_color_config(style_cfg.get("border_color"), "BEBEBE")
         border_size = self._int_text_config(style_cfg.get("border_size"), "4")
 
         for table in doc.tables:
@@ -6699,9 +7053,7 @@ class TemplateRenderer:
         style_cfg = content_cfg.get("gene_list_table_style")
         style_cfg = style_cfg if isinstance(style_cfg, dict) else {}
         row_height_cm = self._float_config(style_cfg.get("row_height_cm"), 0.88)
-        header_font_size = self._float_config(
-            style_cfg.get("header_font_size"), 14.0
-        )
+        header_font_size = self._float_config(style_cfg.get("header_font_size"), 14.0)
         body_font_size = self._float_config(style_cfg.get("body_font_size"), 10.5)
         w_br = qn("w:br")
         w_type = qn("w:type")
@@ -6731,7 +7083,10 @@ class TemplateRenderer:
                         # page. Merged cells expose the same paragraph multiple
                         # times, hence the identity guard.
                         paragraph_marker = id(paragraph._p)
-                        if row_idx == 0 and paragraph_marker not in seen_title_paragraphs:
+                        if (
+                            row_idx == 0
+                            and paragraph_marker not in seen_title_paragraphs
+                        ):
                             seen_title_paragraphs.add(paragraph_marker)
                             for node in list(paragraph._p.iter()):
                                 if node.tag == w_br and node.get(w_type) == "page":
@@ -6749,7 +7104,9 @@ class TemplateRenderer:
                         paragraph.paragraph_format.space_after = Pt(0)
                         paragraph.paragraph_format.line_spacing = 1.0
                         for run in paragraph.runs:
-                            run.font.size = Pt(body_font_size if row_idx else header_font_size)
+                            run.font.size = Pt(
+                                body_font_size if row_idx else header_font_size
+                            )
                             run.font.underline = False
                             # 表体（基因格）统一不加粗——模板把首列基因加粗了，
                             # 正确版应与其它列一致（仅标题行 row 0 保持原样）。
@@ -6795,7 +7152,11 @@ class TemplateRenderer:
             return
 
         last_table = doc.tables[-1]
-        first_row_text = " ".join(cell.text.strip() for cell in last_table.rows[0].cells) if last_table.rows else ""
+        first_row_text = (
+            " ".join(cell.text.strip() for cell in last_table.rows[0].cells)
+            if last_table.rows
+            else ""
+        )
         if "HLA位点" not in first_row_text:
             return
 
@@ -6850,7 +7211,9 @@ class TemplateRenderer:
                 else:
                     compat.append(element)
         doc.save(file_path)
-        self.logger.debug("已写入 Word 兼容分页标志(usePrinterMetrics)，目录页码将贴近 Word")
+        self.logger.debug(
+            "已写入 Word 兼容分页标志(usePrinterMetrics)，目录页码将贴近 Word"
+        )
 
     def _refresh_fields_with_native_engine(self, file_path: str) -> None:
         """优先使用可用的原生排版引擎刷新目录/页码域。"""
@@ -6866,7 +7229,9 @@ class TemplateRenderer:
             return
 
         if sys.platform == "darwin":
-            use_word = str(os.environ.get("REPORTGEN_REFRESH_WITH_WORD") or "").strip().lower()
+            use_word = (
+                str(os.environ.get("REPORTGEN_REFRESH_WITH_WORD") or "").strip().lower()
+            )
             if use_word in {"1", "true", "yes", "y", "on"}:
                 try:
                     self._refresh_fields_with_word_macos(file_path)
@@ -6996,7 +7361,9 @@ class TemplateRenderer:
             raise RuntimeError("未找到 LibreOffice，目录页码仅保留 updateFields 兜底")
 
         if not self._document_contains_toc(file_path):
-            self.logger.debug("文档不包含 TOC 域，跳过 LibreOffice 目录刷新", output=file_path)
+            self.logger.debug(
+                "文档不包含 TOC 域，跳过 LibreOffice 目录刷新", output=file_path
+            )
             return
 
         try:
@@ -7011,7 +7378,9 @@ class TemplateRenderer:
 
         self._refresh_fields_with_libreoffice_convert(file_path, soffice)
 
-    def _refresh_fields_with_libreoffice_uno(self, file_path: str, soffice: str) -> None:
+    def _refresh_fields_with_libreoffice_uno(
+        self, file_path: str, soffice: str
+    ) -> None:
         """通过 LibreOffice UNO 显式更新目录索引并重新保存 docx。
 
         如果环境变量 ``REPORTGEN_LO_LISTENER_PORT`` 已设(由 web 端 lifespan
@@ -7026,7 +7395,10 @@ class TemplateRenderer:
         import tempfile
         import textwrap
 
-        python_candidates = [Path("/usr/bin/python3"), Path(shutil.which("python3") or "")]
+        python_candidates = [
+            Path("/usr/bin/python3"),
+            Path(shutil.which("python3") or ""),
+        ]
         uno_python = None
         for candidate in python_candidates:
             if not candidate or not str(candidate):
@@ -7046,9 +7418,14 @@ class TemplateRenderer:
             raise RuntimeError("未找到支持 python3-uno 的系统 Python")
 
         persistent_port_raw = os.environ.get("REPORTGEN_LO_LISTENER_PORT", "")
-        persistent_port = int(persistent_port_raw) if persistent_port_raw.isdigit() else None
+        persistent_port = (
+            int(persistent_port_raw) if persistent_port_raw.isdigit() else None
+        )
 
-        with tempfile.TemporaryDirectory(prefix="reportgen_lo_") as tmp_dir, contextlib.ExitStack() as stack:
+        with (
+            tempfile.TemporaryDirectory(prefix="reportgen_lo_") as tmp_dir,
+            contextlib.ExitStack() as stack,
+        ):
             input_dir = Path(tmp_dir) / "input"
             output_dir = Path(tmp_dir) / "output"
             input_dir.mkdir(parents=True, exist_ok=True)
@@ -7177,7 +7554,13 @@ class TemplateRenderer:
                 )
             try:
                 result = subprocess.run(
-                    [uno_python, str(uno_script), str(tmp_input), str(refreshed), str(port)],
+                    [
+                        uno_python,
+                        str(uno_script),
+                        str(tmp_input),
+                        str(refreshed),
+                        str(port),
+                    ],
                     check=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -7187,10 +7570,12 @@ class TemplateRenderer:
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError("LibreOffice 刷新目录超时") from exc
             except subprocess.CalledProcessError as exc:
-                log = "\n".join(part for part in [(exc.stdout or "").strip(), (exc.stderr or "").strip()] if part)
-                raise RuntimeError(
-                    f"LibreOffice UNO 刷新失败: {log or exc}"
-                ) from exc
+                log = "\n".join(
+                    part
+                    for part in [(exc.stdout or "").strip(), (exc.stderr or "").strip()]
+                    if part
+                )
+                raise RuntimeError(f"LibreOffice UNO 刷新失败: {log or exc}") from exc
             finally:
                 if listener is not None:
                     listener.terminate()
@@ -7202,11 +7587,14 @@ class TemplateRenderer:
 
             if not refreshed.exists():
                 log = "\n".join(
-                    part for part in [(result.stdout or "").strip(), (result.stderr or "").strip()] if part
+                    part
+                    for part in [
+                        (result.stdout or "").strip(),
+                        (result.stderr or "").strip(),
+                    ]
+                    if part
                 )
-                raise RuntimeError(
-                    f"LibreOffice UNO 未生成刷新后的文档: {log}"
-                )
+                raise RuntimeError(f"LibreOffice UNO 未生成刷新后的文档: {log}")
 
             try:
                 Document(refreshed)
@@ -7214,7 +7602,14 @@ class TemplateRenderer:
                 raise RuntimeError(f"LibreOffice UNO 生成的文档不可读: {exc}") from exc
 
             shutil.copy2(refreshed, file_path)
-            log = "\n".join(part for part in [(result.stdout or "").strip(), (result.stderr or "").strip()] if part)
+            log = "\n".join(
+                part
+                for part in [
+                    (result.stdout or "").strip(),
+                    (result.stderr or "").strip(),
+                ]
+                if part
+            )
             self.logger.info(
                 "已使用 LibreOffice 刷新目录/页码",
                 output=file_path,
@@ -7222,22 +7617,23 @@ class TemplateRenderer:
                 log=log,
             )
 
-    def _refresh_fields_with_libreoffice_convert(self, file_path: str, soffice: str) -> None:
+    def _refresh_fields_with_libreoffice_convert(
+        self, file_path: str, soffice: str
+    ) -> None:
         """回退路径：通过 LibreOffice convert-to 重写 docx。"""
         import shutil
         import subprocess
         import tempfile
 
-        with tempfile.TemporaryDirectory(prefix="reportgen_lo_") as tmp_dir, tempfile.TemporaryDirectory(
-            prefix="reportgen_lo_profile_"
-        ) as profile_dir:
+        with (
+            tempfile.TemporaryDirectory(prefix="reportgen_lo_") as tmp_dir,
+            tempfile.TemporaryDirectory(prefix="reportgen_lo_profile_") as profile_dir,
+        ):
             input_dir = Path(tmp_dir) / "input"
             output_dir = Path(tmp_dir) / "output"
             input_dir.mkdir(parents=True, exist_ok=True)
             output_dir.mkdir(parents=True, exist_ok=True)
-            initialize_libreoffice_profile(
-                Path(profile_dir), require_available=True
-            )
+            initialize_libreoffice_profile(Path(profile_dir), require_available=True)
 
             tmp_input = input_dir / "input.docx"
             shutil.copy2(file_path, tmp_input)
@@ -7250,7 +7646,7 @@ class TemplateRenderer:
                 "--nolockcheck",
                 "--nodefault",
                 "--convert-to",
-                'docx:Office Open XML Text',
+                "docx:Office Open XML Text",
                 "--outdir",
                 str(output_dir),
                 str(tmp_input),
@@ -7267,7 +7663,11 @@ class TemplateRenderer:
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError("LibreOffice convert-to 刷新目录超时") from exc
             except subprocess.CalledProcessError as exc:
-                log = "\n".join(part for part in [(exc.stdout or "").strip(), (exc.stderr or "").strip()] if part)
+                log = "\n".join(
+                    part
+                    for part in [(exc.stdout or "").strip(), (exc.stderr or "").strip()]
+                    if part
+                )
                 raise RuntimeError(
                     f"LibreOffice convert-to 刷新目录失败: {log or exc}"
                 ) from exc
@@ -7275,19 +7675,31 @@ class TemplateRenderer:
             refreshed = output_dir / "input.docx"
             if not refreshed.exists():
                 log = "\n".join(
-                    part for part in [(result.stdout or "").strip(), (result.stderr or "").strip()] if part
+                    part
+                    for part in [
+                        (result.stdout or "").strip(),
+                        (result.stderr or "").strip(),
+                    ]
+                    if part
                 )
-                raise RuntimeError(
-                    f"LibreOffice convert-to 未生成刷新后的文档: {log}"
-                )
+                raise RuntimeError(f"LibreOffice convert-to 未生成刷新后的文档: {log}")
 
             try:
                 Document(refreshed)
             except Exception as exc:
-                raise RuntimeError(f"LibreOffice convert-to 生成的文档不可读: {exc}") from exc
+                raise RuntimeError(
+                    f"LibreOffice convert-to 生成的文档不可读: {exc}"
+                ) from exc
 
             shutil.copy2(refreshed, file_path)
-            log = "\n".join(part for part in [(result.stdout or "").strip(), (result.stderr or "").strip()] if part)
+            log = "\n".join(
+                part
+                for part in [
+                    (result.stdout or "").strip(),
+                    (result.stderr or "").strip(),
+                ]
+                if part
+            )
             self.logger.info(
                 "已使用 LibreOffice 刷新目录/页码",
                 output=file_path,

@@ -1661,8 +1661,23 @@ drug_sections:
   type: caution
   header: ''
   drug_name: 依维莫司（Everolimus）
-  relation: 该样本检出KRAS基因c.34G>A，p.G12S错义突变，为已知激活突变，对蛋白功能有重要影响。临床前研究表明，含有KRAS突变的结肠癌细胞系对依维莫司不敏感[29285035，28544747]。因此，该患者可能对依维莫司的治疗负相关。依维莫司已获FDA批准，用于治疗乳腺癌、神经内分泌瘤、肾癌等疾病，并已获NMPA批准，用于治疗肾癌、室管膜下巨细胞型星形细胞瘤。
-  clinical: 临床前研究表明，含有KRAS突变的结肠癌细胞系对依维莫司不敏感[29285035，28544747]。在转移性癌症患者中，携带KRAS突变的患者接受依维莫司治疗后对依维莫司缺乏疗效，12例具有KRAS突变的肿瘤患者中11例均出现疾病进展，而31例KRAS野生型患者中仅16例患者未从依维莫司治疗中获益[20664172]。
+  relation: 该样本检出KRAS基因c.34G>A，p.G12S错义突变，为已知激活突变。研究显示，在PI3K通路异常的人类肿瘤细胞中，合并KRAS/BRAF突变的细胞（包括结直肠癌细胞系）对依维莫司更不敏感[20664172]。该证据属于KRAS突变层级，并非p.G12S位点专属临床证据；因此本条仅作慎用/低获益提示，不构成绝对耐药结论。依维莫司的既有获批适应证不等同于KRAS p.G12S结直肠癌适应证。
+  clinical: 一项小样本、跨癌种的依维莫司治疗队列中，12例KRAS突变肿瘤有11例疾病进展，而31例KRAS野生型肿瘤中16例未获益；研究在结直肠癌亚组中也观察到KRAS突变与低获益相关[20664172]。鉴于样本量小、癌种异质且并非p.G12S位点专属试验，报告中仅保留为负相关/慎用证据，需结合患者病情和正式适应证判断。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: codex_first_review_corrected_misattributed_kras_everolimus_citations
+  evidence_level: preclinical_plus_small_pan_cancer_cohort_not_variant_specific
+  evidence_as_of: '2026-07-20'
+  cancer_scope: colorectal_kras_mutation_caution_not_G12S_specific
+  secondary_review_status: pending_report_group_review
+  review_metadata:
+    reviewer: codex
+    reviewer_type: ai_assisted_first_pass_primary_source_review
+    reviewed_at: '2026-07-20'
+    risk_level: high
+    secondary_review_status: pending_report_group_review
+    references:
+    - https://pmc.ncbi.nlm.nih.gov/articles/PMC2912177/
 - gene: TSC1
   type: benefit
   applicability: loss_of_function
@@ -1689,6 +1704,29 @@ drug_sections:
   drug_name: 西妥昔单抗（Cetuximab）、帕尼单抗（Panitumumab）
   relation: 该样本检出KRAS基因c.35G>A，p.G12D错义突变，为已知激活突变，对蛋白功能有重要影响。已被证实KRAS基因激活突变是anti-EGFR抗体药物（如西妥昔单抗、帕尼单抗）耐药的标志[20100961]。因此预测患者可能无法从anti-EGFR抗体药物治疗中获益。
   clinical: 多项结直肠癌研究表明，KRAS突变与西妥昔单抗或帕尼单抗治疗后响应降低或缺乏响应相关[16618717，17664471，17375050，18621636，23066310，23182985]。
+- gene: KRAS
+  c_hgvs: c.35G>A
+  p_hgvs: p.G12D
+  type: caution
+  header: ''
+  drug_name: 依维莫司（Everolimus）
+  relation: 该样本检出KRAS基因c.35G>A，p.G12D错义突变，为已知激活突变。研究显示，在PI3K通路异常的人类肿瘤细胞中，合并KRAS/BRAF突变的细胞（包括结直肠癌细胞系）对依维莫司更不敏感[20664172]。该证据属于KRAS突变层级，并非p.G12D位点专属临床证据；因此本条仅作慎用/低获益提示，不构成绝对耐药结论。依维莫司的既有获批适应证不等同于KRAS p.G12D结直肠癌适应证。
+  clinical: 一项小样本、跨癌种的依维莫司治疗队列中，12例KRAS突变肿瘤有11例疾病进展，而31例KRAS野生型肿瘤中16例未获益；研究在结直肠癌亚组中也观察到KRAS突变与低获益相关[20664172]。鉴于样本量小、癌种异质且并非p.G12D位点专属试验，报告中仅保留为负相关/慎用证据，需结合患者病情和正式适应证判断。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: report_group_feedback_20260720_plus_existing_kras_caution_evidence
+  evidence_level: preclinical_plus_small_pan_cancer_cohort_not_variant_specific
+  evidence_as_of: '2026-07-20'
+  cancer_scope: colorectal_kras_mutation_caution_not_G12D_specific
+  secondary_review_status: pending_report_group_review
+  review_metadata:
+    reviewer: codex
+    reviewer_type: ai_assisted_first_pass_primary_source_review
+    reviewed_at: '2026-07-20'
+    risk_level: high
+    secondary_review_status: pending_report_group_review
+    references:
+    - https://pmc.ncbi.nlm.nih.gov/articles/PMC2912177/
 - gene: KRAS
   c_hgvs: c.35G>T
   p_hgvs: p.G12V

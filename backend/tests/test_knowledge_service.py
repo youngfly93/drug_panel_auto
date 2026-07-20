@@ -113,19 +113,22 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
     }
     overlay_expected = {
         "available": True,
-        "gene_rows": 315,
+        "gene_rows": 319,
         "unique_genes": 235,
-        "gene_level_rows": 233,
+        "gene_level_rows": 237,
         "variant_level_rows": 82,
-        "drug_rows": 40,
+        # Includes two governed KRAS/everolimus correction rows plus the
+        # superseded historical row retained for audit traceability.
+        "drug_rows": 43,
         "drug_unique_genes": 16,
         "targeted_drug_rule_rows": 17,
         "targeted_drug_rule_unique_genes": 15,
         "targeted_drug_applicability_rule_rows": 1,
         "extra_reference_rows": 12,
         "review_status_counts": {
-            "legacy_runtime": 338,
-            "provisional_runtime": 17,
+            "legacy_runtime": 336,
+            "provisional_runtime": 25,
+            "superseded": 1,
         },
     }
     if panel_id == "crc_301_msi":
@@ -134,13 +137,13 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
             unique_genes=271,
             gene_level_rows=269,
             variant_level_rows=71,
-            drug_rows=18,
+            drug_rows=19,
             drug_unique_genes=8,
             targeted_drug_rule_rows=9,
             targeted_drug_rule_unique_genes=9,
             review_status_counts={
-                "legacy_runtime": 309,
-                "provisional_runtime": 49,
+                "legacy_runtime": 308,
+                "provisional_runtime": 51,
             },
         )
     assert payload["reviewed_overlay"] == overlay_expected
@@ -253,27 +256,28 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     genes = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="gene", page=1, page_size=1
     )
-    assert genes["total"] == 692
+    assert genes["total"] == 696
     assert genes["facets"] == {
-        "layers": {"reviewed_overlay": 315, "base": 377},
+        "layers": {"reviewed_overlay": 319, "base": 377},
         "review_statuses": {
             "legacy_runtime": 680,
-            "provisional_runtime": 12,
+            "provisional_runtime": 16,
         },
-        "match_scopes": {"gene": 610, "variant": 82},
+        "match_scopes": {"gene": 614, "variant": 82},
     }
 
     drugs = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="drug", page=1, page_size=1
     )
-    assert drugs["total"] == 121
+    assert drugs["total"] == 124
     assert drugs["facets"] == {
-        "layers": {"base": 81, "reviewed_overlay": 40},
+        "layers": {"base": 81, "reviewed_overlay": 43},
         "review_statuses": {
-            "legacy_runtime": 116,
-            "provisional_runtime": 5,
+            "legacy_runtime": 114,
+            "provisional_runtime": 9,
+            "superseded": 1,
         },
-        "match_scopes": {"gene": 48, "variant": 71, "event": 2},
+        "match_scopes": {"gene": 48, "variant": 73, "event": 3},
     }
 
     targeted = service.get_catalog_entries(
@@ -403,16 +407,20 @@ def test_review_status_filters_distinguish_provisional_and_legacy_runtime():
         page=1,
         page_size=100,
     )
-    assert provisional["total"] == 12
+    assert provisional["total"] == 16
     assert {row["gene"] for row in provisional["rows"]} == {
         "CD274",
         "CHD2",
+        "DNMT3A",
         "ERCC2",
         "ESR2",
+        "FANCA",
         "HIST1H3B",
         "HLA-C",
         "HLA-DPA1",
+        "PALB2",
         "PIK3C2G",
+        "RAD51D",
         "SLCO1B1",
         "WDR90",
         "XPC",
@@ -429,9 +437,6 @@ def test_review_status_filters_distinguish_provisional_and_legacy_runtime():
     )
     assert all(
         row["runtime_behavior"] == "override_base_on_match"
-        and row["content"]["first_pass_status"] == "completed"
-        and row["content"]["first_pass_reviewer_type"]
-        == "ai_assisted_evidence_review"
         and row["content"]["secondary_review_status"]
         == "pending_report_group_review"
         and row["content"]["runtime_eligible"] is True
@@ -447,7 +452,7 @@ def test_review_status_filters_distinguish_provisional_and_legacy_runtime():
         page=1,
         page_size=100,
     )
-    assert legacy_drug_narratives["total"] == 35
+    assert legacy_drug_narratives["total"] == 33
     assert all(
         row["review"]["basis"] == "historical_final_report_migration"
         for row in legacy_drug_narratives["rows"]

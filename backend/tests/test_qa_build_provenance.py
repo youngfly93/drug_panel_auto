@@ -29,9 +29,7 @@ def test_qa_binds_output_hash_to_explicit_source_revision(tmp_path, monkeypatch)
         "source_kind": "environment",
         "source_dirty": False,
     }
-    assert report["metrics"]["output_sha256"] == hashlib.sha256(
-        output.read_bytes()
-    ).hexdigest()
+    assert report["metrics"]["output_sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
 
 
 def test_explicit_source_revision_must_be_commit_like(monkeypatch):
@@ -70,7 +68,7 @@ def test_golden_visual_gate_requires_linux_full_render(tmp_path):
         "profile_mode": "isolated",
         "pdf_renderer": "pdftoppm",
         "pdf_renderer_version": "pdftoppm 24.02.0",
-        "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+        "font_substitution_profile": "reportgen-cjk-font-substitution-v2",
         "font_substitution_profile_sha256": "a" * 64,
     }
     qa_path.write_text(

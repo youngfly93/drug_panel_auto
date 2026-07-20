@@ -173,9 +173,7 @@ def test_field_mapper_derives_report_number_from_sample_id(tmp_path):
     excel_data = _excel(tmp_path)
     excel_data.metadata["sample_id_from_filename"] = "lz258792"
 
-    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
-        excel_data
-    )
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(excel_data)
 
     assert report_data.get_field("report_number") == "MLJY-LZ258792"
 
@@ -184,9 +182,7 @@ def test_field_mapper_keeps_explicit_report_number(tmp_path):
     excel_data = _excel(tmp_path, single_values={"报告编号": "CUSTOM-REPORT-001"})
     excel_data.metadata["sample_id_from_filename"] = "lz258792"
 
-    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
-        excel_data
-    )
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(excel_data)
 
     assert report_data.get_field("report_number") == "CUSTOM-REPORT-001"
 
@@ -198,9 +194,7 @@ def test_field_mapper_receive_date_becomes_cover_compact_alias(tmp_path):
     )
     excel_data.metadata["sample_id_from_filename"] = "lz258792"
 
-    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
-        excel_data
-    )
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(excel_data)
     DataCleaner(log_level="ERROR").validate_and_clean(report_data)
 
     assert report_data.get_field("receive_date") == "2025-11-21"
@@ -340,14 +334,10 @@ def test_nccn_mutation_rows_do_not_include_cnv_or_fusion(tmp_path):
         base_path=str(ROOT),
     )
 
-    assert report_data.get_field("nccn_ERBB2_MUT") == (
-        "c.2324_2325ins12，p.Y772_A775dup"
-    )
+    assert report_data.get_field("nccn_ERBB2_MUT") == ("c.2324_2325ins12，p.Y772_A775dup")
     assert report_data.get_field("nccn_ERBB2_AMP") == "CNV:扩增"
     assert report_data.get_field("nccn_FGFR123_MUT") == "未检出"
-    assert report_data.get_field("nccn_FGFR123_FUSION") == (
-        "FGFR2：融合:BICC1-FGFR2"
-    )
+    assert report_data.get_field("nccn_FGFR123_FUSION") == ("FGFR2：融合:BICC1-FGFR2")
     assert report_data.get_field("imm_hyper_EGFR_AMP") == "CNV:扩增"
 
 
@@ -445,9 +435,7 @@ def test_grouped_nccn_and_immune_rows_keep_gene_identity_and_vaf_order(tmp_path)
         },
     ]
     panel_config = PanelConfig(
-        nccn_result_rows=[
-            {"key": "BRCA12_MUT", "genes": ["BRCA1", "BRCA2"], "match": "突变"}
-        ],
+        nccn_result_rows=[{"key": "BRCA12_MUT", "genes": ["BRCA1", "BRCA2"], "match": "突变"}],
         immune_positive_rows=[
             {"key": "KRAS_TP53", "genes": ["TP53", "KRAS"], "mode": "co_mutation"},
             {"key": "DDR", "genes": ["ATR", "BRCA1"], "mode": "gene_group"},
@@ -495,9 +483,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
     assert len(rows) == 7
     assert "瑞戈非尼" in rows[0]["drug"]
     assert rows[0]["enabled"] is False
-    assert rule["drug_rules"]["approved_drug_rows_source"] == (
-        "drugs.yaml:approved_drug_rows"
-    )
+    assert rule["drug_rules"]["approved_drug_rows_source"] == ("drugs.yaml:approved_drug_rows")
     assert "crc_approved_drugs" not in engine.get("panel_rules")
 
 
@@ -527,9 +513,7 @@ def test_crc_biomarker_rule_contains_active_immune_tables():
         "EGFR_L858R",
         "KRAS_STK11",
     }
-    assert {row["key"] for row in tables["hyperprogression"]["rows"]} >= {
-        "EGFR_AMP"
-    }
+    assert {row["key"] for row in tables["hyperprogression"]["rows"]} >= {"EGFR_AMP"}
     assert "immune_positive_genes" not in engine.get("panel_rules")
     assert "immune_negative_genes" not in engine.get("panel_rules")
     assert "immune_hyperprogression_genes" not in engine.get("panel_rules")
@@ -549,9 +533,7 @@ def test_load_panel_config_prefers_biomarkers_yaml_immune_tables():
         "EGFR_L858R",
         "KRAS_STK11",
     }
-    assert {row["key"] for row in panel_config.immune_hyperprogression_rows} >= {
-        "EGFR_AMP"
-    }
+    assert {row["key"] for row in panel_config.immune_hyperprogression_rows} >= {"EGFR_AMP"}
 
 
 def test_load_panel_config_uses_package_identity_without_redundant_panel_id():
@@ -627,9 +609,7 @@ def test_field_mapper_adds_legacy_fusion_aliases(tmp_path):
         },
     )
 
-    report_data = FieldMapper(
-        config_dir=str(ROOT / "config"), log_level="ERROR"
-    ).map(excel_data)
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(excel_data)
 
     rows = report_data.get_table("fusion")
     assert rows
@@ -682,9 +662,9 @@ def test_tmb_invalid_is_explicit_format_error(tmp_path):
 
 
 def test_field_mapper_invalid_tmb_uses_same_format_error(tmp_path):
-    report_data = FieldMapper(
-        config_dir=str(ROOT / "config"), log_level="ERROR"
-    ).map(_excel(tmp_path, single_values={"TMB": "abc"}))
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
+        _excel(tmp_path, single_values={"TMB": "abc"})
+    )
 
     assert report_data.get_field("tmb_value") == "未检测（格式错误）"
     assert report_data.get_field("tmb_status") == "未检测"
@@ -692,9 +672,9 @@ def test_field_mapper_invalid_tmb_uses_same_format_error(tmp_path):
 
 
 def test_field_mapper_valid_tmb_overrides_default_status(tmp_path):
-    report_data = FieldMapper(
-        config_dir=str(ROOT / "config"), log_level="ERROR"
-    ).map(_excel(tmp_path, single_values={"TMB": 7.10499382716049, "MSI状态": "MSI-H"}))
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
+        _excel(tmp_path, single_values={"TMB": 7.10499382716049, "MSI状态": "MSI-H"})
+    )
 
     assert report_data.get_field("tmb_value") == "7.1"
     assert report_data.get_field("tmb") == "7.1 mutations/Mb"
@@ -793,10 +773,7 @@ def test_report_summary_flags_draft_panel_status_without_cancer_name():
     )
 
     assert summary["panel"] == {"status": "draft", "template_status": "draft"}
-    assert any(
-        "draft" in item and "勿直接交付" in item
-        for item in summary["manual_review"]
-    )
+    assert any("draft" in item and "勿直接交付" in item for item in summary["manual_review"])
 
 
 def test_report_summary_flags_pilot_panel_status():
@@ -809,10 +786,7 @@ def test_report_summary_flags_pilot_panel_status():
         qa_report={"status": "PASS", "issues": []},
     )
 
-    assert any(
-        "pilot" in item and "试运行" in item
-        for item in summary["manual_review"]
-    )
+    assert any("pilot" in item and "试运行" in item for item in summary["manual_review"])
 
 
 def test_report_summary_active_panel_status_has_no_draft_guard():
@@ -848,17 +822,15 @@ def test_write_report_summary_uses_docx_sidecar(tmp_path):
 
 
 def test_field_mapper_dynamic_tmb_msi_narratives_match_mss_low_tmb(tmp_path):
-    report_data = FieldMapper(
-        config_dir=str(ROOT / "config"), log_level="ERROR"
-    ).map(_excel(tmp_path, single_values={"TMB": 7.74681481481482, "MSI状态": "MSS"}))
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
+        _excel(tmp_path, single_values={"TMB": 7.74681481481482, "MSI状态": "MSS"})
+    )
 
     assert report_data.get_field("tmb_value") == "7.7"
     assert report_data.get_field("tmb_status") == "L"
     assert "7.7 mutations/Mb" in report_data.get_field("tmb_detail_sentence")
     assert "TMB水平较低" in report_data.get_field("tmb_detail_sentence")
-    assert "2020年6月，FDA批准帕博利珠单抗" in report_data.get_field(
-        "tmb_detail_interpretation"
-    )
+    assert "2020年6月，FDA批准帕博利珠单抗" in report_data.get_field("tmb_detail_interpretation")
     assert "帕博利珠单抗、纳武利尤单抗" in report_data.get_field("tmb_drug_note")
     assert "微卫星稳定（MSS）型" in report_data.get_field("msi_detail_sentence")
     assert "林奇综合征" in report_data.get_field("msi_detail_interpretation")
@@ -1008,20 +980,14 @@ def test_mixed_reviewed_class_labels_control_counts_and_drug_rows(tmp_path):
         "SETD2",
         "ATM",
     ]
-    assert "FBXW7" not in {
-        row.get("gene") for row in report_data.get_table("targeted_drug_tips")
-    }
+    assert "FBXW7" not in {row.get("gene") for row in report_data.get_table("targeted_drug_tips")}
     assert report_data.get_field("immune_positive_count") == 3
-    assert "KRAS：c.34G>A，p.G12S" in report_data.get_field(
-        "immune_positive_result"
-    )
+    assert "KRAS：c.34G>A，p.G12S" in report_data.get_field("immune_positive_result")
     assert report_data.get_field("immune_negative_result") == "未检出"
     assert report_data.get_field("imm_neg_KRAS_STK11") == "未检出有害变异"
     assert "TP53：c.844C>T，p.R282W" in report_data.get_field("imm_pos_KRAS_TP53")
     assert "ATM：c.6874C>T，p.Q2292*" in report_data.get_field("imm_pos_DDR")
-    assert "西妥昔单抗[爱必妥]" in report_data.get_field(
-        "targeted_drug_brand_summary"
-    )
+    assert "西妥昔单抗[爱必妥]" in report_data.get_field("targeted_drug_brand_summary")
     assert "FBXW7" not in report_data.get_field("targeted_drug_brand_summary")
 
 
@@ -1040,29 +1006,76 @@ def test_drug_related_count_matches_variants_2_1_table(tmp_path):
     report_data.set_table(
         "variants_2_1",
         [
-            {"gene": "TP53", "locus": "c.1A>T", "af_pct": "30",
-             "benefit_drugs": "DrugX（C）", "caution_drugs": "--"},
-            {"gene": "ATR", "locus": "c.2A>T", "af_pct": "5",
-             "benefit_drugs": "--", "caution_drugs": "DrugY（A）"},
-            {"gene": "APC", "locus": "c.3A>T", "af_pct": "20",
-             "benefit_drugs": "--", "caution_drugs": "--"},
-            {"gene": "BRAF", "locus": "未见突变", "af_pct": "--",
-             "benefit_drugs": "--", "caution_drugs": "--"},
+            {
+                "gene": "TP53",
+                "locus": "c.1A>T",
+                "af_pct": "30",
+                "benefit_drugs": "DrugX（C）",
+                "caution_drugs": "--",
+            },
+            {
+                "gene": "ATR",
+                "locus": "c.2A>T",
+                "af_pct": "5",
+                "benefit_drugs": "--",
+                "caution_drugs": "DrugY（A）",
+            },
+            {
+                "gene": "APC",
+                "locus": "c.3A>T",
+                "af_pct": "20",
+                "benefit_drugs": "--",
+                "caution_drugs": "--",
+            },
+            {
+                "gene": "BRAF",
+                "locus": "未见突变",
+                "af_pct": "--",
+                "benefit_drugs": "--",
+                "caution_drugs": "--",
+            },
         ],
     )
     variations = [
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "KRAS",
-         "Transcript": "NM_a", "Chr": "chr12", "ExIn_ID": "EX2",
-         "cHGVS": "c.34G>T", "pHGVS_S": "p.G12C", "Function": "Missense",
-         "Freq(%)": 40.0, "CLNSIG": "Pathogenic"},
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "PIK3CA",
-         "Transcript": "NM_b", "Chr": "chr3", "ExIn_ID": "EX10",
-         "cHGVS": "c.1624G>A", "pHGVS_S": "p.E542K", "Function": "Missense",
-         "Freq(%)": 15.0, "CLNSIG": "Pathogenic"},
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "ATM",
-         "Transcript": "NM_c", "Chr": "chr11", "ExIn_ID": "EX47",
-         "cHGVS": "c.6874C>T", "pHGVS_S": "p.Q2292*", "Function": "Nonsense",
-         "Freq(%)": 10.0, "CLNSIG": "Pathogenic"},
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "KRAS",
+            "Transcript": "NM_a",
+            "Chr": "chr12",
+            "ExIn_ID": "EX2",
+            "cHGVS": "c.34G>T",
+            "pHGVS_S": "p.G12C",
+            "Function": "Missense",
+            "Freq(%)": 40.0,
+            "CLNSIG": "Pathogenic",
+        },
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "PIK3CA",
+            "Transcript": "NM_b",
+            "Chr": "chr3",
+            "ExIn_ID": "EX10",
+            "cHGVS": "c.1624G>A",
+            "pHGVS_S": "p.E542K",
+            "Function": "Missense",
+            "Freq(%)": 15.0,
+            "CLNSIG": "Pathogenic",
+        },
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "ATM",
+            "Transcript": "NM_c",
+            "Chr": "chr11",
+            "ExIn_ID": "EX47",
+            "cHGVS": "c.6874C>T",
+            "pHGVS_S": "p.Q2292*",
+            "Function": "Nonsense",
+            "Freq(%)": 10.0,
+            "CLNSIG": "Pathogenic",
+        },
     ]
     result = enhance_report_data(
         report_data,
@@ -1225,15 +1238,21 @@ def test_flt3_reviewed_override_brings_out_curated_drugs(tmp_path):
     in sync with the 2.1 table).
     """
     variations = [
-        {"ExistIn552": "Ⅱ类", "ExistInsmall358": 1, "Gene_Symbol": "FLT3",
-         "Transcript": "NM_004119.3", "Chr": "chr13", "ExIn_ID": "EX20",
-         "cHGVS": "c.2537G>A", "pHGVS_S": "p.G846D", "Function": "Missense",
-         "Freq(%)": 1.02},
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "FLT3",
+            "Transcript": "NM_004119.3",
+            "Chr": "chr13",
+            "ExIn_ID": "EX20",
+            "cHGVS": "c.2537G>A",
+            "pHGVS_S": "p.G846D",
+            "Function": "Missense",
+            "Freq(%)": 1.02,
+        },
     ]
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
-    rows = mapper._build_variants_2_1(
-        _excel(tmp_path, variations=variations), ReportData()
-    )
+    rows = mapper._build_variants_2_1(_excel(tmp_path, variations=variations), ReportData())
     flt3 = next(row for row in rows if row["gene"] == "FLT3")
     for drug in ("瑞戈非尼", "索拉非尼", "舒尼替尼"):
         assert drug in flt3["benefit_drugs"], flt3["benefit_drugs"]
@@ -1255,9 +1274,7 @@ def test_immune_table_conditional_notes_and_numbering():
             "备注：1. FoundationOne CDx (324 个基因) TMB 研究表明，"
             "对于组织样本，TMB≥10 mut/Mb 为高突变负荷。"
         )
-        doc.add_paragraph(
-            "#帕博利珠单抗、#纳武利尤单抗均已获FDA和/或NMPA批准用于治疗结直肠癌。"
-        )
+        doc.add_paragraph("#帕博利珠单抗、#纳武利尤单抗均已获FDA和/或NMPA批准用于治疗结直肠癌。")
         doc.add_paragraph(
             "3. 上表涉及的已上市的药物名称及对应的商品名称："
             "帕博利珠单抗[可瑞达]、纳武利尤单抗[欧狄沃]"
@@ -1301,23 +1318,57 @@ def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
     frequency, and variants within a gene by frequency descending.
     """
     variations = [
-        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "TP53",
-         "Transcript": "NM_000546.6", "Chr": "chr17", "ExIn_ID": "EX8",
-         "cHGVS": "c.844C>T", "pHGVS_S": "p.R282W", "Function": "Missense", "Freq(%)": 50.0},
-        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "APC",
-         "Transcript": "NM_000038.6", "Chr": "chr5", "ExIn_ID": "EX10",
-         "cHGVS": "c.994C>T", "pHGVS_S": "p.R332*", "Function": "Nonsense", "Freq(%)": 10.5},
-        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "KRAS",
-         "Transcript": "NM_004985.5", "Chr": "chr12", "ExIn_ID": "EX2",
-         "cHGVS": "c.34G>T", "pHGVS_S": "p.G12C", "Function": "Missense", "Freq(%)": 30.0},
-        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "APC",
-         "Transcript": "NM_000038.6", "Chr": "chr5", "ExIn_ID": "EX16",
-         "cHGVS": "c.4348C>T", "pHGVS_S": "p.R1450*", "Function": "Nonsense", "Freq(%)": 40.0},
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "TP53",
+            "Transcript": "NM_000546.6",
+            "Chr": "chr17",
+            "ExIn_ID": "EX8",
+            "cHGVS": "c.844C>T",
+            "pHGVS_S": "p.R282W",
+            "Function": "Missense",
+            "Freq(%)": 50.0,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "APC",
+            "Transcript": "NM_000038.6",
+            "Chr": "chr5",
+            "ExIn_ID": "EX10",
+            "cHGVS": "c.994C>T",
+            "pHGVS_S": "p.R332*",
+            "Function": "Nonsense",
+            "Freq(%)": 10.5,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "KRAS",
+            "Transcript": "NM_004985.5",
+            "Chr": "chr12",
+            "ExIn_ID": "EX2",
+            "cHGVS": "c.34G>T",
+            "pHGVS_S": "p.G12C",
+            "Function": "Missense",
+            "Freq(%)": 30.0,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "APC",
+            "Transcript": "NM_000038.6",
+            "Chr": "chr5",
+            "ExIn_ID": "EX16",
+            "cHGVS": "c.4348C>T",
+            "pHGVS_S": "p.R1450*",
+            "Function": "Nonsense",
+            "Freq(%)": 40.0,
+        },
     ]
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
-    rows = mapper._build_variants_2_1(
-        _excel(tmp_path, variations=variations), ReportData()
-    )
+    rows = mapper._build_variants_2_1(_excel(tmp_path, variations=variations), ReportData())
 
     def af(row):
         try:
@@ -1330,11 +1381,14 @@ def test_variants_2_1_detected_rows_sorted_by_frequency_desc(tmp_path):
     # together and ordered 40 then 10.5. Non-integer VAF display keeps the
     # reviewed report's two-decimal precision.
     assert detected == [("TP53", 50.0), ("APC", 40.0), ("APC", 10.5), ("KRAS", 30.0)]
-    assert next(
-        row["af_pct"]
-        for row in rows
-        if row["gene"] == "APC" and row["locus"].startswith("c.994C>T")
-    ) == "10.50"
+    assert (
+        next(
+            row["af_pct"]
+            for row in rows
+            if row["gene"] == "APC" and row["locus"].startswith("c.994C>T")
+        )
+        == "10.50"
+    )
 
 
 def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path, monkeypatch):
@@ -1342,18 +1396,54 @@ def test_targeted_drug_tips_summary_sorted_by_frequency_desc(tmp_path, monkeypat
     frequency high→low and grouped by gene — consistent with the 2.1 table.
     """
     variations = [
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "GENEB",
-         "Transcript": "NM_1", "Chr": "chr1", "ExIn_ID": "EX1",
-         "cHGVS": "c.100A>T", "pHGVS_S": "p.K34N", "Function": "Missense", "Freq(%)": 50.0},
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "GENEA",
-         "Transcript": "NM_2", "Chr": "chr2", "ExIn_ID": "EX1",
-         "cHGVS": "c.200G>C", "pHGVS_S": "p.G67A", "Function": "Missense", "Freq(%)": 10.0},
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "GENEC",
-         "Transcript": "NM_3", "Chr": "chr3", "ExIn_ID": "EX1",
-         "cHGVS": "c.300T>A", "pHGVS_S": "p.S100T", "Function": "Missense", "Freq(%)": 30.0},
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "GENEA",
-         "Transcript": "NM_2", "Chr": "chr2", "ExIn_ID": "EX2",
-         "cHGVS": "c.400C>G", "pHGVS_S": "p.P133A", "Function": "Missense", "Freq(%)": 40.0},
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "GENEB",
+            "Transcript": "NM_1",
+            "Chr": "chr1",
+            "ExIn_ID": "EX1",
+            "cHGVS": "c.100A>T",
+            "pHGVS_S": "p.K34N",
+            "Function": "Missense",
+            "Freq(%)": 50.0,
+        },
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "GENEA",
+            "Transcript": "NM_2",
+            "Chr": "chr2",
+            "ExIn_ID": "EX1",
+            "cHGVS": "c.200G>C",
+            "pHGVS_S": "p.G67A",
+            "Function": "Missense",
+            "Freq(%)": 10.0,
+        },
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "GENEC",
+            "Transcript": "NM_3",
+            "Chr": "chr3",
+            "ExIn_ID": "EX1",
+            "cHGVS": "c.300T>A",
+            "pHGVS_S": "p.S100T",
+            "Function": "Missense",
+            "Freq(%)": 30.0,
+        },
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "GENEA",
+            "Transcript": "NM_2",
+            "Chr": "chr2",
+            "ExIn_ID": "EX2",
+            "cHGVS": "c.400C>G",
+            "pHGVS_S": "p.P133A",
+            "Function": "Missense",
+            "Freq(%)": 40.0,
+        },
     ]
     # This test only verifies row ordering. Simulate an unavailable production KB
     # so the legacy CtDrug fallback can provide simple synthetic drug rows.
@@ -1397,25 +1487,79 @@ def test_crc_targeted_summary_only_displays_drug_matched_variants(tmp_path):
     drug conclusion; full display applies to each matched row's drug list.
     """
     variations = [
-        {"ExistIn552": "Ⅱ类", "ExistInsmall358": 1, "Gene_Symbol": "TP53",
-         "cHGVS": "c.646G>A", "pHGVS_S": "p.V216M", "Freq(%)": 93.79},
-        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "SOS1",
-         "cHGVS": "c.2536G>A", "pHGVS_S": "p.E846K", "Freq(%)": 57.77},
-        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "GNAS",
-         "cHGVS": "c.1030G>A", "pHGVS_S": "p.E344K", "Freq(%)": 19.04},
-        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "KMT2B",
-         "cHGVS": "c.1681C>T", "pHGVS_S": "p.P561S", "Freq(%)": 1.69},
-        {"ExistIn552": "Ⅲ类", "ExistInsmall358": 1, "Gene_Symbol": "SMARCA4",
-         "cHGVS": "c.839C>A", "pHGVS_S": "p.P280H", "Freq(%)": 1.27},
-        {"ExistIn552": "Ⅱ类", "ExistInsmall358": 1, "Gene_Symbol": "RNF43",
-         "cHGVS": "c.350_351delinsA", "pHGVS_S": "p.R117Hfs*41", "Freq(%)": 0.90},
-        {"ExistIn552": "Ⅱ类", "ExistInsmall358": 1, "Gene_Symbol": "BARD1",
-         "cHGVS": "c.590delA", "pHGVS_S": "p.K197Rfs*15", "Freq(%)": 0.70},
-        {"ExistIn552": "Ⅱ类", "ExistInsmall358": 1, "Gene_Symbol": "ATM",
-         "cHGVS": "c.3673C>T", "pHGVS_S": "p.Q1225*", "Freq(%)": 0.53},
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "TP53",
+            "cHGVS": "c.646G>A",
+            "pHGVS_S": "p.V216M",
+            "Freq(%)": 93.79,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "SOS1",
+            "cHGVS": "c.2536G>A",
+            "pHGVS_S": "p.E846K",
+            "Freq(%)": 57.77,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "GNAS",
+            "cHGVS": "c.1030G>A",
+            "pHGVS_S": "p.E344K",
+            "Freq(%)": 19.04,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "KMT2B",
+            "cHGVS": "c.1681C>T",
+            "pHGVS_S": "p.P561S",
+            "Freq(%)": 1.69,
+        },
+        {
+            "ExistIn552": "Ⅲ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "SMARCA4",
+            "cHGVS": "c.839C>A",
+            "pHGVS_S": "p.P280H",
+            "Freq(%)": 1.27,
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "RNF43",
+            "cHGVS": "c.350_351delinsA",
+            "pHGVS_S": "p.R117Hfs*41",
+            "Freq(%)": 0.90,
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "BARD1",
+            "cHGVS": "c.590delA",
+            "pHGVS_S": "p.K197Rfs*15",
+            "Freq(%)": 0.70,
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "ATM",
+            "cHGVS": "c.3673C>T",
+            "pHGVS_S": "p.Q1225*",
+            "Freq(%)": 0.53,
+        },
         # A classified row outside the selected panel must not leak into the summary.
-        {"ExistIn552": "Ⅱ类", "ExistInsmall358": 0, "Gene_Symbol": "ERBB2",
-         "cHGVS": "c.1979G>A", "pHGVS_S": "p.G660D", "Freq(%)": 99.0},
+        {
+            "ExistIn552": "Ⅱ类",
+            "ExistInsmall358": 0,
+            "Gene_Symbol": "ERBB2",
+            "cHGVS": "c.1979G>A",
+            "pHGVS_S": "p.G660D",
+            "Freq(%)": 99.0,
+        },
     ]
     package = load_panel_package("crc_358_msi", project_root=ROOT)
     context = load_targeted_drug_rule_context(package)
@@ -1443,20 +1587,47 @@ def test_immune_positive_summary_includes_class_i_ii_without_clnsig(tmp_path):
 
     variations = [
         # PMS2 frameshift, Ⅰ类, BLANK CLNSIG — was wrongly dropped from summary.
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "PMS2",
-         "Transcript": "NM_000535", "Chr": "chr7", "ExIn_ID": "EX11",
-         "cHGVS": "c.1273delT", "pHGVS_S": "p.S425Lfs*23",
-         "Function": "Frameshift", "Freq(%)": 30.0, "CLNSIG": ""},
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "PMS2",
+            "Transcript": "NM_000535",
+            "Chr": "chr7",
+            "ExIn_ID": "EX11",
+            "cHGVS": "c.1273delT",
+            "pHGVS_S": "p.S425Lfs*23",
+            "Function": "Frameshift",
+            "Freq(%)": 30.0,
+            "CLNSIG": "",
+        },
         # ATR frameshift, Ⅰ类, BLANK CLNSIG — was wrongly dropped from summary.
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "ATR",
-         "Transcript": "NM_001184", "Chr": "chr3", "ExIn_ID": "EX9",
-         "cHGVS": "c.1291delA", "pHGVS_S": "p.R431Gfs*8",
-         "Function": "Frameshift", "Freq(%)": 5.0, "CLNSIG": ""},
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "ATR",
+            "Transcript": "NM_001184",
+            "Chr": "chr3",
+            "ExIn_ID": "EX9",
+            "cHGVS": "c.1291delA",
+            "pHGVS_S": "p.R431Gfs*8",
+            "Function": "Frameshift",
+            "Freq(%)": 5.0,
+            "CLNSIG": "",
+        },
         # KRAS missense, Ⅰ类, pathogenic — always included.
-        {"ExistIn552": "Ⅰ类", "ExistInsmall358": 1, "Gene_Symbol": "KRAS",
-         "Transcript": "NM_004985", "Chr": "chr12", "ExIn_ID": "EX2",
-         "cHGVS": "c.34G>T", "pHGVS_S": "p.G12C",
-         "Function": "Missense", "Freq(%)": 13.0, "CLNSIG": "Pathogenic"},
+        {
+            "ExistIn552": "Ⅰ类",
+            "ExistInsmall358": 1,
+            "Gene_Symbol": "KRAS",
+            "Transcript": "NM_004985",
+            "Chr": "chr12",
+            "ExIn_ID": "EX2",
+            "cHGVS": "c.34G>T",
+            "pHGVS_S": "p.G12C",
+            "Function": "Missense",
+            "Freq(%)": 13.0,
+            "CLNSIG": "Pathogenic",
+        },
     ]
 
     result = build_immune_variants(
@@ -1591,9 +1762,7 @@ def test_fancd2_panel_rule_survives_mapper_enhancer_and_word_render(tmp_path):
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
 
     report_data = mapper.map(excel_data, panel_package=package)
-    assert "FANCD2：c.1630C>T，p.Q544*" in report_data.get_field(
-        "immuno_positive_genes"
-    )
+    assert "FANCD2：c.1630C>T，p.Q544*" in report_data.get_field("immuno_positive_genes")
 
     enhance_report_data(
         report_data,
@@ -1603,9 +1772,10 @@ def test_fancd2_panel_rule_survives_mapper_enhancer_and_word_render(tmp_path):
         panel_id=package.panel_id,
         panel_package=package,
     )
-    assert [
-        row["gene"] for row in report_data.get_table("immune_positive_variants")
-    ] == ["FANCD2", "RAD50"]
+    assert [row["gene"] for row in report_data.get_table("immune_positive_variants")] == [
+        "FANCD2",
+        "RAD50",
+    ]
     assert report_data.get_field("imm_pos_DDR").splitlines() == [
         "FANCD2：c.1630C>T，p.Q544*",
         "RAD50：c.1093C>T，p.R365*",
@@ -1763,12 +1933,8 @@ def test_fanca_reviewed_rule_only_matches_class_ii_loss_of_function():
         "variant_level": ["Ⅱ类"],
         "applicability": "loss_of_function",
     }
-    assert _variant_override_matches(
-        rule, "FANCA", "c.100_101del", "p.K34Rfs*5", gene_class="Ⅱ类"
-    )
-    assert not _variant_override_matches(
-        rule, "FANCA", "c.100A>G", "p.K34R", gene_class="Ⅱ类"
-    )
+    assert _variant_override_matches(rule, "FANCA", "c.100_101del", "p.K34Rfs*5", gene_class="Ⅱ类")
+    assert not _variant_override_matches(rule, "FANCA", "c.100A>G", "p.K34R", gene_class="Ⅱ类")
     assert not _variant_override_matches(
         rule, "FANCA", "c.100_101del", "p.K34Rfs*5", gene_class="Ⅲ类"
     )
@@ -1791,26 +1957,16 @@ def test_report_group_feedback_variants_have_exact_panel_scoped_rules():
         assert rule["review_status"] == "provisional_runtime"
         assert rule["secondary_review_status"] == "pending_report_group_reconfirmation"
         assert len(rule["benefit_drugs"]) == drug_count
-        assert _variant_override_matches(
-            rule, gene, c_hgvs, p_hgvs, gene_class="Ⅱ类"
-        )
-        assert not _variant_override_matches(
-            rule, gene, "c.999999A>G", "p.X1Y", gene_class="Ⅱ类"
-        )
-        assert not _variant_override_matches(
-            rule, gene, c_hgvs, p_hgvs, gene_class="Ⅲ类"
-        )
+        assert _variant_override_matches(rule, gene, c_hgvs, p_hgvs, gene_class="Ⅱ类")
+        assert not _variant_override_matches(rule, gene, "c.999999A>G", "p.X1Y", gene_class="Ⅱ类")
+        assert not _variant_override_matches(rule, gene, c_hgvs, p_hgvs, gene_class="Ⅲ类")
 
 
 def test_feedback_ddr_genes_are_in_runtime_immune_rows():
     panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_358_msi")
-    ddr_row = next(
-        row for row in panel_config.immune_positive_rows if row.get("key") == "DDR"
-    )
+    ddr_row = next(row for row in panel_config.immune_positive_rows if row.get("key") == "DDR")
 
-    assert {"FANCD2", "RAD50", "PALB2", "RAD51D"} <= set(
-        panel_config.immune_positive_genes
-    )
+    assert {"FANCD2", "RAD50", "PALB2", "RAD51D"} <= set(panel_config.immune_positive_genes)
     assert {"FANCD2", "RAD50", "PALB2", "RAD51D"} <= {
         str(gene).upper() for gene in ddr_row["genes"]
     }
@@ -2002,9 +2158,9 @@ def test_excel_reader_infers_msi_status_from_percent_when_status_missing(tmp_pat
     path = tmp_path / "msi_percent_only.xlsx"
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
         pd.DataFrame({"A": [1]}).to_excel(writer, index=False, sheet_name="Meta")
-        pd.DataFrame(
-            {"Sample": ["normal", "tumor"], "MSI Percentage": [1.1, "45.2%"]}
-        ).to_excel(writer, index=False, sheet_name="MSIsensor")
+        pd.DataFrame({"Sample": ["normal", "tumor"], "MSI Percentage": [1.1, "45.2%"]}).to_excel(
+            writer, index=False, sheet_name="MSIsensor"
+        )
 
     result = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(str(path))
 
@@ -2031,9 +2187,7 @@ def test_excel_reader_reads_summary_first_legacy_msisensor_export(tmp_path):
             ],
         ).to_excel(writer, index=False, sheet_name="Msisensor")
 
-    result = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(
-        str(path)
-    )
+    result = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(str(path))
 
     assert result.single_values["MSI状态"] == "MSS"
     assert float(result.single_values["MSI百分比"]) == 0.0
@@ -2058,9 +2212,7 @@ def test_excel_reader_prefers_msisensor2_over_legacy_summary(tmp_path):
             ],
         ).to_excel(writer, index=False, sheet_name="Msisensor")
 
-    result = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(
-        str(path)
-    )
+    result = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(str(path))
 
     assert result.single_values["MSI状态"] == "MSI-H"
     assert float(result.single_values["MSI百分比"]) == pytest.approx(45.5)
@@ -2212,18 +2364,23 @@ def test_part3_and_word_tables_share_grouped_vaf_order(tmp_path):
     )
 
     # Table views keep APC adjacent so OOXML vertical merging remains valid.
-    assert [
-        (row["gene"], row["frequency"])
-        for row in report_data.get_table("all_variants")
-    ] == [("APC", "22.03"), ("APC", "17.50"), ("SMAD4", "20")]
+    assert [(row["gene"], row["frequency"]) for row in report_data.get_table("all_variants")] == [
+        ("APC", "22.03"),
+        ("APC", "17.50"),
+        ("SMAD4", "20"),
+    ]
 
     # Part 3 uses the same grouped policy: genes by max VAF, then sites by VAF.
-    assert [
-        row["header"] for row in report_data.get_table("gene_knowledge_sections")
-    ] == ["APC：c.994C>T", "APC：c.4666_4667insA", "SMAD4：c.1081C>T"]
-    assert [
-        row["gene"] for row in report_data.get_table("drug_analysis_sections")
-    ] == ["APC", "APC", "SMAD4"]
+    assert [row["header"] for row in report_data.get_table("gene_knowledge_sections")] == [
+        "APC：c.994C>T",
+        "APC：c.4666_4667insA",
+        "SMAD4：c.1081C>T",
+    ]
+    assert [row["gene"] for row in report_data.get_table("drug_analysis_sections")] == [
+        "APC",
+        "APC",
+        "SMAD4",
+    ]
     assert report_data.get_table("gene_references") == [
         "APC reference",
         "APC reference",
@@ -2338,9 +2495,7 @@ brands:
         base_path=str(tmp_path),
     )
 
-    assert summary == (
-        "DrugA[A牌]、DrugB[B牌]、替西罗莫司[替西罗莫司牌]、BCDE[BCDE牌]。"
-    )
+    assert summary == ("DrugA[A牌]、DrugB[B牌]、替西罗莫司[替西罗莫司牌]、BCDE[BCDE牌]。")
     assert "西罗莫司[西罗莫司牌]" not in summary
     assert "ABC[ABC牌]" not in summary
 
@@ -2371,9 +2526,7 @@ def test_qa_report_exposes_targeted_brand_mapping_warning(tmp_path):
     doc.add_paragraph("本次共检出体细胞变异：0个")
     doc.save(docx_path)
     report_data = ReportData()
-    report_data.set_field(
-        "targeted_drug_brand_warnings", ["NO_CONFIGURED_BRAND_MATCH"]
-    )
+    report_data.set_field("targeted_drug_brand_warnings", ["NO_CONFIGURED_BRAND_MATCH"])
 
     qa = build_docx_qa_report(
         output_file=str(docx_path),
@@ -2386,8 +2539,7 @@ def test_qa_report_exposes_targeted_brand_mapping_warning(tmp_path):
         "warning_codes": ["NO_CONFIGURED_BRAND_MATCH"],
     }
     assert any(
-        issue["code"] == "TARGETED_DRUG_BRAND_MAPPING"
-        and issue["level"] == "warning"
+        issue["code"] == "TARGETED_DRUG_BRAND_MAPPING" and issue["level"] == "warning"
         for issue in qa["issues"]
     )
 
@@ -2395,9 +2547,7 @@ def test_qa_report_exposes_targeted_brand_mapping_warning(tmp_path):
 def test_targeted_brand_processor_replaces_golden_template_static_summary(tmp_path):
     docx_path = tmp_path / "targeted_brand_summary.docx"
     doc = Document()
-    doc.add_paragraph(
-        "2.上表涉及的已上市的药物名称及对应的商品名称：旧商品名。"
-    )
+    doc.add_paragraph("2.上表涉及的已上市的药物名称及对应的商品名称：旧商品名。")
     doc.add_paragraph(
         "3. 上表涉及的已上市的药物名称及对应的商品名称："
         "帕博利珠单抗[可瑞达]、纳武利尤单抗[欧狄沃]。"
@@ -2406,17 +2556,12 @@ def test_targeted_brand_processor_replaces_golden_template_static_summary(tmp_pa
 
     TemplateRenderer(log_level="ERROR")._apply_targeted_drug_brand_summary(
         str(docx_path),
-        {
-            "targeted_drug_brand_summary": (
-                "奥拉帕利[利普卓]、纳武利尤单抗[欧狄沃]。"
-            )
-        },
+        {"targeted_drug_brand_summary": ("奥拉帕利[利普卓]、纳武利尤单抗[欧狄沃]。")},
     )
 
     paragraphs = [p.text for p in Document(docx_path).paragraphs]
     assert paragraphs[0] == (
-        "2.上表涉及的已上市的药物名称及对应的商品名称："
-        "奥拉帕利[利普卓]、纳武利尤单抗[欧狄沃]。"
+        "2.上表涉及的已上市的药物名称及对应的商品名称：奥拉帕利[利普卓]、纳武利尤单抗[欧狄沃]。"
     )
     assert paragraphs[1] == (
         "3. 上表涉及的已上市的药物名称及对应的商品名称："
@@ -2432,9 +2577,7 @@ def test_case2_fixture_tmb_msi_mapping_if_available():
     excel_data = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(
         str(fixture), include_tables=True
     )
-    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
-        excel_data
-    )
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(excel_data)
 
     assert excel_data.single_values["TMB"] == pytest.approx(7.10499382716049)
     assert excel_data.single_values["MSI状态"] == "MSI-H"
@@ -2444,9 +2587,9 @@ def test_case2_fixture_tmb_msi_mapping_if_available():
 
 
 def test_field_mapper_updates_msi_status_cn_from_mss(tmp_path):
-    report_data = FieldMapper(
-        config_dir=str(ROOT / "config"), log_level="ERROR"
-    ).map(_excel(tmp_path, single_values={"MSI状态": "MSS"}))
+    report_data = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR").map(
+        _excel(tmp_path, single_values={"MSI状态": "MSS"})
+    )
 
     assert report_data.get_field("msi_status") == "MSS"
     assert report_data.get_field("msi_status_cn") == "微卫星稳定型，MSS"
@@ -2495,7 +2638,9 @@ def test_detector_uses_trusted_filename_project_tokens(tmp_path):
 
     assert detector.detect(str(path_301), excel_data=excel_data)["project_type"] == "crc_301_msi"
     assert detector.detect(str(path_358), excel_data=excel_data)["project_type"] == "crc_358_msi"
-    assert detector.detect(str(path_lung), excel_data=excel_data)["project_type"] == "lung_methylation"
+    assert (
+        detector.detect(str(path_lung), excel_data=excel_data)["project_type"] == "lung_methylation"
+    )
 
 
 def test_crc_panel_enhancer_accepts_legacy_aliases():
@@ -2531,9 +2676,7 @@ def test_report_generator_rejects_unknown_project_type(tmp_path):
 
     result = generator.generate(
         excel_file=str(tmp_path / "missing.xlsx"),
-        template_file=str(
-            ROOT / "templates" / "aligned_template_with_cnv_fusion_hla_FIXED.docx"
-        ),
+        template_file=str(ROOT / "templates" / "aligned_template_with_cnv_fusion_hla_FIXED.docx"),
         output_dir=str(tmp_path),
         project_type="unknown_panel",
     )
@@ -2822,9 +2965,7 @@ def test_rule_package_loader_records_crc_rule_provenance():
         "drugs",
         "style",
     } <= rule_names
-    report_text = next(
-        item for item in provenance["files"] if item["rule_name"] == "report_text"
-    )
+    report_text = next(item for item in provenance["files"] if item["rule_name"] == "report_text")
     assert report_text["version"] == "0.2.0"
     assert report_text["sha256"]
 
@@ -2864,12 +3005,8 @@ def test_crc_report_text_rule_contains_active_tmb_msi_copy():
     assert rule["version"] == "0.2.0"
     assert rule["status"] == "active"
     assert "TMB-H的肿瘤" in text_rules["tmb_table_immuno_tips"]
-    assert "2020年6月，FDA批准帕博利珠单抗" in text_rules[
-        "tmb_detail_interpretation"
-    ]
-    assert "MSI-H的实体瘤通常具有免疫原性" in text_rules[
-        "msi_educational_tips"
-    ]
+    assert "2020年6月，FDA批准帕博利珠单抗" in text_rules["tmb_detail_interpretation"]
+    assert "MSI-H的实体瘤通常具有免疫原性" in text_rules["msi_educational_tips"]
 
 
 def test_crc_style_rule_contains_active_table_tokens():
@@ -3000,9 +3137,7 @@ def test_panel_registry_rejects_runtime_alias_collision():
         registry.register("shared_alias", object())
 
 
-def test_report_generator_blocks_invalid_panel_package_before_excel_read(
-    tmp_path, monkeypatch
-):
+def test_report_generator_blocks_invalid_panel_package_before_excel_read(tmp_path, monkeypatch):
     panel_yaml = _write_minimal_panel_package(tmp_path, "bad_panel")
     (panel_yaml.parent / "templates" / "standard.docx").unlink()
     package = PanelPackageLoader(
@@ -3048,10 +3183,7 @@ def test_report_generator_blocks_invalid_panel_package_before_excel_read(
     assert result["stage_results"][-1]["status"] == "FAIL"
     validation = result["panel_package_validation"]
     assert validation["status"] == "FAIL"
-    assert any(
-        issue["code"] == "DECLARED_FILE_MISSING"
-        for issue in validation["issues"]
-    )
+    assert any(issue["code"] == "DECLARED_FILE_MISSING" for issue in validation["issues"])
 
 
 def test_panel_validate_cli_reports_invalid_package(tmp_path):
@@ -3113,20 +3245,12 @@ def test_panel_package_validator_rejects_missing_required_marker(tmp_path):
     )
 
     assert report.ok is False
-    assert any(
-        issue.code == "TEMPLATE_MARKER_MISSING" for issue in report.errors
-    )
+    assert any(issue.code == "TEMPLATE_MARKER_MISSING" for issue in report.errors)
 
 
 def test_panel_package_validator_accepts_marker_split_across_runs(tmp_path):
     panel_yaml = _write_minimal_panel_package(tmp_path, "split_marker_panel")
-    template_path = (
-        tmp_path
-        / "panels"
-        / "split_marker_panel"
-        / "templates"
-        / "standard.docx"
-    )
+    template_path = tmp_path / "panels" / "split_marker_panel" / "templates" / "standard.docx"
     template_doc = Document()
     paragraph = template_doc.add_paragraph()
     paragraph.add_run("__PART3")
@@ -3173,9 +3297,7 @@ def test_template_contract_fails_when_declared_variable_is_removed(tmp_path):
 
 
 @pytest.mark.parametrize("marker_count", [0, 2])
-def test_template_contract_requires_exactly_one_structural_marker(
-    tmp_path, marker_count
-):
+def test_template_contract_requires_exactly_one_structural_marker(tmp_path, marker_count):
     template_path = tmp_path / f"part3_marker_{marker_count}.docx"
     doc = Document()
     doc.add_paragraph("报告正文")
@@ -3383,9 +3505,7 @@ def test_report_generator_blocks_missing_part3_marker_even_in_warn_mode(tmp_path
     assert not (output_dir / "must_not_render.docx").exists()
     stage_by_name = {stage["name"]: stage for stage in result["stage_results"]}
     assert stage_by_name["TemplateContractStage"]["status"] == "FAIL"
-    assert stage_by_name["TemplateContractStage"]["issues"][0]["code"] == (
-        "PART3_CONTRACT_FAILED"
-    )
+    assert stage_by_name["TemplateContractStage"]["issues"][0]["code"] == ("PART3_CONTRACT_FAILED")
     assert "TemplateRenderStage" not in stage_by_name
 
 
@@ -3450,9 +3570,7 @@ def test_report_generator_blocks_partial_part3_variant_coverage(
     assert result["success"] is False
     assert result["output_file"] is None
     assert not (output_dir / "partial_part3.docx").exists()
-    stage = next(
-        row for row in result["stage_results"] if row["name"] == "TemplateContractStage"
-    )
+    stage = next(row for row in result["stage_results"] if row["name"] == "TemplateContractStage")
     assert stage["status"] == "FAIL"
     assert "variant coverage mismatch" in stage["issues"][0]["message"]
 
@@ -3711,10 +3829,7 @@ def test_drug_analysis_is_limited_to_final_displayed_drugs():
         "ATM": [
             {
                 "type": "benefit",
-                "drug": (
-                    "奥拉帕利（Olaparib）、芦卡帕利（Rucaparib）、"
-                    "Tuvusertib+Peposertib"
-                ),
+                "drug": ("奥拉帕利（Olaparib）、芦卡帕利（Rucaparib）、Tuvusertib+Peposertib"),
                 "relation": "奥拉帕利相关说明。Tuvusertib联合治疗说明。",
                 "clinical": "芦卡帕利相关说明。Peposertib与Tuvusertib研究说明。",
             }
@@ -3828,13 +3943,16 @@ def test_gene_knowledge_uses_reviewed_columns_without_intro_domain_tail():
     provider._gene_intro_cache = {
         "KRAS": provider._strip_intro_domain_tail(
             "KRAS",
-            "KRAS基因简介。\nKRAS基因编码的蛋白全长为189个氨基酸，主要包含Hypervariable region（166-185位氨基酸）。",
+            "KRAS基因简介。\nKRAS基因编码的蛋白全长为189个氨基酸，"
+            "主要包含Hypervariable region（166-185位氨基酸）。",
         )
     }
     provider._gene_analysis_cache = {"KRAS": "generic KRAS analysis"}
     provider._reviewed_gene_analysis_cache = {
         "KRAS": {
-            "domain_text": "KRAS基因编码的蛋白全长为189个氨基酸，主要包含RAS结构域（1-166位氨基酸）。",
+            "domain_text": (
+                "KRAS基因编码的蛋白全长为189个氨基酸，主要包含RAS结构域（1-166位氨基酸）。"
+            ),
             "expert_text": "据OncoKB/JAXCKB数据库记载，该为已知激活突变，对蛋白功能有重要影响。",
             "cancer_text": "KRAS突变会激活下游信号通路，且已被证实是anti-EGFR抗体药物耐药的标志。",
         }
@@ -3934,7 +4052,9 @@ def test_detector_and_reviewer_signature_images_are_context_driven(tmp_path):
     paragraph.add_run().add_picture(str(old_detector), width=Cm(2))
     paragraph.add_run(" ")
     paragraph.add_run().add_picture(str(old_reviewer), width=Cm(2))
-    doc.add_paragraph("检测者：                    审核者：                    报告日期：2026.05.24")
+    doc.add_paragraph(
+        "检测者：                    审核者：                    报告日期：2026.05.24"
+    )
     doc.save(docx_path)
 
     TemplateRenderer(log_level="ERROR")._replace_signature_anchor_images(
@@ -3946,14 +4066,8 @@ def test_detector_and_reviewer_signature_images_are_context_driven(tmp_path):
     )
 
     with ZipFile(docx_path) as zf:
-        assert (
-            zf.read("word/media/reportgen_signature_detector.png")
-            == new_detector.read_bytes()
-        )
-        assert (
-            zf.read("word/media/reportgen_signature_reviewer.png")
-            == new_reviewer.read_bytes()
-        )
+        assert zf.read("word/media/reportgen_signature_detector.png") == new_detector.read_bytes()
+        assert zf.read("word/media/reportgen_signature_reviewer.png") == new_reviewer.read_bytes()
         document_xml = zf.read("word/document.xml").decode("utf-8")
         rels_xml = zf.read("word/_rels/document.xml.rels").decode("utf-8")
     assert "reportgen_signature_detector.png" in rels_xml
@@ -3982,7 +4096,9 @@ def test_signature_processors_replace_uploaded_images_after_layout(tmp_path):
     paragraph.add_run().add_picture(str(old_detector), width=Cm(2))
     paragraph.add_run(" ")
     paragraph.add_run().add_picture(str(old_reviewer), width=Cm(2))
-    doc.add_paragraph("检测者：                    审核者：                    报告日期：2026.05.24")
+    doc.add_paragraph(
+        "检测者：                    审核者：                    报告日期：2026.05.24"
+    )
     doc.save(docx_path)
 
     renderer = TemplateRenderer(log_level="ERROR")
@@ -4006,11 +4122,7 @@ def test_signature_processors_replace_uploaded_images_after_layout(tmp_path):
     assert label_inline is not None and len(label_inline) == 2
 
     with ZipFile(docx_path) as zf:
-        media = {
-            zf.read(name)
-            for name in zf.namelist()
-            if name.startswith("word/media/")
-        }
+        media = {zf.read(name) for name in zf.namelist() if name.startswith("word/media/")}
         document_xml = zf.read("word/document.xml").decode("utf-8")
 
     assert new_detector.read_bytes() in media
@@ -4036,7 +4148,9 @@ def test_template_signature_images_are_removed_without_context_paths(tmp_path):
     paragraph.add_run().add_picture(str(old_detector), width=Cm(2))
     paragraph.add_run(" ")
     paragraph.add_run().add_picture(str(old_reviewer), width=Cm(2))
-    doc.add_paragraph("检测者：                    审核者：                    报告日期：2026.05.24")
+    doc.add_paragraph(
+        "检测者：                    审核者：                    报告日期：2026.05.24"
+    )
     doc.save(docx_path)
 
     TemplateRenderer(log_level="ERROR")._replace_signature_anchor_images(str(docx_path), {})
@@ -4066,9 +4180,7 @@ reviewer:
     )
 
     assert signature_options(tmp_path, "detector") == ["张三"]
-    assert resolve_signature_path(tmp_path, "detector", " 张三 ") == str(
-        detector_png.resolve()
-    )
+    assert resolve_signature_path(tmp_path, "detector", " 张三 ") == str(detector_png.resolve())
     assert resolve_signature_path(tmp_path, "reviewer", "李四") == str(reviewer_png)
     assert resolve_signature_path(tmp_path, "reviewer", "王五") == ""
 
@@ -4087,9 +4199,7 @@ def test_signature_library_prefers_external_runtime_storage(tmp_path, monkeypatc
     )
     monkeypatch.setenv("RG_WEB_STORAGE_ROOT", str(runtime_root))
 
-    assert resolve_signature_path(config_dir, "detector", "TEST") == str(
-        runtime_image.resolve()
-    )
+    assert resolve_signature_path(config_dir, "detector", "TEST") == str(runtime_image.resolve())
 
 
 def test_report_generator_fills_signature_paths_from_library(tmp_path):
@@ -4162,11 +4272,7 @@ def test_clinical_schema_exposes_signature_people_as_editable_selects(monkeypatc
     )
 
     schema = clinical_info_service.get_clinical_form_schema("crc_358_msi")
-    fields = {
-        field.key: field
-        for group in schema.groups
-        for field in group.fields
-    }
+    fields = {field.key: field for group in schema.groups for field in group.fields}
 
     assert fields["issuer"].ui.component == "select"
     assert fields["issuer"].ui.options == ["张三"]
@@ -4199,11 +4305,7 @@ def test_crc358_clinical_schema_does_not_require_receive_date(monkeypatch):
     )
 
     schema = clinical_info_service.get_clinical_form_schema("crc_358_msi")
-    fields = {
-        field.key: field
-        for group in schema.groups
-        for field in group.fields
-    }
+    fields = {field.key: field for group in schema.groups for field in group.fields}
 
     assert fields["receive_date"].required is False
     assert fields["report_date"].required is True
@@ -4234,7 +4336,9 @@ def test_detection_content_fill_underline_is_restored(tmp_path):
     paragraph = doc.add_paragraph()
     paragraph.add_run("对委托人").font.underline = True
     paragraph.add_run("    组织    ").font.underline = True
-    paragraph.add_run("的 DNA 样本微卫星不稳定性（MSI）以及与肿瘤密切相关的358个基因进行检测：").font.underline = True
+    paragraph.add_run(
+        "的 DNA 样本微卫星不稳定性（MSI）以及与肿瘤密切相关的358个基因进行检测："
+    ).font.underline = True
     doc.save(docx_path)
 
     renderer = TemplateRenderer(log_level="ERROR")
@@ -4298,9 +4402,7 @@ def test_pdf_footer_page_number_is_used_for_static_toc_detection():
 
 def test_report_generator_normalizes_duplicate_project_name_suffix():
     assert (
-        ReportGenerator._normalize_project_name(
-            "结直肠癌358基因+MSI检测项目", "crc_358_msi"
-        )
+        ReportGenerator._normalize_project_name("结直肠癌358基因+MSI检测项目", "crc_358_msi")
         == "结直肠癌358基因+MSI"
     )
     assert (
@@ -4315,7 +4417,12 @@ def test_variant_summary_table_restores_reviewed_link_style(tmp_path):
     docx_path = tmp_path / "variant_summary.docx"
     doc = Document()
     table = doc.add_table(rows=2, cols=4)
-    headers = ["基因", "突变位点", "潜在获益靶向药物\n（证据等级）", "可能耐药或慎重药物\n（证据等级）"]
+    headers = [
+        "基因",
+        "突变位点",
+        "潜在获益靶向药物\n（证据等级）",
+        "可能耐药或慎重药物\n（证据等级）",
+    ]
     values = ["KRAS", "c.34G>A,\np.G12S", "司美替尼（C）", "西妥昔单抗（A）"]
     for idx, value in enumerate(headers):
         table.rows[0].cells[idx].text = value
@@ -4348,7 +4455,12 @@ def test_variant_summary_table_can_disable_link_underlines_from_panel_style(tmp_
     docx_path = tmp_path / "variant_summary_plain.docx"
     doc = Document()
     table = doc.add_table(rows=2, cols=4)
-    headers = ["基因", "突变位点", "潜在获益靶向药物\n（证据等级）", "可能耐药或慎重药物\n（证据等级）"]
+    headers = [
+        "基因",
+        "突变位点",
+        "潜在获益靶向药物\n（证据等级）",
+        "可能耐药或慎重药物\n（证据等级）",
+    ]
     values = ["KRAS", "c.34G>A,\np.G12S", "司美替尼（C）", "西妥昔单抗（A）"]
     for idx, value in enumerate(headers):
         table.rows[0].cells[idx].text = value
@@ -4381,7 +4493,12 @@ def test_variant_summary_table_keeps_undetected_text_plain(tmp_path):
     docx_path = tmp_path / "variant_summary_undetected.docx"
     doc = Document()
     table = doc.add_table(rows=2, cols=4)
-    headers = ["基因", "突变位点", "潜在获益靶向药物\n（证据等级）", "可能耐药或慎重药物\n（证据等级）"]
+    headers = [
+        "基因",
+        "突变位点",
+        "潜在获益靶向药物\n（证据等级）",
+        "可能耐药或慎重药物\n（证据等级）",
+    ]
     values = ["FBXW7", "未见突变", "--", "--"]
     for idx, value in enumerate(headers):
         table.rows[0].cells[idx].text = value
@@ -4673,15 +4790,11 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
             for p in toc.xpath(".//w:p", namespaces=ns)
             if label in "".join(p.xpath(".//w:t/text()", namespaces=ns))
         )
-        instruction = "".join(
-            paragraph.xpath(".//w:instrText/text()", namespaces=ns)
-        )
+        instruction = "".join(paragraph.xpath(".//w:instrText/text()", namespaces=ns))
         return re.search(r"PAGEREF (_ReportGenToc_[^ ]+)", instruction).group(1)
 
     def bookmark_text(name):
-        start = root.xpath(
-            ".//w:bookmarkStart[@w:name=$name]", namespaces=ns, name=name
-        )[0]
+        start = root.xpath(".//w:bookmarkStart[@w:name=$name]", namespaces=ns, name=name)[0]
         paragraph = start.xpath("ancestor::w:p[1]", namespaces=ns)[0]
         return "".join(paragraph.xpath(".//w:t/text()", namespaces=ns)).strip()
 
@@ -4732,8 +4845,7 @@ def test_toc_uses_valid_reportgen_bookmarks_and_cached_page_numbers(tmp_path):
     toc = [
         sdt
         for sdt in root.xpath(".//w:sdt", namespaces=ns)
-        if "参考文献" in paragraph_text(sdt)
-        and re.search(r"第[一二三四]部分", paragraph_text(sdt))
+        if "参考文献" in paragraph_text(sdt) and re.search(r"第[一二三四]部分", paragraph_text(sdt))
     ]
     assert toc, "TOC sdt not found"
     toc = toc[0]
@@ -4792,14 +4904,38 @@ def test_variant_detail_no_mutation_gene_is_not_link_styled(tmp_path):
     doc = Document()
     table = doc.add_table(rows=4, cols=9)
     hdr0 = [
-        "基因名称", "基因突变信息", "基因突变信息", "基因突变信息", "基因突变信息",
-        "基因突变信息", "基因突变信息", "靶向药物信息", "靶向药物信息",
+        "基因名称",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "靶向药物信息",
+        "靶向药物信息",
     ]
     hdr1 = [
-        "基因名称", "转录本号", "染色体", "外显子", "位点", "突变类型", "频率",
-        "潜在获益靶向药物", "可能耐药或慎重药物",
+        "基因名称",
+        "转录本号",
+        "染色体",
+        "外显子",
+        "位点",
+        "突变类型",
+        "频率",
+        "潜在获益靶向药物",
+        "可能耐药或慎重药物",
     ]
-    variant_row = ["TP53", "NM_000546", "chr17", "7", "c.844C>T", "missense", "30", "AZD1775（C）", "--"]
+    variant_row = [
+        "TP53",
+        "NM_000546",
+        "chr17",
+        "7",
+        "c.844C>T",
+        "missense",
+        "30",
+        "AZD1775（C）",
+        "--",
+    ]
     no_mut_row = ["BRAF", "", "", "", "未见突变", "", "", "--", "--"]
     for ci, value in enumerate(hdr0):
         table.rows[0].cells[ci].text = value
@@ -4854,7 +4990,9 @@ def test_biomarker_table_restores_template_typography(tmp_path):
     table.rows[0].cells[2].text = "用药提示"
     table.rows[1].cells[0].text = "肿瘤突变负荷（TMB）"
     table.rows[1].cells[1].text = "6.5 mutations/Mb，TMB-L"
-    table.rows[1].cells[2].text = "多项临床研究表明，TMB-H的肿瘤对免疫检查点抑制剂有更强的免疫应答效果"
+    table.rows[1].cells[
+        2
+    ].text = "多项临床研究表明，TMB-H的肿瘤对免疫检查点抑制剂有更强的免疫应答效果"
     doc.save(docx_path)
 
     TemplateRenderer(log_level="ERROR")._restore_biomarker_table_style(str(docx_path))
@@ -5056,15 +5194,11 @@ def test_multiline_bullet_placeholder_splits_into_real_bullets(tmp_path):
     doc.add_paragraph("注：")
     doc.save(docx_path)
 
-    TemplateRenderer(log_level="ERROR")._normalize_multiline_bullet_paragraphs(
-        str(docx_path)
-    )
+    TemplateRenderer(log_level="ERROR")._normalize_multiline_bullet_paragraphs(str(docx_path))
 
     rendered = Document(docx_path)
     bullets = [
-        p.text
-        for p in rendered.paragraphs
-        if p._p.pPr is not None and p._p.pPr.numPr is not None
+        p.text for p in rendered.paragraphs if p._p.pPr is not None and p._p.pPr.numPr is not None
     ]
     assert bullets == ["第一条", "第二条", "第三条"]
 
@@ -5096,9 +5230,7 @@ def test_empty_numbered_paragraphs_are_removed(tmp_path):
 
     rendered = Document(docx_path)
     bullets = [
-        p.text
-        for p in rendered.paragraphs
-        if p._p.pPr is not None and p._p.pPr.numPr is not None
+        p.text for p in rendered.paragraphs if p._p.pPr is not None and p._p.pPr.numPr is not None
     ]
     assert bullets == ["保留", "也保留"]
     assert any(not p.text for p in rendered.paragraphs)
@@ -5151,9 +5283,7 @@ def test_multiline_bullet_cleanup_preserves_numbered_image_paragraph(tmp_path):
     image_paragraph.add_run().add_picture(str(image_path), width=Inches(2.0))
     doc.save(docx_path)
 
-    TemplateRenderer(log_level="ERROR")._normalize_multiline_bullet_paragraphs(
-        str(docx_path)
-    )
+    TemplateRenderer(log_level="ERROR")._normalize_multiline_bullet_paragraphs(str(docx_path))
 
     rendered = Document(docx_path)
     assert len(rendered.inline_shapes) == 1
@@ -5170,9 +5300,7 @@ def test_blank_page_break_before_references_heading_is_removed(tmp_path):
     doc.add_paragraph("PMID: 23066310 KRAS mutation testing in metastatic colorectal cancer.")
     doc.save(docx_path)
 
-    TemplateRenderer(log_level="ERROR")._remove_blank_page_breaks_before_headings(
-        str(docx_path)
-    )
+    TemplateRenderer(log_level="ERROR")._remove_blank_page_breaks_before_headings(str(docx_path))
 
     rendered = Document(docx_path)
     texts = [p.text for p in rendered.paragraphs]
@@ -5258,22 +5386,16 @@ def test_standalone_page_break_before_pathway_table_is_removed(tmp_path):
 
     rendered = Document(docx_path)
     empty_breaks = [
-        p
-        for p in rendered.paragraphs
-        if not p.text.strip() and 'w:type="page"' in p._p.xml
+        p for p in rendered.paragraphs if not p.text.strip() and 'w:type="page"' in p._p.xml
     ]
     assert empty_breaks == []
-    assert not any(
-        not p.text.strip()
-        for p in rendered.paragraphs[:2]
-    )
-    reference_label = next(
-        p for p in rendered.paragraphs if p.text.strip() == "参考文献："
-    )
+    assert not any(not p.text.strip() for p in rendered.paragraphs[:2])
+    reference_label = next(p for p in rendered.paragraphs if p.text.strip() == "参考文献：")
     assert "keepNext" in reference_label._p.xml
-    assert 'w:type="page"' in next(
-        p for p in rendered.paragraphs if p.text.startswith("Nat Rev Cancer")
-    )._p.xml
+    assert (
+        'w:type="page"'
+        in next(p for p in rendered.paragraphs if p.text.startswith("Nat Rev Cancer"))._p.xml
+    )
     assert pathway_reference_label.text in [p.text for p in rendered.paragraphs]
     compacted_label = [
         p
@@ -5487,9 +5609,7 @@ def test_appendix_sections_reuse_reviewed_body_header(tmp_path):
     doc = Document(docx_path)
     appendix = doc.sections[-1]
     assert not appendix.different_first_page_header_footer
-    assert "科技服务人类健康" in "\n".join(
-        p.text for p in appendix.header.paragraphs
-    )
+    assert "科技服务人类健康" in "\n".join(p.text for p in appendix.header.paragraphs)
     p_bdr = appendix.footer.paragraphs[0]._p.get_or_add_pPr().find(qn("w:pBdr"))
     assert p_bdr is not None
     assert p_bdr.find(qn("w:top")).get(qn("w:val")) == "single"
@@ -5553,8 +5673,12 @@ def test_macos_field_refresh_does_not_use_word_by_default(monkeypatch, tmp_path)
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.delenv("REPORTGEN_REFRESH_WITH_WORD", raising=False)
     monkeypatch.setattr(renderer, "_document_contains_toc", lambda path: True)
-    monkeypatch.setattr(renderer, "_refresh_fields_with_word_macos", lambda path: calls.append("word"))
-    monkeypatch.setattr(renderer, "_refresh_fields_with_libreoffice", lambda path: calls.append("libreoffice"))
+    monkeypatch.setattr(
+        renderer, "_refresh_fields_with_word_macos", lambda path: calls.append("word")
+    )
+    monkeypatch.setattr(
+        renderer, "_refresh_fields_with_libreoffice", lambda path: calls.append("libreoffice")
+    )
 
     renderer._refresh_fields_with_native_engine(str(docx_path))
 
@@ -5570,8 +5694,12 @@ def test_macos_field_refresh_can_opt_into_word(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setenv("REPORTGEN_REFRESH_WITH_WORD", "1")
     monkeypatch.setattr(renderer, "_document_contains_toc", lambda path: True)
-    monkeypatch.setattr(renderer, "_refresh_fields_with_word_macos", lambda path: calls.append("word"))
-    monkeypatch.setattr(renderer, "_refresh_fields_with_libreoffice", lambda path: calls.append("libreoffice"))
+    monkeypatch.setattr(
+        renderer, "_refresh_fields_with_word_macos", lambda path: calls.append("word")
+    )
+    monkeypatch.setattr(
+        renderer, "_refresh_fields_with_libreoffice", lambda path: calls.append("libreoffice")
+    )
 
     renderer._refresh_fields_with_native_engine(str(docx_path))
 
@@ -5583,17 +5711,30 @@ def test_variant_table_layout_optimizer_keeps_reviewed_nine_column_template(tmp_
     doc = Document()
     table = doc.add_table(rows=3, cols=9)
     headers = [
-        "基因名称", "基因突变信息", "基因突变信息", "基因突变信息",
-        "基因突变信息", "基因突变信息", "基因突变信息",
-        "靶向药物信息", "靶向药物信息",
+        "基因名称",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "基因突变信息",
+        "靶向药物信息",
+        "靶向药物信息",
     ]
     for idx, text in enumerate(headers):
         table.rows[0].cells[idx].text = text
     for idx in range(9):
         table.rows[1].cells[idx].text = "测试内容"
     values = [
-        "TP53", "NM_000546.6", "17", "8", "c.817C>T,\np.R273C",
-        "点突变", "76.12", "AZD1775（C）\nAlisertib（C）", "--",
+        "TP53",
+        "NM_000546.6",
+        "17",
+        "8",
+        "c.817C>T,\np.R273C",
+        "点突变",
+        "76.12",
+        "AZD1775（C）\nAlisertib（C）",
+        "--",
     ]
     for idx, text in enumerate(values):
         table.rows[2].cells[idx].text = text
@@ -5618,9 +5759,9 @@ def test_real_no_variants_sample_regression_if_available():
     if not sample.exists():
         pytest.skip("real no-variants sample is not available in this checkout")
 
-    excel_data = ExcelReader(
-        config_dir=str(ROOT / "config"), log_level="ERROR"
-    ).read(str(sample), include_tables=True)
+    excel_data = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(
+        str(sample), include_tables=True
+    )
     report_data = enhance_report_data(
         ReportData(),
         excel_data,
@@ -5732,6 +5873,198 @@ def test_qa_report_detects_body_blank_page_hidden_by_header_footer_and_watermark
     )
     assert page2["body_low_content"] is True
     assert page2["body_dark_ratio"] == 0.0
+
+
+def test_qa_report_accepts_only_reviewed_semantic_sparse_page(tmp_path, monkeypatch):
+    docx_path = tmp_path / "semantic_sparse.docx"
+    doc = Document()
+    doc.add_paragraph("已生成报告")
+    doc.save(docx_path)
+
+    def fake_render(docx_path, *, output_dir, **_kwargs):
+        from PIL import Image, ImageDraw
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        pages = []
+        for page_no in (1, 2, 3):
+            page = output_dir / f"{Path(docx_path).stem}-{page_no}.png"
+            image = Image.new("RGB", (200, 300), "white")
+            draw = ImageDraw.Draw(image)
+            if page_no == 2:
+                draw.rectangle((30, 80, 110, 81), fill="black")
+                draw.rectangle((30, 100, 80, 101), fill="black")
+            else:
+                draw.rectangle((25, 65, 175, 235), fill="black")
+            image.save(page)
+            pages.append(page)
+        return pages
+
+    monkeypatch.setattr("reportgen.core.qa_report.render_docx_to_pngs", fake_render)
+    monkeypatch.setattr(
+        "reportgen.core.qa_report._extract_pdf_page_texts",
+        lambda *_args, **_kwargs: (
+            {
+                1: "正文",
+                2: "检测结果仅对本次送检样本负责\n咨询电话：00000000。",
+                3: "正文",
+            },
+            None,
+        ),
+    )
+    report_data = ReportData(
+        context={
+            "panel_style": {
+                "visual_qa": {
+                    "expected_sparse_pages": [
+                        {
+                            "id": "legal_notice",
+                            "required_text": [
+                                "检测结果仅对本次送检样本负责",
+                                "咨询电话：",
+                            ],
+                            "max_matches": 1,
+                        }
+                    ]
+                }
+            }
+        }
+    )
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        visual_render="all",
+        visual_render_required=True,
+        visual_render_output_dir=str(tmp_path / "rendered"),
+    )
+
+    assert qa["status"] == "PASS"
+    check = qa["checks"]["blank_page_detection"]
+    assert check["status"] == "PASS"
+    accepted = check["expected_sparse_pages"]
+    assert len(accepted) == 1
+    assert accepted[0]["id"] == "legal_notice"
+    assert accepted[0]["page_number"] == 2
+
+
+def test_qa_report_rejects_sparse_page_when_semantic_marker_is_incomplete(tmp_path, monkeypatch):
+    docx_path = tmp_path / "unexpected_sparse.docx"
+    Document().save(docx_path)
+
+    def fake_render(docx_path, *, output_dir, **_kwargs):
+        from PIL import Image, ImageDraw
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        pages = []
+        for page_no in (1, 2, 3):
+            page = output_dir / f"{Path(docx_path).stem}-{page_no}.png"
+            image = Image.new("RGB", (200, 300), "white")
+            draw = ImageDraw.Draw(image)
+            if page_no == 2:
+                draw.rectangle((30, 80, 110, 81), fill="black")
+            else:
+                draw.rectangle((25, 65, 175, 235), fill="black")
+            image.save(page)
+            pages.append(page)
+        return pages
+
+    monkeypatch.setattr("reportgen.core.qa_report.render_docx_to_pngs", fake_render)
+    monkeypatch.setattr(
+        "reportgen.core.qa_report._extract_pdf_page_texts",
+        lambda *_args, **_kwargs: (
+            {2: "检测结果仅对本次送检样本负责"},
+            None,
+        ),
+    )
+    report_data = ReportData(
+        context={
+            "panel_style": {
+                "visual_qa": {
+                    "expected_sparse_pages": [
+                        {
+                            "id": "legal_notice",
+                            "required_text": [
+                                "检测结果仅对本次送检样本负责",
+                                "咨询电话：",
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+    )
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        visual_render="all",
+        visual_render_required=True,
+        visual_render_output_dir=str(tmp_path / "rendered"),
+    )
+
+    assert qa["status"] == "FAIL"
+    check = qa["checks"]["blank_page_detection"]
+    assert check["status"] == "FAIL"
+    assert any(path.endswith("-2.png") for path in check["unexpected_low_content_pages"])
+    assert check["expected_sparse_pages"] == []
+
+
+def test_qa_report_never_accepts_blank_page_as_sparse_exception(tmp_path, monkeypatch):
+    docx_path = tmp_path / "blank_exception.docx"
+    Document().save(docx_path)
+
+    def fake_render(docx_path, *, output_dir, **_kwargs):
+        from PIL import Image, ImageDraw
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        pages = []
+        for page_no in (1, 2, 3):
+            page = output_dir / f"{Path(docx_path).stem}-{page_no}.png"
+            image = Image.new("RGB", (200, 300), "white")
+            if page_no != 2:
+                ImageDraw.Draw(image).rectangle((25, 65, 175, 235), fill="black")
+            image.save(page)
+            pages.append(page)
+        return pages
+
+    monkeypatch.setattr("reportgen.core.qa_report.render_docx_to_pngs", fake_render)
+    monkeypatch.setattr(
+        "reportgen.core.qa_report._extract_pdf_page_texts",
+        lambda *_args, **_kwargs: (
+            {2: "检测结果仅对本次送检样本负责 咨询电话：00000000。"},
+            None,
+        ),
+    )
+    report_data = ReportData(
+        context={
+            "panel_style": {
+                "visual_qa": {
+                    "expected_sparse_pages": [
+                        {
+                            "id": "legal_notice",
+                            "required_text": [
+                                "检测结果仅对本次送检样本负责",
+                                "咨询电话：",
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+    )
+
+    qa = build_docx_qa_report(
+        output_file=str(docx_path),
+        report_data=report_data,
+        visual_render="all",
+        visual_render_required=True,
+        visual_render_output_dir=str(tmp_path / "rendered"),
+    )
+
+    assert qa["status"] == "FAIL"
+    check = qa["checks"]["blank_page_detection"]
+    assert any(path.endswith("-2.png") for path in check["blank_pages"])
+    assert check["expected_sparse_pages"] == []
 
 
 def test_qa_report_visual_render_optional_failure_warns(tmp_path, monkeypatch):
@@ -5939,9 +6272,7 @@ def test_qa_report_records_template_contract_failure(tmp_path):
 
     assert qa["status"] == "FAIL"
     assert qa["checks"]["template_contract"]["status"] == "FAIL"
-    assert qa["checks"]["template_contract"]["missing_required_variables"] == [
-        "sample_id"
-    ]
+    assert qa["checks"]["template_contract"]["missing_required_variables"] == ["sample_id"]
     assert any(i["code"] == "TEMPLATE_CONTRACT_FAILED" for i in qa["issues"])
 
 
@@ -6012,9 +6343,7 @@ def test_front_matter_spacing_restores_report_guide_golden_offset(tmp_path):
     doc.add_paragraph("报告导读")
     doc.save(docx_path)
 
-    TemplateRenderer(log_level="ERROR")._normalize_front_matter_spacing(
-        str(docx_path)
-    )
+    TemplateRenderer(log_level="ERROR")._normalize_front_matter_spacing(str(docx_path))
 
     import xml.etree.ElementTree as ET
     from zipfile import ZipFile
@@ -6040,8 +6369,8 @@ def test_front_matter_spacing_restores_report_guide_golden_offset(tmp_path):
 
     assert has_page_break(paragraphs[guide_idx - 31])
     assert text(paragraphs[guide_idx - 32]) == "检测报告"
-    assert all(text(elem) == "" for elem in paragraphs[guide_idx - 30:guide_idx])
-    assert not any(has_page_break(elem) for elem in paragraphs[guide_idx - 30:guide_idx])
+    assert all(text(elem) == "" for elem in paragraphs[guide_idx - 30 : guide_idx])
+    assert not any(has_page_break(elem) for elem in paragraphs[guide_idx - 30 : guide_idx])
 
 
 def test_template_renderer_can_build_panel_declared_processors_only():
@@ -6076,9 +6405,7 @@ def test_template_renderer_can_disable_panel_processors(tmp_path):
     assert renderer.last_processor_report == []
 
 
-def test_template_renderer_blocks_critical_part3_processor_error(
-    tmp_path, monkeypatch
-):
+def test_template_renderer_blocks_critical_part3_processor_error(tmp_path, monkeypatch):
     docx_path = tmp_path / "critical_part3.docx"
     doc = Document()
     doc.add_paragraph("__PART3_MARKER__")
@@ -6088,9 +6415,7 @@ def test_template_renderer_blocks_critical_part3_processor_error(
     monkeypatch.setattr(
         renderer,
         "_render_part3_formatted",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            RuntimeError("part3 failed")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("part3 failed")),
     )
 
     with pytest.raises(RuntimeError, match="Critical DOCX post-processing failed"):
@@ -6119,9 +6444,7 @@ def test_template_renderer_does_not_leave_output_after_critical_failure(
     monkeypatch.setattr(
         renderer,
         "_render_part3_formatted",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            RuntimeError("synthetic part3 failure")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("synthetic part3 failure")),
     )
 
     with pytest.raises(ValueError, match="Critical DOCX post-processing failed"):
@@ -6184,9 +6507,7 @@ def _assert_processors_idempotent(
         str(docx_path),
         processor_names=processor_names,
     )
-    assert all(
-        row["status"] in {"OK", "SKIPPED"} for row in renderer.last_processor_report
-    )
+    assert all(row["status"] in {"OK", "SKIPPED"} for row in renderer.last_processor_report)
     first_signature = _docx_xml_signature(docx_path)
 
     renderer._run_post_render_processors(
@@ -6195,9 +6516,7 @@ def _assert_processors_idempotent(
         str(docx_path),
         processor_names=processor_names,
     )
-    assert all(
-        row["status"] in {"OK", "SKIPPED"} for row in renderer.last_processor_report
-    )
+    assert all(row["status"] in {"OK", "SKIPPED"} for row in renderer.last_processor_report)
     assert _docx_xml_signature(docx_path) == first_signature
     return docx_path
 
@@ -6472,9 +6791,7 @@ def test_drug_brand_summary_bolds_only_square_bracket_fragments(tmp_path):
     docx_path = tmp_path / "brand_brackets.docx"
     marker = "上表涉及的已上市的药物名称及对应的商品名称"
     doc = Document()
-    targeted = doc.add_paragraph(
-        f"2. {marker}：奥拉帕利[利普卓]、芦卡帕利[Rubraca]。"
-    )
+    targeted = doc.add_paragraph(f"2. {marker}：奥拉帕利[利普卓]、芦卡帕利[Rubraca]。")
     targeted.runs[0].font.bold = False
     immune = doc.add_paragraph(f"3. {marker}：帕博利珠单抗[可瑞达]。")
     immune.runs[0].font.bold = False
@@ -6489,9 +6806,7 @@ def test_drug_brand_summary_bolds_only_square_bracket_fragments(tmp_path):
     summaries = [p for p in rendered.paragraphs if marker in p.text]
     assert len(summaries) == 2
     for paragraph in summaries:
-        bracket_runs = [
-            run for run in paragraph.runs if run.text.startswith("[")
-        ]
+        bracket_runs = [run for run in paragraph.runs if run.text.startswith("[")]
         non_bracket_runs = [
             run for run in paragraph.runs if run.text and not run.text.startswith("[")
         ]
@@ -6512,9 +6827,7 @@ def test_part3_variant_heading_has_ten_point_spacing_before_and_after(tmp_path):
         doc.add_paragraph(text)
     doc.save(docx_path)
 
-    TemplateRenderer(log_level="ERROR")._restore_part3_dynamic_styles(
-        str(docx_path), {}
-    )
+    TemplateRenderer(log_level="ERROR")._restore_part3_dynamic_styles(str(docx_path), {})
 
     rendered = Document(docx_path)
     heading = next(
@@ -6547,16 +6860,13 @@ def test_part3_drug_analysis_labels_do_not_emit_keepnext_marker(tmp_path):
         doc.add_paragraph(text)
     doc.save(docx_path)
 
-    TemplateRenderer(log_level="ERROR")._restore_part3_dynamic_styles(
-        str(docx_path), {}
-    )
+    TemplateRenderer(log_level="ERROR")._restore_part3_dynamic_styles(str(docx_path), {})
 
     rendered = Document(docx_path)
     labels = [
         paragraph
         for paragraph in rendered.paragraphs
-        if paragraph.text.strip()
-        in {"基因变异与药物关联分析：", "药物疗效临床解析："}
+        if paragraph.text.strip() in {"基因变异与药物关联分析：", "药物疗效临床解析："}
     ]
     assert [paragraph.text.strip() for paragraph in labels] == [
         "基因变异与药物关联分析：",
@@ -6655,6 +6965,11 @@ def test_underlines_and_styles_finalizes_toc_after_layout_normalizers(monkeypatc
     )
     monkeypatch.setattr(
         renderer,
+        "_normalize_legal_notice_style",
+        lambda *_args: sequence.append("legal_notice"),
+    )
+    monkeypatch.setattr(
+        renderer,
         "_normalize_back_cover_artwork",
         lambda *_args: sequence.append("back_cover"),
     )
@@ -6669,9 +6984,7 @@ def test_underlines_and_styles_finalizes_toc_after_layout_normalizers(monkeypatc
             renderer=renderer,
             output_path="report.docx",
             template_context={
-                "report_content": {
-                    "force_page_break_before_headings": ["5. 参考文献"]
-                }
+                "report_content": {"force_page_break_before_headings": ["5. 参考文献"]}
             },
             logger=SimpleNamespace(warning=lambda *_args, **_kwargs: None),
         )
@@ -6680,6 +6993,7 @@ def test_underlines_and_styles_finalizes_toc_after_layout_normalizers(monkeypatc
     assert sequence == [
         "recolor",
         "page_breaks",
+        "legal_notice",
         "references",
         "back_cover",
         "toc",
@@ -6706,6 +7020,7 @@ def test_underlines_and_styles_does_not_swallow_toc_convergence_failure(
         "_render_inline_signatures",
         "_remove_empty_numbered_paragraphs",
         "_recolor_part3_intro_marker",
+        "_normalize_legal_notice_style",
         "_normalize_reference_section_style",
         "_normalize_back_cover_artwork",
     )
@@ -6728,15 +7043,9 @@ def test_underlines_and_styles_does_not_swallow_toc_convergence_failure(
         )
 
     assert "underlines_and_styles" not in CRITICAL_DOCX_PROCESSOR_NAMES
-    assert "underlines_and_styles" in critical_docx_processor_names(
-        "crc_358_msi"
-    )
-    assert "final_refresh_cleanup" in critical_docx_processor_names(
-        "crc_358_msi"
-    )
-    assert "underlines_and_styles" not in critical_docx_processor_names(
-        "endometrial_29"
-    )
+    assert "underlines_and_styles" in critical_docx_processor_names("crc_358_msi")
+    assert "final_refresh_cleanup" in critical_docx_processor_names("crc_358_msi")
+    assert "underlines_and_styles" not in critical_docx_processor_names("endometrial_29")
 
 
 def test_fast_toc_skips_final_libreoffice_refresh(monkeypatch):
@@ -6804,10 +7113,7 @@ def test_fast_toc_skips_final_libreoffice_refresh(monkeypatch):
         "heading_cleanup",
         "heading_cleanup",
     ]
-    assert all(
-        "2. 靶向药物相关检测结果" in headings
-        for _name, headings in sequence
-    )
+    assert all("2. 靶向药物相关检测结果" in headings for _name, headings in sequence)
 
 
 def test_fast_toc_is_blocked_for_deterministic_production_panel(monkeypatch):
@@ -6843,27 +7149,51 @@ def test_final_refresh_recleans_heading_breaks_after_native_refresh(monkeypatch)
     sequence = []
 
     class FakeRenderer:
-        def _normalize_final_section_layout(self, *_args): pass
-        def _cleanup_section_spacing(self, *_args): pass
-        def _remove_standalone_page_breaks_before_pathway_tables(self, *_args): pass
+        def _normalize_final_section_layout(self, *_args):
+            pass
+
+        def _cleanup_section_spacing(self, *_args):
+            pass
+
+        def _remove_standalone_page_breaks_before_pathway_tables(self, *_args):
+            pass
+
         def _compact_gene_list_tables(self, *_args):
             sequence.append("gene_list")
+
         def _restore_gene_list_table_borders(self, *_args):
             sequence.append("gene_list_borders")
-        def _normalize_quality_control_tables(self, *_args): pass
-        def _optimize_variant_table_layout(self, *_args): pass
-        def _cleanup_trailing_blank_page(self, *_args): pass
+
+        def _normalize_quality_control_tables(self, *_args):
+            pass
+
+        def _optimize_variant_table_layout(self, *_args):
+            pass
+
+        def _cleanup_trailing_blank_page(self, *_args):
+            pass
+
         def _remove_blank_page_breaks_before_headings(self, *_args):
             sequence.append("heading_cleanup")
+
         def _refresh_fields_with_native_engine(self, *_args):
             sequence.append("refresh")
-        def _set_update_fields(self, *_args): pass
-        def _normalize_toc_decoration_layout(self, *_args): pass
-        def _restore_reviewed_body_headers(self, *_args): pass
+
+        def _set_update_fields(self, *_args):
+            pass
+
+        def _normalize_toc_decoration_layout(self, *_args):
+            pass
+
+        def _restore_reviewed_body_headers(self, *_args):
+            pass
 
     class FakeLogger:
-        def info(self, *_args, **_kwargs): pass
-        def warning(self, *_args, **_kwargs): pass
+        def info(self, *_args, **_kwargs):
+            pass
+
+        def warning(self, *_args, **_kwargs):
+            pass
 
     monkeypatch.delenv("REPORTGEN_FAST_TOC", raising=False)
     monkeypatch.delenv("REPORTGEN_SKIP_FINAL_LO_REFRESH", raising=False)
@@ -6885,9 +7215,7 @@ def test_final_refresh_recleans_heading_breaks_after_native_refresh(monkeypatch)
     ]
 
 
-def test_final_refresh_restores_gene_list_borders_dropped_by_libreoffice(
-    tmp_path, monkeypatch
-):
+def test_final_refresh_restores_gene_list_borders_dropped_by_libreoffice(tmp_path, monkeypatch):
     """The native field refresh must not erase the reviewed gene-list frame."""
     docx_path = tmp_path / "gene_list_after_refresh.docx"
     doc = Document()
@@ -6913,12 +7241,8 @@ def test_final_refresh_restores_gene_list_borders_dropped_by_libreoffice(
         simulate_libreoffice_refresh,
     )
     monkeypatch.setattr(renderer, "_set_update_fields", lambda *_args: None)
-    monkeypatch.setattr(
-        renderer, "_normalize_toc_decoration_layout", lambda *_args: None
-    )
-    monkeypatch.setattr(
-        renderer, "_restore_reviewed_body_headers", lambda *_args: None
-    )
+    monkeypatch.setattr(renderer, "_normalize_toc_decoration_layout", lambda *_args: None)
+    monkeypatch.setattr(renderer, "_restore_reviewed_body_headers", lambda *_args: None)
     monkeypatch.delenv("REPORTGEN_FAST_TOC", raising=False)
     monkeypatch.delenv("REPORTGEN_SKIP_FINAL_LO_REFRESH", raising=False)
 
@@ -6956,9 +7280,7 @@ def test_fast_toc_skips_static_toc_pdf_detection(tmp_path, monkeypatch):
     monkeypatch.setattr(
         renderer,
         "_set_update_fields",
-        lambda *_args: calls.__setitem__(
-            "set_update_fields", calls["set_update_fields"] + 1
-        ),
+        lambda *_args: calls.__setitem__("set_update_fields", calls["set_update_fields"] + 1),
     )
     monkeypatch.setattr(
         renderer,
@@ -6989,6 +7311,47 @@ def test_static_toc_missing_tools_blocks_deterministic_panel(tmp_path, monkeypat
             str(docx_path),
             {"_require_deterministic_layout": True},
         )
+
+
+def test_pdf_layout_probe_freezes_only_the_disposable_docx_fields(tmp_path):
+    source_path = tmp_path / "source.docx"
+    probe_path = tmp_path / "probe.docx"
+    doc = Document()
+    paragraph = doc.add_paragraph()
+    begin_run = paragraph.add_run()
+    begin = OxmlElement("w:fldChar")
+    begin.set(qn("w:fldCharType"), "begin")
+    begin.set(qn("w:dirty"), "true")
+    begin_run._r.append(begin)
+    instruction_run = paragraph.add_run()
+    instruction = OxmlElement("w:instrText")
+    instruction.text = " PAGEREF _ReportGenToc_1 \\h "
+    instruction_run._r.append(instruction)
+    end_run = paragraph.add_run()
+    end = OxmlElement("w:fldChar")
+    end.set(qn("w:fldCharType"), "end")
+    end.set(qn("w:dirty"), "true")
+    end_run._r.append(end)
+    doc.save(source_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._set_update_fields(str(source_path))
+    renderer._set_word_compat_pagination(str(source_path))
+    shutil.copy2(source_path, probe_path)
+    renderer._freeze_fields_for_pdf_layout_probe(str(probe_path))
+
+    source_document = _read_docx_part(source_path, "word/document.xml")
+    source_settings = _read_docx_part(source_path, "word/settings.xml")
+    assert 'w:dirty="true"' in source_document
+    assert "<w:updateFields" in source_settings
+    assert "<w:usePrinterMetrics" in source_settings
+
+    probe_document = _read_docx_part(probe_path, "word/document.xml")
+    probe_settings = _read_docx_part(probe_path, "word/settings.xml")
+    assert "w:dirty=" not in probe_document
+    assert 'w:fldLock="true"' in probe_document
+    assert "<w:updateFields" not in probe_settings
+    assert "<w:usePrinterMetrics" not in probe_settings
 
 
 def test_static_toc_page_numbers_converge_after_toc_rebuild(tmp_path, monkeypatch):
@@ -7027,9 +7390,7 @@ def test_static_toc_page_numbers_converge_after_toc_rebuild(tmp_path, monkeypatc
     assert visible == shifted
 
 
-def test_static_toc_page_numbers_fail_when_final_layout_never_converges(
-    tmp_path, monkeypatch
-):
+def test_static_toc_page_numbers_fail_when_final_layout_never_converges(tmp_path, monkeypatch):
     docx_path = tmp_path / "report.docx"
     Document().save(docx_path)
     renderer = TemplateRenderer(log_level="ERROR")
@@ -7105,10 +7466,7 @@ def test_qa_report_fails_on_critical_part3_processor_error(tmp_path):
     assert qa["status"] == "FAIL"
     assert qa["checks"]["post_processors"]["status"] == "FAIL"
     assert qa["checks"]["post_processors"]["critical_error_count"] == 1
-    assert any(
-        issue["code"] == "CRITICAL_POST_PROCESSOR_ERROR"
-        for issue in qa["issues"]
-    )
+    assert any(issue["code"] == "CRITICAL_POST_PROCESSOR_ERROR" for issue in qa["issues"])
 
 
 def test_qa_report_scopes_final_pagination_failure_to_crc_panels(tmp_path):
@@ -7282,9 +7640,7 @@ def test_qa_report_checks_crc_tables_and_counts(tmp_path):
 
 def _add_crc_style_qa_tables(doc: Document) -> None:
     summary = doc.add_table(rows=2, cols=4)
-    for idx, text in enumerate(
-        ["基因", "突变位点", "潜在获益靶向药物", "可能耐药或慎重药物"]
-    ):
+    for idx, text in enumerate(["基因", "突变位点", "潜在获益靶向药物", "可能耐药或慎重药物"]):
         summary.rows[0].cells[idx].text = text
     for idx, text in enumerate(["KRAS", "c.34G>A", "司美替尼（C）", "西妥昔单抗（A）"]):
         summary.rows[1].cells[idx].text = text
@@ -7480,13 +7836,11 @@ def test_write_qa_report_creates_sidecar_json(tmp_path):
 
 
 def test_crc358_golden_excel_fixture_is_synthetic_and_parseable(tmp_path):
-    xlsx_path = build_crc_358_msi_golden_excel(
-        tmp_path / "LZ999001_crc_358_msi_golden.xlsx"
-    )
+    xlsx_path = build_crc_358_msi_golden_excel(tmp_path / "LZ999001_crc_358_msi_golden.xlsx")
 
-    excel_data = ExcelReader(
-        config_dir=str(ROOT / "config"), log_level="ERROR"
-    ).read(str(xlsx_path), include_tables=True)
+    excel_data = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(
+        str(xlsx_path), include_tables=True
+    )
 
     assert excel_data.metadata["sample_id_from_filename"] == "LZ999001"
     assert excel_data.single_values["患者姓名"] == "黄金测试患者"
@@ -7508,9 +7862,7 @@ def test_crc358_missing_required_msi_blocks_generation_even_without_strict_mode(
     workbook.save(xlsx_path)
     package = load_panel_package("crc_358_msi", project_root=ROOT)
 
-    result = ReportGenerator(
-        config_dir=str(ROOT / "config"), log_level="ERROR"
-    ).generate(
+    result = ReportGenerator(config_dir=str(ROOT / "config"), log_level="ERROR").generate(
         excel_file=str(xlsx_path),
         template_file=str(package.resolve_template_file()),
         output_dir=str(tmp_path / "out"),
@@ -7524,18 +7876,14 @@ def test_crc358_missing_required_msi_blocks_generation_even_without_strict_mode(
 
 
 def test_crc301_panel_package_basic_generation_passes(tmp_path):
-    xlsx_path = build_crc_301_msi_golden_excel(
-        tmp_path / "LZ999301_crc_301_msi_basic.xlsx"
-    )
+    xlsx_path = build_crc_301_msi_golden_excel(tmp_path / "LZ999301_crc_301_msi_basic.xlsx")
 
     result = ReportGenerator(
         config_dir=str(ROOT / "config"),
         log_level="ERROR",
     ).generate(
         excel_file=str(xlsx_path),
-        template_file=str(
-            ROOT / "templates" / "aligned_template_with_cnv_fusion_hla_FIXED.docx"
-        ),
+        template_file=str(ROOT / "templates" / "aligned_template_with_cnv_fusion_hla_FIXED.docx"),
         output_dir=str(tmp_path / "out"),
         output_filename="crc301_basic.docx",
         strict_mode=True,
@@ -7575,23 +7923,15 @@ def test_crc301_panel_package_basic_generation_passes(tmp_path):
     assert all(stage["duration_ms"] is not None for stage in result["stage_results"])
     assert Path(result["output_file"]).exists()
     assert result["context"]["project_name"] == "结直肠癌301基因+MSI"
-    assert result["context"]["panel_style"]["variant_summary_table"][
-        "link_underline"
-    ] is False
-    assert result["context"]["panel_style"]["biomarker_table"]["header_fill"] == (
-        "00B7C7"
-    )
+    assert result["context"]["panel_style"]["variant_summary_table"]["link_underline"] is False
+    assert result["context"]["panel_style"]["biomarker_table"]["header_fill"] == ("00B7C7")
     chemotherapy = result["context"]["chemotherapy"]
     assert len(chemotherapy) == 7
     assert "瑞戈非尼" in chemotherapy[0]["Drug"]
     assert "结直肠癌" in chemotherapy[0]["药物适应情况"]
-    assert result["context"]["report_text_rule_keys"]["immuno_tips"] == (
-        "tmb_table_immuno_tips"
-    )
+    assert result["context"]["report_text_rule_keys"]["immuno_tips"] == ("tmb_table_immuno_tips")
     assert "TMB-H的肿瘤" in result["context"]["immuno_tips"]
-    assert "2020年6月，FDA批准帕博利珠单抗" in result["context"][
-        "tmb_detail_interpretation"
-    ]
+    assert "2020年6月，FDA批准帕博利珠单抗" in result["context"]["tmb_detail_interpretation"]
     assert "MSI-H的实体瘤通常具有免疫原性" in result["context"]["msi_tips"]
     assert result["template_contract"]["declared_contract"]["ok"] is True
 
@@ -7619,9 +7959,9 @@ def test_lung_methylation_golden_excel_fixture_is_parseable(tmp_path):
         tmp_path / "LUNG999001_lung_methylation_golden.xlsx"
     )
 
-    excel_data = ExcelReader(
-        config_dir=str(ROOT / "config"), log_level="ERROR"
-    ).read(str(xlsx_path), include_tables=True)
+    excel_data = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(
+        str(xlsx_path), include_tables=True
+    )
 
     assert excel_data.metadata["sample_id_from_filename"] == "LUNG999001"
     assert excel_data.single_values["患者姓名"] == "黄金甲基化患者"
@@ -7718,9 +8058,7 @@ def test_golden_case_assertions_pass_on_expected_report_shape(tmp_path):
         "post_processors": processor_report,
         "errors": [],
     }
-    assertion = assert_golden_case_output(
-        result, expectations=CRC_358_MSI_EXPECTATIONS
-    )
+    assertion = assert_golden_case_output(result, expectations=CRC_358_MSI_EXPECTATIONS)
 
     assert assertion["ok"]
 
@@ -7970,9 +8308,7 @@ def test_report_diff_fails_on_table_shape_change_and_writes_outputs(tmp_path):
     assert result["status"] == "FAIL"
     assert any(i["code"] == "TABLE_SHAPE_DIFF" for i in result["issues"])
     assert (tmp_path / "diff" / "report_diff.json").exists()
-    assert "TABLE_SHAPE_DIFF" in (tmp_path / "diff" / "report_diff.md").read_text(
-        encoding="utf-8"
-    )
+    assert "TABLE_SHAPE_DIFF" in (tmp_path / "diff" / "report_diff.md").read_text(encoding="utf-8")
 
 
 def test_report_diff_warns_on_style_and_qa_changes(tmp_path):
@@ -8216,6 +8552,34 @@ def test_quality_gate_can_run_panel_validation_only(tmp_path):
     assert Path(result["report_file"]).exists()
 
 
+def test_quality_gate_records_the_repository_pinned_ruff_toolchain():
+    from reportgen.core.qa_gate import _run_qa_toolchain_check
+
+    result = _run_qa_toolchain_check(ROOT)
+
+    assert result["status"] == "PASS"
+    assert result["required_ruff_version"] == "0.15.8"
+    assert result["installed_ruff_version"] == "0.15.8"
+    assert result["python_executable"] == sys.executable
+
+
+def test_quality_gate_reports_missing_ruff_as_an_environment_contract_error(tmp_path, monkeypatch):
+    from reportgen.core import qa_gate
+
+    (tmp_path / "requirements-qa.txt").write_text("ruff==0.15.8\n", encoding="utf-8")
+
+    def missing_distribution(_name):
+        raise qa_gate.importlib_metadata.PackageNotFoundError("ruff")
+
+    monkeypatch.setattr(qa_gate.importlib_metadata, "version", missing_distribution)
+
+    result = qa_gate._run_qa_toolchain_check(tmp_path)
+
+    assert result["status"] == "FAIL"
+    assert result["installed_ruff_version"] is None
+    assert result["issues"][0]["code"] == "QA_ENV_MISSING_DEPENDENCY"
+
+
 def test_quality_gate_fails_when_panel_validation_has_warnings(tmp_path, monkeypatch):
     from reportgen.core import qa_gate
 
@@ -8343,13 +8707,10 @@ def test_recolor_part3_intro_marker_is_idempotent_and_noop_without_intro(tmp_pat
 
 def test_reviewed_part3_knowledge_ships_dnmt3a_and_flt3_overrides():
     """历史终版中的 DNMT3A/FLT3 策展解析必须随包发布，避免回退到兜底文案。"""
-    overlay_path = (
-        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
-    )
+    overlay_path = ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
     data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     sections = {
-        (s["gene"], s.get("c_hgvs"), s.get("p_hgvs")): s
-        for s in data.get("gene_sections", [])
+        (s["gene"], s.get("c_hgvs"), s.get("p_hgvs")): s for s in data.get("gene_sections", [])
     }
 
     dnmt3a = sections.get(("DNMT3A", "c.1367delA", "p.K456Sfs*195"))
@@ -8365,9 +8726,7 @@ def test_reviewed_part3_knowledge_ships_dnmt3a_and_flt3_overrides():
 
 def test_reviewed_part3_legacy_crc_gene_level_candidates_are_promoted():
     """旧肠癌知识库通过审核后，应作为 CRC gene-level reviewed 内容随包发布。"""
-    overlay_path = (
-        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
-    )
+    overlay_path = ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
     data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     gene_level_sections = {
         row.get("gene"): row
@@ -8453,9 +8812,7 @@ def test_reviewed_part3_legacy_crc_gene_level_candidates_are_promoted():
 
 def test_reviewed_part3_crc_pressure_sites_are_variant_level_only():
     """报告组初审通过的 CRC358 压测缺口应按位点级入库，不能误作 gene-level 套话。"""
-    overlay_path = (
-        ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
-    )
+    overlay_path = ROOT / "panels" / "crc_358_msi" / "rules" / "reviewed_part3_knowledge.yaml"
     data = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     sections = {
         (row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs", "")): row
@@ -8538,8 +8895,7 @@ def test_mutation_description_build_variant_lead_by_type():
     )
     # 剪接：无 p.HGVS → 省略蛋白部分，不留逗号
     assert (
-        gen.build_variant_lead("MET", "c.153+2T>C", "")
-        == "该样本检出MET基因c.153+2T>C剪接突变。"
+        gen.build_variant_lead("MET", "c.153+2T>C", "") == "该样本检出MET基因c.153+2T>C剪接突变。"
     )
     # 缺基因或 c.HGVS → 空串
     assert gen.build_variant_lead("", "c.1A>T", "p.M1L") == ""
@@ -8612,9 +8968,7 @@ def _sig_label_inline_drawings(doc):
     for paragraph in doc.paragraphs:
         text = paragraph.text or ""
         if "检测者" in text and "审核者" in text:
-            return paragraph._p.findall(
-                ".//" + qn("w:drawing") + "/" + qn("wp:inline")
-            )
+            return paragraph._p.findall(".//" + qn("w:drawing") + "/" + qn("wp:inline"))
     return None
 
 
@@ -8702,9 +9056,7 @@ def test_rebuild_reference_section_covers_cited_pmids(tmp_path):
     """末尾 5.参考文献 应按正文实际引用重建：被引 PMID/NCT 全覆盖、示例排除、静态替换。"""
     docx_path = tmp_path / "refs.docx"
     doc = Document()
-    doc.add_paragraph(
-        "BRCA1 突变对PARP抑制剂有预测作用[24579064]。又见[20664172，NCT04305496]。"
-    )
+    doc.add_paragraph("BRCA1 突变对PARP抑制剂有预测作用[24579064]。又见[20664172，NCT04305496]。")
     doc.add_paragraph("说明：如编号[99999999]为参考文献PMID号示例。")  # 应被排除
     doc.add_paragraph("5. 参考文献")
     doc.add_paragraph("PMID:0000001 stale ref one")
@@ -8725,14 +9077,10 @@ def test_rebuild_reference_section_covers_cited_pmids(tmp_path):
 
     rendered = Document(docx_path)
     start = next(
-        i
-        for i, p in enumerate(rendered.paragraphs)
-        if (p.text or "").strip() == "5. 参考文献"
+        i for i, p in enumerate(rendered.paragraphs) if (p.text or "").strip() == "5. 参考文献"
     )
     refs = [
-        (p.text or "").strip()
-        for p in rendered.paragraphs[start + 1:]
-        if (p.text or "").strip()
+        (p.text or "").strip() for p in rendered.paragraphs[start + 1 :] if (p.text or "").strip()
     ]
     blob = "\n".join(refs)
     assert "PMID: 24579064 BRCA paper" in blob
@@ -8770,12 +9118,17 @@ def test_rebuild_reference_section_applies_configured_entry_font_only(tmp_path):
             "reference_style": {
                 "font_name": "Calibri",
                 "font_size_pt": 10.5,
+                "line_spacing": 1.0,
+                "space_before_pt": 0,
+                "space_after_pt": 0,
+                "keep_with_next": False,
+                "keep_together": False,
+                "widow_control": False,
+                "page_break_before": False,
             }
         },
     }
-    TemplateRenderer(log_level="ERROR")._rebuild_reference_section(
-        str(docx_path), ctx
-    )
+    TemplateRenderer(log_level="ERROR")._rebuild_reference_section(str(docx_path), ctx)
 
     rendered = Document(docx_path)
     start, end = find_reference_section_bounds(rendered.paragraphs)
@@ -8794,6 +9147,17 @@ def test_rebuild_reference_section_applies_configured_entry_font_only(tmp_path):
         assert r_fonts is not None
         for attr in ("ascii", "hAnsi", "eastAsia"):
             assert r_fonts.get(qn(f"w:{attr}")) == "Calibri"
+    for paragraph in rendered.paragraphs[start + 1 : end]:
+        if not paragraph.text.strip():
+            continue
+        fmt = paragraph.paragraph_format
+        assert fmt.line_spacing == 1.0
+        assert fmt.space_before.pt == pytest.approx(0.0)
+        assert fmt.space_after.pt == pytest.approx(0.0)
+        assert fmt.keep_with_next is False
+        assert fmt.keep_together is False
+        assert fmt.widow_control is False
+        assert fmt.page_break_before is False
 
     rendered_heading = rendered.paragraphs[start].runs[0]
     assert rendered_heading.font.name == "Microsoft YaHei"
@@ -9013,8 +9377,7 @@ def test_render_inline_signatures_no_path_leaves_label_clean(tmp_path):
     assert inline is not None and len(inline) == 0
     # 标签文字保留
     assert any(
-        "检测者" in (p.text or "") and "审核者" in (p.text or "")
-        for p in rendered.paragraphs
+        "检测者" in (p.text or "") and "审核者" in (p.text or "") for p in rendered.paragraphs
     )
 
 
@@ -9023,8 +9386,7 @@ def test_signature_resolution_semantics_for_warning(tmp_path):
     from reportgen.core.signature_library import resolve_signature_path
 
     (tmp_path / "signatures.yaml").write_text(
-        "detector:\n  张三: sigs/zhangsan.png\n"
-        "reviewer:\n  李四: sigs/lisi.png\n",
+        "detector:\n  张三: sigs/zhangsan.png\nreviewer:\n  李四: sigs/lisi.png\n",
         encoding="utf-8",
     )
     assert resolve_signature_path(str(tmp_path), "detector", "张三")

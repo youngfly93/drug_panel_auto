@@ -1,0 +1,3 @@
+# Release-gate tooling. Keep exact pins so local, CI, and deployment preflight
+# evaluate the same source tree with the same lint semantics.
+ruff==0.15.8

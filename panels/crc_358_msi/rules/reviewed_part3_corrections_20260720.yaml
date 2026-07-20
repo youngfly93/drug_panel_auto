@@ -1,0 +1,96 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: Governed corrections that supersede medically misattributed historical Part-3 entries without rewriting the historical source record.
+  source_type: reviewed_knowledge_correction_overlay
+  source_id: crc358_part3_corrections_20260720
+  created_at: '2026-07-20'
+  privacy: No patient name, sample ID, report date, or case-specific branch key is stored.
+governance:
+  schema_version: '1.0'
+  policy_id: crc358_reviewed_correction_v1
+  defaults:
+    gene:
+      review_status: needs_review
+      runtime_eligible: false
+      review_basis: correction_overlay_gene_default
+      evidence_level: not_assessed
+      evidence_as_of: '2026-07-20'
+      cancer_scope: crc358
+      secondary_review_status: pending_report_group_review
+      source_refs:
+      - type: correction_registry
+        id: crc358_part3_corrections_20260720
+    drug:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_primary_source_correction
+      evidence_level: preclinical_plus_small_pan_cancer_cohort_not_variant_specific
+      evidence_as_of: '2026-07-20'
+      cancer_scope: colorectal_report_kras_activating_mutation_caution_not_g12c_specific
+      secondary_review_status: pending_report_group_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_primary_source_review
+        reviewed_at: '2026-07-20'
+        risk_level: high
+      source_refs:
+      - type: pubmed
+        id: PMID:20664172
+        url: https://pubmed.ncbi.nlm.nih.gov/20664172/
+gene_sections: []
+drug_sections:
+- gene: KRAS
+  type: caution
+  applicability: kras_oncogenic_mutation_class
+  header: ''
+  drug_name: 依维莫司（Everolimus）
+  relation: 研究显示，在PI3K通路异常的人类肿瘤细胞中，合并致癌性KRAS突变与依维莫司低敏感性相关，其中包含结直肠癌细胞模型[20664172]。该证据属于KRAS致癌性突变层级，不是任一具体位点的专属临床证据；因此仅作慎用/低获益提示，不构成绝对耐药结论。依维莫司的既有获批适应证不等同于KRAS突变结直肠癌适应证。
+  clinical: 一项小样本、跨癌种的依维莫司治疗队列中，12例KRAS突变肿瘤有11例疾病进展，而31例KRAS野生型肿瘤中16例未获益[20664172]。鉴于样本量小、癌种异质且并非具体KRAS位点专属试验，报告中仅保留为负相关/慎用证据，需结合患者病情和正式适应证判断。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: codex_first_review_corrected_base_kras_everolimus_attribution
+  evidence_level: preclinical_plus_small_pan_cancer_cohort_not_variant_specific
+  evidence_as_of: '2026-07-20'
+  cancer_scope: colorectal_report_kras_activating_mutation_caution_not_variant_specific
+  secondary_review_status: pending_report_group_review
+  supersedes: base_gene_knowledge_kras_everolimus_rows_with_misattributed_pmids
+  variant_evidence_scope: kras_activating_mutation_class_not_variant_specific
+  review_metadata:
+    reviewer: codex
+    reviewer_type: ai_assisted_first_pass_primary_source_review
+    reviewed_at: '2026-07-20'
+    risk_level: high
+    secondary_review_status: pending_report_group_review
+  source_refs:
+  - type: pubmed
+    id: PMID:20664172
+    url: https://pubmed.ncbi.nlm.nih.gov/20664172/
+- gene: KRAS
+  c_hgvs: c.34G>T
+  p_hgvs: p.G12C
+  type: caution
+  applicability: exact_variant_with_kras_activating_mutation_class_evidence
+  header: ''
+  drug_name: 依维莫司（Everolimus）
+  relation: 该样本检出KRAS基因c.34G>T，p.G12C错义突变，为已知激活突变。研究显示，在PI3K通路异常的人类肿瘤细胞中，合并致癌性KRAS突变与依维莫司低敏感性相关，其中包含结直肠癌细胞模型[20664172]。该证据属于KRAS致癌性突变层级，并非p.G12C位点专属临床证据；因此本条仅作慎用/低获益提示，不构成绝对耐药结论。依维莫司的既有获批适应证不等同于KRAS p.G12C结直肠癌适应证。
+  clinical: 一项小样本、跨癌种的依维莫司治疗队列中，12例KRAS突变肿瘤有11例疾病进展，而31例KRAS野生型肿瘤中16例未获益[20664172]。鉴于样本量小、癌种异质且并非p.G12C位点专属试验，报告中仅保留为负相关/慎用证据，需结合患者病情和正式适应证判断。
+  review_status: provisional_runtime
+  runtime_eligible: true
+  review_basis: codex_first_review_corrected_historical_kras_everolimus_attribution
+  evidence_level: preclinical_plus_small_pan_cancer_cohort_not_variant_specific
+  evidence_as_of: '2026-07-20'
+  cancer_scope: colorectal_report_kras_activating_mutation_caution_not_g12c_specific
+  secondary_review_status: pending_report_group_review
+  supersedes: crc358_reviewed_case_a_kras_g12c_everolimus
+  variant_evidence_scope: kras_activating_mutation_class_not_p_g12c_specific
+  review_metadata:
+    reviewer: codex
+    reviewer_type: ai_assisted_first_pass_primary_source_review
+    reviewed_at: '2026-07-20'
+    risk_level: high
+    secondary_review_status: pending_report_group_review
+  source_refs:
+  - type: pubmed
+    id: PMID:20664172
+    url: https://pubmed.ncbi.nlm.nih.gov/20664172/

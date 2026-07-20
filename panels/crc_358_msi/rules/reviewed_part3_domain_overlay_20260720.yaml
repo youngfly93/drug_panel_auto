@@ -1,0 +1,61 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: Stable protein/domain descriptions missing from the legacy workbook.
+  source_type: curated_public_protein_records
+  curated_at: "2026-07-20"
+  scope: pan_cancer_protein_structure_only
+  privacy: No patient or sample identifiers are stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_fixed_domain_first_review_20260720
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_report_group_domain_gap
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-20"
+      evidence_as_of: "2026-07-20"
+      evidence_level: curated_protein_structure
+      cancer_scope: pan_cancer_protein_structure_only
+      secondary_review_status: pending_report_group_review
+gene_sections:
+  - gene: FANCA
+    fixed_domain_text: FANCA基因编码的蛋白全长为1455个氨基酸，主要包含N端结构域（170-524位氨基酸）、螺旋结构域（544-625位氨基酸）、ArcN结构域（648-880位氨基酸）和C端结构域（1225-1431位氨基酸）。
+    source_refs:
+      - type: uniprot
+        id: O15360
+        url: https://www.uniprot.org/uniprotkb/O15360/entry
+      - type: interpro
+        id: O15360
+        url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/O15360/?page_size=200
+  - gene: PALB2
+    fixed_domain_text: PALB2基因编码的蛋白全长为1186个氨基酸，主要包含N端卷曲螺旋区域（9-41位氨基酸）、染色质结合区域ChAM（395-446位氨基酸）和C端WD40重复结构域（854-1186位氨基酸）。
+    source_refs:
+      - type: uniprot
+        id: Q86YC2
+        url: https://www.uniprot.org/uniprotkb/Q86YC2/entry
+      - type: interpro
+        id: Q86YC2
+        url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/Q86YC2/?page_size=200
+  - gene: DNMT3A
+    fixed_domain_text: DNMT3A基因编码的蛋白全长为912个氨基酸，主要包含PWWP结构域（292-350位氨基酸）、ADD结构域（482-614位氨基酸）和S-腺苷甲硫氨酸依赖性C5 DNA甲基转移酶结构域（634-912位氨基酸）。
+    source_refs:
+      - type: uniprot
+        id: Q9Y6K1
+        url: https://www.uniprot.org/uniprotkb/Q9Y6K1/entry
+      - type: interpro
+        id: Q9Y6K1
+        url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/Q9Y6K1/?page_size=200
+  - gene: RAD51D
+    fixed_domain_text: RAD51D基因编码的蛋白全长为328个氨基酸，主要包含N端单链DNA优先结合区域（1-83位氨基酸）、ATP结合区域（107-114位氨基酸）和RecA样ATP酶家族核心区域。
+    source_refs:
+      - type: uniprot
+        id: O75771
+        url: https://www.uniprot.org/uniprotkb/O75771/entry
+      - type: interpro
+        id: O75771
+        url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/O75771/?page_size=200
+drug_sections: []

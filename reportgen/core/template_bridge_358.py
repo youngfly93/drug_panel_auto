@@ -2149,10 +2149,15 @@ def _build_nccn_and_immune_fields(
             p = v.get("pHGVS", "")
             if not c:
                 continue
+            annotation = (
+                "（意义未明变异）"
+                if v.get("gene_class") == "Ⅲ类"
+                else ""
+            )
             if p and p not in ("--", "*", ""):
-                parts.append(f"{c}，{p}")
+                parts.append(f"{c}，{p}{annotation}")
             else:
-                parts.append(c)
+                parts.append(f"{c}{annotation}")
         return "\n".join(parts) if parts else "未检出"
 
     def _immune_eligible_variants(gene_key: str) -> List[Dict[str, str]]:
@@ -3131,6 +3136,43 @@ def enhance_report_data(
             ]
             report_data.set_table("drug_benefit_sections", drug_benefit_sections)
             report_data.set_table("drug_caution_sections", drug_caution_sections)
+            consistency_builder = getattr(
+                gene_knowledge_provider,
+                "build_drug_analysis_consistency",
+                None,
+            )
+            # The exact Part-2/Part-3 identity contract is currently defined
+            # only for CRC358.  CRC301 still uses the shared legacy narrative
+            # layout, whose sections do not carry exact variant identities;
+            # enforcing the CRC358 gate there would turn every valid CRC301
+            # report into a false failure.
+            if (
+                str(panel_id or "").strip() == "crc_358_msi"
+                and callable(consistency_builder)
+            ):
+                contract_checker = getattr(
+                    gene_knowledge_provider,
+                    "has_reviewed_drug_analysis_contract",
+                    None,
+                )
+                consistency_variants = drug_variants
+                consistency_sections = drug_analysis_sections
+                if callable(contract_checker):
+                    consistency_variants = [
+                        row for row in drug_variants if contract_checker(row)
+                    ]
+                    consistency_sections = [
+                        row
+                        for row in drug_analysis_sections
+                        if contract_checker(row)
+                    ]
+                report_data.set_field(
+                    "drug_analysis_consistency",
+                    consistency_builder(
+                        consistency_variants,
+                        consistency_sections,
+                    ),
+                )
 
             # Build references (参考文献) — follows configured Part 3 scope.
             references = gene_knowledge_provider.build_all_references_flat(

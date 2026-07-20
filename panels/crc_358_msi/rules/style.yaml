@@ -38,6 +38,8 @@ style:
     link_underline: true
     link_color: "0000FF"
     plain_texts: ["未见突变", "未检出", "未检出有害变异", "-", "--", "—"]
+    fit_to_content_width: true
+    minimum_content_width_ratio: 0.98
   biomarker_table:
     header_fill: "00B7C7"
     header_font_color: "FFFFFF"
@@ -47,11 +49,24 @@ style:
     header_font_size: 10
     border_color: "000000"
     border_size: "6"
+    # Keep the long approved-drug/brand note with the immune table so the
+    # following targeted-results section can begin on a genuinely new page.
+    note_font_size: 8
+    note_line_spacing: 1.0
   clinical_result_tables:
     border_color: "000000"
     border_size: "6"
     detected_result_color: "FF0000"
     undetected_values: ["", "-", "--", "—", "未检出", "未检出有害变异"]
+  visual_qa:
+    # 这是经报告组确认的固定法律声明页。例外按正文语义匹配，不绑定物理页码；
+    # 空白页、不可读页及任何其他低内容页仍然阻断发布。
+    expected_sparse_pages:
+      - id: "legal_notice"
+        required_text:
+          - "检测结果仅对本次送检样本负责"
+          - "咨询电话："
+        max_matches: 1
   toc:
     font_name: "微软雅黑"
     section_font_color: "00C4D8"

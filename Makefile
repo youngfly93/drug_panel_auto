@@ -3,6 +3,7 @@
 # Install all dependencies
 install:
 	pip install -r requirements.txt
+	pip install -r requirements-qa.txt
 	cd backend && pip install -e ".[dev]"
 	cd frontend && npm install
 

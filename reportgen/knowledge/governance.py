@@ -162,6 +162,7 @@ def structured_source_refs(
         _clean(row.get(field))
         for field in (
             "intro",
+            "fixed_domain_text",
             "mutation_analysis",
             "relation",
             "clinical",
@@ -263,6 +264,7 @@ def row_text(row: Mapping[str, Any]) -> str:
             "header",
             "drug_name",
             "intro",
+            "fixed_domain_text",
             "mutation_analysis",
             "relation",
             "clinical",

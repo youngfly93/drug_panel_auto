@@ -26,13 +26,7 @@ from scripts.check_historical_golden_release import (
     _sha256_files,
 )
 
-CONTRACT = (
-    ROOT
-    / "panels"
-    / "crc_358_msi"
-    / "golden_cases"
-    / "crc358_reviewed_case_a.yaml"
-)
+CONTRACT = ROOT / "panels" / "crc_358_msi" / "golden_cases" / "crc358_reviewed_case_a.yaml"
 
 
 def test_crc358_historical_contract_is_deidentified_and_structured() -> None:
@@ -45,34 +39,22 @@ def test_crc358_historical_contract_is_deidentified_and_structured() -> None:
         "targeted_or_immune_related": 8,
     }
     assert contract["medical_uat"]["status"] == "blocked"
-    assert contract["medical_uat"]["blockers"][0]["id"] == (
-        "KRAS_G12C_DRUG_RECONFIRMATION"
-    )
-    assert (
-        len(contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"])
-        == 41
-    )
+    assert contract["medical_uat"]["blockers"][0]["id"] == ("KRAS_G12C_DRUG_RECONFIRMATION")
+    assert len(contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"]) == 41
     assert contract["expectations"]["part3"]["gene_section_count"] == 11
     assert contract["expectations"]["part3"]["drug_section_count"] == 18
     assert contract["expectations"]["part3"]["group_by_gene"] is True
-    assert (
-        contract["expectations"]["part3"]["gene_order_by_max_vaf_descending"]
-        is True
-    )
+    assert contract["expectations"]["part3"]["gene_order_by_max_vaf_descending"] is True
     assert contract["expectations"]["part3"]["within_gene_vaf_descending"] is True
     assert len(contract["expectations"]["part3"]["gene_section_order"]) == 11
 
 
 def test_targeted_brand_config_order_matches_historical_contract() -> None:
     contract = load_historical_golden_contract(CONTRACT)
-    config = yaml.safe_load(
-        (ROOT / "config" / "drug_brands.yaml").read_text(encoding="utf-8")
-    )
+    config = yaml.safe_load((ROOT / "config" / "drug_brands.yaml").read_text(encoding="utf-8"))
     expected_drugs = [
         pair.split("[", 1)[0]
-        for pair in contract["expectations"]["targeted_drug_brand_summary"][
-            "ordered_pairs"
-        ]
+        for pair in contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"]
     ]
 
     assert config["targeted_summary_order"] == expected_drugs
@@ -131,9 +113,7 @@ def _minimal_historical_docx(
         row[8].text = "--"
     if brand_pairs is not None:
         doc.add_paragraph(
-            "2.上表涉及的已上市的药物名称及对应的商品名称："
-            + "、".join(brand_pairs)
-            + "。"
+            "2.上表涉及的已上市的药物名称及对应的商品名称：" + "、".join(brand_pairs) + "。"
         )
     doc.add_paragraph("非业务差异标记")
     if part3_headers is not None:
@@ -263,9 +243,7 @@ def test_historical_contract_blocks_incomplete_targeted_brand_summary(tmp_path) 
     result = validate_historical_golden_docx(contract=contract, docx_path=candidate)
 
     assert result["status"] == "FAIL"
-    assert {error["code"] for error in result["errors"]} >= {
-        "TARGETED_DRUG_BRAND_SUMMARY_ORDER"
-    }
+    assert {error["code"] for error in result["errors"]} >= {"TARGETED_DRUG_BRAND_SUMMARY_ORDER"}
 
 
 def test_historical_contract_blocks_targeted_immune_union_count_regression(
@@ -347,9 +325,7 @@ def test_historical_contract_blocks_split_gene_groups_in_part3(
     result = validate_historical_golden_docx(contract=contract, docx_path=candidate)
 
     assert result["status"] == "FAIL"
-    assert {error["code"] for error in result["errors"]} >= {
-        "PART3_GENE_GROUP_CONTIGUITY"
-    }
+    assert {error["code"] for error in result["errors"]} >= {"PART3_GENE_GROUP_CONTIGUITY"}
     assert result["checks"]["part3_gene_section_vafs"] == [22.03, 20.0, 17.5]
 
 
@@ -403,7 +379,7 @@ def test_candidate_renderer_fingerprint_is_explicit_and_complete() -> None:
                 "profile_mode": "isolated",
                 "pdf_renderer": "pdftoppm",
                 "pdf_renderer_version": "pdftoppm 22.02.0",
-                "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+                "font_substitution_profile": "reportgen-cjk-font-substitution-v2",
                 "font_substitution_profile_sha256": "a" * 64,
                 "evidence": "production-equivalent visual QA",
             }
@@ -416,7 +392,7 @@ def test_candidate_renderer_fingerprint_is_explicit_and_complete() -> None:
         "profile_mode": "isolated",
         "pdf_renderer": "pdftoppm",
         "pdf_renderer_version": "pdftoppm 22.02.0",
-        "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+        "font_substitution_profile": "reportgen-cjk-font-substitution-v2",
         "font_substitution_profile_sha256": "a" * 64,
         "evidence": "production-equivalent visual QA",
     }
@@ -435,9 +411,7 @@ def test_release_candidate_attestation_requires_explicit_sha256() -> None:
         _required_sha256({"candidate_sha256": "latest"}, "candidate_sha256")
 
 
-def test_manifest_gate_binds_candidate_and_qa_to_current_revision(
-    tmp_path, monkeypatch
-) -> None:
+def test_manifest_gate_binds_candidate_and_qa_to_current_revision(tmp_path, monkeypatch) -> None:
     revision = "1" * 40
     reference = tmp_path / "reference.docx"
     candidate = tmp_path / "candidate.docx"
@@ -471,7 +445,7 @@ def test_manifest_gate_binds_candidate_and_qa_to_current_revision(
                             "profile_mode": "isolated",
                             "pdf_renderer": "pdftoppm",
                             "pdf_renderer_version": "pdftoppm 24.02.0",
-                            "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+                            "font_substitution_profile": "reportgen-cjk-font-substitution-v2",
                             "font_substitution_profile_sha256": "a" * 64,
                         },
                     }
@@ -515,7 +489,7 @@ def test_manifest_gate_binds_candidate_and_qa_to_current_revision(
                     "profile_mode": "isolated",
                     "pdf_renderer": "pdftoppm",
                     "pdf_renderer_version": "pdftoppm 24.02.0",
-                    "font_substitution_profile": "reportgen-cjk-font-substitution-v1",
+                    "font_substitution_profile": "reportgen-cjk-font-substitution-v2",
                     "font_substitution_profile_sha256": "a" * 64,
                 },
             }
