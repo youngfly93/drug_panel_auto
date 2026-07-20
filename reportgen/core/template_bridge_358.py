@@ -27,6 +27,11 @@ from reportgen.knowledge import GeneKnowledgeProvider
 from reportgen.core.validation import build_msi_fields, build_tmb_fields
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
+from reportgen.rules.approved_drugs import (
+    EXCLUDE_IF_LISTED_IN_PART2,
+    normalize_display_mode,
+    select_approved_drug_rows,
+)
 from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 from reportgen.utils.hgvs_utils import (
     infer_variant_type_cn,
@@ -367,6 +372,9 @@ class PanelConfig:
     )
     reviewed_variant_overrides: List[Dict[str, Any]] = field(default_factory=list)
     approved_drug_rows: List[Dict[str, str]] = field(default_factory=list)
+    # Panel-owned policy for the 2.2 approved-drug table. Legacy panels keep a
+    # fixed table; CRC358 may subtract drugs already visible in final Part 2.1.
+    approved_drug_rows_display_mode: str = "fixed"
     # None means render every reviewed drug in Part 2. A positive integer keeps
     # the historical compact summary behavior for panels that explicitly opt in.
     drug_display_max_items: Optional[int] = DRUG_DISPLAY_MAX_ITEMS
@@ -777,6 +785,11 @@ def load_panel_config(
         panel_id=panel_id,
         config_path=cfg_path,
     )
+    drug_rules_config = (
+        drugs_rule.get("drug_rules")
+        if isinstance(drugs_rule.get("drug_rules"), dict)
+        else {}
+    )
     approved_drug_rows = _normalize_approved_drug_rows(drugs_rule)
     targeted_drug_rules = load_targeted_drug_rule_context(panel_package)
     reviewed_variant_overrides = as_dict_list("reviewed_variant_overrides")
@@ -834,13 +847,16 @@ def load_panel_config(
         reviewed_variant_overrides=reviewed_variant_overrides,
         drug_display_max_items=(
             None
-            if bool((drugs_rule.get("drug_rules") or {}).get("show_all_in_part2", False))
-            else int((drugs_rule.get("drug_rules") or {}).get("max_items_in_part2", 5))
+            if bool(drug_rules_config.get("show_all_in_part2", False))
+            else int(drug_rules_config.get("max_items_in_part2", 5))
         ),
         approved_drug_rows=(
             approved_drug_rows
             if targeted_drug_rules is not None
             else approved_drug_rows or as_dict_list("crc_approved_drugs")
+        ),
+        approved_drug_rows_display_mode=normalize_display_mode(
+            drug_rules_config.get("approved_drug_rows_display_mode")
         ),
         nccn_result_rows=nccn_rows or [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS],
     )
@@ -2399,12 +2415,18 @@ def _resolve_crc_filter_column(excel_data: ExcelDataSource) -> Optional[str]:
     return None
 
 
-def _build_crc_approved_drugs(panel_config: PanelConfig) -> List[Dict[str, str]]:
-    """Build the CRC 2.2 approved/backup targeted-drug table from YAML config."""
+def _select_crc_approved_drugs(
+    panel_config: PanelConfig,
+    part2_rows: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[List[Dict[str, str]], List[str], int]:
+    """Select and render CRC 2.2 rows under the active Panel rule."""
+    selection = select_approved_drug_rows(
+        panel_config.approved_drug_rows,
+        part2_rows or [],
+        mode=panel_config.approved_drug_rows_display_mode,
+    )
     rows: List[Dict[str, str]] = []
-    for row in panel_config.approved_drug_rows:
-        if row.get("enabled") is False:
-            continue
+    for row in selection.rows:
         drug = _join_text_value(row.get("drug") or row.get("Drug"))
         gene = _join_text_value(row.get("gene") or row.get("Gene"))
         indication = _norm_text(
@@ -2421,6 +2443,15 @@ def _build_crc_approved_drugs(panel_config: PanelConfig) -> List[Dict[str, str]]
                 "药物适应情况": indication,
             }
         )
+    return rows, selection.suppressed_names, selection.total_count
+
+
+def _build_crc_approved_drugs(
+    panel_config: PanelConfig,
+    part2_rows: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, str]]:
+    """Build the CRC 2.2 approved/backup targeted-drug table from YAML config."""
+    rows, _, _ = _select_crc_approved_drugs(panel_config, part2_rows)
     return rows
 
 
@@ -2885,9 +2916,36 @@ def enhance_report_data(
     # 2.1/摘要表中的人工复核变异覆盖口径由 panel YAML 配置驱动。
     _patch_reviewed_variant_override_rows(report_data, pc)
 
-    # 2.2 是 CRC 适应症固定药物表，不来自 CtDrug 全量药敏表。
-    if not report_data.get_table("chemotherapy"):
-        report_data.set_table("chemotherapy", _build_crc_approved_drugs(pc))
+    # 2.2 来自 Panel 审核药物全集，不来自 CtDrug 全量药敏表。CRC358
+    # 按报告组 2026-07-20 书面反馈所述候选口径，从全集中剔除已在最终
+    # 2.1 获益/慎用列出现的药物；旧契约替代仍须在发布前确认。
+    # 其他 Panel 仍保持既有 fixed 行为。
+    existing_approved_rows = report_data.get_table("chemotherapy") or []
+    dynamic_approved_rows = (
+        pc.approved_drug_rows_display_mode == EXCLUDE_IF_LISTED_IN_PART2
+    )
+    if dynamic_approved_rows or not existing_approved_rows:
+        approved_rows, suppressed_names, approved_total = (
+            _select_crc_approved_drugs(
+                pc,
+                list(report_data.get_table("variants_2_1") or []),
+            )
+        )
+        report_data.set_table("chemotherapy", approved_rows)
+        report_data.set_field(
+            "approved_drug_rows_display_mode",
+            pc.approved_drug_rows_display_mode,
+        )
+        report_data.set_field("approved_drug_rows_total_count", approved_total)
+        report_data.set_field(
+            "approved_drug_rows_display_count", len(approved_rows)
+        )
+        report_data.set_field(
+            "approved_drug_rows_suppressed_count", len(suppressed_names)
+        )
+        report_data.set_field(
+            "approved_drug_rows_suppressed_names", suppressed_names
+        )
 
     # MSI/TMB 字段由 FieldMapper 生成（终版口径）；此处仅做缺失兜底，避免覆盖
     for key, value in build_msi_summary(excel_data).items():

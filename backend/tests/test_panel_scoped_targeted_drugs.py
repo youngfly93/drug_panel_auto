@@ -217,7 +217,7 @@ def test_real_targeted_db_and_fixed_table_are_disabled_for_non_crc_panels():
             (lookup, len(panel_config.approved_drug_rows))
         )
 
-    expected_approved_counts = {"crc_358_msi": 6, "crc_301_msi": 7}
+    expected_approved_counts = {"crc_358_msi": 7, "crc_301_msi": 7}
     for panel_id in ("crc_358_msi", "crc_301_msi"):
         for (benefit, caution, score), approved_count in observed[panel_id]:
             assert score > 0

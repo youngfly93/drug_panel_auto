@@ -478,20 +478,39 @@ def test_crc_drug_rule_contains_active_approved_rows():
     rule = engine.get("drugs")
     rows = rule["approved_drug_rows"]
 
-    assert rule["version"] == "0.5.0"
+    assert rule["version"] == "0.6.0"
     assert rule["status"] == "active"
     assert len(rows) == 7
     assert "瑞戈非尼" in rows[0]["drug"]
-    assert rows[0]["enabled"] is False
+    assert rows[0]["enabled"] is True
     assert rule["drug_rules"]["approved_drug_rows_source"] == ("drugs.yaml:approved_drug_rows")
+    assert rule["drug_rules"]["approved_drug_rows_display_mode"] == (
+        "exclude_if_listed_in_part2"
+    )
+    transition = rule["drug_rules"]["approved_drug_rows_contract_transition"]
+    assert transition == {
+        "proposed_contract_id": "crc358_dynamic_7_drug_differencing_20260720",
+        "prior_contract_id": "crc358_reviewed_historical_table_contract",
+        "transition_status": "pending_report_group_supersession_ack",
+        "source_ref": {
+            "type": "report_group_feedback",
+            "id": "feedback_20260720_crc_approved_drug_dynamic_display",
+        },
+    }
+    assert rows[0]["secondary_review_status"] == (
+        "report_group_rule_stated_pending_supersession_ack"
+    )
     assert "crc_approved_drugs" not in engine.get("panel_rules")
 
 
 def test_load_panel_config_prefers_drugs_yaml_approved_rows():
     panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_358_msi")
 
-    assert len(panel_config.approved_drug_rows) == 6
-    assert "贝伐珠单抗" in panel_config.approved_drug_rows[0]["drug"]
+    assert len(panel_config.approved_drug_rows) == 7
+    assert "瑞戈非尼" in panel_config.approved_drug_rows[0]["drug"]
+    assert panel_config.approved_drug_rows_display_mode == (
+        "exclude_if_listed_in_part2"
+    )
 
 
 def test_crc_biomarker_rule_contains_active_immune_tables():

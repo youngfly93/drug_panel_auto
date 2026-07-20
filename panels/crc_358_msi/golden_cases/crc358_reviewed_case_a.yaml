@@ -72,7 +72,8 @@ expectations:
     # pipeline intentionally uses the shared VAF policy in every summary.
     immune_positive_gene_order: [KRAS, BRCA1, TP53, PMS2, ATR]
   approved_drug_table:
-    drug_order: [贝伐珠单抗, 雷莫西尤单抗, 呋喹替尼, 阿柏西普, 阿帕替尼, 盐酸安罗替尼]
+    # 该病例 2.1 不含下列 7 种药，故 2.2 应完整展示审核全集。
+    drug_order: [瑞戈非尼, 贝伐珠单抗, 雷莫西尤单抗, 呋喹替尼, 阿柏西普, 阿帕替尼, 盐酸安罗替尼]
   patient_letter:
     salutation: 女士
   vertical_merges:

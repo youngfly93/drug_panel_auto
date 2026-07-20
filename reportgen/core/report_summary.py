@@ -150,6 +150,18 @@ def build_report_summary(
             "targeted_count": _count_drug_related_rows(targeted_drugs),
             "displayed_variant_count": len(targeted_drugs),
             "chemotherapy_count": len(chemotherapy),
+            "approved_display_policy": _safe_text(
+                context.get("approved_drug_rows_display_mode")
+            ),
+            "approved_universe_count": _as_int(
+                context.get("approved_drug_rows_total_count")
+            ),
+            "approved_suppressed_count": _as_int(
+                context.get("approved_drug_rows_suppressed_count")
+            ),
+            "approved_suppressed_names": _safe_text_list(
+                context.get("approved_drug_rows_suppressed_names")
+            ),
             "targeted_rows": [_normalize_drug_row(row) for row in targeted_drugs[:8]],
             "chemotherapy_rows": [_normalize_chemo_row(row) for row in chemotherapy[:8]],
         },
@@ -264,6 +276,13 @@ def _safe_text(value: Any) -> str:
         return "\n".join(_safe_text(item) for item in value if not _is_empty(item))
     text = str(value).strip()
     return "" if text.lower() in EMPTY_VALUES else text
+
+
+def _safe_text_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    values = value if isinstance(value, (list, tuple, set)) else [value]
+    return [text for text in (_safe_text(item) for item in values) if text]
 
 
 def _drug_display_text(row: dict[str, Any], keys: Iterable[str]) -> str:

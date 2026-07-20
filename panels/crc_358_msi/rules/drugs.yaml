@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 rule_id: "drugs"
-version: "0.5.0"
-updated: "2026-07-16"
+version: "0.6.0"
+updated: "2026-07-20"
 status: "active"
 description: "CRC drug-display rule declarations used by the generator."
 
@@ -36,6 +36,17 @@ governance:
 drug_rules:
   show_all_in_part2: true
   approved_drug_rows_source: "drugs.yaml:approved_drug_rows"
+  # 报告组 2026-07-20 书面口径：2.2 从下方 7 种审核药物全集中，
+  # 剔除已经出现在最终 2.1 获益/慎用药物列（含全量字段）的药物。
+  approved_drug_rows_display_mode: exclude_if_listed_in_part2
+  approved_drug_rows_display_basis: report_group_feedback_20260720
+  approved_drug_rows_contract_transition:
+    proposed_contract_id: crc358_dynamic_7_drug_differencing_20260720
+    prior_contract_id: crc358_reviewed_historical_table_contract
+    transition_status: pending_report_group_supersession_ack
+    source_ref:
+      type: report_group_feedback
+      id: feedback_20260720_crc_approved_drug_dynamic_display
   brand_lookup_source: "config/drug_brands.yaml"
   immunotherapy_brand_list_source: "config/drug_brands.yaml"
   evidence_levels:
@@ -459,8 +470,16 @@ approved_drug_rows:
       - "瑞戈非尼"
       - "Regorafenib"
       - "[拜万戈]"
-    enabled: false
-    exclusion_basis: crc358_reviewed_historical_table_contract
+    enabled: true
+    review_status: legacy_runtime
+    runtime_eligible: true
+    review_basis: historical_guideline_table_plus_report_group_rule_stated_20260720
+    secondary_review_status: report_group_rule_stated_pending_supersession_ack
+    source_refs:
+      - type: guideline_summary
+        id: legacy_crc_approved_drug_table
+      - type: report_group_feedback
+        id: feedback_20260720_crc_approved_drug_dynamic_display
     gene: "RET、VEGFR1、VEGFR2、VEGFR3、KIT、PDGFRα、\nPDGFRβ、FGFR1、FGFR2、TIE2、DDR2、TrkA、EphA2、RAF1、BRAF、BRAF、V600E、SAPK2、PTK5、ABL"
     indication: "FDA和NMPA批准用于治疗结直肠癌、胃肠道间质瘤和肝癌。2022年结肠癌和直肠癌NCCN指南推荐瑞戈非尼为在所有可用方案进展的结直肠癌患者的治疗方案。2022年CSCO指南推荐瑞戈非尼作为化疗，或抗VEGF和抗EGFR靶向药物等现有标准治疗失败后的三线用药。"
   - drug:
@@ -485,6 +504,8 @@ approved_drug_rows:
       - "阿柏西普"
       - "Ziv-aflibercept"
       - "[ZALTRAP]"
+    match_aliases:
+      - "Aflibercept"
     gene: "VEGF-A、\nVEGF-B、\nPIGF"
     indication: "FDA批准阿柏西普联合5-氟尿嘧啶、亚叶酸钙、伊立替康（FOLFIRI）用于治疗奥沙利铂治疗后耐药或疾病进展的转移性结直肠癌（mCRC）患者。2022年结肠癌和直肠癌NCCN指南推荐阿柏西普联合化疗用于治疗结肠癌和直肠癌患者。"
   - drug:
@@ -497,5 +518,8 @@ approved_drug_rows:
       - "盐酸安罗替尼"
       - "Anlotinib Hydrochloride"
       - "[福可维]"
+    match_aliases:
+      - "安罗替尼"
+      - "Anlotinib"
     gene: "VEGFR1、\nVEGFR2、\nVEGFR3、\nc-KIT、\nPDGFR-β"
     indication: "NMPA批准用于治疗小细胞肺癌、腺泡状软组织肉瘤、透明细胞肉瘤以及既往至少接受过含蒽环类化疗方案治疗后进展或复发的其它晚期软组织肉瘤、放射性碘难治性分化型甲状腺癌、甲状腺髓样癌、非小细胞肺癌。目前有将安罗替尼用于治疗结直肠癌患者的临床试验，正在招募患者。"

@@ -19,7 +19,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from reportgen.core.report_generator import ReportGenerator
-from reportgen.core.template_bridge_358 import PanelConfig, _build_nccn_and_immune_fields
+from reportgen.core.report_summary import build_report_summary
+from reportgen.core.template_bridge_358 import (
+    PanelConfig,
+    _build_crc_approved_drugs,
+    _build_nccn_and_immune_fields,
+    enhance_report_data,
+    load_panel_config,
+)
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
 from reportgen.knowledge.governance import load_and_validate_overlay
@@ -96,6 +103,151 @@ def test_missing_gene_domains_ship_as_governed_first_review_overlay():
         section = _section(provider, gene, "c.999A>G", "p.X333Y")
         combined = f"{section['intro']}\n{section['mutation_analysis']}"
         assert all(marker in combined for marker in markers), (gene, combined)
+
+
+def _approved_drug_names(rows):
+    return [str(row.get("Drug") or "").splitlines()[0] for row in rows]
+
+
+def test_crc358_approved_drug_universe_is_seven_when_part2_has_no_match():
+    panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_358_msi")
+
+    assert panel_config.approved_drug_rows_display_mode == (
+        "exclude_if_listed_in_part2"
+    )
+    assert _approved_drug_names(_build_crc_approved_drugs(panel_config, [])) == [
+        "瑞戈非尼",
+        "贝伐珠单抗",
+        "雷莫西尤单抗",
+        "呋喹替尼",
+        "阿柏西普",
+        "阿帕替尼",
+        "盐酸安罗替尼",
+    ]
+
+
+def test_crc358_approved_drugs_subtract_part2_across_names_and_combinations():
+    panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_358_msi")
+    part2_rows = [
+        {
+            "benefit_drugs_full": "瑞戈非尼（C）\nFOLFIRI+Bevacizumab（A）",
+            "benefit_drugs": "瑞戈非尼（C）\n另1项详见第三部分",
+            "caution_drugs": "Aflibercept（C）\n安罗替尼（C）",
+        }
+    ]
+
+    assert _approved_drug_names(
+        _build_crc_approved_drugs(panel_config, part2_rows)
+    ) == ["雷莫西尤单抗", "呋喹替尼", "阿帕替尼"]
+
+
+def test_crc358_approved_drugs_can_be_fully_suppressed_by_all_seven_aliases():
+    panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_358_msi")
+    part2_rows = [
+        {
+            "benefit_drugs": (
+                "Regorafenib（C）\n[安维汀]\n希冉择\nFruquintinib\n"
+                "ZALTRAP\n艾坦\nAnlotinib Hydrochloride"
+            ),
+            "caution_drugs": "--",
+        }
+    ]
+
+    assert _build_crc_approved_drugs(panel_config, part2_rows) == []
+
+
+def test_approved_drug_matching_does_not_use_genes_or_near_names():
+    panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_358_msi")
+    part2_rows = [
+        {
+            "gene": "VEGFR2",
+            "benefit_drugs": "阿帕他胺（C）\n某艾坦试验",
+            "caution_drugs": "--",
+        }
+    ]
+
+    # Gene overlap never suppresses a row, and the deliberately near-but-not-
+    # equal drug name stays distinct.
+    assert _approved_drug_names(
+        _build_crc_approved_drugs(panel_config, part2_rows)
+    ) == [
+        "瑞戈非尼",
+        "贝伐珠单抗",
+        "雷莫西尤单抗",
+        "呋喹替尼",
+        "阿柏西普",
+        "阿帕替尼",
+        "盐酸安罗替尼",
+    ]
+
+
+def test_crc358_dynamic_policy_overrides_stale_prefilled_approved_table(tmp_path):
+    source = tmp_path / "empty.xlsx"
+    source.touch()
+    excel_data = ExcelDataSource(file_path=str(source), table_data={"Variations": []})
+    report_data = ReportData()
+    report_data.set_table(
+        "variants_2_1",
+        [
+            {
+                "gene": "DEMO",
+                "benefit_drugs": "瑞戈非尼（C）",
+                "caution_drugs": "--",
+            }
+        ],
+    )
+    report_data.set_table(
+        "chemotherapy",
+        [{"Drug": "过期占位", "Gene": "--", "药物适应情况": "--"}],
+    )
+
+    enhanced = enhance_report_data(
+        report_data,
+        excel_data,
+        base_path=str(ROOT),
+        panel_id="crc_358_msi",
+    )
+
+    assert _approved_drug_names(enhanced.get_table("chemotherapy")) == [
+        "贝伐珠单抗",
+        "雷莫西尤单抗",
+        "呋喹替尼",
+        "阿柏西普",
+        "阿帕替尼",
+        "盐酸安罗替尼",
+    ]
+    assert enhanced.get_field("approved_drug_rows_total_count") == 7
+    assert enhanced.get_field("approved_drug_rows_suppressed_count") == 1
+    assert enhanced.get_field("approved_drug_rows_suppressed_names") == [
+        "瑞戈非尼"
+    ]
+    summary = build_report_summary(report_data=enhanced)
+    assert summary["drugs"]["approved_display_policy"] == (
+        "exclude_if_listed_in_part2"
+    )
+    assert summary["drugs"]["approved_universe_count"] == 7
+    assert summary["drugs"]["approved_suppressed_count"] == 1
+    assert summary["drugs"]["approved_suppressed_names"] == ["瑞戈非尼"]
+
+
+def test_crc301_keeps_fixed_approved_table_when_part2_lists_a_drug():
+    panel_config = load_panel_config(base_path=str(ROOT), panel_id="crc_301_msi")
+
+    assert panel_config.approved_drug_rows_display_mode == "fixed"
+    assert _approved_drug_names(
+        _build_crc_approved_drugs(
+            panel_config,
+            [{"benefit_drugs": "瑞戈非尼（C）", "caution_drugs": "--"}],
+        )
+    ) == [
+        "瑞戈非尼",
+        "贝伐珠单抗",
+        "雷莫西尤单抗",
+        "呋喹替尼",
+        "阿柏西普",
+        "阿帕替尼",
+        "盐酸安罗替尼",
+    ]
 
 
 def test_drug_consistency_gate_detects_missing_and_duplicate_items():
