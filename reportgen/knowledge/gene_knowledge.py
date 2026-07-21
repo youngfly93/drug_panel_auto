@@ -11,7 +11,7 @@ Python 3.9 compatible.
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import pandas as pd
 
@@ -35,6 +35,19 @@ class GeneKnowledgeProvider:
         """
         self.config = config or {}
         self._loaded = False
+
+        # Gene-symbol aliases are panel-scoped.  They normalize knowledge
+        # lookup and Part-3 variant identity without rewriting the input gene
+        # label shown in the report.  This is deliberately not a global alias
+        # dictionary: historical panel keys can be ambiguous across assays.
+        raw_gene_aliases = self.config.get("gene_symbol_aliases")
+        if raw_gene_aliases is None:
+            raw_gene_aliases = (self.config.get("gene_knowledge_db") or {}).get(
+                "gene_symbol_aliases"
+            )
+        self._gene_symbol_aliases: Dict[str, str] = {}
+        self._gene_aliases_by_canonical: Dict[str, tuple[str, ...]] = {}
+        self._configure_gene_symbol_aliases(raw_gene_aliases)
 
         # 数据缓存
         self._gene_analysis_df: Optional[pd.DataFrame] = None
@@ -246,6 +259,56 @@ class GeneKnowledgeProvider:
                 }
                 if not section:
                     continue
+                raw_replace_fields = row.get("replace_fields") or []
+                if isinstance(raw_replace_fields, str):
+                    raw_replace_fields = [raw_replace_fields]
+                replace_fields = {
+                    self._norm_text(field)
+                    for field in raw_replace_fields
+                    if self._norm_text(field)
+                    in {"intro", "mutation_analysis"}
+                }
+                # Gene-level prose normally follows first-writer precedence so
+                # an additive overlay cannot silently rewrite reviewed text.
+                # A later correction may replace named fields only when it also
+                # declares the source entry it supersedes, preserving an
+                # explicit audit trail in the YAML rather than editing history.
+                if replace_fields and not self._norm_text(row.get("supersedes")):
+                    _log.warning(
+                        "ignored replace_fields without supersedes: %s (%s)",
+                        row.get("gene"),
+                        path,
+                    )
+                    replace_fields = set()
+                gene_key = self._hgvs_key(row.get("gene"))
+                # Historical reviewed rows often stored a stable protein/domain
+                # sentence at the front of a variant-specific analysis.  Treat
+                # only that narrowly recognisable sentence as gene-level fixed
+                # knowledge; the consequence text remains variant-scoped.
+                explicit_fixed = section.get("fixed_domain_text", "")
+                derived_fixed = self._extract_fixed_domain_sentence(
+                    gene_key,
+                    section.get("mutation_analysis", ""),
+                    section.get("intro", ""),
+                )
+                if explicit_fixed:
+                    # An explicit reviewed field is the configured source of
+                    # truth.  Later overlays intentionally supersede legacy
+                    # sentences derived from variant prose instead of appending
+                    # a second, potentially conflicting protein description.
+                    fixed_domain_text = self._merge_fixed_domain_texts(
+                        explicit_fixed
+                    )
+                    section["fixed_domain_text"] = fixed_domain_text
+                    self._gene_fixed_domain_cache[gene_key] = fixed_domain_text
+                elif derived_fixed:
+                    # Legacy variant prose is only a fill-missing source.  Once
+                    # a base or reviewed fixed statement exists, it must not be
+                    # promoted again into the variant override and reintroduced
+                    # after a later curated replacement.
+                    if not self._gene_fixed_domain_cache.get(gene_key):
+                        self._gene_fixed_domain_cache[gene_key] = derived_fixed
+                    section.pop("fixed_domain_text", None)
                 key = self._variant_key(
                     row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs")
                 )
@@ -259,16 +322,25 @@ class GeneKnowledgeProvider:
                     # gene-level override (gene only, no c_hgvs): applies to ANY
                     # variant of this gene. Lets a panel curate cancer-specific
                     # wording (e.g. lung) without listing every variant.
-                    gene_key = self._hgvs_key(row.get("gene"))
                     if gene_key:
                         existing = self._gene_level_section_overrides.setdefault(
                             gene_key, {}
                         )
                         # Additional overlays may enrich an existing gene row
-                        # with an independently governed fixed-domain field, but
-                        # must not replace earlier reviewed prose by accident.
+                        # with an independently governed fixed-domain field. An
+                        # explicit correction can replace only the fields named
+                        # in ``replace_fields`` and must declare ``supersedes``.
                         for field, value in section.items():
-                            existing.setdefault(field, value)
+                            if field == "fixed_domain_text" or field in replace_fields:
+                                # Fixed-domain overlays are ordered sources of
+                                # truth: the later explicit reviewed statement
+                                # supersedes an earlier catalog/base statement.
+                                # Intro and mutation prose retain first-writer
+                                # precedence unless a governed correction opts
+                                # into field-level replacement above.
+                                existing[field] = value
+                            else:
+                                existing.setdefault(field, value)
 
             for row in data.get("drug_sections") or []:
                 if not isinstance(row, dict):
@@ -390,6 +462,90 @@ class GeneKnowledgeProvider:
     def _hgvs_key(self, value: Any) -> str:
         return re.sub(r"\s+", "", self._norm_text(value)).upper()
 
+    def _configure_gene_symbol_aliases(self, raw: Any) -> None:
+        """Normalize a panel-owned ``alias -> current symbol`` mapping.
+
+        Chained aliases are flattened.  Cycles fail closed because a cyclic
+        identity contract would make report deduplication order-dependent.
+        """
+        if raw in (None, ""):
+            return
+        if not isinstance(raw, Mapping):
+            raise ValueError("gene_symbol_aliases must be a mapping")
+
+        declared: Dict[str, str] = {}
+        for raw_alias, raw_canonical in raw.items():
+            alias = self._hgvs_key(raw_alias)
+            canonical = self._hgvs_key(raw_canonical)
+            if not alias or not canonical or alias == canonical:
+                continue
+            declared[alias] = canonical
+
+        flattened: Dict[str, str] = {}
+        for alias, target in declared.items():
+            seen = {alias}
+            canonical = target
+            while canonical in declared:
+                if canonical in seen:
+                    raise ValueError(
+                        f"cyclic gene_symbol_aliases contract at {alias}"
+                    )
+                seen.add(canonical)
+                canonical = declared[canonical]
+            flattened[alias] = canonical
+
+        aliases_by_canonical: Dict[str, List[str]] = {}
+        for alias, canonical in flattened.items():
+            aliases_by_canonical.setdefault(canonical, []).append(alias)
+        self._gene_symbol_aliases = flattened
+        self._gene_aliases_by_canonical = {
+            canonical: tuple(sorted(aliases))
+            for canonical, aliases in aliases_by_canonical.items()
+        }
+
+    def _canonical_gene_key(self, value: Any) -> str:
+        gene_key = self._hgvs_key(value)
+        return self._gene_symbol_aliases.get(gene_key, gene_key)
+
+    def _gene_lookup_keys(self, value: Any) -> tuple[str, ...]:
+        """Return raw, canonical, then sibling-alias keys without duplicates."""
+        raw_key = self._hgvs_key(value)
+        if not raw_key:
+            return ()
+        canonical = self._canonical_gene_key(raw_key)
+        ordered = [raw_key, canonical]
+        ordered.extend(self._gene_aliases_by_canonical.get(canonical, ()))
+        return tuple(dict.fromkeys(key for key in ordered if key))
+
+    def _first_gene_value(self, values: Mapping[str, Any], gene: Any) -> Any:
+        for gene_key in self._gene_lookup_keys(gene):
+            if gene_key in values:
+                return values[gene_key]
+        return None
+
+    def _merged_gene_mapping(
+        self, values: Mapping[str, Dict[str, str]], gene: Any
+    ) -> Dict[str, str]:
+        """Merge partial alias rows while keeping the raw input key dominant."""
+        merged: Dict[str, str] = {}
+        # Apply sibling aliases first, then canonical/raw rows.  This lets a
+        # canonical NSD2 fixed-domain row coexist with the governed WHSC1
+        # intro/analysis instead of the partial canonical row masking it.
+        for gene_key in reversed(self._gene_lookup_keys(gene)):
+            candidate = values.get(gene_key)
+            if candidate:
+                merged.update(candidate)
+        return merged
+
+    def _variant_lookup_keys(
+        self, gene: Any, c_hgvs: Any, p_hgvs: Any = ""
+    ) -> tuple[str, ...]:
+        return tuple(
+            key
+            for gene_key in self._gene_lookup_keys(gene)
+            if (key := self._variant_key(gene_key, c_hgvs, p_hgvs))
+        )
+
     def _variant_key(self, gene: Any, c_hgvs: Any, p_hgvs: Any = "") -> str:
         gene_key = self._hgvs_key(gene)
         c_key = self._hgvs_key(c_hgvs)
@@ -405,14 +561,13 @@ class GeneKnowledgeProvider:
 
     def variant_identity_key(self, row: Dict[str, Any]) -> str:
         """Return the canonical gene+cHGVS+pHGVS key used for Part 3 dedupe."""
-        exact = self._variant_key_from_row(row)
-        if exact:
-            return exact
-        gene = self._hgvs_key(row.get("gene"))
+        gene = self._canonical_gene_key(row.get("gene"))
         if not gene:
             return ""
         c_hgvs = self._hgvs_key(row.get("cHGVS") or row.get("c_hgvs"))
         p_hgvs = self._hgvs_key(row.get("pHGVS") or row.get("p_hgvs"))
+        if c_hgvs:
+            return f"{gene}|{c_hgvs}|{p_hgvs}"
         event = self._hgvs_key(
             row.get("event")
             or row.get("mutation_type")
@@ -476,6 +631,24 @@ class GeneKnowledgeProvider:
                     reviewed.get("domain_text", ""),
                     intro_domain_text,
                 )
+                # The workbook's structured reviewed column is authoritative
+                # when a legacy intro tail cannot be safely reduced to the same
+                # single protein statement.  This catches historical row/column
+                # drift such as a SMAD4 intro carrying ATM's 3056-aa sentence,
+                # while still allowing genuinely complementary KRAS domains to
+                # merge into one 189-aa statement.
+                if (
+                    reviewed.get("domain_text")
+                    and len(
+                        re.findall(
+                            r"编码的蛋白全长", fixed_domain_text
+                        )
+                    )
+                    > 1
+                ):
+                    fixed_domain_text = self._merge_fixed_domain_texts(
+                        reviewed["domain_text"]
+                    )
                 if fixed_domain_text:
                     self._gene_fixed_domain_cache[gene_upper] = fixed_domain_text
 
@@ -535,6 +708,34 @@ class GeneKnowledgeProvider:
         return body or intro
 
     @staticmethod
+    def _extract_fixed_domain_sentence(gene: str, *values: str) -> str:
+        """Extract only a variant-independent protein/domain sentence.
+
+        Reviewed legacy rows may combine a stable ``GENE基因编码的蛋白全长…``
+        sentence with ``该样本检出…`` consequence prose.  Promoting the entire
+        paragraph would incorrectly generalise a precise variant interpretation;
+        this deliberately narrow extractor promotes only the fixed first sentence.
+        """
+
+        gene_key = str(gene or "").strip().upper()
+        if not gene_key:
+            return ""
+        subject = rf"(?:(?:{re.escape(gene_key)})?基因编码的蛋白全长)"
+        pattern = re.compile(
+            rf"({subject}(?:为)?\s*\d+\s*(?:个|位)?氨基酸[^。\n]*(?:。|$))",
+            flags=re.IGNORECASE,
+        )
+        for value in values:
+            match = pattern.search(str(value or ""))
+            if not match:
+                continue
+            sentence = match.group(1).strip()
+            if sentence.startswith("基因编码"):
+                sentence = f"{gene_key}{sentence}"
+            return sentence.rstrip("。.") + "。"
+        return ""
+
+    @staticmethod
     def _merge_fixed_domain_texts(*values: str) -> str:
         """Merge complementary stable domain statements without repetition."""
         statements: List[str] = []
@@ -558,7 +759,15 @@ class GeneKnowledgeProvider:
         parsed = [pattern.match(item) for item in statements]
         if all(parsed):
             prefixes = [
-                re.sub(r"\s+", "", match.group(1)).casefold()
+                re.sub(
+                    r"(\d+)(?:个|位)氨基酸",
+                    r"\1氨基酸",
+                    re.sub(
+                        r"蛋白全长为?",
+                        "蛋白全长",
+                        re.sub(r"\s+", "", match.group(1)),
+                    ),
+                ).casefold()
                 for match in parsed
                 if match is not None
             ]
@@ -567,11 +776,18 @@ class GeneKnowledgeProvider:
                 tail_seen: set[str] = set()
                 for match in parsed:
                     assert match is not None
-                    tail = match.group(2).strip().rstrip("。.")
-                    tail_key = re.sub(r"[\s，,。.;；]", "", tail).casefold()
-                    if tail_key not in tail_seen:
-                        tail_seen.add(tail_key)
-                        tails.append(tail)
+                    # The accumulator may already contain a canonical sentence
+                    # joined with Chinese semicolons.  Split it back into
+                    # components before merging so repeated overlay rows do not
+                    # make the operation order-dependent (A+B)+A -> A+B+A.
+                    for raw_tail in re.split(r"[；;]", match.group(2)):
+                        tail = raw_tail.strip().rstrip("。.")
+                        tail_key = re.sub(
+                            r"[\s，,。.;；]", "", tail
+                        ).casefold()
+                        if tail and tail_key not in tail_seen:
+                            tail_seen.add(tail_key)
+                            tails.append(tail)
                 return f"{parsed[0].group(1)}，主要包含{'；'.join(tails)}。"
 
         return "\n".join(f"{item}。" for item in statements)
@@ -688,7 +904,9 @@ class GeneKnowledgeProvider:
         mutation_type: Optional[str],
         has_drug: bool,
     ) -> str:
-        reviewed = self._reviewed_gene_analysis_cache.get(gene.upper(), {})
+        reviewed = self._first_gene_value(
+            self._reviewed_gene_analysis_cache, gene
+        ) or {}
         if not reviewed:
             return self.get_gene_analysis(gene)
 
@@ -972,7 +1190,7 @@ class GeneKnowledgeProvider:
         """
         if not self._loaded:
             self.load()
-        intro = self._gene_intro_cache.get(gene.upper(), "")
+        intro = self._first_gene_value(self._gene_intro_cache, gene) or ""
         if not intro:
             # Fallback：未收录基因生成通用描述
             intro = f"{gene}基因与肿瘤的发生发展可能相关，具体功能及临床意义请参考相关文献。"
@@ -990,7 +1208,7 @@ class GeneKnowledgeProvider:
         """
         if not self._loaded:
             self.load()
-        return self._gene_analysis_cache.get(gene.upper(), "")
+        return self._first_gene_value(self._gene_analysis_cache, gene) or ""
 
     def get_drug_analysis(self, gene: str, drug: Optional[str] = None) -> str:
         """
@@ -1006,7 +1224,7 @@ class GeneKnowledgeProvider:
         if not self._loaded:
             self.load()
 
-        gene_drugs = self._drug_analysis_cache.get(gene.upper(), {})
+        gene_drugs = self._first_gene_value(self._drug_analysis_cache, gene) or {}
         if not gene_drugs:
             return ""
 
@@ -1028,7 +1246,7 @@ class GeneKnowledgeProvider:
         """
         if not self._loaded:
             self.load()
-        return self._drug_full_cache.get(gene.upper(), [])
+        return self._first_gene_value(self._drug_full_cache, gene) or []
 
     def has_reviewed_drug_analysis_contract(
         self, variant: Dict[str, Any]
@@ -1043,15 +1261,23 @@ class GeneKnowledgeProvider:
         """
         if not self._loaded:
             self.load()
-        variant_key = self._variant_key_from_row(variant)
-        gene = self._hgvs_key(variant.get("gene"))
+        variant_keys = self._variant_lookup_keys(
+            variant.get("gene"),
+            variant.get("cHGVS") or variant.get("c_hgvs"),
+            variant.get("pHGVS") or variant.get("p_hgvs"),
+        )
+        gene_keys = self._gene_lookup_keys(variant.get("gene"))
         for direction in ("benefit", "caution"):
-            if variant_key and (
-                variant_key,
-                direction,
-            ) in self._reviewed_drug_section_overrides:
+            if any(
+                (variant_key, direction)
+                in self._reviewed_drug_section_overrides
+                for variant_key in variant_keys
+            ):
                 return True
-            if gene and (gene, direction) in self._gene_level_drug_overrides:
+            if any(
+                (gene_key, direction) in self._gene_level_drug_overrides
+                for gene_key in gene_keys
+            ):
                 return True
         return False
 
@@ -1077,7 +1303,7 @@ class GeneKnowledgeProvider:
         """
         if not self._loaded:
             self.load()
-        return self._references_cache.get(gene.upper(), [])
+        return self._first_gene_value(self._references_cache, gene) or []
 
     def build_reference_lookup(self) -> Dict[str, Any]:
         """构建全局"引用标识 → 参考文献全文"映射，供按正文引用重建参考文献。
@@ -1130,7 +1356,7 @@ class GeneKnowledgeProvider:
         """
         if not self._loaded:
             self.load()
-        return self._gene_transcript_cache.get(gene.upper(), {})
+        return self._first_gene_value(self._gene_transcript_cache, gene) or {}
 
     def generate_mutation_description(
         self,
@@ -1227,23 +1453,26 @@ class GeneKnowledgeProvider:
         # gene-level overlay (panel-scoped, variant-agnostic): overrides the
         # base KB for ANY variant of this gene. Lets e.g. lung supply lung
         # wording without enumerating every variant.
-        gene_override = self._gene_level_section_overrides.get(
-            self._hgvs_key(gene), {}
+        gene_override = self._merged_gene_mapping(
+            self._gene_level_section_overrides, gene
         )
         intro = gene_override.get("intro") or intro
         mutation_analysis = gene_override.get("mutation_analysis") or mutation_analysis
         # variant-level overlay has the highest precedence.
-        reviewed_override = self._reviewed_gene_section_overrides.get(
-            self._variant_key(gene, c_hgvs, p_hgvs),
-            {},
-        )
+        reviewed_override: Dict[str, str] = {}
+        for variant_key in self._variant_lookup_keys(gene, c_hgvs, p_hgvs):
+            reviewed_override = self._reviewed_gene_section_overrides.get(
+                variant_key, {}
+            )
+            if reviewed_override:
+                break
         intro = reviewed_override.get("intro") or intro
         mutation_analysis = (
             reviewed_override.get("mutation_analysis") or mutation_analysis
         )
 
         fixed_domain_text = self._merge_fixed_domain_texts(
-            self._gene_fixed_domain_cache.get(gene.upper(), ""),
+            self._first_gene_value(self._gene_fixed_domain_cache, gene) or "",
             gene_override.get("fixed_domain_text", ""),
             reviewed_override.get("fixed_domain_text", ""),
         )
@@ -1318,6 +1547,64 @@ class GeneKnowledgeProvider:
             sections.append(section)
 
         return sections
+
+    @staticmethod
+    def build_gene_domain_coverage(
+        sections: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Return a fail-closed fixed-domain coverage contract for Part 3.
+
+        The contract is gene-level even when several variants of the same gene
+        are rendered.  Missing content is intentionally explicit so report QA
+        cannot silently pass a Part-3 section that omitted the fixed structural
+        paragraph requested by the report group.
+        """
+
+        expected: set[str] = set()
+        covered: set[str] = set()
+        missing_variant_keys: List[str] = []
+        duplicate_genes: set[str] = set()
+        duplicate_variant_keys: List[str] = []
+        for section in sections:
+            gene = str(section.get("gene") or "").strip().upper()
+            if not gene:
+                continue
+            expected.add(gene)
+            fixed_domain_text = str(
+                section.get("fixed_domain_text") or ""
+            ).strip()
+            variant_key = str(section.get("source_variant_key") or "").strip()
+            if fixed_domain_text:
+                covered.add(gene)
+                if len(re.findall(r"编码的蛋白全长", fixed_domain_text)) > 1:
+                    duplicate_genes.add(gene)
+                    if (
+                        variant_key
+                        and variant_key not in duplicate_variant_keys
+                    ):
+                        duplicate_variant_keys.append(variant_key)
+            else:
+                if variant_key and variant_key not in missing_variant_keys:
+                    missing_variant_keys.append(variant_key)
+
+        missing = sorted(expected - covered)
+        total = len(expected)
+        return {
+            "status": (
+                "PASS" if not missing and not duplicate_genes else "FAIL"
+            ),
+            "expected_gene_count": total,
+            "covered_gene_count": len(expected & covered),
+            "coverage_percent": (
+                round(100.0 * len(expected & covered) / total, 2)
+                if total
+                else 100.0
+            ),
+            "missing_genes": missing,
+            "missing_variant_keys": missing_variant_keys,
+            "duplicate_fixed_domain_genes": sorted(duplicate_genes),
+            "duplicate_fixed_domain_variant_keys": duplicate_variant_keys,
+        }
 
     def build_drug_analysis_sections(
         self,
@@ -1811,6 +2098,66 @@ class GeneKnowledgeProvider:
             "duplicates": duplicates,
         }
 
+    def build_drug_analysis_contract_coverage(
+        self,
+        variants: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Report which Part-2 drug rows have an explicit reviewed contract.
+
+        Runtime Part-2/Part-3 consistency is enforced for every CRC358 drug
+        row.  This companion metric keeps the remaining migration debt
+        visible without confusing legacy-but-consistent content with a
+        content omission.
+        """
+        rows: Dict[str, Dict[str, str]] = {}
+        for variant in variants:
+            if not any(
+                self._has_drug_text(variant.get(field))
+                for field in (
+                    "benefit_drugs_full",
+                    "benefit_drugs",
+                    "caution_drugs_full",
+                    "caution_drugs",
+                )
+            ):
+                continue
+            variant_key = self._variant_key_from_row(variant)
+            if not variant_key:
+                continue
+            rows.setdefault(
+                variant_key,
+                {
+                    "gene": str(variant.get("gene") or "").upper(),
+                    "c_hgvs": str(
+                        variant.get("cHGVS") or variant.get("c_hgvs") or ""
+                    ),
+                    "p_hgvs": str(
+                        variant.get("pHGVS") or variant.get("p_hgvs") or ""
+                    ),
+                    "variant_key": variant_key,
+                },
+            )
+
+        governed_keys = {
+            key
+            for key, row in rows.items()
+            if self.has_reviewed_drug_analysis_contract(row)
+        }
+        legacy_rows = [rows[key] for key in sorted(set(rows) - governed_keys)]
+        expected_count = len(rows)
+        governed_count = len(governed_keys)
+        return {
+            "status": "PASS" if not legacy_rows else "MIGRATION_PENDING",
+            "expected_variant_count": expected_count,
+            "governed_variant_count": governed_count,
+            "coverage_percent": round(
+                100.0 * governed_count / expected_count, 2
+            )
+            if expected_count
+            else 100.0,
+            "legacy_uncontracted": legacy_rows,
+        }
+
     def _variant_display_from_row(self, row: Dict[str, Any]) -> str:
         c_hgvs = self._norm_text(row.get("cHGVS") or row.get("c_hgvs"))
         p_hgvs = self._norm_text(row.get("pHGVS") or row.get("p_hgvs"))
@@ -1893,10 +2240,26 @@ class GeneKnowledgeProvider:
                     ]
                 if overrides and self._has_drug_text(variant.get(source_field)):
                     variant_display = self._variant_display_from_row(variant)
+                    current_gene = self._norm_text(variant.get("gene")).upper()
+                    current_c_hgvs = self._norm_text(
+                        variant.get("cHGVS") or variant.get("c_hgvs")
+                    )
+                    current_p_hgvs = self._norm_text(
+                        variant.get("pHGVS") or variant.get("p_hgvs")
+                    )
                     for override in overrides:
                         result.append(
                             {
                                 **override,
+                                # A gene-level reviewed rule owns its prose,
+                                # but the rendered section must retain the
+                                # concrete Part-2 row identity.  Otherwise the
+                                # cross-section gate sees a gene-only phantom
+                                # key and reports the real FANCA/TSC1 variant as
+                                # missing.
+                                "gene": current_gene,
+                                "c_hgvs": current_c_hgvs,
+                                "p_hgvs": current_p_hgvs,
                                 "variant": variant_display,
                             }
                         )

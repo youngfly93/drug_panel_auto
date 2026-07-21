@@ -1,7 +1,7 @@
 schema_version: 1
 source:
-  panel: crc_358_msi
-  purpose: Stable protein/domain descriptions missing from the legacy workbook.
+  panel: crc_301_msi+crc_358_msi
+  purpose: Stable protein/domain descriptions missing from or conflicting in the legacy workbook.
   source_type: curated_public_protein_records
   curated_at: "2026-07-20"
   scope: pan_cancer_protein_structure_only
@@ -58,4 +58,16 @@ gene_sections:
       - type: interpro
         id: O75771
         url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/O75771/?page_size=200
+  - gene: PIK3CA
+    fixed_domain_text: PIK3CA基因编码的蛋白全长为1068个氨基酸，UniProt/InterPro注释的主要结构区域包括PI3K-ABD结构域（16-105位氨基酸）、PI3K-RBD结构域（187-289位氨基酸）、C2 PI3K-type结构域（330-487位氨基酸）、PIK helical结构域（517-694位氨基酸）、PI3K/PI4K catalytic结构域（765-1051位氨基酸）。
+    source_refs:
+      - type: uniprot
+        id: P42336
+        url: https://www.uniprot.org/uniprotkb/P42336/entry
+  - gene: SMAD4
+    fixed_domain_text: SMAD4基因编码的蛋白全长为552个氨基酸，UniProt/InterPro注释的主要结构区域包括MH1结构域（18-142位氨基酸）、MH2结构域（323-552位氨基酸）。
+    source_refs:
+      - type: uniprot
+        id: Q13485
+        url: https://www.uniprot.org/uniprotkb/Q13485/entry
 drug_sections: []

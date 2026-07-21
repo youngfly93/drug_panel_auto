@@ -1,0 +1,102 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: >-
+    Governed corrections for six legacy exact-variant narratives among the
+    P3-F2 CRC358-only chromatin genes. Static database absence, domain position,
+    expression or knockout experiments, family-level cohort observations, and
+    cross-lineage evidence are not treated as proof of the detected variant.
+  source_type: reviewed_knowledge_correction_overlay
+  source_id: crc358_p3f2_legacy_exact_corrections_20260721
+  created_at: "2026-07-21"
+  privacy: No patient or sample identifiers are stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_p3f2_legacy_exact_correction_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_correction_of_legacy_database_domain_expression_or_cross_lineage_prose
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: exact_variant_not_clinically_established_conservative_interpretation
+      cancer_scope: colorectal_cancer_crc358_only_exact_variant_conservative_correction
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: ARID1B
+    panels: [crc_358_msi]
+    c_hgvs: c.618_641del
+    p_hgvs: p.Q207_Q214del
+    mutation_analysis: >-
+      ARID1B p.Q207_Q214del为框内缺失；当前缺少足够的位点级SWI/SNF复合物功能和结直肠癌临床证据确定其影响。静态数据库未收录、位于已注释结构区域之外以及MSI结直肠癌中ARID家族的队列突变均不能证明本位点导致双等位失活、染色质重塑缺陷、肿瘤驱动或治疗敏感性。
+    supersedes: legacy_arid1b_p_q207_q214del_database_domain_and_family_cohort_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-57492, url: https://www.ncbi.nlm.nih.gov/gene/57492}
+      - {type: pubmed, id: PMID-24382590, url: https://pubmed.ncbi.nlm.nih.gov/24382590/}
+
+  - gene: DNMT3B
+    panels: [crc_358_msi]
+    c_hgvs: c.1526delinsTGGA
+    p_hgvs: p.G509delinsVD
+    mutation_analysis: >-
+      DNMT3B p.G509delinsVD为框内插入缺失变异；当前缺少足够的位点级甲基转移酶功能、甲基化组和结直肠癌临床证据确定其影响。静态数据库未收录或位于主要催化区域之外不能证明无功能影响；miR-124下调DNMT3B表达的细胞研究也不能证明本位点导致相同表型或治疗反应。
+    supersedes: legacy_dnmt3b_p_g509delinsvd_database_domain_and_expression_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-1789, url: https://www.ncbi.nlm.nih.gov/gene/1789}
+      - {type: pubmed, id: PMID-32552060, url: https://pubmed.ncbi.nlm.nih.gov/32552060/}
+
+  - gene: HDAC7
+    panels: [crc_358_msi]
+    c_hgvs: c.615G>T
+    p_hgvs: p.K205N
+    mutation_analysis: >-
+      HDAC7 p.K205N为错义变异；当前缺少足够的位点级蛋白功能和结直肠癌临床证据确定其影响。静态数据库未收录或位于主要去乙酰化区域之外均不能证明良性或致病，HDAC7表达、磷酸化、核质定位及泛HDAC抑制研究也不能形成该位点的治疗结论。
+    supersedes: legacy_hdac7_p_k205n_database_and_domain_only_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-51564, url: https://www.ncbi.nlm.nih.gov/gene/51564}
+
+  - gene: HDAC9
+    panels: [crc_358_msi]
+    c_hgvs: c.829_830delinsGT
+    p_hgvs: p.S277V
+    mutation_analysis: >-
+      HDAC9 p.S277V为错义变异；当前缺少足够的位点级蛋白功能和结直肠癌临床证据确定其影响。静态数据库未收录或结构域外定位不能证明良性或致病；HDAC9缺失/抑制改善小鼠Treg功能和结肠炎的研究不是结直肠肿瘤位点证据，也不能推导免疫治疗或HDAC抑制剂反应。
+    supersedes: legacy_hdac9_p_s277v_database_domain_and_mouse_colitis_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9734, url: https://www.ncbi.nlm.nih.gov/gene/9734}
+      - {type: pubmed, id: PMID-19879272, url: https://pubmed.ncbi.nlm.nih.gov/19879272/}
+
+  - gene: KMT2B
+    panels: [crc_358_msi]
+    c_hgvs: c.3164G>A
+    p_hgvs: p.R1055Q
+    mutation_analysis: >-
+      KMT2B p.R1055Q为错义变异；当前缺少足够的位点级甲基转移酶/转录功能和结直肠癌临床证据确定其影响。静态数据库未收录、结构域外定位或基因在其他肿瘤中的泛化描述均不能证明本位点导致H3K4重编程、肿瘤驱动或治疗敏感性。
+    supersedes: legacy_kmt2b_p_r1055q_database_domain_and_genecards_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9757, url: https://www.ncbi.nlm.nih.gov/gene/9757}
+
+  - gene: KMT2B
+    panels: [crc_358_msi]
+    c_hgvs: c.1681C>T
+    p_hgvs: p.P561S
+    intro: >-
+      KMT2B编码含CXXC、PHD和SET等区域的KMT2/MLL家族赖氨酸甲基转移酶，参与H3K4甲基化相关转录调控。
+    mutation_analysis: >-
+      KMT2B p.P561S为错义变异；当前缺少足够的位点级甲基转移酶/转录功能和结直肠癌临床证据确定其影响。KMT2B扩增、胚系肌张力障碍、其他KMT2家族事件或肿瘤测序中的基因级检出均不能证明本位点具有驱动、预后或治疗意义。
+    supersedes: legacy_kmt2b_p_p561s_generic_pathway_and_cross_tumor_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9757, url: https://www.ncbi.nlm.nih.gov/gene/9757}
+
+drug_sections: []

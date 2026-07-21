@@ -1,0 +1,282 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: >-
+    P3-F3 first-review fallbacks for 18 CRC358-only lineage and transcription
+    regulators remaining after P3-F2.
+  source_type: official_gene_identity_plus_conservative_lineage_transcription_event_boundary
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_crc358_only_lineage_transcription_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    An ordinary colorectal-cancer sequence variant does not establish a
+    fusion or rearrangement, copy-number or expression state, germline
+    developmental syndrome, hematologic-lineage event, transcriptional
+    program, or treatment response. Evidence is not transferred between
+    paralogs, binding partners, family members, or historical symbol aliases.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_p3f3_lineage_transcription_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_identity_and_lineage_transcription_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_identity_plus_conservative_event_boundary
+      cancer_scope: colorectal_cancer_crc358_only_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+
+symbol_identity_map:
+  - {panel_symbol: CUX1, current_symbol: CUX1, ncbi_gene_id: 1523}
+  - {panel_symbol: ETV1, current_symbol: ETV1, ncbi_gene_id: 2115}
+  - {panel_symbol: FLI1, current_symbol: FLI1, ncbi_gene_id: 2313}
+  - {panel_symbol: FOXP1, current_symbol: FOXP1, ncbi_gene_id: 27086}
+  - {panel_symbol: FUBP1, current_symbol: FUBP1, ncbi_gene_id: 8880}
+  - {panel_symbol: MAX, current_symbol: MAX, ncbi_gene_id: 4149}
+  - {panel_symbol: MGA, current_symbol: MGA, ncbi_gene_id: 23269}
+  - {panel_symbol: MYB, current_symbol: MYB, ncbi_gene_id: 4602}
+  - {panel_symbol: PAX5, current_symbol: PAX5, ncbi_gene_id: 5079}
+  - {panel_symbol: RUNX1T1, current_symbol: RUNX1T1, ncbi_gene_id: 862}
+  - {panel_symbol: RUNX2, current_symbol: RUNX2, ncbi_gene_id: 860}
+  - {panel_symbol: SOX9, current_symbol: SOX9, ncbi_gene_id: 6662}
+  - {panel_symbol: TCF12, current_symbol: TCF12, ncbi_gene_id: 6938}
+  - {panel_symbol: TCF3, current_symbol: TCF3, ncbi_gene_id: 6929}
+  - {panel_symbol: TCF4, current_symbol: TCF4, ncbi_gene_id: 6925}
+  - {panel_symbol: TLE3, current_symbol: TLE3, ncbi_gene_id: 7090}
+  - {panel_symbol: TLE4, current_symbol: TLE4, ncbi_gene_id: 7091}
+  - {panel_symbol: NCOA4, current_symbol: NCOA4, ncbi_gene_id: 8031}
+
+symbol_disambiguation_contract:
+  - panel_symbol: TCF4
+    canonical_symbol: TCF4
+    canonical_ncbi_gene_id: 6925
+    identity_status: confirmed_official_symbol
+    conflicting_historical_alias:
+      symbol: TCF4
+      canonical_symbol: TCF7L2
+      ncbi_gene_id: 6934
+    runtime_policy: >-
+      Resolve the CRC358 panel key TCF4 only to NCBI Gene 6925. Do not import
+      TCF7L2/Wnt evidence merely because TCF7L2 has historically been called
+      TCF-4 or TCF4.
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6925, url: https://www.ncbi.nlm.nih.gov/gene/6925}
+      - {type: ncbi_gene, id: NCBI-Gene-6934, url: https://www.ncbi.nlm.nih.gov/gene/6934}
+
+gene_sections:
+  - gene: CUX1
+    panels: [crc_358_msi]
+    intro: >-
+      CUX1编码含多个CUT重复区和同源盒DNA结合区的转录调控蛋白，可参与基因表达、形态发生、分化和细胞周期调节，并存在多种剪接异构体。
+    mutation_analysis: >-
+      明确截短、拷贝缺失、等位基因状态和普通错义位点对CUX1功能的证据不同；造血系统或其他肿瘤中的失活事件也不能直接定义结直肠癌未知位点。单个位点需转录调控功能和CRC直接证据，不能自动判定抑癌功能缺失或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_cux1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-1523, url: https://www.ncbi.nlm.nih.gov/gene/1523}
+
+  - gene: ETV1
+    panels: [crc_358_msi]
+    intro: >-
+      ETV1编码ETS家族转录因子，含N端转录激活区域和C端ETS DNA结合区域，可调节细胞生长、迁移、增殖、血管生成和分化相关基因。
+    mutation_analysis: >-
+      Ewing肉瘤或前列腺癌中的ETV1融合/重排，以及前列腺癌、黑色素瘤或胃肠间质瘤中的过表达，与结直肠癌普通序列位点不是同一事件。未知位点不能仅凭ETS家族身份、融合伙伴或表达研究判定驱动性或形成治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_etv1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-2115, url: https://www.ncbi.nlm.nih.gov/gene/2115}
+      - {type: pubmed, id: PMID-19657377, url: https://pubmed.ncbi.nlm.nih.gov/19657377/}
+
+  - gene: FLI1
+    panels: [crc_358_msi]
+    intro: >-
+      FLI1编码含ETS DNA结合区域的转录因子，参与造血和细胞谱系相关转录调节。
+    mutation_analysis: >-
+      Ewing肉瘤中的EWSR1-FLI1融合和白血病相关染色体易位是重排事件，不能由FLI1普通错义或小片段插入缺失替代。肿瘤组织中的未知位点还需排除造血来源并获得直接功能证据，不能自动形成肉瘤、白血病或靶向治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_fli1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-2313, url: https://www.ncbi.nlm.nih.gov/gene/2313}
+
+  - gene: FOXP1
+    panels: [crc_358_msi]
+    intro: >-
+      FOXP1编码FOX家族转录因子，含DNA结合和蛋白相互作用区域，参与发育期及成体组织/细胞类型特异的转录调控。
+    mutation_analysis: >-
+      FOXP1缺失、表达变化、重排或异常异构体与普通编码区位点需要分别解释；淋巴系统事件及FOXP2/FOXP3等家族成员证据不能跨成员迁移。未知CRC位点不能自动证明抑癌功能缺失、谱系改变或药物反应。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_foxp1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-27086, url: https://www.ncbi.nlm.nih.gov/gene/27086}
+
+  - gene: FUBP1
+    panels: [crc_358_msi]
+    intro: >-
+      FUBP1编码单链DNA/RNA结合蛋白，可结合MYC上游FUSE元件并参与转录调控；其蛋白包含N端调节区、中央核酸结合区和C端转录激活区。
+    mutation_analysis: >-
+      少突胶质瘤中的FUBP1失活/截短事件、表达异常和结直肠癌普通序列位点不能互相替代；MYC通路关系也不等于任意FUBP1位点具有驱动性。未知位点需等位基因、核酸结合和转录功能证据，不能据此形成治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_fubp1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-8880, url: https://www.ncbi.nlm.nih.gov/gene/8880}
+      - {type: pubmed, id: PMID-26068201, url: https://pubmed.ncbi.nlm.nih.gov/26068201/}
+
+  - gene: MAX
+    panels: [crc_358_msi]
+    intro: >-
+      MAX编码bHLH-亮氨酸拉链转录因子，可与MYC、MAD/MXD等成员形成同源或异源二聚体并竞争结合E-box，从而调节增殖、分化和凋亡相关转录。
+    mutation_analysis: >-
+      胚系MAX变异相关嗜铬细胞瘤/副神经节瘤、双等位或明确功能缺失与结直肠癌普通体细胞位点具有不同证据边界。MYC扩增或其他二聚伙伴的证据不能替代MAX位点功能，也不能自动形成MYC通路或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_max_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4149, url: https://www.ncbi.nlm.nih.gov/gene/4149}
+
+  - gene: MGA
+    panels: [crc_358_msi]
+    intro: >-
+      MGA编码可与MAX二聚的转录调控蛋白，含T-box和bHLH-亮氨酸拉链相关DNA结合区域，并参与转录复合物和细胞命运调节。
+    mutation_analysis: >-
+      MGA截短/双等位失活、表达或复合物状态与普通错义位点不能统一解释；MAX、MYC或MXD家族成员的证据也不能跨蛋白转移。未知CRC位点需直接的DNA结合、二聚和转录功能证据，不能自动推导抑癌或用药意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_mga_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-23269, url: https://www.ncbi.nlm.nih.gov/gene/23269}
+
+  - gene: MYB
+    panels: [crc_358_msi]
+    intro: >-
+      MYB编码含三个螺旋-转角-螺旋DNA结合重复区的转录调控蛋白，在造血调节中发挥重要作用。
+    mutation_analysis: >-
+      白血病/淋巴瘤中的MYB重排、易位或异常表达，以及其他肿瘤中的MYB融合，与结直肠癌普通序列位点不是同一证据。肿瘤组织检出的未知位点需结合样本来源和直接转录功能资料，不能自动判定造血克隆、驱动性或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_myb_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4602, url: https://www.ncbi.nlm.nih.gov/gene/4602}
+
+  - gene: PAX5
+    panels: [crc_358_msi]
+    intro: >-
+      PAX5编码含paired-box DNA结合区域的转录因子，是早期B细胞分化和B细胞谱系程序的重要调节蛋白。
+    mutation_analysis: >-
+      B细胞白血病/淋巴瘤中的PAX5缺失、融合、易位或谱系表达事件与结直肠上皮肿瘤普通位点不能互相替代。肿瘤组织中的未知PAX5位点需考虑造血来源并获得直接功能证据，不能自动形成血液肿瘤诊断或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_pax5_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5079, url: https://www.ncbi.nlm.nih.gov/gene/5079}
+
+  - gene: RUNX1T1
+    panels: [crc_358_msi]
+    intro: >-
+      RUNX1T1编码髓系易位基因家族转录共抑制蛋白，可与DNA结合转录因子和共抑制/HDAC复合物相互作用并抑制转录。
+    mutation_analysis: >-
+      急性髓系白血病中的t(8;21) RUNX1-RUNX1T1融合是特定染色体重排，不能由RUNX1T1普通编码区位点替代。单个CRC位点也不能仅凭共抑制蛋白功能推定造血分化阻断、融合生物学或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_runx1t1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-862, url: https://www.ncbi.nlm.nih.gov/gene/862}
+
+  - gene: RUNX2
+    panels: [crc_358_msi]
+    intro: >-
+      RUNX2编码含Runt DNA结合区域的RUNX家族转录因子，是成骨细胞分化和骨骼形态发生的重要调节蛋白，并可作为核酸及转录调控因子的支架。
+    mutation_analysis: >-
+      胚系RUNX2变异相关锁骨颅骨发育不良、肿瘤中的表达/转录程序变化和结直肠癌普通体细胞位点属于不同证据层。其他癌种的表达、侵袭或细胞模型不能替代当前位点功能，未知位点不得自动形成驱动、预后或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_runx2_developmental_and_cross_tumor_gene_level_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-860, url: https://www.ncbi.nlm.nih.gov/gene/860}
+
+  - gene: SOX9
+    panels: [crc_358_msi]
+    intro: >-
+      SOX9编码HMG-box DNA结合转录因子，参与软骨细胞分化、骨骼形态发生、性别决定和多种组织谱系发育。
+    mutation_analysis: >-
+      胚系SOX9缺陷导致的发育综合征、肿瘤中的SOX9过表达或细胞状态与结直肠癌普通体细胞序列位点不能互相替代。单个位点需DNA结合和转录功能证据，不能由前列腺、胰腺或其他癌种表达研究推导驱动、预后或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_sox9_cross_cancer_expression_and_germline_gene_level_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6662, url: https://www.ncbi.nlm.nih.gov/gene/6662}
+
+  - gene: TCF12
+    panels: [crc_358_msi]
+    intro: >-
+      TCF12编码bHLH E蛋白家族转录因子，可识别E-box并与其他bHLH蛋白形成异源二聚体，参与多组织和免疫细胞的谱系特异性转录调节。
+    mutation_analysis: >-
+      TCF12在CRC中的过表达/转移相关观察与序列位点不是同一事件；少突胶质瘤中的bHLH区或截短变异也不能跨癌种套用到普通CRC位点。未知位点需直接的DNA结合、二聚和转录功能证据，不能自动判定转移风险或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_tcf12_crc_expression_and_oligodendroglioma_gene_level_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6938, url: https://www.ncbi.nlm.nih.gov/gene/6938}
+      - {type: pubmed, id: PMID-22130667, url: https://pubmed.ncbi.nlm.nih.gov/22130667/}
+      - {type: pubmed, id: PMID-26068201, url: https://pubmed.ncbi.nlm.nih.gov/26068201/}
+
+  - gene: TCF3
+    panels: [crc_358_msi]
+    intro: >-
+      TCF3编码E蛋白家族bHLH转录因子，可作为同源或异源二聚体结合E-box，在B/T淋巴细胞发育中发挥重要作用。
+    mutation_analysis: >-
+      淋系恶性肿瘤中的TCF3-PBX1、TCF3-ZNF384等融合/易位及淋巴发育缺陷与结直肠癌普通序列位点不是同一事件。未知位点需结合样本来源和直接转录功能证据，不能自动形成血液肿瘤或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_tcf3_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6929, url: https://www.ncbi.nlm.nih.gov/gene/6929}
+
+  - gene: TCF4
+    panels: [crc_358_msi]
+    intro: >-
+      本Panel中的TCF4指现行官方基因TCF4（NCBI Gene 6925），编码可识别E-box的bHLH转录因子，并在神经系统发育等过程中发挥作用。
+    mutation_analysis: >-
+      TCF4胚系缺陷相关Pitt-Hopkins综合征、内含子CTG重复扩增相关Fuchs角膜内皮营养不良和肿瘤体细胞普通位点不能互相替代。TCF7L2（Gene 6934）历史别名也曾写作TCF4，但其Wnt通路证据不得迁移到本Panel的TCF4位点。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_tcf4_generic_fallback_and_tcf7l2_symbol_ambiguity
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6925, url: https://www.ncbi.nlm.nih.gov/gene/6925}
+      - {type: ncbi_gene, id: NCBI-Gene-6934, url: https://www.ncbi.nlm.nih.gov/gene/6934}
+
+  - gene: TLE3
+    panels: [crc_358_msi]
+    intro: >-
+      TLE3编码Groucho/TLE家族转录共抑制蛋白，可参与Notch等发育信号下游的细胞命运调节，且存在多种剪接异构体。
+    mutation_analysis: >-
+      卵巢癌中TLE3表达与紫杉类疗效的相关观察不是TLE3序列变异证据，也不能外推到结直肠癌。表达、拷贝数、共抑制复合物状态和普通位点需分别解释；TLE1/2/4证据不能跨成员替代。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_tle3_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7090, url: https://www.ncbi.nlm.nih.gov/gene/7090}
+
+  - gene: TLE4
+    panels: [crc_358_msi]
+    intro: >-
+      TLE4编码Groucho/TLE家族转录共抑制蛋白，可参与RNA聚合酶Ⅱ转录抑制及Wnt/β-catenin等信号复合物的调节。
+    mutation_analysis: >-
+      TLE4缺失、表达或共抑制复合物状态与普通编码区位点不是同一检测事件；TLE3表达标志物和其他TLE家族成员证据不能跨成员迁移。未知CRC位点不能仅凭Wnt通路关联推定通路失活、预后或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_tle4_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7091, url: https://www.ncbi.nlm.nih.gov/gene/7091}
+
+  - gene: NCOA4
+    panels: [crc_358_msi]
+    intro: >-
+      NCOA4编码核受体共激活蛋白，可与雄激素受体等核受体相互作用并增强配体依赖的转录活性。
+    mutation_analysis: >-
+      甲状腺乳头状癌中的RET-NCOA4融合是特定染色体重排，不能由NCOA4普通错义或小片段插入缺失替代。核受体共激活、表达和融合伙伴证据均不能自动证明CRC序列位点具有驱动性或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_ncoa4_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-8031, url: https://www.ncbi.nlm.nih.gov/gene/8031}
+
+drug_sections: []

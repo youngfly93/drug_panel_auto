@@ -1,0 +1,86 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: >-
+    Governed corrections for four legacy exact-variant narratives among the
+    P3-F4 residual genes. Static database absence, domain position, family or
+    other-cancer observations, germline disease, and lineage-specific events
+    are not treated as proof of the detected CRC variant. The MYH11 correction
+    also removes a PALB2 patient-result fragment leaked into the legacy row.
+  source_type: reviewed_knowledge_correction_overlay
+  source_id: crc358_p3f4_legacy_exact_corrections_20260721
+  created_at: "2026-07-21"
+  privacy: No patient or sample identifiers are stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_p3f4_legacy_exact_correction_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_correction_of_legacy_domain_family_germline_or_cross_entry_prose
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: exact_variant_not_clinically_established_conservative_interpretation
+      cancer_scope: colorectal_cancer_crc358_only_exact_variant_conservative_correction
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: FAT3
+    panels: [crc_358_msi]
+    c_hgvs: c.4622A>T
+    p_hgvs: p.Q1541L
+    mutation_analysis: >-
+      FAT3 p.Q1541L为错义变异，位于现行UniProt注释的Cadherin 14结构域；结构域位置和静态数据库是否收录均不能单独确定功能影响。当前缺少足够的位点级黏附功能和结直肠癌临床证据，不能由FAT家族或其他癌种观察推导其驱动、预后或治疗意义。
+    supersedes: legacy_fat3_p_q1541l_database_domain_and_cross_tumor_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-120114, url: https://www.ncbi.nlm.nih.gov/gene/120114}
+      - {type: uniprot, id: Q8TDW7, url: https://www.uniprot.org/uniprotkb/Q8TDW7/entry}
+
+  - gene: FAT3
+    panels: [crc_358_msi]
+    c_hgvs: c.11941G>A
+    p_hgvs: p.G3981S
+    intro: >-
+      FAT3编码FAT非典型钙黏蛋白家族的大型跨膜蛋白，含多段钙黏蛋白重复及Laminin G-like、EGF-like区域，预测参与细胞间黏附和神经组织发育。
+    mutation_analysis: >-
+      FAT3 p.G3981S为错义变异，位于现行UniProt注释的Laminin G-like结构域；该定位不能证明黏附或信号功能受损。当前缺少足够的位点级功能和结直肠癌临床证据，不能仅凭FAT家族、结构域或肿瘤队列中的基因级观察判定驱动、预后或治疗意义。
+    supersedes: legacy_fat3_p_g3981s_family_adhesion_and_domain_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-120114, url: https://www.ncbi.nlm.nih.gov/gene/120114}
+      - {type: uniprot, id: Q8TDW7, url: https://www.uniprot.org/uniprotkb/Q8TDW7/entry}
+
+  - gene: MYH11
+    panels: [crc_358_msi]
+    c_hgvs: c.3089del
+    p_hgvs: p.N1030Tfs*6
+    mutation_analysis: >-
+      MYH11 p.N1030Tfs*6为移码变异并产生提前终止密码子；对转录本稳定性、无义介导降解和实际蛋白产物的影响仍需结合转录本及功能证据。主动脉/内脏平滑肌胚系疾病和CBFB::MYH11相关髓系融合均不能证明该CRC体细胞位点具有相同机制、驱动或治疗意义。
+    supersedes: legacy_myh11_p_n1030tfs6_database_aortic_germline_and_cross_entry_patient_fragment
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4629, url: https://www.ncbi.nlm.nih.gov/gene/4629}
+      - {type: uniprot, id: P35749, url: https://www.uniprot.org/uniprotkb/P35749/entry}
+
+  - gene: PCLO
+    panels: [crc_358_msi]
+    c_hgvs: c.11722C>A
+    p_hgvs: p.H3908N
+    intro: >-
+      PCLO编码突触前活性区细胞骨架基质蛋白Piccolo，参与突触活性区建立和突触囊泡运输，是一个含PDZ和C2等区域的大型支架蛋白。
+    mutation_analysis: >-
+      PCLO p.H3908N为错义变异，位于本库固定注释的PDZ/C2区域之前；结构域外定位不能证明无功能影响，PCLO编码区较长或神经系统相关表型也不能证明本位点为肿瘤驱动。当前缺少足够的位点级功能和结直肠癌临床证据，不能形成预后或治疗结论。
+    supersedes: legacy_pclo_p_h3908n_large_scaffold_and_domain_only_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-27445, url: https://www.ncbi.nlm.nih.gov/gene/27445}
+      - {type: uniprot, id: Q9Y6V0, url: https://www.uniprot.org/uniprotkb/Q9Y6V0/entry}
+
+drug_sections: []

@@ -17,7 +17,10 @@ from reportgen.knowledge.governance import (
     load_and_validate_overlay,
     validate_knowledge_rows,
 )
-from reportgen.knowledge.quality import profile_panel_runtime_content
+from reportgen.knowledge.quality import (
+    profile_panel_runtime_content,
+    profile_panel_targeted_drug_contracts,
+)
 from reportgen.panels.loader import PanelPackageLoader
 
 
@@ -372,6 +375,10 @@ def _panel_report(
     runtime_content = profile_panel_runtime_content(project_root, package, declared)
     drug_rules = _validate_drug_rules(package)
     issues.extend(drug_rules["issues"])
+    drug_analysis_contracts = profile_panel_targeted_drug_contracts(
+        project_root, package
+    )
+    issues.extend(drug_analysis_contracts["issues"])
     clinical_status_counts = Counter(status_counts)
     targeted_status_counts = (
         drug_rules.get("targeted_rules", {}).get("status_counts") or {}
@@ -414,6 +421,28 @@ def _panel_report(
                     "render an empty mutation analysis for a previously unseen variant"
                 ),
                 "genes": runtime_content["missing_analysis_genes"],
+            }
+        )
+    if runtime_content["missing_fixed_domain_genes"]:
+        issues.append(
+            {
+                "code": "RUNTIME_FIXED_DOMAIN_GAP",
+                "message": (
+                    f"{len(runtime_content['missing_fixed_domain_genes'])} declared genes "
+                    "render without gene-level fixed protein/domain content"
+                ),
+                "genes": runtime_content["missing_fixed_domain_genes"],
+            }
+        )
+    if runtime_content["duplicate_fixed_domain_genes"]:
+        issues.append(
+            {
+                "code": "RUNTIME_FIXED_DOMAIN_DUPLICATE",
+                "message": (
+                    f"{len(runtime_content['duplicate_fixed_domain_genes'])} declared genes "
+                    "render more than one gene-level protein/domain statement"
+                ),
+                "genes": runtime_content["duplicate_fixed_domain_genes"],
             }
         )
     citation_integrity = runtime_content["citation_integrity"]
@@ -473,6 +502,7 @@ def _panel_report(
         "status": "PASS" if not issues else "FAIL",
         "overlay_files": overlay_reports,
         "drug_rules": drug_rules,
+        "drug_analysis_contracts": drug_analysis_contracts,
         "runtime_content_quality": runtime_content,
         "clinical_release_readiness": clinical_readiness,
         "multidimensional_coverage": {

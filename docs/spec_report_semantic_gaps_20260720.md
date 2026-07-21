@@ -1,6 +1,6 @@
 # 7.20 报告语义与版式缺口修复规范
 
-状态：7 药动态差集规则已形成独立候选提交并完成本地工程复测；待同一提交双审与正式发布门禁，未部署。新增医学知识为人工一审候选，待报告组二审。
+状态：本提交用于冻结已完成候选复测的工程与知识增量；尚未完成同一提交双审、正式发布总闸和生产部署。新增医学知识为人工一审候选，待报告组二审。
 
 共享审计模块名：`report-semantic-gaps`
 
@@ -19,6 +19,7 @@
 - 从基础知识库提取固定蛋白和结构域描述，不能因 reviewed `domain_text` 是否存在而直接丢弃。
 - 基础简介、基因级 overlay、位点级 overlay 组合后，固定结构域信息仍必须出现。
 - 多来源结构域内容应合并互补信息，并避免完全重复的句子或结构域条目。
+- 每个基因最终只能保留一条“编码的蛋白全长”固定结构域陈述；跨基因错配、同基因冲突或重复均须阻断 QA 和知识发布门禁。
 - ERBB2 精确位点回归必须保留 1255 aa 固定结构域段。
 - KRAS 回归必须同时保留 RAS 结构域和 Hypervariable region，且各出现一次。
 
@@ -27,6 +28,10 @@
 - FANCA、PALB2、DNMT3A、RAD51D 不得以 22/23 字占位简介冒充结构域知识完整。
 - 新增内容必须具有来源、审核状态和适用范围；本轮状态只能是 `provisional_runtime`/待报告组二审。
 - 缺少正式内容时，知识门禁必须报告缺口，不能静默 PASS。
+- 固定结构域覆盖必须按 Panel 全量基因和单份报告两个维度分别计算：全量缺口阻断发布；单份报告命中缺口时 QA 直接失败。
+- 历史位点解析中可复用的固定结构域句只能按窄语法提取，不得把“该样本检出……”等位点结论提升为基因级知识。
+- 全 Panel 新增候选仅允许来自官方 reviewed UniProt/InterPro 结构注释；旧符号和多蛋白基因必须显式记录映射，非蛋白编码基因必须给出可追溯的不适用说明。
+- 历史 Excel 的简介尾句与结构化结构域列冲突时，以有来源的结构化字段为准；SMAD4 不得继承 ATM 的 3056 aa 文本，PIK3CA 不得并列展示两套全长描述。
 
 ### RSG-03 药物表与第三部分解析一致
 
@@ -88,27 +93,30 @@
 - 原 `1408509` 候选的后端全量回归：`568 passed, 4 skipped, 0 failed`（316.75 秒）。
 - 原 `1408509` 候选的本地 `release_check.sh` 编排预检：`PASS`；Panel、知识门禁、工具链、Ruff、pytest、CRC358/CRC301/肺癌甲基化 golden 与重复 diff 均通过。该次预检显式使用 `ALLOW_DIRTY=1` 且跳过 GitHub 检查，只证明当时编排和本地环境已恢复，不能替代本增量的凭据。
 - CRC358、CRC301 Panel 包：均 `PASS`，错误/警告均为 0。
-- 知识发布门禁：CRC358、CRC301 均 `PASS`；运行时基因解释覆盖、治理字段标准化、结构化来源均为 100%。该结果不等于报告组医学二审完成。
-- CRC 实例 CASE-CRC-A：75 页；机器 QA `PASS`；空白页、不可读页、非预期低内容页均为 0；14 个目录字段/目标/书签完整；受治理药物契约 36/36 一致，无遗漏、越界或重复；ERBB2 固定结构域、KRAS G12D、PALB2、RAD51D 精确解析均已在最终 DOCX 中复核。
-- CRC 实例 CASE-CRC-B：95 页；机器 QA `PASS`；空白页、不可读页、非预期低内容页均为 0；14 个目录字段/目标/书签完整；受治理药物契约 89/89 一致，无遗漏、越界或重复。
+- 知识发布门禁：CRC358、CRC301 均 `PASS`，issues=0。固定结构域覆盖分别为 358/358、301/301，缺失和重复均为 0；运行时基因解释覆盖、治理字段标准化、结构化来源均为 100%。静态药物解析清单也按全规则展开校验：CRC301 为 9 条规则/10 个选择器/83 个解析项，CRC358 为 17 条规则/18 个选择器/178 个解析项，均 100% 对齐。该结果不等于报告组医学二审完成；通用 fallback 仍分别为 200 和 291 个。
+- 共享结构域目录已按基因显式声明适用 Panel，而不是依赖“共享文件即全量适用”的隐式行为：CRC358 目录 273 行中 188 行适用于 CRC301/358，85 行仅适用于 CRC358；CRC301 自有 45 行仅适用于 CRC301。Web 知识目录双向隔离回归确认 ABCB1 的 CRC301 两层知识不进入 CRC358，ABL2 的 CRC358 官方结构域条目不进入 CRC301。
+- CRC 实例 CASE-CRC-A 根治版：75 页；整份机器 QA 为 `WARN`，唯一业务警告是 MLH1 c.676C>T、p.R226* 仍属待迁移的历史药物条目，不能写成整份 PASS。空白页、不可读页、非预期低内容页均为 0；14 个目录字段/目标/书签完整；实际药物解析 39/39 一致、固定结构域 8/8 且重复为 0；受 reviewed 契约治理的变异为 3/4。ERBB2 固定结构域、KRAS G12D、PALB2、RAD51D 精确解析均已在最终 DOCX 中复核。
+- CRC 实例 CASE-CRC-B 根治版：94 页；机器 QA `PASS`；空白页、不可读页、非预期低内容页均为 0；14 个目录字段/目标/书签完整；药物解析 89/89 一致，受治理变异 7/7；固定结构域 10/10 且重复为 0。
+- 根治复测同时纠正了两个此前未进入反馈索引的基础库污染：SMAD4 最终仅展示 reviewed UniProt Q13485 的 552 aa/MH1/MH2 描述，ATM 的 3056 aa 文本为 0 次；PIK3CA 最终仅展示 reviewed UniProt P42336 的 1068 aa 结构域描述。DNMT3A 的固定结构域句也从重复两次收敛为一次。
+- 两份根治版的 `2. 靶向药物相关检测结果` 均设置 `pageBreakBefore` 并在新物理页开始；9 列表格宽度 8306 twips，与正文版心完全一致。第三部分药物名、关系解析和临床解析正文段后均为 10 磅，CASE-A/CASE-B 分别核对 16/36 个关系与临床正文段落，异常数为 0。2.2 审核药物表的方括号商品名已纳入渲染后 QA：CASE-A 的 7 个、CASE-B 的 6 个商品名片段均整体加粗，通用名未被连带加粗。
 - 法律说明页以语义标记而非页号识别；最终两份候选中该内容均与“报告导读”合理同页。CASE-CRC-A 的参考文献从物理第 71 页开始并在第 72 页结束，不再产生仅含末两条文献的孤立低内容页。
 - CASE-CRC-A 的 KRAS G12D 和 CASE-CRC-B 的 KRAS G12C 依维莫司慎用叙述，均改为 KRAS 致癌性突变层级、非具体位点专属的保守表述，并仅保留直接支持该判断的 PMID 20664172；误归因的 PMID 29285035/28544747 在两份最终 DOCX 中均为 0 次。旧条目作为 `superseded` 审计记录保留，但 `runtime_eligible: false`，不再进入运行时报告。
 - LibreOffice PDF 探针只在临时 DOCX 副本中锁定缓存域，并移除无头环境不稳定的 `usePrinterMetrics`；同一 CRC301 文件由随机 72/73 页恢复为连续 9 次均 73 页。最终交付 DOCX 仍保留 `dirty PAGEREF + updateFields=true + usePrinterMetrics`，Word/WPS 可按自身排版刷新。
 - macOS 隔离渲染字体配置升级为 `reportgen-cjk-font-substitution-v2`，无中文方框字；两份候选使用 LibreOffice 25.8.4.2 完成视觉预检。正式部署仍必须在 iyun129 Linux LibreOffice/字体环境复验。
 - 三份肺癌输入完成跨 Panel 隔离检查，未载入 CRC overlay；肺癌报告自身仍因草案契约缺少 PD-L1/免疫字段而 QA FAIL，不构成 CRC 修复回归，也不能作为肺癌医学验收通过。
 - 七药动态差集增量定向检查：Ruff `PASS`；语义缺口、规则加载和跨 Panel 定向回归共 `30 passed`。
-- 后端全量回归：`574 passed, 4 skipped, 0 failed`（303.68 秒）；跳过项均为既有环境条件跳过。
-- CRC 实例 CASE-CRC-A：2.1 未出现 7 药全集中的药物；2.2 实测为 `7−0=7`，顺序为瑞戈非尼、贝伐珠单抗、雷莫西尤单抗、呋喹替尼、阿柏西普、阿帕替尼、盐酸安罗替尼。最终 DOCX 75 页，全页视觉 QA `PASS`、issues 为 0；摘要记录 `approved_universe_count=7`、`approved_suppressed_count=0`。
-- CRC 实例 CASE-CRC-B：2.1 的 FLT3 行包含瑞戈非尼；2.2 实测为 `7−1=6`，且摘要明确记录 `approved_suppressed_names=[瑞戈非尼]`。最终 DOCX 95 页，全页视觉 QA `PASS`、issues 为 0；2.2 中不再重复瑞戈非尼。
+- 最终后端全量回归：`585 passed, 4 skipped, 0 failed`（357.23 秒）；跳过项均为既有环境条件跳过。另行复跑知识服务/API/语义门禁为 `52 passed`，CRC358/CRC301 两份端到端样式金标均通过，Ruff 为 `All checks passed`。
+- CRC 实例 CASE-CRC-A：2.1 未出现 7 药全集中的药物；2.2 实测为 `7−0=7`，顺序为瑞戈非尼、贝伐珠单抗、雷莫西尤单抗、呋喹替尼、阿柏西普、阿帕替尼、盐酸安罗替尼。最终 DOCX 75 页；全页视觉结构检查无空白、不可读或非预期低内容页，但整份业务 QA 仍为 `WARN`，唯一警告是 MLH1 c.676C>T、p.R226* 尚未进入 reviewed 精确药物契约。摘要记录 `approved_universe_count=7`、`approved_suppressed_count=0`。
+- CRC 实例 CASE-CRC-B：2.1 的 FLT3 行包含瑞戈非尼；2.2 实测为 `7−1=6`，且摘要明确记录 `approved_suppressed_names=[瑞戈非尼]`。根治版最终 DOCX 94 页，机器 QA `PASS`、issues 为 0；2.2 中不再重复瑞戈非尼。FLT3 临床段保留 NCT02029001 的篮子试验边界，并明确该试验不能作为结直肠癌 p.G846D 位点疗效证据。
 - 两份最终候选均使用 `REPORTGEN_FAST_TOC=0`、严格输入合同、完整模板合同和 LibreOffice 全页渲染；2.2 表格跨页连续、无空白页。
-- 本地发布编排预检：`PASS`，共 `16 PASS / 0 WARN / 0 FAIL / 1 SKIPPED`；CRC358/CRC301/肺癌甲基化 reference、candidate、repeat diff 和 CRC current-output 全部通过。凭据 `.work/seven_drug_dynamic_20260720/release_check_v1/qa_gate/qa_gate_report.json`，SHA256 `e58a0b7e2474a717a9df52115daa3664c4effcdb52cac9a7925e3318ff696319`。该次使用 `ALLOW_DIRTY=1` 且跳过 GitHub 检查，只构成工作树候选预检。
+- 当前工作树的本地发布编排预检：`PASS`，共 `16 PASS / 0 WARN / 0 FAIL / 1 SKIPPED`；Panel、知识、QA 工具链、Ruff、pytest，以及 CRC358/CRC301/肺癌甲基化 reference、candidate、repeat diff 和 CRC current-output 全部通过。凭据 `.work/semantic_gaps_20260721/final_gates/release_check/qa_gate/qa_gate_report.json`，SHA256 `de0d4db579853126802522db1e1662c1998d67ead25f66e8c55b0d30bf5e8b6f`。历史金标工程契约为 `PASS`，医学状态仍按 KRAS G12C 冲突标记为 `BLOCKED`。该次使用 `ALLOW_DIRTY=1` 且跳过 GitHub 检查，只构成未提交工作树候选预检，不能替代冻结 commit 的 CI 和双审。
 
 ## 5. 尚未关闭的发布条件
 
 1. 报告组书面确认 7 药动态差集契约正式废止 `crc358_reviewed_historical_table_contract`；确认前只能作为候选规则，不得宣称医学契约已完成替代。
-2. 报告组二审 FANCA、PALB2、DNMT3A、RAD51D 固定结构域文本，以及 KRAS G12S/G12D/G12C 依维莫司慎用叙述。本轮仅构成人工一审候选，不代替报告组最终签发。
-3. 候选变更已经隔离提交；Claude/Codex 仍须针对同一 commit 分别审计并通过 `audit_reconcile.py`。
+2. 报告组二审 FANCA、PALB2、DNMT3A、RAD51D、PIK3CA、SMAD4 固定结构域文本，以及新增/迁移的精确药物契约和 KRAS G12S/G12D/G12C 依维莫司慎用叙述。本轮仅构成人工一审候选，不代替报告组最终签发。
+3. 以包含本文及对应规则、实现和测试的提交作为唯一冻结身份；Claude/Codex 仍须针对该同一 commit 分别审计并通过 `audit_reconcile.py`。
 4. 在干净提交上重跑正式 `release_check.sh`；本地工具链已修复，但 GitHub required check 必须绑定同一候选 commit，不能用手工 Ruff 或旧 commit 的 CI 结果替代。
 5. 双审与总闸通过后，才可进入 iyun129 Linux 渲染、发布切换和生产活实例验收；Linux 版报告必须重新确认七药差集、中文字体、目录页码、空白/稀疏页和 G12C 文本。
 
-共享审计工具直接扫描项目目录时会读取 KINGSTON 自动生成的 `audit/._*.md` AppleDouble 文件并触发 UTF-8 解码失败；未删除这些用户文件。旧版 `audit/report-semantic-gaps.codex.md` 锁定身份 `1408509`，不能代表本候选；须由 Codex/Claude 针对当前冻结提交分别重审，并用 `/tmp` 合法 Markdown 索引运行 `audit_reconcile.py`。
+共享审计工具直接扫描项目目录时会读取 KINGSTON 自动生成的 `audit/._*.md` AppleDouble 文件并触发 UTF-8 解码失败；未删除这些用户文件。现有两份 `audit/report-semantic-gaps.*.md` 锁定的是前序 `d50ff90`，不能代表本知识增量；须由 Codex/Claude 针对本次冻结提交分别重审，并用 `/tmp` 合法 Markdown 索引运行 `audit_reconcile.py`。

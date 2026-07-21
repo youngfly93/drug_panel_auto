@@ -1,0 +1,563 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    P3-E first-review fallbacks for the 47 residual genes shared by both CRC
+    panels, with an explicit panel-symbol to current-NCBI-identity audit.
+  source_type: official_gene_identity_plus_conservative_event_boundary
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_shared_residual_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    Gene function does not by itself establish the effect of an individual
+    variant. Sequence variants, copy-number change, expression, phosphorylation,
+    fusion, germline disease, lineage-specific hotspots, and functional loss are
+    distinct evidence classes and must not be substituted for one another.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p3e_shared_residual_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_identity_and_conservative_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_identity_plus_conservative_event_boundary
+      cancer_scope: colorectal_cancer_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+
+# Runtime keys preserve the historical Panel/Excel vocabulary. The identity map
+# prevents aliases and similarly named genes from being silently conflated.
+symbol_identity_map:
+  - {panel_symbol: AXIN1, current_symbol: AXIN1, ncbi_gene_id: 8312, identity_status: current}
+  - {panel_symbol: BCL2L11, current_symbol: BCL2L11, ncbi_gene_id: 10018, identity_status: current}
+  - {panel_symbol: CARD11, current_symbol: CARD11, ncbi_gene_id: 84433, identity_status: current}
+  - {panel_symbol: CCNE1, current_symbol: CCNE1, ncbi_gene_id: 898, identity_status: current}
+  - {panel_symbol: CD79B, current_symbol: CD79B, ncbi_gene_id: 974, identity_status: current}
+  - {panel_symbol: CDH11, current_symbol: CDH11, ncbi_gene_id: 1009, identity_status: current}
+  - {panel_symbol: CRKL, current_symbol: CRKL, ncbi_gene_id: 1399, identity_status: current}
+  - {panel_symbol: EPAS1, current_symbol: EPAS1, ncbi_gene_id: 2034, identity_status: current}
+  - {panel_symbol: ERRFI1, current_symbol: ERRFI1, ncbi_gene_id: 54206, identity_status: current}
+  - {panel_symbol: FGF19, current_symbol: FGF19, ncbi_gene_id: 9965, identity_status: current}
+  - {panel_symbol: FOXL2, current_symbol: FOXL2, ncbi_gene_id: 668, identity_status: current}
+  - {panel_symbol: GATA3, current_symbol: GATA3, ncbi_gene_id: 2625, identity_status: current}
+  - {panel_symbol: IRS1, current_symbol: IRS1, ncbi_gene_id: 3667, identity_status: current}
+  - {panel_symbol: JAK3, current_symbol: JAK3, ncbi_gene_id: 3718, identity_status: current}
+  - {panel_symbol: KDR, current_symbol: KDR, ncbi_gene_id: 3791, identity_status: current}
+  - {panel_symbol: KEAP1, current_symbol: KEAP1, ncbi_gene_id: 9817, identity_status: current}
+  - {panel_symbol: KEL, current_symbol: KEL, ncbi_gene_id: 3792, identity_status: current}
+  - {panel_symbol: LBP1B, current_symbol: UBP1, ncbi_gene_id: 7342, identity_status: legacy_isoform_alias}
+  - {panel_symbol: MAP2K2, current_symbol: MAP2K2, ncbi_gene_id: 5605, identity_status: current}
+  - {panel_symbol: MAPK1, current_symbol: MAPK1, ncbi_gene_id: 5594, identity_status: current}
+  - {panel_symbol: MAPK3, current_symbol: MAPK3, ncbi_gene_id: 5595, identity_status: current}
+  - {panel_symbol: MDM4, current_symbol: MDM4, ncbi_gene_id: 4194, identity_status: current}
+  - {panel_symbol: MPL, current_symbol: MPL, ncbi_gene_id: 4352, identity_status: current}
+  - {panel_symbol: MYCN, current_symbol: MYCN, ncbi_gene_id: 4613, identity_status: current}
+  - {panel_symbol: PDGFRB, current_symbol: PDGFRB, ncbi_gene_id: 5159, identity_status: current}
+  - {panel_symbol: PIK3R1, current_symbol: PIK3R1, ncbi_gene_id: 5295, identity_status: current}
+  - {panel_symbol: PIM1, current_symbol: PIM1, ncbi_gene_id: 5292, identity_status: current}
+  - {panel_symbol: PPP2R2A, current_symbol: PPP2R2A, ncbi_gene_id: 5520, identity_status: current}
+  - {panel_symbol: PTCH2, current_symbol: PTCH2, ncbi_gene_id: 8643, identity_status: current}
+  - {panel_symbol: PTPN11, current_symbol: PTPN11, ncbi_gene_id: 5781, identity_status: current}
+  - {panel_symbol: RAD21, current_symbol: RAD21, ncbi_gene_id: 5885, identity_status: current}
+  - {panel_symbol: SERPINB3, current_symbol: SERPINB3, ncbi_gene_id: 6317, identity_status: current}
+  - {panel_symbol: SERPINB4, current_symbol: SERPINB4, ncbi_gene_id: 6318, identity_status: current}
+  - {panel_symbol: SHH, current_symbol: SHH, ncbi_gene_id: 6469, identity_status: current}
+  - {panel_symbol: SLIT2, current_symbol: SLIT2, ncbi_gene_id: 9353, identity_status: current}
+  - {panel_symbol: SRC, current_symbol: SRC, ncbi_gene_id: 6714, identity_status: current}
+  - {panel_symbol: SYK, current_symbol: SYK, ncbi_gene_id: 6850, identity_status: current}
+  - {panel_symbol: TEK, current_symbol: TEK, ncbi_gene_id: 7010, identity_status: current}
+  - {panel_symbol: TGFBR1, current_symbol: TGFBR1, ncbi_gene_id: 7046, identity_status: current}
+  - {panel_symbol: TNFAIP3, current_symbol: TNFAIP3, ncbi_gene_id: 7128, identity_status: current}
+  - {panel_symbol: TP63, current_symbol: TP63, ncbi_gene_id: 8626, identity_status: current}
+  - {panel_symbol: TSHR, current_symbol: TSHR, ncbi_gene_id: 7253, identity_status: current}
+  - {panel_symbol: YAP1, current_symbol: YAP1, ncbi_gene_id: 10413, identity_status: current}
+  - {panel_symbol: YES1, current_symbol: YES1, ncbi_gene_id: 7525, identity_status: current}
+  - {panel_symbol: ZNF217, current_symbol: ZNF217, ncbi_gene_id: 7764, identity_status: current}
+  - {panel_symbol: ZNF278, current_symbol: PATZ1, ncbi_gene_id: 23598, identity_status: legacy_symbol}
+  - {panel_symbol: ZNF521, current_symbol: ZNF521, ncbi_gene_id: 25925, identity_status: current}
+
+gene_sections:
+  - gene: AXIN1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      AXIN1编码WNT信号破坏复合体的支架蛋白，可与APC、β-catenin和GSK3等组分协同调节β-catenin稳定性，并参与细胞增殖和凋亡调控。
+    mutation_analysis: >-
+      AXIN1功能缺失可影响WNT通路，但普通错义变异不能仅凭基因名称判定破坏复合体失活；需结合变异类型、关键结构区域、第二等位基因和直接功能证据。AXIN1位点也不能替代APC或CTNNB1事件，更不能自动形成WNT通路用药结论。
+    supersedes: base_templated_axin1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-8312, url: https://www.ncbi.nlm.nih.gov/gene/8312}
+
+  - gene: BCL2L11
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      BCL2L11又称BIM，编码含BH3结构域的促凋亡BCL-2家族蛋白，可与其他BCL-2家族成员相互作用并参与细胞凋亡启动。
+    mutation_analysis: >-
+      BCL2L11表达量、缺失、多态性和肿瘤体细胞序列变异属于不同证据类型。单个未验证位点不能证明BIM功能缺失，也不能由表达或药物反应研究直接推导治疗敏感性或耐药性。
+    supersedes: base_templated_bcl2l11_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-10018, url: https://www.ncbi.nlm.nih.gov/gene/10018}
+
+  - gene: CARD11
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      CARD11编码淋巴细胞受体信号中的支架蛋白，可通过CARD-BCL10-MALT1复合体连接抗原受体与NF-κB等下游通路。
+    mutation_analysis: >-
+      CARD11激活与失活事件具有不同分子后果，并高度依赖B/T细胞谱系、位点和功能证据。淋巴系统肿瘤或免疫缺陷中的事件不能迁移到结直肠癌普通错义位点，单个位点不得据此判定NF-κB激活或形成用药结论。
+    supersedes: base_templated_card11_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-84433, url: https://www.ncbi.nlm.nih.gov/gene/84433}
+
+  - gene: CCNE1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      CCNE1编码细胞周期蛋白E1，与CDK2形成复合体并参与G1/S期转换，其蛋白丰度受细胞周期严格调控。
+    mutation_analysis: >-
+      CCNE1扩增或过表达与编码区序列变异不是同一事件；单个错义位点不能替代拷贝数和蛋白表达结果。未有位点级功能及结直肠癌临床证据时，不得推导细胞周期失控或CDK相关治疗获益。
+    supersedes: base_templated_ccne1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-898, url: https://www.ncbi.nlm.nih.gov/gene/898}
+
+  - gene: CD79B
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      CD79B编码B细胞抗原受体复合体的Ig-β组分，与CD79A共同支持受体表面表达和B细胞信号传递。
+    mutation_analysis: >-
+      CD79B的肿瘤证据主要具有B细胞谱系、确切位点和信号功能语境；该语境不能转移到结直肠癌中偶然检出的序列变异。普通错义位点不足以证明B细胞受体通路激活、肿瘤驱动或治疗意义。
+    supersedes: base_templated_cd79b_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-974, url: https://www.ncbi.nlm.nih.gov/gene/974}
+
+  - gene: CDH11
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      CDH11编码Ⅱ型经典钙黏蛋白，是介导钙依赖性细胞间黏附的跨膜蛋白，包含多个胞外钙黏蛋白重复和胞内连接区域。
+    mutation_analysis: >-
+      CDH11表达、细胞黏附和迁移研究不能直接解释单个肿瘤序列位点。未验证错义变异需结合保守性、黏附功能实验及肿瘤直接证据评估，不能仅凭结构域位置判定驱动性或治疗意义。
+    supersedes: base_templated_cdh11_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-1009, url: https://www.ncbi.nlm.nih.gov/gene/1009}
+
+  - gene: CRKL
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      CRKL编码含SH2和SH3结构域的衔接蛋白，可连接受体或非受体酪氨酸激酶与RAS/JNK等下游信号，也是BCR-ABL信号底物之一。
+    mutation_analysis: >-
+      CRKL扩增、蛋白磷酸化或BCR-ABL背景下的信号激活不等同于CRKL编码区序列变异。单个未验证位点不能证明通路激活，也不能据此外推ABL或其他激酶抑制剂反应。
+    supersedes: base_templated_crkl_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-1399, url: https://www.ncbi.nlm.nih.gov/gene/1399}
+
+  - gene: EPAS1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      EPAS1编码缺氧诱导因子HIF-2α，是氧浓度应答转录调控因子，可参与低氧环境下相关基因表达。
+    mutation_analysis: >-
+      EPAS1蛋白稳定、缺氧表达特征、胚系红细胞增多症与肿瘤体细胞位点属于不同证据层。特定稳定化事件的结论不能扩展到任意结直肠癌错义变异，需确切位点、功能和肿瘤语境证据后才能判断通路影响。
+    supersedes: base_templated_epas1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-2034, url: https://www.ncbi.nlm.nih.gov/gene/2034}
+
+  - gene: ERRFI1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      ERRFI1又称MIG6，编码ERBB受体信号的胞质负反馈调节蛋白，可在生长刺激和细胞应激条件下参与限制受体信号。
+    mutation_analysis: >-
+      明确截短、双等位失活、表达缺失和普通错义位点对ERRFI1功能的证据强度不同。单个未验证序列变异不能直接视为EGFR通路解除抑制，也不能据此形成抗EGFR药物敏感或耐药结论。
+    supersedes: base_templated_errfi1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-54206, url: https://www.ncbi.nlm.nih.gov/gene/54206}
+
+  - gene: FGF19
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      FGF19编码成纤维细胞生长因子家族配体，可与FGFR4及共受体形成信号轴并参与代谢、生长和组织稳态调控。
+    mutation_analysis: >-
+      FGF19扩增、过表达或配体依赖信号与FGF19编码区序列变异不是同一事件。未验证位点不能证明FGFR4轴激活，也不能从扩增或表达研究直接推导靶向治疗获益。
+    supersedes: base_templated_fgf19_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9965, url: https://www.ncbi.nlm.nih.gov/gene/9965}
+
+  - gene: FOXL2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      FOXL2编码叉头框转录因子，参与卵巢发育、颗粒细胞功能和组织特异性转录调控。
+    mutation_analysis: >-
+      卵巢颗粒细胞肿瘤中的特定位点语境和FOXL2胚系发育性疾病证据均不能替代结直肠癌普通体细胞位点解释。需匹配确切变异、肿瘤类型和功能证据，不能仅凭FOXL2基因名推导驱动性或治疗意义。
+    supersedes: base_templated_foxl2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-668, url: https://www.ncbi.nlm.nih.gov/gene/668}
+
+  - gene: GATA3
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      GATA3编码含双GATA型锌指的转录因子，参与T细胞分化、上皮谱系维持及多种组织发育过程。
+    mutation_analysis: >-
+      GATA3变异的意义依赖肿瘤谱系、变异类型、转录本和功能后果；乳腺或血液肿瘤事件及胚系HDR综合征不能直接迁移到结直肠癌位点。普通错义变异不足以证明谱系重编程或治疗意义。
+    supersedes: base_templated_gata3_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-2625, url: https://www.ncbi.nlm.nih.gov/gene/2625}
+
+  - gene: IRS1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      IRS1编码胰岛素和胰岛素样生长因子受体下游衔接蛋白，经磷酸化后连接PI3K等信号组分。
+    mutation_analysis: >-
+      IRS1蛋白表达、磷酸化状态、胚系代谢相关多态性和肿瘤体细胞变异不能互相替代。单个未验证位点不足以证明PI3K通路激活或药物敏感性，需要直接功能和结直肠癌临床证据。
+    supersedes: base_templated_irs1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-3667, url: https://www.ncbi.nlm.nih.gov/gene/3667}
+
+  - gene: JAK3
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      JAK3编码主要在免疫细胞中表达的Janus激酶，连接多种白细胞介素受体与下游信号转导。
+    mutation_analysis: >-
+      血液肿瘤中的激活事件、胚系双等位失活导致的免疫缺陷和结直肠癌普通体细胞位点具有不同语境。未有位点级功能证据时，不能判定JAK3激活或失活，也不能自动形成JAK抑制剂结论。
+    supersedes: base_templated_jak3_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-3718, url: https://www.ncbi.nlm.nih.gov/gene/3718}
+
+  - gene: KDR
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      KDR编码VEGFR2受体酪氨酸激酶，是VEGF介导内皮细胞增殖、存活、迁移和血管生成的重要信号受体。
+    mutation_analysis: >-
+      肿瘤血管生成、KDR表达和循环VEGF水平不等同于KDR肿瘤序列变异。结直肠癌抗血管生成治疗依据不能由任意KDR位点替代；未验证位点需独立的功能和临床证据后才能解释。
+    supersedes: base_templated_kdr_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-3791, url: https://www.ncbi.nlm.nih.gov/gene/3791}
+
+  - gene: KEAP1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      KEAP1编码氧化应激感受和调节蛋白，在非应激状态下促进NRF2泛素化降解，从而限制抗氧化和细胞保护基因表达。
+    mutation_analysis: >-
+      KEAP1通路异常需结合变异类型、关键结合区域、等位基因状态及NRF2功能证据判断；任意错义位点不能自动视为KEAP1功能缺失。其他癌种中的预后或耐药观察不能直接外推为结直肠癌治疗结论。
+    supersedes: base_templated_keap1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9817, url: https://www.ncbi.nlm.nih.gov/gene/9817}
+
+  - gene: KEL
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      KEL编码Kell血型系统的Ⅱ型跨膜糖蛋白和锌金属内肽酶，与XK蛋白形成复合体；其遗传多态性主要与红细胞抗原和输血医学相关。
+    mutation_analysis: >-
+      血型相关胚系等位基因与肿瘤体细胞测序位点不是同一临床问题。缺少肿瘤功能和结直肠癌证据时，KEL序列变异不应解释为肿瘤驱动、遗传性血型结论或治疗标志物。
+    supersedes: base_templated_kel_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-3792, url: https://www.ncbi.nlm.nih.gov/gene/3792}
+
+  - gene: LBP1B
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      Panel中的LBP1B不是独立现行基因符号，而是UBP1（NCBI Gene 7342）所编码的upstream-binding protein 1亚型LBP-1b；UBP1为序列特异性DNA结合转录调控因子。
+    mutation_analysis: >-
+      本条必须先按UBP1转录本和LBP-1b蛋白亚型核对变异坐标，不能把LBP1B当作另一独立基因。UBP1表达或转录调控研究不足以确定单个肿瘤位点的功能，当前不得据此形成结直肠癌驱动或治疗结论。
+    supersedes: base_templated_lbp1b_generic_fallback_and_unresolved_symbol_identity
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7342, url: https://www.ncbi.nlm.nih.gov/gene/7342}
+
+  - gene: MAP2K2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      MAP2K2编码双特异性激酶MEK2，可被上游RAF/MAP3K磷酸化并进一步激活ERK通路，参与生长因子信号传递。
+    mutation_analysis: >-
+      MAP2K2特定激活事件、胚系RASopathy变异和结直肠癌未知错义位点不能互相替代。只有确切位点和功能证据支持时才能判断激酶激活；普通位点不自动等于MAPK通路驱动或MEK抑制剂敏感。
+    supersedes: base_templated_map2k2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5605, url: https://www.ncbi.nlm.nih.gov/gene/5605}
+
+  - gene: MAPK1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      MAPK1编码ERK2丝氨酸/苏氨酸激酶，是RAS-RAF-MEK-ERK级联的下游效应分子，参与增殖、分化和转录调控。
+    mutation_analysis: >-
+      ERK2磷酸化、通路激活、拷贝数变化与MAPK1编码区位点是不同检测事件。单个未验证变异不能证明激酶持续激活，也不能从上游RAS/RAF事件或其他ERK同源蛋白证据推导治疗意义。
+    supersedes: base_templated_mapk1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5594, url: https://www.ncbi.nlm.nih.gov/gene/5594}
+
+  - gene: MAPK3
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      MAPK3编码ERK1丝氨酸/苏氨酸激酶，经上游MEK激活后调节细胞增殖、分化和细胞周期相关靶点。
+    mutation_analysis: >-
+      MAPK3序列变异不能由ERK1蛋白磷酸化或整个MAPK通路活性替代解释，也不得直接套用MAPK1位点证据。未知错义位点需直接功能和结直肠癌证据，不能自动形成通路驱动或药物结论。
+    supersedes: base_templated_mapk3_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5595, url: https://www.ncbi.nlm.nih.gov/gene/5595}
+
+  - gene: MDM4
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      MDM4编码p53结合调节蛋白，可抑制p53转录活性并通过RING区域与MDM2相互作用；其扩增、过表达和剪接异常可影响p53通路。
+    mutation_analysis: >-
+      MDM4扩增、过表达或剪接改变与单个编码区错义变异不是同一事件。未有位点级功能证据时，不能由p53调控功能推定该变异导致p53失活，也不能形成MDM2/MDM4相关治疗结论。
+    supersedes: base_templated_mdm4_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4194, url: https://www.ncbi.nlm.nih.gov/gene/4194}
+
+  - gene: MPL
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      MPL编码血小板生成素受体CD110，主要参与巨核细胞生成、血小板形成和造血细胞信号调控。
+    mutation_analysis: >-
+      骨髓增殖性肿瘤中的特定MPL激活事件、胚系血小板疾病和结直肠癌普通体细胞位点具有不同疾病语境。未知位点不能据此判定受体激活、血液肿瘤诊断或JAK通路药物意义。
+    supersedes: base_templated_mpl_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4352, url: https://www.ncbi.nlm.nih.gov/gene/4352}
+
+  - gene: MYCN
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      MYCN编码MYC家族碱性螺旋-环-螺旋转录因子，需要与伙伴蛋白二聚后结合DNA；其扩增在部分肿瘤中具有重要生物学意义。
+    mutation_analysis: >-
+      MYCN扩增、mRNA或蛋白过表达与编码区序列变异不能互相替代，神经母细胞瘤等肿瘤中的扩增证据也不能直接迁移到结直肠癌位点。单个未验证变异不得解释为MYCN驱动或治疗标志物。
+    supersedes: base_templated_mycn_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4613, url: https://www.ncbi.nlm.nih.gov/gene/4613}
+
+  - gene: PDGFRB
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      PDGFRB编码血小板源生长因子受体β，是在间充质细胞信号和心血管发育中发挥作用的受体酪氨酸激酶。
+    mutation_analysis: >-
+      血液肿瘤中的PDGFRB融合/重排、受体扩增或特定激活事件不能替代结直肠癌普通序列位点。只有确认事件类型、保留激酶结构和功能后才能讨论靶向意义，未知错义变异不得自动匹配抑制剂。
+    supersedes: base_templated_pdgfrb_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5159, url: https://www.ncbi.nlm.nih.gov/gene/5159}
+
+  - gene: PIK3R1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      PIK3R1编码Ⅰ类PI3K的p85α等调节亚基，参与稳定和调节p110催化亚基并连接受体信号与PI3K-AKT通路。
+    mutation_analysis: >-
+      PIK3R1不同结构区域和变异类型可产生不同甚至相反的功能后果，不能把任意位点统一解释为PI3K激活或功能缺失。PIK3R1证据也不能直接套用PIK3CA热点或药物规则，需位点级功能和结直肠癌临床资料。
+    supersedes: base_templated_pik3r1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5295, url: https://www.ncbi.nlm.nih.gov/gene/5295}
+
+  - gene: PIM1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      PIM1编码丝氨酸/苏氨酸激酶，参与造血细胞增殖和存活，并可由不同起始密码子产生具有不同细胞定位的蛋白亚型。
+    mutation_analysis: >-
+      血液肿瘤中的表达升高、体细胞高突变过程和PIM1编码区具体位点必须分开解释。单个结直肠癌位点不能仅凭PIM1通路功能判定激酶激活或形成PIM抑制剂结论。
+    supersedes: base_templated_pim1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5292, url: https://www.ncbi.nlm.nih.gov/gene/5292}
+
+  - gene: PPP2R2A
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      PPP2R2A编码蛋白磷酸酶2A的B55α调节亚基，可参与决定PP2A复合体的底物选择和催化调控。
+    mutation_analysis: >-
+      PPP2R2A缺失、表达降低、复合体装配异常与单个错义变异的证据不同。未知位点需验证对PP2A结合和磷酸酶功能的影响，不能自动解释为抑癌功能缺失或药物敏感性。
+    supersedes: base_templated_ppp2r2a_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5520, url: https://www.ncbi.nlm.nih.gov/gene/5520}
+
+  - gene: PTCH2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      PTCH2编码Patched家族跨膜受体，可参与Hedgehog信号调控，但其功能和疾病证据不能简单等同于同源基因PTCH1。
+    mutation_analysis: >-
+      PTCH2胚系疾病报道、肿瘤缺失和普通体细胞错义位点需分别评估，且不得直接套用PTCH1的热点、综合征或治疗证据。缺少第二击、通路功能和结直肠癌资料时，单个位点不能证明Hedgehog通路激活。
+    supersedes: base_templated_ptch2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-8643, url: https://www.ncbi.nlm.nih.gov/gene/8643}
+
+  - gene: PTPN11
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      PTPN11编码含双SH2结构域的蛋白酪氨酸磷酸酶SHP2，参与多种受体下游的生长、分化和RAS-MAPK信号调控。
+    mutation_analysis: >-
+      PTPN11特定激活位点、胚系RASopathy变异、血液肿瘤事件和结直肠癌未知位点具有不同证据边界。普通错义变异不能仅凭SHP2通路位置判定激活，也不能自动形成SHP2或MEK相关用药结论。
+    supersedes: base_templated_ptpn11_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5781, url: https://www.ncbi.nlm.nih.gov/gene/5781}
+
+  - gene: RAD21
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      RAD21编码cohesin复合体核心组分，参与姐妹染色单体黏连、染色体分离和DNA双链断裂修复相关过程。
+    mutation_analysis: >-
+      明确截短或复合体功能缺失、拷贝数变化和普通错义位点不能视为同一事件；胚系cohesin相关发育综合征也不能替代肿瘤体细胞解释。未知位点需复合体功能及肿瘤证据，不能据此推导DNA修复缺陷或药物敏感性。
+    supersedes: base_templated_rad21_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5885, url: https://www.ncbi.nlm.nih.gov/gene/5885}
+
+  - gene: SERPINB3
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SERPINB3编码细胞内丝氨酸蛋白酶抑制剂家族成员，可参与蛋白酶调控、细胞应激及炎症相关过程。
+    mutation_analysis: >-
+      SERPINB3蛋白或血清表达作为肿瘤相关观察指标与SERPINB3编码区序列变异不是同一证据。单个未验证位点不能由表达、预后或炎症研究推定功能影响，也不能形成治疗结论。
+    supersedes: base_templated_serpinb3_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6317, url: https://www.ncbi.nlm.nih.gov/gene/6317}
+
+  - gene: SERPINB4
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SERPINB4编码serpin家族蛋白酶抑制剂，可抑制包括颗粒酶M在内的蛋白酶并参与炎症和细胞存活相关过程。
+    mutation_analysis: >-
+      SERPINB4表达升高、蛋白水平标志物和编码区序列位点不能相互替代。未知肿瘤位点需要蛋白酶抑制功能和结直肠癌直接证据，不能仅凭基因表达研究判定驱动性或治疗意义。
+    supersedes: base_templated_serpinb4_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6318, url: https://www.ncbi.nlm.nih.gov/gene/6318}
+
+  - gene: SHH
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SHH编码Sonic Hedgehog分泌型信号配体，前体经加工后参与胚胎模式形成和Hedgehog通路调控。
+    mutation_analysis: >-
+      SHH表达、配体分泌、胚系发育性变异与肿瘤体细胞编码区位点是不同事件。单个结直肠癌序列变异不能自动证明Hedgehog通路激活，也不能据此匹配SMO等通路药物。
+    supersedes: base_templated_shh_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6469, url: https://www.ncbi.nlm.nih.gov/gene/6469}
+
+  - gene: SLIT2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SLIT2编码可与ROBO受体结合的分泌型糖蛋白，参与轴突导向及多种细胞迁移过程，蛋白可被加工为不同片段。
+    mutation_analysis: >-
+      SLIT2启动子甲基化、表达下降、蛋白加工异常和编码区序列变异不能互相替代。未知位点需直接功能和结直肠癌证据，不能由迁移或甲基化研究直接推定抑癌功能缺失。
+    supersedes: base_templated_slit2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9353, url: https://www.ncbi.nlm.nih.gov/gene/9353}
+
+  - gene: SRC
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SRC编码Src家族非受体酪氨酸激酶，参与细胞生长、黏附、迁移和多种受体下游信号，其活性受磷酸化状态调节。
+    mutation_analysis: >-
+      SRC蛋白磷酸化、过表达或通路活性与SRC编码区序列变异不是同一检测结果。单个未验证位点不能自动判定激酶激活，也不能由体外抑制剂研究直接形成临床用药结论。
+    supersedes: base_templated_src_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6714, url: https://www.ncbi.nlm.nih.gov/gene/6714}
+
+  - gene: SYK
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SYK编码含双SH2结构域的非受体酪氨酸激酶，在造血细胞中连接免疫受体与下游增殖、分化和吞噬等信号。
+    mutation_analysis: >-
+      SYK融合、表达或磷酸化、血液肿瘤谱系事件和结直肠癌普通序列位点不可互相替代。未知位点需激酶或衔接功能证据，不能仅凭SYK通路角色判定驱动性或抑制剂敏感性。
+    supersedes: base_templated_syk_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6850, url: https://www.ncbi.nlm.nih.gov/gene/6850}
+
+  - gene: TEK
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      TEK又称TIE2，编码血管内皮受体酪氨酸激酶；ANGPT1等配体通过该受体参与血管发育和血管稳定性调控。
+    mutation_analysis: >-
+      血管畸形中的特定TEK激活位点、肿瘤血管中的受体表达和结直肠癌普通序列位点具有不同证据语境。未知错义变异不能自动判定受体激活或抗血管生成/激酶抑制剂反应。
+    supersedes: base_templated_tek_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7010, url: https://www.ncbi.nlm.nih.gov/gene/7010}
+
+  - gene: TGFBR1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      TGFBR1编码TGF-βⅠ型丝氨酸/苏氨酸激酶受体，与Ⅱ型受体形成复合体并向胞内传递TGF-β信号。
+    mutation_analysis: >-
+      胚系Loeys-Dietz综合征变异、肿瘤中的明确双等位失活和普通体细胞错义位点不能互相替代。单个位点需受体激酶和通路功能证据，不能仅凭TGF-β通路作用推定抑癌功能丧失或治疗意义。
+    supersedes: base_templated_tgfbr1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7046, url: https://www.ncbi.nlm.nih.gov/gene/7046}
+
+  - gene: TNFAIP3
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      TNFAIP3编码A20泛素编辑酶，兼具去泛素化和泛素连接相关功能，可限制NF-κB活化并调节炎症和免疫反应。
+    mutation_analysis: >-
+      淋巴系统肿瘤中的截短或双等位失活、胚系自身炎症性疾病和结直肠癌未知体细胞位点具有不同语境。普通错义变异不能自动视为A20功能缺失或NF-κB持续激活，也不能形成治疗结论。
+    supersedes: base_templated_tnfaip3_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7128, url: https://www.ncbi.nlm.nih.gov/gene/7128}
+
+  - gene: TP63
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      TP63编码p53家族转录因子；不同启动子和可变剪接产生多种具有不同转录功能的蛋白亚型，参与上皮发育和干/祖细胞维持。
+    mutation_analysis: >-
+      TP63亚型表达、扩增、重排、胚系发育性变异和肿瘤体细胞序列位点不能统一解释。未知位点必须核对转录本和功能后果，不能仅凭p53家族身份推定抑癌或致癌作用及治疗意义。
+    supersedes: base_templated_tp63_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-8626, url: https://www.ncbi.nlm.nih.gov/gene/8626}
+
+  - gene: TSHR
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      TSHR编码促甲状腺激素受体，是调节甲状腺细胞代谢和功能的G蛋白偶联受体。
+    mutation_analysis: >-
+      甲状腺疾病或甲状腺肿瘤中的特定激活/失活位点、胚系事件和结直肠癌普通体细胞位点具有不同组织与疾病语境。未知位点不能自动判定受体活性改变，也不能外推甲状腺诊断或治疗结论。
+    supersedes: base_templated_tshr_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7253, url: https://www.ncbi.nlm.nih.gov/gene/7253}
+
+  - gene: YAP1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      YAP1编码Hippo通路下游转录共调节因子，其核定位和与TEAD等因子的相互作用可调控组织生长、修复和稳态。
+    mutation_analysis: >-
+      YAP1核定位、蛋白表达、扩增或融合与YAP1编码区序列变异不是同一事件。单个未验证位点不能证明Hippo通路失活或YAP1持续激活，也不能据此形成靶向治疗结论。
+    supersedes: base_templated_yap1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-10413, url: https://www.ncbi.nlm.nih.gov/gene/10413}
+
+  - gene: YES1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      YES1编码Src家族非受体酪氨酸激酶，可参与受体下游信号、细胞增殖和黏附调控。
+    mutation_analysis: >-
+      YES1扩增、蛋白活化或融合事件与普通编码区位点具有不同证据要求，也不能直接套用SRC其他家族成员的位点数据。未知变异不得自动视为激酶激活或匹配Src家族抑制剂。
+    supersedes: base_templated_yes1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7525, url: https://www.ncbi.nlm.nih.gov/gene/7525}
+
+  - gene: ZNF217
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      ZNF217编码锌指转录调控蛋白，可参与转录抑制并与组蛋白去乙酰化相关复合体相互作用。
+    mutation_analysis: >-
+      ZNF217扩增、过表达或染色质复合体变化与编码区序列变异不能相互替代。单个未验证位点不能由表达或预后研究推定转录抑制异常、肿瘤驱动或治疗意义。
+    supersedes: base_templated_znf217_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7764, url: https://www.ncbi.nlm.nih.gov/gene/7764}
+
+  - gene: ZNF278
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      Panel中的ZNF278是PATZ1（NCBI Gene 23598）的历史符号；PATZ1编码含BTB/POZ、AT-hook和C2H2锌指区域的转录调控蛋白。
+    mutation_analysis: >-
+      PATZ1相关融合事件与ZNF278/PATZ1普通编码区序列变异不是同一事件，其他肿瘤中的融合语境不能迁移到结直肠癌位点。解释前需确认符号和转录本，未知位点不得据此判定转录功能异常或治疗意义。
+    supersedes: base_templated_znf278_generic_fallback_and_legacy_symbol_identity
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-23598, url: https://www.ncbi.nlm.nih.gov/gene/23598}
+
+  - gene: ZNF521
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      ZNF521编码含多个C2H2锌指区域的转录调控蛋白，可与其他转录因子相互作用并参与细胞命运和分化调节。
+    mutation_analysis: >-
+      ZNF521表达、重排或特定造血谱系观察与结直肠癌普通序列位点不能互相替代。单个未验证变异需直接的转录调控和肿瘤证据，不能仅凭基因功能推定驱动性或形成治疗结论。
+    supersedes: base_templated_znf521_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-25925, url: https://www.ncbi.nlm.nih.gov/gene/25925}
+
+drug_sections: []

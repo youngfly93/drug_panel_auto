@@ -1,0 +1,109 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    Governed exact-variant corrections for P3-A legacy entries that contained
+    cross-cancer or cross-event extrapolation, unsupported drug inference, or
+    leaked prose from another gene.
+  source_type: reviewed_knowledge_correction_overlay
+  source_id: crc_p3a_legacy_exact_corrections_20260721
+  created_at: "2026-07-21"
+  privacy: No patient or sample identifiers are stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p3a_legacy_exact_correction_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_correction_of_legacy_cross_event_or_leakage
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: exact_variant_not_clinically_established_conservative_interpretation
+      cancer_scope: colorectal_cancer_exact_variant_conservative_correction
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://educate.amp.org/local/catalog/view/product.php?productid=135
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: FANCI
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2879G>A
+    p_hgvs: p.R960Q
+    mutation_analysis: >-
+      FANCI p.R960Q为错义变异；在当前审核证据中尚无足够的该位点功能实验或结直肠癌临床资料证明其导致FANCI功能缺失。FANCI参与Fanconi贫血DNA修复通路，但其他位点、基因沉默或其他癌种的功能缺失研究不能替代本位点证据；本位点不得据此解释为HRD、PARP抑制剂敏感或免疫治疗获益标志。
+    supersedes: legacy_fanci_p_r960q_cross_event_parp_and_immunotherapy_extrapolation
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-55215
+        url: https://www.ncbi.nlm.nih.gov/gene/55215
+
+  - gene: ATRX
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.3277del
+    p_hgvs: p.R1093Gfs*25
+    mutation_analysis: >-
+      ATRX p.R1093Gfs*25为移码变异，预计造成提前终止并可能影响蛋白功能。该事件不同于经蛋白和端粒检测确认的ATRX缺失或替代性端粒延长表型；其他癌种模型中的PARP抑制剂研究不能证明本位点在结直肠癌中的药物敏感性，本条仅按潜在功能缺失事件保守解释。
+    supersedes: legacy_atrx_p_r1093gfs25_cross_cancer_parp_extrapolation
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-546
+        url: https://www.ncbi.nlm.nih.gov/gene/546
+
+  - gene: GALNT12
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.592C>T
+    p_hgvs: p.R198C
+    mutation_analysis: >-
+      GALNT12 p.R198C为位于糖基转移酶相关区域的错义变异；当前缺少足够的位点级功能和结直肠癌临床证据确定其致病性。GALNT12的易感性研究属于胚系和位点特异语境，肿瘤检出本位点不能自动证明遗传性结直肠癌、基因功能缺失或治疗意义。
+    supersedes: legacy_galnt12_p_r198c_domain_only_inference
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-79695
+        url: https://www.ncbi.nlm.nih.gov/gene/79695
+
+  - gene: HOXB13
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.583del
+    p_hgvs: p.W195Gfs*84
+    mutation_analysis: >-
+      HOXB13 p.W195Gfs*84为移码变异，预计造成提前终止并可能破坏蛋白功能。HOXB13甲基化、表达改变或其他癌种的胚系易感研究与该体细胞序列变异不是同一证据事件；目前不能据此确定其为结直肠癌驱动、遗传易感标志或治疗靶点。
+    supersedes: legacy_hoxb13_p_w195gfs84_methylation_to_variant_extrapolation
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-10481
+        url: https://www.ncbi.nlm.nih.gov/gene/10481
+
+  - gene: RAD52
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.481G>A
+    p_hgvs: p.A161T
+    mutation_analysis: >-
+      RAD52 p.A161T为位于RAD52相关结构域的错义变异；当前缺少足够的位点级功能和结直肠癌临床证据确定其影响。RAD52参与同源重组修复，但单个未证实功能的位点不能证明HRD或药物敏感，也不得直接生成PARP抑制剂、铂类或其他DNA损伤药物结论。
+    supersedes: legacy_rad52_p_a161t_with_chek2_prose_leak
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5893
+        url: https://www.ncbi.nlm.nih.gov/gene/5893
+
+  - gene: XRCC2
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.121+2T>C
+    p_hgvs: ""
+    mutation_analysis: >-
+      XRCC2 c.121+2T>C位于经典剪接供体区域，可能影响RNA剪接，但仍需RNA或其他功能证据确认实际转录本后果。即使证实影响剪接，单个位点也不能自动证明双等位XRCC2失活或HRD；本位点不得直接用于推导PARP抑制剂、铂类或其他药物获益。
+    supersedes: legacy_xrcc2_c_121_plus_2t_c_unbounded_hrd_inference
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7516
+        url: https://www.ncbi.nlm.nih.gov/gene/7516
+
+drug_sections: []

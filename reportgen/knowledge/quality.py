@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 import yaml
 
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
+from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 
 
 GENERIC_ANALYSIS_FRAGMENT = (
@@ -25,6 +26,8 @@ GENERIC_ANALYSIS_FRAGMENT = (
 GENERIC_ANALYSIS_ENDING = "临床意义是当前研究的热点领域"
 SENTINEL_C_HGVS = "c.999999A>G"
 SENTINEL_P_HGVS = "p.X999999Y"
+SENTINEL_LOF_C_HGVS = "c.1del"
+SENTINEL_LOF_P_HGVS = "p.M1Rfs*2"
 
 
 def _overlay_paths(package: Any) -> list[str]:
@@ -54,6 +57,12 @@ def build_panel_gene_provider(project_root: str | Path, package: Any) -> GeneKno
         {
             "enabled": True,
             "panel_id": package.panel_id,
+            "gene_symbol_aliases": (
+                (getattr(package, "raw", None) or {}).get(
+                    "gene_symbol_aliases"
+                )
+                or {}
+            ),
             "gene_knowledge_db": gene_config,
             "gene_transcript_db": knowledge.get("gene_transcript_db") or {},
         }
@@ -104,6 +113,8 @@ def profile_panel_runtime_content(
     provider = build_panel_gene_provider(project_root, package)
     missing_intro: list[str] = []
     missing_analysis: list[str] = []
+    missing_fixed_domain: list[str] = []
+    duplicate_fixed_domain: list[str] = []
     generic_analysis: list[str] = []
     texts: list[str] = []
     for gene in normalized_genes:
@@ -117,6 +128,7 @@ def profile_panel_runtime_content(
         )
         intro = str(section.get("intro") or "").strip()
         analysis = str(section.get("mutation_analysis") or "").strip()
+        fixed_domain = str(section.get("fixed_domain_text") or "").strip()
         texts.extend((intro, analysis))
         if not intro:
             missing_intro.append(gene)
@@ -124,6 +136,10 @@ def profile_panel_runtime_content(
             missing_analysis.append(gene)
         elif is_generic_mutation_analysis(gene, analysis):
             generic_analysis.append(gene)
+        if not fixed_domain:
+            missing_fixed_domain.append(gene)
+        elif len(re.findall(r"编码的蛋白全长", fixed_domain)) > 1:
+            duplicate_fixed_domain.append(gene)
 
     complete = len(normalized_genes) - len(set(missing_intro) | set(missing_analysis))
     specific = complete - len(generic_analysis)
@@ -145,6 +161,14 @@ def profile_panel_runtime_content(
         "complete_percent": round(100.0 * complete / total, 2) if total else 100.0,
         "missing_intro_genes": missing_intro,
         "missing_analysis_genes": missing_analysis,
+        "fixed_domain_covered_genes": total - len(missing_fixed_domain),
+        "fixed_domain_coverage_percent": (
+            round(100.0 * (total - len(missing_fixed_domain)) / total, 2)
+            if total
+            else 100.0
+        ),
+        "missing_fixed_domain_genes": missing_fixed_domain,
+        "duplicate_fixed_domain_genes": duplicate_fixed_domain,
         "generic_fallback_genes": generic_analysis,
         "generic_fallback_count": len(generic_analysis),
         "generic_fallback_percent": (
@@ -160,4 +184,157 @@ def profile_panel_runtime_content(
             "cited_trials": len(identifiers["trial"]),
             "unresolved_trials": unresolved_trials,
         },
+    }
+
+
+def _drug_rule_text(value: Any) -> str:
+    if isinstance(value, (list, tuple)):
+        return "\n".join(str(item).strip() for item in value if str(item).strip())
+    return str(value or "").strip()
+
+
+def _selector_values(value: Any, fallback: str) -> list[str]:
+    if isinstance(value, (list, tuple)):
+        values = [str(item).strip() for item in value if str(item).strip()]
+        return values or [fallback]
+    text = str(value or "").strip()
+    return [text or fallback]
+
+
+def _representative_targeted_drug_cases(
+    context: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Expand every runtime rule selector into a deterministic synthetic case."""
+    cases: list[dict[str, Any]] = []
+    for gene, raw_rule in sorted((context.get("overrides") or {}).items()):
+        rule = dict(raw_rule) if isinstance(raw_rule, Mapping) else {}
+        cases.append(
+            {
+                "rule_id": f"gene_override:{str(gene).upper()}",
+                "selector_kind": "gene_override",
+                "gene": str(gene).upper(),
+                "cHGVS": SENTINEL_C_HGVS,
+                "pHGVS": SENTINEL_P_HGVS,
+                "gene_class": "Ⅱ类",
+                "benefit_drugs": _drug_rule_text(rule.get("benefit_drugs"))
+                or "--",
+                "caution_drugs": _drug_rule_text(rule.get("caution_drugs"))
+                or "--",
+            }
+        )
+
+    for index, raw_rule in enumerate(
+        context.get("reviewed_variant_overrides") or [], start=1
+    ):
+        if not isinstance(raw_rule, Mapping):
+            continue
+        rule = dict(raw_rule)
+        gene = str(rule.get("gene") or "").strip().upper()
+        applicability = str(rule.get("applicability") or "").strip().lower()
+        is_lof = applicability in {"loss_of_function", "lof", "truncating"}
+        fallback_c = SENTINEL_LOF_C_HGVS if is_lof else SENTINEL_C_HGVS
+        fallback_p = SENTINEL_LOF_P_HGVS if is_lof else SENTINEL_P_HGVS
+        c_values = _selector_values(rule.get("c_hgvs"), fallback_c)
+        p_values = _selector_values(rule.get("p_hgvs"), fallback_p)
+        for c_hgvs in c_values:
+            for p_hgvs in p_values:
+                cases.append(
+                    {
+                        "rule_id": f"reviewed_rule:{index}:{gene}:{c_hgvs}:{p_hgvs}",
+                        "selector_kind": "reviewed_variant_or_event",
+                        "gene": gene,
+                        "cHGVS": c_hgvs,
+                        "pHGVS": p_hgvs,
+                        "gene_class": "Ⅱ类",
+                        "benefit_drugs": _drug_rule_text(
+                            rule.get("benefit_drugs")
+                        )
+                        or "--",
+                        "caution_drugs": _drug_rule_text(
+                            rule.get("caution_drugs")
+                        )
+                        or "--",
+                    }
+                )
+    return cases
+
+
+def profile_panel_targeted_drug_contracts(
+    project_root: str | Path,
+    package: Any,
+) -> dict[str, Any]:
+    """Prove every configured Part-2 rule has an exact Part-3 contract.
+
+    This is an inventory gate rather than a sampled-report check: every active
+    gene, event and HGVS selector is synthesized, rendered through the real
+    provider, and compared item-for-item in the same variant and direction.
+    """
+    context = load_targeted_drug_rule_context(package)
+    if not context or not context.get("enabled"):
+        return {
+            "status": "NOT_APPLICABLE",
+            "rules_checked": 0,
+            "selector_cases_checked": 0,
+            "expected_item_count": 0,
+            "rendered_item_count": 0,
+            "issues": [],
+        }
+
+    provider = build_panel_gene_provider(project_root, package)
+    cases = _representative_targeted_drug_cases(context)
+    issues: list[dict[str, Any]] = []
+    expected_items = 0
+    rendered_items = 0
+    for case in cases:
+        variant = {
+            key: value
+            for key, value in case.items()
+            if key not in {"rule_id", "selector_kind"}
+        }
+        sections = provider.build_drug_analysis_sections([variant])
+        consistency = provider.build_drug_analysis_consistency([variant], sections)
+        coverage = provider.build_drug_analysis_contract_coverage([variant])
+        expected_items += int(consistency.get("expected_item_count") or 0)
+        rendered_items += int(consistency.get("rendered_item_count") or 0)
+        if consistency.get("status") != "PASS":
+            issues.append(
+                {
+                    "code": "TARGETED_DRUG_ANALYSIS_GAP",
+                    "message": (
+                        f"{package.panel_id} {case['rule_id']} does not render "
+                        "the complete Part-3 drug analysis"
+                    ),
+                    "rule_id": case["rule_id"],
+                    "gene": case["gene"],
+                    "c_hgvs": case["cHGVS"],
+                    "p_hgvs": case["pHGVS"],
+                    "consistency": consistency,
+                }
+            )
+        if coverage.get("status") != "PASS":
+            issues.append(
+                {
+                    "code": "TARGETED_DRUG_CONTRACT_GAP",
+                    "message": (
+                        f"{package.panel_id} {case['rule_id']} still depends on "
+                        "an ungoverned legacy Part-3 fallback"
+                    ),
+                    "rule_id": case["rule_id"],
+                    "gene": case["gene"],
+                    "c_hgvs": case["cHGVS"],
+                    "p_hgvs": case["pHGVS"],
+                    "coverage": coverage,
+                }
+            )
+
+    rule_count = len(context.get("overrides") or {}) + len(
+        context.get("reviewed_variant_overrides") or []
+    )
+    return {
+        "status": "PASS" if not issues else "FAIL",
+        "rules_checked": rule_count,
+        "selector_cases_checked": len(cases),
+        "expected_item_count": expected_items,
+        "rendered_item_count": rendered_items,
+        "issues": issues,
     }

@@ -1,0 +1,389 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    P3-D first-review fallbacks and an explicit legacy-to-current symbol map for
+    linker and core histone genes shared by both CRC panels.
+  source_type: official_gene_identity_plus_histone_event_boundary
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_histone_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    Histone evidence is gene-copy, protein-isoform, residue, alteration-class,
+    and tumor-context specific. An ordinary tumor sequence variant does not
+    establish a post-translational modification, expression state, oncohistone
+    hotspot, hematologic/CNS diagnosis, or drug sensitivity, and evidence must
+    not be transferred between near-identical histone paralogs.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p3d_histone_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_histone_identity_and_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_identity_plus_conservative_histone_boundary
+      cancer_scope: colorectal_cancer_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://educate.amp.org/local/catalog/view/product.php?productid=135
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+
+# Structured identity map for the historical symbols still emitted by the
+# production assay. Runtime keys remain unchanged for backward compatibility;
+# current symbols are disclosed in report prose and provenance.
+legacy_symbol_map:
+  - {legacy_symbol: HIST1H1B, current_symbol: H1-5, ncbi_gene_id: 3009, encoded_histone: H1.5}
+  - {legacy_symbol: HIST1H1C, current_symbol: H1-2, ncbi_gene_id: 3006, encoded_histone: H1.2}
+  - {legacy_symbol: HIST1H1D, current_symbol: H1-3, ncbi_gene_id: 3007, encoded_histone: H1.3}
+  - {legacy_symbol: HIST1H1E, current_symbol: H1-4, ncbi_gene_id: 3008, encoded_histone: H1.4}
+  - {legacy_symbol: HIST1H2AL, current_symbol: H2AC16, ncbi_gene_id: 8332, encoded_histone: H2A}
+  - {legacy_symbol: HIST1H2AM, current_symbol: H2AC17, ncbi_gene_id: 8336, encoded_histone: H2A}
+  - {legacy_symbol: HIST1H2BC, current_symbol: H2BC4, ncbi_gene_id: 8347, encoded_histone: H2B}
+  - {legacy_symbol: HIST1H2BD, current_symbol: H2BC5, ncbi_gene_id: 3017, encoded_histone: H2B}
+  - {legacy_symbol: HIST1H2BG, current_symbol: H2BC8, ncbi_gene_id: 8339, encoded_histone: H2B}
+  - {legacy_symbol: HIST1H2BJ, current_symbol: H2BC11, ncbi_gene_id: 8970, encoded_histone: H2B}
+  - {legacy_symbol: HIST1H2BK, current_symbol: H2BC12, ncbi_gene_id: 85236, encoded_histone: H2B}
+  - {legacy_symbol: HIST1H2BO, current_symbol: H2BC17, ncbi_gene_id: 8348, encoded_histone: H2B}
+  - {legacy_symbol: HIST1H3A, current_symbol: H3C1, ncbi_gene_id: 8350, encoded_histone: H3.1}
+  - {legacy_symbol: HIST1H3C, current_symbol: H3C3, ncbi_gene_id: 8352, encoded_histone: H3.1}
+  - {legacy_symbol: HIST1H3D, current_symbol: H3C4, ncbi_gene_id: 8351, encoded_histone: H3.1}
+  - {legacy_symbol: HIST1H3E, current_symbol: H3C6, ncbi_gene_id: 8353, encoded_histone: H3.1}
+  - {legacy_symbol: HIST1H3F, current_symbol: H3C7, ncbi_gene_id: 8968, encoded_histone: H3.1}
+  - {legacy_symbol: HIST1H3G, current_symbol: H3C8, ncbi_gene_id: 8355, encoded_histone: H3.1}
+  - {legacy_symbol: HIST1H3H, current_symbol: H3C10, ncbi_gene_id: 8357, encoded_histone: H3.1}
+  - {legacy_symbol: HIST1H3I, current_symbol: H3C11, ncbi_gene_id: 8354, encoded_histone: H3.1}
+  - {legacy_symbol: HIST1H3J, current_symbol: H3C12, ncbi_gene_id: 8356, encoded_histone: H3.1}
+  - {legacy_symbol: HIST1H4I, current_symbol: H4C9, ncbi_gene_id: 8294, encoded_histone: H4}
+  - {legacy_symbol: HIST3H3, current_symbol: H3-4, ncbi_gene_id: 8290, encoded_histone: H3.4}
+
+gene_sections:
+  - gene: HIST1H1B
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H1B现行官方符号为H1-5，编码复制依赖的连接组蛋白H1.5；连接组蛋白结合核小体之间的DNA并参与染色质高级结构压缩和基因调控。
+    mutation_analysis: >-
+      HIST1H1B/C/D/E在滤泡性淋巴瘤中的复发突变证据具有血液肿瘤和位点语境，不能直接迁移到结直肠癌。H1.5表达或翻译后修饰与HIST1H1B序列变异不是同一事件；单个位点不足以证明染色质功能缺失、肿瘤驱动或治疗意义。
+    supersedes: base_templated_hist1h1b_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3009
+        url: https://www.ncbi.nlm.nih.gov/gene/3009
+      - type: pubmed
+        id: PMID-24435047
+        url: https://pubmed.ncbi.nlm.nih.gov/24435047/
+
+  - gene: HIST1H1C
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H1C现行官方符号为H1-2，编码复制依赖的连接组蛋白H1.2；该蛋白参与连接DNA结合、核小体间组织和染色质压缩。
+    mutation_analysis: >-
+      HIST1H1B/C/D/E在滤泡性淋巴瘤中的复发突变证据具有血液肿瘤和位点语境，不能直接迁移到结直肠癌。H1.2表达或翻译后修饰与HIST1H1C序列变异不是同一事件；单个位点不足以证明染色质功能缺失、肿瘤驱动或治疗意义。
+    supersedes: base_templated_hist1h1c_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3006
+        url: https://www.ncbi.nlm.nih.gov/gene/3006
+      - type: pubmed
+        id: PMID-24435047
+        url: https://pubmed.ncbi.nlm.nih.gov/24435047/
+
+  - gene: HIST1H1D
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H1D现行官方符号为H1-3，编码复制依赖的连接组蛋白H1.3；该蛋白参与连接DNA结合和染色质高级结构组织。
+    mutation_analysis: >-
+      HIST1H1B/C/D/E在滤泡性淋巴瘤中的复发突变证据具有血液肿瘤和位点语境，不能直接迁移到结直肠癌。H1.3表达或翻译后修饰与HIST1H1D序列变异不是同一事件；单个位点不足以证明染色质功能缺失、肿瘤驱动或治疗意义。
+    supersedes: base_templated_hist1h1d_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3007
+        url: https://www.ncbi.nlm.nih.gov/gene/3007
+      - type: pubmed
+        id: PMID-24435047
+        url: https://pubmed.ncbi.nlm.nih.gov/24435047/
+
+  - gene: HIST1H1E
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H1E现行官方符号为H1-4，编码复制依赖的连接组蛋白H1.4；该蛋白参与连接DNA结合、染色质压缩和转录环境调节。
+    mutation_analysis: >-
+      HIST1H1B/C/D/E在滤泡性淋巴瘤中的复发突变证据具有血液肿瘤和位点语境，不能直接迁移到结直肠癌；H1-4胚系疾病证据也不能替代肿瘤体细胞位点解释。表达、翻译后修饰、胚系和体细胞事件必须分开，单个位点不足以形成治疗结论。
+    supersedes: base_templated_hist1h1e_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3008
+        url: https://www.ncbi.nlm.nih.gov/gene/3008
+      - type: pubmed
+        id: PMID-24435047
+        url: https://pubmed.ncbi.nlm.nih.gov/24435047/
+
+  - gene: HIST1H2AL
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H2AL现行官方符号为H2AC16，编码复制依赖的H2A核心组蛋白；H2A与H2B、H3和H4共同组成核小体八聚体并支持DNA包装。
+    mutation_analysis: >-
+      H2A翻译后修饰、表达或核小体状态与肿瘤序列变异不是同一证据；不同H2A基因可编码高度相似蛋白，位点证据不得跨基因拷贝转移。单个HIST1H2AL位点不足以证明致癌组蛋白效应、染色质异常或治疗意义。
+    supersedes: base_templated_hist1h2al_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8332
+        url: https://www.ncbi.nlm.nih.gov/gene/8332
+
+  - gene: HIST1H2AM
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H2AM现行官方符号为H2AC17，编码复制依赖的H2A核心组蛋白；H2A参与核小体八聚体形成和染色质结构维持。
+    mutation_analysis: >-
+      H2A翻译后修饰、表达或核小体状态与肿瘤序列变异不是同一证据；不同H2A基因可编码高度相似蛋白，位点证据不得跨基因拷贝转移。单个HIST1H2AM位点不足以证明致癌组蛋白效应、染色质异常或治疗意义。
+    supersedes: base_templated_hist1h2am_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8336
+        url: https://www.ncbi.nlm.nih.gov/gene/8336
+
+  - gene: HIST1H2BC
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H2BC现行官方符号为H2BC4，编码复制依赖的H2B核心组蛋白；H2B与H2A形成二聚体并参与核小体结构和染色质组织。
+    mutation_analysis: >-
+      H2B翻译后修饰、表达或核小体状态与肿瘤序列变异不是同一证据；H2B多个基因可编码相同或高度相似蛋白，数据库或蛋白位点记录必须核对实际基因座。单个HIST1H2BC位点不能自动证明致癌组蛋白效应或治疗意义。
+    supersedes: base_templated_hist1h2bc_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8347
+        url: https://www.ncbi.nlm.nih.gov/gene/8347
+
+  - gene: HIST1H2BD
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H2BD现行官方符号为H2BC5，编码复制依赖的H2B核心组蛋白；H2B参与核小体八聚体形成和染色质结构维持。
+    mutation_analysis: >-
+      H2B翻译后修饰、表达或核小体状态与肿瘤序列变异不是同一证据；H2B多个基因可编码相同或高度相似蛋白，数据库或蛋白位点记录必须核对实际基因座。单个HIST1H2BD位点不能自动证明致癌组蛋白效应或治疗意义。
+    supersedes: base_templated_hist1h2bd_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3017
+        url: https://www.ncbi.nlm.nih.gov/gene/3017
+
+  - gene: HIST1H2BG
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H2BG现行官方符号为H2BC8，编码复制依赖的H2B核心组蛋白；H2B参与核小体结构、DNA包装和染色质调节。
+    mutation_analysis: >-
+      H2B翻译后修饰、表达或核小体状态与肿瘤序列变异不是同一证据；H2B多个基因可编码相同或高度相似蛋白，数据库或蛋白位点记录必须核对实际基因座。单个HIST1H2BG位点不能自动证明致癌组蛋白效应或治疗意义。
+    supersedes: base_templated_hist1h2bg_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8339
+        url: https://www.ncbi.nlm.nih.gov/gene/8339
+
+  - gene: HIST1H2BJ
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H2BJ现行官方符号为H2BC11，编码复制依赖的H2B核心组蛋白；该蛋白参与核小体八聚体形成和染色质结构维持。
+    mutation_analysis: >-
+      H2B翻译后修饰、表达或核小体状态与肿瘤序列变异不是同一证据；H2B多个基因可编码相同或高度相似蛋白，位点证据不得跨基因拷贝转移。单个HIST1H2BJ位点不能自动证明致癌组蛋白效应或治疗意义。
+    supersedes: base_templated_hist1h2bj_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8970
+        url: https://www.ncbi.nlm.nih.gov/gene/8970
+
+  - gene: HIST1H2BK
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H2BK现行官方符号为H2BC12，编码复制依赖的H2B核心组蛋白；该蛋白参与核小体结构和染色质组织。
+    mutation_analysis: >-
+      H2B翻译后修饰、表达或核小体状态与肿瘤序列变异不是同一证据；H2B多个基因可编码相同或高度相似蛋白，位点证据不得跨基因拷贝转移。单个HIST1H2BK位点不能自动证明致癌组蛋白效应或治疗意义。
+    supersedes: base_templated_hist1h2bk_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-85236
+        url: https://www.ncbi.nlm.nih.gov/gene/85236
+
+  - gene: HIST1H2BO
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H2BO现行官方符号为H2BC17，编码复制依赖的H2B核心组蛋白；该蛋白参与核小体八聚体形成和DNA包装。
+    mutation_analysis: >-
+      H2B翻译后修饰、表达或核小体状态与肿瘤序列变异不是同一证据；H2B多个基因可编码相同或高度相似蛋白，位点证据不得跨基因拷贝转移。单个HIST1H2BO位点不能自动证明致癌组蛋白效应或治疗意义。
+    supersedes: base_templated_hist1h2bo_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8348
+        url: https://www.ncbi.nlm.nih.gov/gene/8348
+
+  - gene: HIST1H3A
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H3A现行官方符号为H3C1，编码复制依赖的H3.1核心组蛋白；H3.1参与核小体组装，其尾部可发生多种调控性翻译后修饰。
+    mutation_analysis: >-
+      H3.1 K27等致癌组蛋白热点证据仅适用于经验证的特定基因、残基和肿瘤类型，不得在不同H3基因拷贝之间转移。H3蛋白翻译后修饰也不等于HIST1H3A序列变异；任意结直肠癌位点不能套用中枢神经系统肿瘤分类或治疗结论。
+    supersedes: base_templated_hist1h3a_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8350
+        url: https://www.ncbi.nlm.nih.gov/gene/8350
+      - type: pubmed
+        id: PMID-26517431
+        url: https://pubmed.ncbi.nlm.nih.gov/26517431/
+
+  - gene: HIST1H3C
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H3C现行官方符号为H3C3，编码复制依赖的H3.1核心组蛋白；H3.1参与核小体组装和染色质状态调节。
+    mutation_analysis: >-
+      H3C3/H3.1 p.K27M在特定中枢神经系统弥漫性中线胶质瘤中具有明确的位点和肿瘤语境；该证据不能扩展到HIST1H3C其他位点、其他H3拷贝或结直肠癌。H3K27翻译后修饰与K27序列替换也不是同一检测事件，不能据此形成治疗结论。
+    supersedes: base_templated_hist1h3c_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8352
+        url: https://www.ncbi.nlm.nih.gov/gene/8352
+      - type: pubmed
+        id: PMID-34759345
+        url: https://pubmed.ncbi.nlm.nih.gov/34759345/
+
+  - gene: HIST1H3D
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H3D现行官方符号为H3C4，编码复制依赖的H3.1核心组蛋白；该蛋白参与核小体组装和染色质结构维持。
+    mutation_analysis: >-
+      H3.1 K27等致癌组蛋白热点证据仅适用于经验证的特定基因、残基和肿瘤类型，不得在不同H3基因拷贝之间转移。H3蛋白翻译后修饰也不等于HIST1H3D序列变异；任意结直肠癌位点不能套用中枢神经系统肿瘤分类或治疗结论。
+    supersedes: base_templated_hist1h3d_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8351
+        url: https://www.ncbi.nlm.nih.gov/gene/8351
+      - type: pubmed
+        id: PMID-26517431
+        url: https://pubmed.ncbi.nlm.nih.gov/26517431/
+
+  - gene: HIST1H3E
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H3E现行官方符号为H3C6，编码复制依赖的H3.1核心组蛋白；该蛋白参与核小体组装和染色质结构维持。
+    mutation_analysis: >-
+      H3.1 K27等致癌组蛋白热点证据仅适用于经验证的特定基因、残基和肿瘤类型，不得在不同H3基因拷贝之间转移。H3蛋白翻译后修饰也不等于HIST1H3E序列变异；任意结直肠癌位点不能套用中枢神经系统肿瘤分类或治疗结论。
+    supersedes: base_templated_hist1h3e_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8353
+        url: https://www.ncbi.nlm.nih.gov/gene/8353
+      - type: pubmed
+        id: PMID-26517431
+        url: https://pubmed.ncbi.nlm.nih.gov/26517431/
+
+  - gene: HIST1H3F
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H3F现行官方符号为H3C7，编码复制依赖的H3.1核心组蛋白；该蛋白参与核小体组装和染色质结构维持。
+    mutation_analysis: >-
+      H3.1 K27等致癌组蛋白热点证据仅适用于经验证的特定基因、残基和肿瘤类型，不得在不同H3基因拷贝之间转移。H3蛋白翻译后修饰也不等于HIST1H3F序列变异；任意结直肠癌位点不能套用中枢神经系统肿瘤分类或治疗结论。
+    supersedes: base_templated_hist1h3f_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8968
+        url: https://www.ncbi.nlm.nih.gov/gene/8968
+      - type: pubmed
+        id: PMID-26517431
+        url: https://pubmed.ncbi.nlm.nih.gov/26517431/
+
+  - gene: HIST1H3G
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H3G现行官方符号为H3C8，编码复制依赖的H3.1核心组蛋白；该蛋白参与核小体组装和染色质结构维持。
+    mutation_analysis: >-
+      H3.1 K27等致癌组蛋白热点证据仅适用于经验证的特定基因、残基和肿瘤类型，不得在不同H3基因拷贝之间转移。H3蛋白翻译后修饰也不等于HIST1H3G序列变异；任意结直肠癌位点不能套用中枢神经系统肿瘤分类或治疗结论。
+    supersedes: base_templated_hist1h3g_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8355
+        url: https://www.ncbi.nlm.nih.gov/gene/8355
+      - type: pubmed
+        id: PMID-26517431
+        url: https://pubmed.ncbi.nlm.nih.gov/26517431/
+
+  - gene: HIST1H3H
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H3H现行官方符号为H3C10，编码复制依赖的H3.1核心组蛋白；该蛋白参与核小体组装和染色质结构维持。
+    mutation_analysis: >-
+      H3.1 K27等致癌组蛋白热点证据仅适用于经验证的特定基因、残基和肿瘤类型，不得在不同H3基因拷贝之间转移。H3蛋白翻译后修饰也不等于HIST1H3H序列变异；任意结直肠癌位点不能套用中枢神经系统肿瘤分类或治疗结论。
+    supersedes: base_templated_hist1h3h_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8357
+        url: https://www.ncbi.nlm.nih.gov/gene/8357
+      - type: pubmed
+        id: PMID-26517431
+        url: https://pubmed.ncbi.nlm.nih.gov/26517431/
+
+  - gene: HIST1H3I
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H3I现行官方符号为H3C11，编码复制依赖的H3.1核心组蛋白；该蛋白参与核小体组装和染色质结构维持。
+    mutation_analysis: >-
+      H3.1 K27等致癌组蛋白热点证据仅适用于经验证的特定基因、残基和肿瘤类型，不得在不同H3基因拷贝之间转移。H3蛋白翻译后修饰也不等于HIST1H3I序列变异；任意结直肠癌位点不能套用中枢神经系统肿瘤分类或治疗结论。
+    supersedes: base_templated_hist1h3i_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8354
+        url: https://www.ncbi.nlm.nih.gov/gene/8354
+      - type: pubmed
+        id: PMID-26517431
+        url: https://pubmed.ncbi.nlm.nih.gov/26517431/
+
+  - gene: HIST1H3J
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H3J现行官方符号为H3C12，编码复制依赖的H3.1核心组蛋白；该蛋白参与核小体组装和染色质结构维持。
+    mutation_analysis: >-
+      H3.1 K27等致癌组蛋白热点证据仅适用于经验证的特定基因、残基和肿瘤类型，不得在不同H3基因拷贝之间转移。H3蛋白翻译后修饰也不等于HIST1H3J序列变异；任意结直肠癌位点不能套用中枢神经系统肿瘤分类或治疗结论。
+    supersedes: base_templated_hist1h3j_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8356
+        url: https://www.ncbi.nlm.nih.gov/gene/8356
+      - type: pubmed
+        id: PMID-26517431
+        url: https://pubmed.ncbi.nlm.nih.gov/26517431/
+
+  - gene: HIST1H4I
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST1H4I现行官方符号为H4C9，编码复制依赖的H4核心组蛋白；H4与H3形成四聚体并参与核小体八聚体和染色质结构维持。
+    mutation_analysis: >-
+      H4甲基化、乙酰化等翻译后修饰状态与HIST1H4I序列变异不是同一事件；不同H4基因拷贝的蛋白位点记录也必须核对实际基因座。单个位点不足以证明全局表观遗传改变、致癌组蛋白效应或治疗意义。
+    supersedes: base_templated_hist1h4i_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8294
+        url: https://www.ncbi.nlm.nih.gov/gene/8294
+
+  - gene: HIST3H3
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HIST3H3现行官方符号为H3-4，编码组蛋白H3.4；H3.4是与复制依赖H3.1及H3.3不同的组蛋白H3亚型，参与核小体和染色质结构。
+    mutation_analysis: >-
+      H3F3A/H3-3A的H3.3热点或H3C家族的H3.1热点证据不能按蛋白家族名称直接套用到HIST3H3/H3-4。任何临床解释必须同时匹配实际基因座、蛋白亚型、残基和肿瘤类型；普通结直肠癌位点不能形成中枢神经系统肿瘤分类或治疗结论。
+    supersedes: base_templated_hist3h3_generic_fallback
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8290
+        url: https://www.ncbi.nlm.nih.gov/gene/8290
+      - type: pubmed
+        id: PMID-26517431
+        url: https://pubmed.ncbi.nlm.nih.gov/26517431/
+
+drug_sections: []

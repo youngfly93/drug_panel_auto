@@ -1,0 +1,200 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    P2-A first-review gene-level mutation-analysis fallbacks for kinase, receptor,
+    and signaling genes represented in the base targeted-drug candidate database.
+  source_type: official_gene_function_plus_crc_reporting_guideline
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_drug_candidate_gene_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    Presence in the base targeted-drug candidate database is not a production drug
+    rule. These rows only describe stable gene function and alteration-class
+    boundaries. They do not create sensitivity, resistance, prognosis, an evidence
+    grade, or a drug match. Exact reviewed variant and drug rules retain precedence.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p2a_drug_candidate_gene_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_gene_function_and_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_function_plus_conservative_variant_boundary
+      cancer_scope: colorectal_cancer_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: ABL1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      ABL1编码参与细胞分裂、黏附、分化和应激反应的非受体酪氨酸激酶；该基因可在血液肿瘤中与不同伙伴形成融合。ABL1融合或重排、明确激活性变异与普通单核苷酸变异属于不同事件；结直肠癌未收录位点不得套用BCR::ABL1相关血液肿瘤证据，也不得仅凭基因名称生成ABL抑制剂用药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-25
+        url: https://www.ncbi.nlm.nih.gov/gene/25
+
+  - gene: AKT3
+    panels: [crc_358_msi]
+    mutation_analysis: >-
+      AKT3编码AKT家族丝氨酸/苏氨酸激酶，参与生长因子和胰岛素相关信号，并调控增殖、分化、凋亡及代谢。AKT3扩增、表达改变与经功能证实的激活性位点不能和普通错义变异互换；未收录位点需结合具体位点、事件类型、功能及癌种证据解释，不得自动推导AKT通路药物敏感性。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-10000
+        url: https://www.ncbi.nlm.nih.gov/gene/10000
+
+  - gene: ARAF
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      ARAF编码RAF家族丝氨酸/苏氨酸激酶，参与RAS-RAF-MEK-ERK及相关细胞信号调控。ARAF融合、拷贝数改变或特定激活性变异与普通单核苷酸变异具有不同功能后果；未收录位点不得按BRAF或其他RAF基因的热点、适应证和药物证据类推，需由精确事件规则判断。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-369
+        url: https://www.ncbi.nlm.nih.gov/gene/369
+
+  - gene: BTK
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      BTK编码对B细胞发育和受体信号传导具有重要作用的胞质酪氨酸激酶。血液系统肿瘤中的BTK依赖、获得性耐药位点与结直肠癌肿瘤细胞中偶见的普通序列变异并非同一证据场景；未收录位点不得直接生成BTK抑制剂获益或耐药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-695
+        url: https://www.ncbi.nlm.nih.gov/gene/695
+
+  - gene: CSF1R
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CSF1R编码巨噬细胞集落刺激因子1受体，是CSF1/PDGF受体家族的跨膜酪氨酸激酶，参与巨噬细胞生成、分化和功能调控。肿瘤微环境中的表达或配体轴、血液肿瘤相关激活事件与肿瘤细胞普通错义变异不能等同；结直肠癌未收录位点不得据此推导CSF1R靶向获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-1436
+        url: https://www.ncbi.nlm.nih.gov/gene/1436
+
+  - gene: CSF3R
+    panels: [crc_358_msi]
+    mutation_analysis: >-
+      CSF3R编码粒细胞集落刺激因子3受体，参与粒细胞生成、分化和功能调控。CSF3R膜近端激活事件、截短事件及普通错义变异具有不同机制，并主要需要在造血系统疾病语境中判断；结直肠癌未收录位点不得套用血液肿瘤治疗证据或自动形成药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-1441
+        url: https://www.ncbi.nlm.nih.gov/gene/1441
+
+  - gene: DDR2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      DDR2编码可被胶原激活的盘状结构域受体酪氨酸激酶，参与细胞黏附、增殖和细胞外基质重塑。DDR2表达改变、明确激活性位点与普通错义变异属于不同证据事件；未收录位点需结合结构域、功能和癌种直接证据解释，不得由其他癌种热点或抑制剂研究外推结直肠癌用药。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4921
+        url: https://www.ncbi.nlm.nih.gov/gene/4921
+
+  - gene: EPHA2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      EPHA2编码结合ephrin-A配体的受体酪氨酸激酶，参与细胞间信号和发育调控。EPHA2蛋白表达、配体依赖信号、剪接异常与普通单核苷酸变异不能相互替代；未收录位点需按变异类型和功能证据保守解释，不得由表达研究或其他癌种资料直接生成靶向及预后结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-1969
+        url: https://www.ncbi.nlm.nih.gov/gene/1969
+
+  - gene: ERBB4
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      ERBB4编码可由神经调节蛋白等配体激活的ERBB家族受体酪氨酸激酶，并存在不同剪接亚型和蛋白水解产物。ERBB4表达、扩增、融合及特定功能性序列变异属于不同事件；普通单核苷酸变异不得视为受体激活，也不得在缺少精确位点和结直肠癌证据时生成用药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2066
+        url: https://www.ncbi.nlm.nih.gov/gene/2066
+
+  - gene: FGFR1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FGFR1编码具有胞外免疫球蛋白样结构域、跨膜区和胞内酪氨酸激酶结构域的成纤维细胞生长因子受体，参与增殖和分化信号。FGFR1扩增、融合或重排、明确激活性位点与普通错义变异不可互换；未收录位点不得仅凭基因名称推导FGFR抑制剂获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2260
+        url: https://www.ncbi.nlm.nih.gov/gene/2260
+
+  - gene: FGFR3
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FGFR3编码成纤维细胞生长因子受体家族成员，包含胞外免疫球蛋白样结构域、跨膜区和胞内酪氨酸激酶结构域。FGFR3融合、已知激活热点、扩增及普通错义变异具有不同功能和临床边界；未收录位点不得套用其他癌种的热点或融合药物证据，需由精确事件规则判断。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2261
+        url: https://www.ncbi.nlm.nih.gov/gene/2261
+
+  - gene: FLT1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FLT1编码血管内皮生长因子受体1，可结合VEGF家族配体并参与血管生成和血管发生，且存在跨膜及可溶性亚型。抗血管生成治疗所针对的配体-受体通路、FLT1表达和肿瘤细胞序列变异不是同一证据事件；普通FLT1位点不得作为抗血管生成药物敏感或耐药标志。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2321
+        url: https://www.ncbi.nlm.nih.gov/gene/2321
+
+  - gene: IGF1R
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      IGF1R编码具有酪氨酸激酶活性的胰岛素样生长因子1受体，参与细胞存活和转化相关信号。受体表达或通路活化、拷贝数改变与具体序列变异属于不同层级；未收录的普通错义变异不能证明IGF1R依赖，也不得据此直接生成IGF1R通路药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3480
+        url: https://www.ncbi.nlm.nih.gov/gene/3480
+
+  - gene: KIT
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      KIT编码由干细胞因子激活的受体酪氨酸激酶，参与造血、干细胞维持和肥大细胞等多种细胞过程。KIT药物意义高度依赖具体外显子、位点、变异机制和肿瘤类型；胃肠间质瘤、肥大细胞疾病或白血病中的激活及耐药证据不得外推到结直肠癌普通KIT变异。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3815
+        url: https://www.ncbi.nlm.nih.gov/gene/3815
+
+  - gene: MTOR
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      MTOR编码磷脂酰肌醇激酶相关激酶家族成员，是mTORC1和mTORC2复合物的核心成分，参与蛋白合成、细胞生长、代谢和存活调控。通路活化、上游基因改变与经验证的MTOR激活性位点不能等同；未收录位点需结合具体功能证据，不能因检出MTOR变异即推导mTOR抑制剂获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2475
+        url: https://www.ncbi.nlm.nih.gov/gene/2475
+
+  - gene: PDGFRA
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      PDGFRA编码血小板源生长因子受体α，是细胞表面受体酪氨酸激酶。PDGFRA融合或重排、扩增、特定激活或耐药位点及普通错义变异具有不同临床意义；胃肠间质瘤或血液系统疾病中的位点和药物证据不得直接外推到结直肠癌未收录变异。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5156
+        url: https://www.ncbi.nlm.nih.gov/gene/5156
+
+  - gene: RAF1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      RAF1编码位于RAS下游并可激活MEK-ERK信号的丝氨酸/苏氨酸激酶。RAF1融合、重排或经验证的激活性位点与普通序列变异不是同一事件；未收录RAF1位点不得按BRAF热点、RAF家族共有机制或其他癌种药物证据类推，需由精确事件规则解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5894
+        url: https://www.ncbi.nlm.nih.gov/gene/5894
+
+  - gene: SMO
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      SMO编码Hedgehog信号通路中的Smoothened受体样蛋白，在解除PTCH介导的抑制后向下游传递信号。SMO激活热点、抑制剂耐药位点与普通错义变异具有不同证据边界，且适用癌种不能互换；结直肠癌未收录位点不得套用其他肿瘤中的Hedgehog通路药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-6608
+        url: https://www.ncbi.nlm.nih.gov/gene/6608
+
+drug_sections: []

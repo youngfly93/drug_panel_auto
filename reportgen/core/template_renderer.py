@@ -3243,19 +3243,21 @@ class TemplateRenderer:
             doc.save(file_path)
 
     def _bold_drug_brand_brackets(self, file_path: str) -> None:
-        """Bold only ``[brand]`` fragments in targeted/immune brand summaries."""
+        """Bold only ``[brand]`` fragments in summaries and approved-drug rows."""
         import copy
         import re
 
         marker = "上表涉及的已上市的药物名称及对应的商品名称"
-        bracket_re = re.compile(r"(\[[^\[\]\r\n]+\])")
+        bracket_re = re.compile(
+            r"((?:\[[^\[\]\r\n]+\])|(?:［[^［］\r\n]+］))"
+        )
         doc = Document(file_path)
         changed = False
-        for paragraph in doc.paragraphs:
-            full_text = paragraph.text or ""
-            if marker not in full_text or not bracket_re.search(full_text):
-                continue
 
+        def rewrite_paragraph(paragraph: Any) -> bool:
+            full_text = paragraph.text or ""
+            if not bracket_re.search(full_text):
+                return False
             base_rpr = next(
                 (
                     copy.deepcopy(run._r.rPr)
@@ -3276,7 +3278,26 @@ class TemplateRenderer:
                         run._r.remove(existing)
                     run._r.insert(0, copy.deepcopy(base_rpr))
                 run.font.bold = bool(bracket_re.fullmatch(segment))
-            changed = True
+            return True
+
+        for paragraph in doc.paragraphs:
+            full_text = paragraph.text or ""
+            if marker not in full_text or not bracket_re.search(full_text):
+                continue
+            changed = rewrite_paragraph(paragraph) or changed
+
+        # The report-group feedback points to the first column of the CRC 2.2
+        # approved-drug table, not only to the prose summary below Part 2.1.
+        # docxtpl may split ``[brand]`` across several runs, so operate on the
+        # complete paragraph and rebuild only this tightly identified column.
+        for table in doc.tables:
+            if not table.rows or len(table.columns) != 3:
+                continue
+            if (table.rows[0].cells[0].text or "").strip() != "药物名称":
+                continue
+            for row in table.rows[1:]:
+                for paragraph in row.cells[0].paragraphs:
+                    changed = rewrite_paragraph(paragraph) or changed
         if changed:
             doc.save(file_path)
 

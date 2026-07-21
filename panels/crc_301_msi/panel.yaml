@@ -83,6 +83,54 @@ rules:
 reviewed_part3_overlay: "panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml"
 reviewed_part3_overlay_additions:
   - "rules/reviewed_part3_knowledge.yaml"
+  # Protein structure is cancer-independent; reuse the governed CRC358 catalog
+  # for shared genes, then fill only CRC301-specific residuals below.
+  - "panels/crc_358_msi/rules/reviewed_part3_domain_catalog.yaml"
+  - "rules/reviewed_part3_domain_catalog.yaml"
+  # Shared CRC corrections replace conflicting legacy domain tails with one
+  # official reviewed protein statement (including PIK3CA/SMAD4).
+  - "panels/crc_358_msi/rules/reviewed_part3_domain_overlay_20260720.yaml"
+  # Shared high-risk gene fallbacks add only stable function and event-class
+  # boundaries. Exact variant rules retain precedence and no drug row is added.
+  - "panels/crc_358_msi/rules/reviewed_part3_gene_fallbacks_20260721.yaml"
+  # Shared CRC-important fallbacks are panel-scoped per row; CRC301 loads only
+  # its five declared genes and receives no CRC358-only knowledge.
+  - "panels/crc_358_msi/rules/reviewed_part3_crc_important_fallbacks_20260721.yaml"
+  # P2-A candidate-gene fallbacks preserve alteration-class boundaries without
+  # creating drug matches; CRC358-only rows are filtered by each row's scope.
+  - "panels/crc_358_msi/rules/reviewed_part3_drug_candidate_fallbacks_p2a_20260721.yaml"
+  # P2-B separates expression/amplification/ligand events from ordinary SNVs;
+  # the ESR1 row is explicitly scoped to CRC301.
+  - "panels/crc_358_msi/rules/reviewed_part3_drug_candidate_fallbacks_p2b_20260721.yaml"
+  # P2-C prevents somatic single variants from implying germline status,
+  # biallelic loss, HRD, or a hematologic treatment context.
+  - "panels/crc_358_msi/rules/reviewed_part3_drug_candidate_fallbacks_p2c_20260721.yaml"
+  # P3-A shares DNA-repair/hereditary boundaries and the exact legacy
+  # corrections with CRC358; neither layer creates a drug match.
+  - "panels/crc_358_msi/rules/reviewed_part3_p3a_dna_hereditary_fallbacks_20260721.yaml"
+  - "panels/crc_358_msi/rules/reviewed_part3_p3a_legacy_exact_corrections_20260721.yaml"
+  # P3-B shares antigen-presentation, IFN-γ receptor, and PD-L2 boundaries;
+  # ordinary sequence variants are not predictive immune biomarkers.
+  - "panels/crc_358_msi/rules/reviewed_part3_p3b_immune_fallbacks_20260721.yaml"
+  # P3-C shares chromatin, histone, cohesin, transcription, and splicing
+  # boundaries without turning ordinary variants into fusion/hotspot evidence.
+  - "panels/crc_358_msi/rules/reviewed_part3_p3c_chromatin_transcription_fallbacks_20260721.yaml"
+  # Shared exact corrections remove cross-event/cross-context legacy prose for
+  # DEK, EP400, JUN, and ZRSR2 while retaining exact-selector precedence.
+  - "panels/crc_358_msi/rules/reviewed_part3_p3c_legacy_exact_corrections_20260721.yaml"
+  # P3-D maps 23 legacy histone symbols to current NCBI identities and prevents
+  # hotspot/PTM evidence from crossing near-identical histone gene copies.
+  - "panels/crc_358_msi/rules/reviewed_part3_p3d_histone_fallbacks_20260721.yaml"
+  # P3-E closes the 47 shared residual fallbacks after current-identity review;
+  # LBP1B and ZNF278 retain historical keys but map to UBP1 and PATZ1.
+  - "panels/crc_358_msi/rules/reviewed_part3_p3e_shared_residual_fallbacks_20260721.yaml"
+  # Shared exact corrections remove static database counts, cross-event prose,
+  # and domain-location-only inference for seven legacy variant rows.
+  - "panels/crc_358_msi/rules/reviewed_part3_p3e_legacy_exact_corrections_20260721.yaml"
+  # CRC301 inherits a reviewed subset of CRC358 targeted-drug rules. Load the
+  # same evidence-bound Part-3 contracts so inherited Part 2 rows cannot lose
+  # their exact analysis or silently fall back to an unrelated variant.
+  - "panels/crc_358_msi/rules/reviewed_part3_drug_contracts_20260721.yaml"
 
 input_contract:
   required_tables:

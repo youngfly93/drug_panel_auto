@@ -1,0 +1,227 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    P2-C first-review gene-level fallbacks for tumor-suppressor, DNA-repair,
+    hereditary-risk, epigenetic, and hematologic-context genes represented in the
+    base targeted-drug candidate database.
+  source_type: official_gene_function_plus_crc_reporting_guideline
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_drug_candidate_gene_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    A single tumor variant does not establish germline status, biallelic loss,
+    pathway deficiency, a hereditary syndrome, or a drug biomarker. These rows
+    contain no drug sections and exact reviewed rules retain precedence.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p2c_drug_candidate_gene_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_gene_function_and_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_function_plus_conservative_variant_boundary
+      cancer_scope: colorectal_cancer_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: BCOR
+    panels: [crc_358_msi]
+    mutation_analysis: >-
+      BCOR编码可与BCL6及部分组蛋白去乙酰化酶相互作用的转录共抑制蛋白。BCOR明确截短或功能缺失事件、表达或表观遗传改变与普通错义变异具有不同证据边界；结直肠癌未收录位点不得套用血液系统或其他肿瘤中的分型、预后和药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-54880
+        url: https://www.ncbi.nlm.nih.gov/gene/54880
+
+  - gene: CBL
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CBL编码RING指E3泛素连接酶，可识别多种酪氨酸磷酸化底物并参与蛋白降解，从而负向调控多条信号通路。CBL易位、明确功能缺失或激活性事件与普通单核苷酸变异不能等同；结直肠癌未收录位点不得套用急性髓系白血病或其他疾病中的机制及用药证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-867
+        url: https://www.ncbi.nlm.nih.gov/gene/867
+
+  - gene: CDH1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CDH1编码钙依赖性细胞间黏附蛋白E-cadherin，功能缺失可影响细胞黏附并促进侵袭相关表型。明确双等位失活或蛋白缺失与普通错义变异不能等同；肿瘤样本中的单个位点也不能自动证明胚系来源或遗传性肿瘤综合征，需结合配对正常样本、家族史和遗传咨询流程。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-999
+        url: https://www.ncbi.nlm.nih.gov/gene/999
+
+  - gene: CDK12
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CDK12编码可与cyclin K形成复合物并调控RNA聚合酶II转录延伸的激酶。经验证的双等位功能缺失、杂合截短与普通错义变异的功能后果不可互换；结直肠癌单个位点不能独立证明同源重组修复缺陷，也不得直接推导PARP抑制剂或其他DNA损伤药物获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-51755
+        url: https://www.ncbi.nlm.nih.gov/gene/51755
+
+  - gene: CDKN2A
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CDKN2A通过不同转录本编码参与CDK4和p53相关细胞周期调控的蛋白，是多种肿瘤中常见的抑癌基因。纯合缺失、明确功能缺失、不同转录本受影响范围与普通错义变异不能等同；单个肿瘤位点也不能自动确定胚系状态或CDK4/6抑制剂敏感性。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-1029
+        url: https://www.ncbi.nlm.nih.gov/gene/1029
+
+  - gene: CHEK1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CHEK1编码DNA损伤或未复制DNA应答中的检查点丝氨酸/苏氨酸激酶，可整合ATM/ATR相关信号并延缓细胞周期进展。检查点通路活化、蛋白表达与具体功能性变异不是同一事件；未收录的普通错义变异不能证明CHEK1依赖，也不得直接生成检查点抑制剂结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-1111
+        url: https://www.ncbi.nlm.nih.gov/gene/1111
+
+  - gene: CHEK2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CHEK2编码DNA损伤应答中的细胞周期检查点激酶，可参与p53、BRCA1等相关信号调控。肿瘤体细胞单个位点不能自动证明胚系易感、双等位失活或同源重组修复缺陷；未收录位点需结合变异分级、合子状态、配对正常样本和功能证据，不能直接推导药物获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-11200
+        url: https://www.ncbi.nlm.nih.gov/gene/11200
+
+  - gene: EZH2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      EZH2编码Polycomb抑制复合物2相关蛋白，参与维持染色质转录抑制状态。EZH2表达升高、特定位点的功能获得、功能缺失或剪接异常具有不同机制和癌种边界；结直肠癌未收录位点不得由表达研究或其他肿瘤热点直接推导EZH2抑制剂获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2146
+        url: https://www.ncbi.nlm.nih.gov/gene/2146
+
+  - gene: FANCC
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FANCC编码Fanconi贫血DNA修复复合物成员；Fanconi贫血是具有染色体不稳定和DNA交联损伤修复缺陷的隐性遗传病。肿瘤中的单个FANCC变异不能自动证明胚系来源、双等位失活或Fanconi通路缺陷，也不得仅凭基因名称推导铂类或PARP抑制剂敏感性。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2176
+        url: https://www.ncbi.nlm.nih.gov/gene/2176
+
+  - gene: FANCL
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FANCL编码Fanconi贫血复合物中的泛素连接酶，可介导FANCD2和FANCI单泛素化并参与DNA交联损伤修复。肿瘤单个位点不能自动证明胚系状态、双等位功能缺失或完整通路缺陷；未收录位点不得直接推导铂类、PARP抑制剂或其他DNA损伤药物获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-55120
+        url: https://www.ncbi.nlm.nih.gov/gene/55120
+
+  - gene: FLCN
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FLCN编码folliculin，胚系致病变异与Birt-Hogg-Dubé综合征相关。肿瘤样本中的单个FLCN位点不能自动证明胚系来源、双等位失活或该综合征诊断；明确截短或缺失与普通错义变异也不能等同，未命中精确审核规则时不得生成mTOR通路药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-201163
+        url: https://www.ncbi.nlm.nih.gov/gene/201163
+
+  - gene: GNA11
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      GNA11编码异源三聚体G蛋白α11亚基，参与跨膜受体信号转导。经验证的激活热点与普通错义变异具有不同功能，适用癌种也不能互换；结直肠癌未收录位点不得套用黑色素细胞来源肿瘤或其他疾病中的通路和药物证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2767
+        url: https://www.ncbi.nlm.nih.gov/gene/2767
+
+  - gene: GNAQ
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      GNAQ编码Gq类异源三聚体G蛋白α亚基，可连接七次跨膜受体与磷脂酶C-β信号。经验证的激活热点与普通单核苷酸变异不能等同，且其他癌种证据不可直接迁移；结直肠癌未收录位点不得自动形成MAPK通路或靶向药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2776
+        url: https://www.ncbi.nlm.nih.gov/gene/2776
+
+  - gene: MYD88
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      MYD88编码白细胞介素1和Toll样受体信号中的胞质衔接蛋白，参与先天及适应性免疫信号传导。血液系统肿瘤中的特定激活性位点与截短、普通错义变异具有不同机制；结直肠癌未收录位点不得套用淋巴系统肿瘤分型或BTK通路治疗证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4615
+        url: https://www.ncbi.nlm.nih.gov/gene/4615
+
+  - gene: NF2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      NF2编码merlin抑癌蛋白，参与接触依赖性生长抑制、细胞黏附和膜相关信号调控。明确双等位功能缺失与普通错义变异不可互换；肿瘤样本中的单个位点不能自动证明胚系神经纤维瘤病2型，也不得直接生成Hippo通路或其他靶向药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4771
+        url: https://www.ncbi.nlm.nih.gov/gene/4771
+
+  - gene: NOTCH2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      NOTCH2编码参与相邻细胞间信号和细胞命运调控的Notch家族跨膜受体。NOTCH2不同结构域的激活性与功能缺失事件可能具有相反后果，普通错义变异不能仅按基因名称分类；结直肠癌未收录位点不得由其他疾病或癌种的NOTCH2证据直接推导治疗结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4853
+        url: https://www.ncbi.nlm.nih.gov/gene/4853
+
+  - gene: NPM1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      NPM1编码在核仁、细胞核和胞质间穿梭的磷蛋白，参与中心体复制、蛋白伴侣作用和细胞增殖。急性髓系白血病相关NPM1事件与结直肠癌普通序列变异不是同一疾病语境；未收录位点不得套用血液肿瘤分型、预后或治疗证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4869
+        url: https://www.ncbi.nlm.nih.gov/gene/4869
+
+  - gene: RAD51B
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      RAD51B编码RAD51旁系同源蛋白并参与同源重组DNA修复，可与RAD51C等蛋白形成复合物。通路成员身份或单个未收录位点不能自动证明双等位失活、同源重组修复缺陷或HRD表型；普通错义变异不得直接生成PARP抑制剂或铂类获益结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5890
+        url: https://www.ncbi.nlm.nih.gov/gene/5890
+
+  - gene: RAD54L
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      RAD54L编码参与同源重组和DNA双链断裂修复的DNA依赖性马达蛋白。明确双等位或功能缺失事件与普通错义变异不能等同；单个未收录位点不足以证明HRD或药物敏感，不能仅因属于DNA修复基因而推导PARP抑制剂、铂类或其他用药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8438
+        url: https://www.ncbi.nlm.nih.gov/gene/8438
+
+  - gene: RB1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      RB1编码细胞周期负调控和染色质稳定相关抑癌蛋白，其低磷酸化状态可结合E2F1。明确双等位失活、纯合缺失或蛋白缺失与普通错义变异不能等同；肿瘤单个位点也不能自动证明胚系视网膜母细胞瘤易感或预测细胞周期靶向药物反应。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5925
+        url: https://www.ncbi.nlm.nih.gov/gene/5925
+
+  - gene: TERT
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      TERT编码端粒酶逆转录酶，与端粒酶RNA组分共同维持端粒末端；体细胞中端粒酶表达失调可参与肿瘤发生。启动子热点、拷贝数或表达改变与编码区普通序列变异属于不同事件；结直肠癌未收录位点不得直接生成端粒酶靶向、预后或遗传易感结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7015
+        url: https://www.ncbi.nlm.nih.gov/gene/7015
+
+drug_sections: []

@@ -70,7 +70,7 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
                 "panel_id": "crc_301_msi",
                 "kind": "gene",
                 "layer": "reviewed_overlay",
-                "page_size": 2,
+                "page_size": 10,
             },
         )
         coverage_response = client.get(
@@ -105,8 +105,8 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
 
     assert entries_response.status_code == 200
     entries = entries_response.json()["data"]
-    assert entries["total"] == 340
-    assert len(entries["rows"]) == 2
+    assert entries["total"] == 797
+    assert len(entries["rows"]) == 10
     assert all(row["layer"] == "reviewed_overlay" for row in entries["rows"])
     assert {row["provenance"]["origin_panel_id"] for row in entries["rows"]} == {
         "crc_301_msi",
@@ -137,7 +137,7 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
 
     assert provisional_response.status_code == 200
     provisional = provisional_response.json()["data"]
-    assert provisional["total"] == 16
+    assert provisional["total"] == 616
     assert all(
         row["review"]["runtime_eligible"] is True
         and row["provenance"]["source_refs"]

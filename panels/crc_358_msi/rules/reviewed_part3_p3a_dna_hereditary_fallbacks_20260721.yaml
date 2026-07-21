@@ -1,0 +1,274 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    P3-A first-review gene-level fallbacks for DNA-repair, chromatin-instability,
+    telomere, metabolic, and hereditary-risk genes shared by both CRC panels.
+  source_type: official_gene_function_plus_somatic_reporting_guidelines
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_dna_repair_and_hereditary_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    A tumor-only single variant does not establish germline origin, biallelic loss,
+    a hereditary syndrome, MMR or HRD phenotype, or drug sensitivity. Exact reviewed
+    corrections retain precedence and this overlay contains no drug sections.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p3a_dna_hereditary_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_gene_function_and_somatic_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_function_plus_conservative_somatic_boundary
+      cancer_scope: colorectal_cancer_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://educate.amp.org/local/catalog/view/product.php?productid=135
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: ATRX
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      ATRX编码含ATP酶/解旋酶结构域的SWI/SNF家族染色质重塑蛋白，参与染色质、DNA甲基化及染色体稳定性调控。明确蛋白缺失、功能缺失和替代性端粒延长表型与普通错义变异不能等同；肿瘤单个位点也不能证明胚系ATRX综合征或自动推导PARP等药物敏感性。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-546
+        url: https://www.ncbi.nlm.nih.gov/gene/546
+
+  - gene: BLM
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      BLM编码参与Holliday连接等DNA结构解旋和基因组稳定性维持的RecQ样解旋酶；双等位胚系致病变异可导致隐性遗传的Bloom综合征。肿瘤中的单个BLM位点不能自动证明胚系来源、双等位功能缺失或同源重组缺陷，也不得直接生成药物获益结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-641
+        url: https://www.ncbi.nlm.nih.gov/gene/641
+
+  - gene: BMPR1A
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      BMPR1A编码BMP/TGF-β超家族相关的I型跨膜丝氨酸/苏氨酸激酶受体，需要与相应II型受体形成复合物传递信号。明确功能缺失、拷贝数缺失与普通错义变异不能等同；肿瘤单个位点不足以诊断遗传性息肉病或直接形成治疗结论，需结合胚系检测和临床遗传评估。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-657
+        url: https://www.ncbi.nlm.nih.gov/gene/657
+
+  - gene: FAM175A
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FAM175A现行官方符号为ABRAXAS1，编码BRCA1-A复合物成员，可招募相关蛋白参与DNA损伤抵抗、修复和细胞周期检查点。单个未收录位点不能证明BRCA1-A复合物失活、HRD或遗传易感，也不得据此直接推导PARP抑制剂或铂类获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-84142
+        url: https://www.ncbi.nlm.nih.gov/gene/84142
+
+  - gene: FANCE
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FANCE编码Fanconi贫血DNA修复复合物成员；Fanconi贫血属于具有染色体不稳定和DNA交联损伤修复缺陷的隐性遗传病。肿瘤单个位点不能自动证明胚系来源、双等位失活或完整Fanconi通路缺陷，也不得直接推导铂类或PARP抑制剂敏感性。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2178
+        url: https://www.ncbi.nlm.nih.gov/gene/2178
+
+  - gene: FANCF
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FANCF编码Fanconi贫血DNA修复复合物成员，各FANC蛋白通过共同复合物参与DNA交联损伤应答。明确双等位功能缺失与普通错义变异不能等同；肿瘤单个位点不足以诊断Fanconi贫血、HRD或药物敏感，需结合合子状态、功能和癌种证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2188
+        url: https://www.ncbi.nlm.nih.gov/gene/2188
+
+  - gene: FANCG
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FANCG编码Fanconi贫血DNA修复复合物成员，参与维持染色体稳定和DNA交联损伤修复。肿瘤中检出的单个FANCG变异不能自动证明胚系来源、双等位失活或Fanconi通路缺陷；普通未收录位点不得直接生成铂类、PARP抑制剂或免疫治疗结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2189
+        url: https://www.ncbi.nlm.nih.gov/gene/2189
+
+  - gene: FANCI
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FANCI编码Fanconi贫血DNA修复通路成员并参与DNA损伤应答。FANCI明确功能缺失与普通错义变异具有不同后果；肿瘤单个位点不能自动证明胚系Fanconi贫血、双等位通路失活、HRD或PARP抑制剂及免疫治疗获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-55215
+        url: https://www.ncbi.nlm.nih.gov/gene/55215
+
+  - gene: FH
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FH编码三羧酸循环中的延胡索酸水合酶，催化延胡索酸生成L-苹果酸。肿瘤单个位点不能自动证明胚系来源、双等位FH失活、代谢物积聚或FH缺陷型肿瘤表型；普通错义变异也不得直接用于遗传综合征诊断或药物选择。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2271
+        url: https://www.ncbi.nlm.nih.gov/gene/2271
+
+  - gene: GALNT12
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      GALNT12编码参与O-连接糖基化起始步骤的多肽N-乙酰半乳糖胺转移酶，已有研究将部分变异与结直肠癌易感性相关联。易感性证据具有位点和胚系语境依赖性；肿瘤单个未收录位点不能证明胚系致病性、遗传性结直肠癌或治疗意义。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-79695
+        url: https://www.ncbi.nlm.nih.gov/gene/79695
+
+  - gene: HNF1A
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      HNF1A编码调控多种肝脏相关基因表达的转录因子，胚系缺陷与特定糖尿病和肝腺瘤语境相关。结直肠肿瘤中的单个位点不能自动证明胚系疾病、肝脏肿瘤机制或结直肠癌驱动作用；未收录位点不得直接形成治疗或遗传咨询结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-6927
+        url: https://www.ncbi.nlm.nih.gov/gene/6927
+
+  - gene: HOXB13
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      HOXB13编码参与胚胎发育和组织分化的同源盒转录因子。其他组织或癌种中的胚系易感、甲基化和表达研究不能替代结直肠癌具体序列变异证据；肿瘤单个位点不能自动证明遗传易感、抑癌功能缺失或治疗意义。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-10481
+        url: https://www.ncbi.nlm.nih.gov/gene/10481
+
+  - gene: MRE11A
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      MRE11A现行官方符号为MRE11，编码参与同源重组、端粒维持和DNA双链断裂修复的核酸酶，并与RAD50等形成修复复合物。单个未收录位点不能证明整个复合物失活、HRD或双等位缺陷，也不得直接推导PARP抑制剂、铂类或放疗敏感性。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4361
+        url: https://www.ncbi.nlm.nih.gov/gene/4361
+
+  - gene: MSH3
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      MSH3编码可与MSH2形成MutSβ复合物的错配修复蛋白，参与识别并启动部分DNA错配修复。肿瘤单个MSH3位点不能自动证明错配修复缺陷、MSI-H、双等位失活或Lynch综合征；免疫治疗判断应以经验证的MSI/MMR结果和独立临床规则为准。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4437
+        url: https://www.ncbi.nlm.nih.gov/gene/4437
+
+  - gene: NBN
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      NBN编码MRE11-RAD50双链断裂修复复合物成员nibrin，双等位胚系致病变异可导致隐性染色体不稳定综合征。肿瘤单个位点不能自动证明胚系来源、双等位失活或HRD，也不得仅凭基因名称推导PARP抑制剂、铂类或其他DNA损伤药物获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4683
+        url: https://www.ncbi.nlm.nih.gov/gene/4683
+
+  - gene: PMS1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      PMS1编码MutL/HexB家族错配修复相关蛋白，并可与MLH1形成异源二聚体。PMS1单个肿瘤位点不足以诊断Lynch综合征或错配修复缺陷，也不能替代MLH1、MSH2、MSH6、PMS2免疫组化及MSI检测；未收录位点不得直接推导免疫治疗获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5378
+        url: https://www.ncbi.nlm.nih.gov/gene/5378
+
+  - gene: POLD1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      POLD1编码DNA聚合酶δ催化亚基，具有聚合酶和3'至5'外切酶活性并参与DNA复制与修复。经验证的校对外切酶结构域致病变异与其他位置的普通变异不能等同；肿瘤单个位点不能自动证明胚系聚合酶校对相关易感、高突变表型或免疫治疗获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5424
+        url: https://www.ncbi.nlm.nih.gov/gene/5424
+
+  - gene: RAD51
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      RAD51编码参与DNA同源配对和链交换的重组酶，并与RPA、RAD52、BRCA1和BRCA2等修复蛋白相互作用。通路成员身份或单个未收录位点不能证明双等位失活或HRD；普通变异不得直接生成PARP抑制剂、铂类或其他DNA损伤药物获益结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5888
+        url: https://www.ncbi.nlm.nih.gov/gene/5888
+
+  - gene: RAD52
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      RAD52编码可结合单链DNA末端、促进互补链退火并参与RAD51相关同源重组修复的蛋白。单个未收录位点不能自动证明RAD52功能缺失、HRD或合成致死关系；不得仅因属于DNA修复基因而生成PARP抑制剂或其他药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5893
+        url: https://www.ncbi.nlm.nih.gov/gene/5893
+
+  - gene: RAD54B
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      RAD54B编码具有DNA依赖ATP酶活性的DEAD样解旋酶家族蛋白，参与同源重组和DNA修复。明确双等位或功能缺失事件与普通错义变异不能等同；肿瘤单个位点不足以证明HRD、遗传易感或PARP抑制剂及铂类敏感性。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-25788
+        url: https://www.ncbi.nlm.nih.gov/gene/25788
+
+  - gene: RECQL4
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      RECQL4编码RecQ家族DNA解旋酶，双等位胚系致病变异可见于Rothmund-Thomson、RAPADILINO等隐性遗传综合征。肿瘤单个位点不能自动证明胚系来源、双等位功能缺失或综合征诊断，也不得直接推导DNA损伤药物敏感性。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-9401
+        url: https://www.ncbi.nlm.nih.gov/gene/9401
+
+  - gene: SDHC
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      SDHC编码线粒体琥珀酸脱氢酶复合物II的膜锚定亚基，参与三羧酸循环和呼吸链。肿瘤单个位点不能自动证明胚系副神经节瘤易感、双等位失活或SDH缺陷型肿瘤表型；需结合合子状态、蛋白或代谢证据及相应临床语境解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-6391
+        url: https://www.ncbi.nlm.nih.gov/gene/6391
+
+  - gene: TERC
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      TERC编码端粒酶RNA模板组分，与逆转录酶蛋白共同维持端粒末端。胚系致病变异可见于部分端粒生物学疾病，但肿瘤单个位点不能自动证明胚系来源、端粒功能缺陷或遗传综合征；也不得直接生成端粒酶靶向或预后结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7012
+        url: https://www.ncbi.nlm.nih.gov/gene/7012
+
+  - gene: TMEM127
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      TMEM127编码定位于内体、Golgi体和溶酶体相关膜结构的跨膜蛋白，部分胚系变异与嗜铬细胞瘤相关。结直肠肿瘤中的单个位点不能自动证明胚系来源、相应遗传易感或驱动作用；未收录位点不得直接形成治疗结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-55654
+        url: https://www.ncbi.nlm.nih.gov/gene/55654
+
+  - gene: TP53BP1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      TP53BP1编码DNA双链断裂修复通路选择和损伤检查点中的支架蛋白，可促进非同源末端连接并限制末端切除。单个未收录位点不能证明修复通路重编程、HRD或PARP抑制剂敏感与耐药；需结合变异功能、双等位状态和直接证据解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7158
+        url: https://www.ncbi.nlm.nih.gov/gene/7158
+
+  - gene: XRCC2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      XRCC2编码RecA/RAD51相关蛋白家族成员，参与同源重组修复DNA双链断裂并维持染色体稳定。通路成员身份或单个未收录位点不能证明双等位功能缺失、HRD或遗传易感；不得直接推导PARP抑制剂、铂类或其他DNA损伤药物获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7516
+        url: https://www.ncbi.nlm.nih.gov/gene/7516
+
+drug_sections: []

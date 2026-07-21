@@ -1,0 +1,108 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    Governed corrections for seven legacy exact-variant narratives among the
+    P3-E shared residual genes. Static COSMIC counts, expression observations,
+    other-tumor contexts, and domain location are not treated as proof of the
+    detected variant's function or clinical significance.
+  source_type: reviewed_knowledge_correction_overlay
+  source_id: crc_p3e_legacy_exact_corrections_20260721
+  created_at: "2026-07-21"
+  privacy: No patient or sample identifiers are stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p3e_legacy_exact_correction_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_correction_of_legacy_database_count_or_cross_event_prose
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: exact_variant_not_clinically_established_conservative_interpretation
+      cancer_scope: colorectal_cancer_exact_variant_conservative_correction
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: CARD11
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2059G>A
+    p_hgvs: p.A687T
+    mutation_analysis: >-
+      CARD11 p.A687T为错义变异；当前缺少足够的位点级功能实验和结直肠癌临床证据确定其激活或失活作用。CARD11在淋巴细胞受体-NF-κB信号中的功能，以及淋巴系统肿瘤中的其他位点，不能证明本位点在结直肠癌中的驱动性或治疗意义。
+    supersedes: legacy_card11_p_a687t_pathway_role_without_direct_variant_evidence
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-84433, url: https://www.ncbi.nlm.nih.gov/gene/84433}
+
+  - gene: CDH11
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.1460A>C
+    p_hgvs: p.K487T
+    mutation_analysis: >-
+      CDH11 p.K487T为错义变异；当前缺少足够的位点级黏附功能和结直肠癌临床证据确定其影响。静态数据库收录次数、结构域边界和其他肿瘤中的CDH11表达或迁移研究均不能证明本位点具有驱动性或治疗意义。
+    supersedes: legacy_cdh11_p_k487t_static_cosmic_count_and_other_cancer_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-1009, url: https://www.ncbi.nlm.nih.gov/gene/1009}
+
+  - gene: MDM4
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.1127C>T
+    p_hgvs: p.A376V
+    mutation_analysis: >-
+      MDM4 p.A376V为错义变异；当前缺少足够的位点级功能实验和结直肠癌临床证据确定其对p53调控的影响。静态数据库收录次数及MDM4扩增、过表达或剪接异常证据不能替代本位点证据，也不得据此形成治疗结论。
+    supersedes: legacy_mdm4_p_a376v_static_cosmic_count_and_copy_expression_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4194, url: https://www.ncbi.nlm.nih.gov/gene/4194}
+
+  - gene: RAD21
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.395A>G
+    p_hgvs: p.Q132R
+    mutation_analysis: >-
+      RAD21 p.Q132R为错义变异；当前缺少足够的位点级cohesin复合体功能和结直肠癌临床证据确定其影响。是否位于已注释结构区域不能单独证明功能正常或受损，本位点也不能由RAD21截短、拷贝数或胚系cohesin疾病证据推导DNA修复缺陷或治疗敏感性。
+    supersedes: legacy_rad21_p_q132r_static_database_and_domain_only_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5885, url: https://www.ncbi.nlm.nih.gov/gene/5885}
+
+  - gene: SYK
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.851G>T
+    p_hgvs: p.W284L
+    mutation_analysis: >-
+      SYK p.W284L为错义变异；当前缺少足够的位点级激酶/衔接功能和结直肠癌临床证据确定其影响。结构域外定位和数据库未收录均不能证明良性或致病，血液肿瘤中的SYK表达、磷酸化或融合证据也不能形成该位点的治疗结论。
+    supersedes: legacy_syk_p_w284l_database_absence_and_domain_only_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6850, url: https://www.ncbi.nlm.nih.gov/gene/6850}
+
+  - gene: TEK
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.1149G>T
+    p_hgvs: p.M383I
+    mutation_analysis: >-
+      TEK p.M383I为胞外区域错义变异；当前缺少足够的位点级受体功能和结直肠癌临床证据确定其影响。位于免疫球蛋白样区域不能证明功能受损，血管畸形中的特定TEK激活位点及肿瘤血管表达证据也不能外推为本位点的驱动或治疗意义。
+    supersedes: legacy_tek_p_m383i_domain_location_to_function_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7010, url: https://www.ncbi.nlm.nih.gov/gene/7010}
+
+  - gene: TSHR
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.1116C>A
+    p_hgvs: p.N372K
+    mutation_analysis: >-
+      TSHR p.N372K为错义变异；当前缺少足够的位点级受体功能和结直肠癌临床证据确定其影响。结构域外定位不能证明无功能影响，甲状腺疾病中的特定激活/失活位点及其他肿瘤中的TSHR表达观察也不能证明本位点具有驱动性或治疗意义。
+    supersedes: legacy_tshr_p_n372k_other_cancer_expression_and_domain_only_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7253, url: https://www.ncbi.nlm.nih.gov/gene/7253}
+
+drug_sections: []

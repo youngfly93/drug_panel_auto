@@ -1,0 +1,62 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: >-
+    Governed corrections for the two legacy exact-variant narratives among
+    P3-F3 lineage/transcription genes. Domain position, database absence,
+    expression studies, developmental disease, other-cancer cohorts, and
+    hematologic-lineage evidence are not treated as proof of the detected CRC
+    variant.
+  source_type: reviewed_knowledge_correction_overlay
+  source_id: crc358_p3f3_legacy_exact_corrections_20260721
+  created_at: "2026-07-21"
+  privacy: No patient or sample identifiers are stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_p3f3_legacy_exact_correction_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_correction_of_legacy_domain_expression_developmental_or_cross_tumor_prose
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: exact_variant_not_clinically_established_conservative_interpretation
+      cancer_scope: colorectal_cancer_crc358_only_exact_variant_conservative_correction
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: RUNX2
+    panels: [crc_358_msi]
+    c_hgvs: c.211_213del
+    p_hgvs: p.Q71del
+    mutation_analysis: >-
+      RUNX2 p.Q71del为框内单个氨基酸缺失；当前缺少足够的位点级DNA结合、转录功能和结直肠癌临床证据确定其影响。静态数据库未收录或位于预测卷曲螺旋区域不能单独判定功能；肺癌中的表达/凋亡研究和肾癌中的表达/侵袭研究也不能证明本位点具有相同表型、驱动性或治疗意义。
+    supersedes: legacy_runx2_p_q71del_database_domain_and_cross_tumor_expression_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-860, url: https://www.ncbi.nlm.nih.gov/gene/860}
+      - {type: pubmed, id: PMID-36510562, url: https://pubmed.ncbi.nlm.nih.gov/36510562/}
+      - {type: pubmed, id: PMID-36328501, url: https://pubmed.ncbi.nlm.nih.gov/36328501/}
+
+  - gene: TCF12
+    panels: [crc_358_msi]
+    c_hgvs: c.572C>T
+    p_hgvs: p.P191L
+    mutation_analysis: >-
+      TCF12 p.P191L为错义变异；当前缺少足够的位点级DNA结合、二聚、转录功能和结直肠癌临床证据确定其影响。该位点位于主要bHLH区域之外并不能证明无功能影响；CRC中的TCF12过表达/转移相关观察，以及少突胶质瘤中的bHLH区或截短变异，均不能替代本位点证据或形成治疗结论。
+    supersedes: legacy_tcf12_p_p191l_database_domain_crc_expression_and_oligodendroglioma_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6938, url: https://www.ncbi.nlm.nih.gov/gene/6938}
+      - {type: pubmed, id: PMID-22130667, url: https://pubmed.ncbi.nlm.nih.gov/22130667/}
+      - {type: pubmed, id: PMID-26068201, url: https://pubmed.ncbi.nlm.nih.gov/26068201/}
+
+drug_sections: []

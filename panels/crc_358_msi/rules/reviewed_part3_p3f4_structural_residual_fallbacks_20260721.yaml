@@ -1,0 +1,184 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: >-
+    P3-F4 first-review fallbacks for the final 11 CRC358-only structural,
+    adhesion, trafficking, digestive, mucin, contractile, and large-scaffold
+    genes remaining after P3-F3.
+  source_type: official_gene_identity_plus_conservative_structural_event_boundary
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_crc358_only_structural_residual_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    An ordinary colorectal-cancer sequence variant does not establish a repeat
+    expansion, fusion or rearrangement, copy-number or expression state,
+    glycosylation or antigen state, germline syndrome, lineage-specific
+    disease, protein loss, or treatment response. Evidence is not transferred
+    between paralogs, family members, interaction partners, homologous
+    digestive enzymes, or highly similar loci.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_p3f4_structural_residual_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_identity_and_structural_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_identity_plus_conservative_event_boundary
+      cancer_scope: colorectal_cancer_crc358_only_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+
+symbol_identity_map:
+  - {panel_symbol: ATXN2, current_symbol: ATXN2, ncbi_gene_id: 6311}
+  - {panel_symbol: CLTCL1, current_symbol: CLTCL1, ncbi_gene_id: 8218}
+  - {panel_symbol: DNM2, current_symbol: DNM2, ncbi_gene_id: 1785}
+  - {panel_symbol: FAT3, current_symbol: FAT3, ncbi_gene_id: 120114}
+  - {panel_symbol: MAGI2, current_symbol: MAGI2, ncbi_gene_id: 9863}
+  - {panel_symbol: MGAM, current_symbol: MGAM, ncbi_gene_id: 8972}
+  - {panel_symbol: MUC1, current_symbol: MUC1, ncbi_gene_id: 4582}
+  - {panel_symbol: MYH11, current_symbol: MYH11, ncbi_gene_id: 4629}
+  - {panel_symbol: PCLO, current_symbol: PCLO, ncbi_gene_id: 27445}
+  - {panel_symbol: PDE4DIP, current_symbol: PDE4DIP, ncbi_gene_id: 9659}
+  - {panel_symbol: PRSS1, current_symbol: PRSS1, ncbi_gene_id: 5644}
+
+gene_sections:
+  - gene: ATXN2
+    panels: [crc_358_msi]
+    intro: >-
+      ATXN2编码细胞质蛋白ataxin-2，含多聚谷氨酰胺重复区和RNA/蛋白相互作用相关区域，参与内吞、RNA颗粒、翻译及细胞应激调控。
+    mutation_analysis: >-
+      ATXN2的CAG/多聚谷氨酰胺重复扩增属于需要专门检测和解释的胚系神经退行性疾病事件，与肿瘤测序中的普通SNV或小片段插入缺失不同。内吞、翻译或应激通路功能，以及神经系统重复扩增证据，均不能证明当前CRC位点具有驱动、预后或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_atxn2_generic_tumor_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6311, url: https://www.ncbi.nlm.nih.gov/gene/6311}
+
+  - gene: CLTCL1
+    panels: [crc_358_msi]
+    intro: >-
+      CLTCL1编码clathrin heavy chain-like 1（CHC22），属于网格蛋白重链家族，参与包被小窝和囊泡形成及细胞内膜运输。
+    mutation_analysis: >-
+      CLTCL1相关染色体异常、拷贝数或膜运输表型与普通编码区SNV/小indel不是同一事件；CLTC及其他网格蛋白家族成员的功能或肿瘤证据也不能跨基因迁移。当前CRC位点需直接功能和临床证据，不能仅凭囊泡运输作用判定驱动性或治疗价值。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_cltcl1_generic_tumor_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-8218, url: https://www.ncbi.nlm.nih.gov/gene/8218}
+
+  - gene: DNM2
+    panels: [crc_358_msi]
+    intro: >-
+      DNM2编码dynamin家族大GTP酶，参与膜重塑、内吞、细胞骨架相互作用和细胞运动，并可通过自组装调节GTP酶活性。
+    mutation_analysis: >-
+      DNM2胚系变异相关神经肌肉疾病、表达或膜运输表型与结直肠肿瘤中的普通体细胞位点需要分别解释；DNM1、DNM3等家族成员证据也不能替代DNM2位点证据。未知CRC位点不能仅凭GTP酶结构域或内吞功能推导致病性、驱动性或用药反应。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_dnm2_generic_tumor_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-1785, url: https://www.ncbi.nlm.nih.gov/gene/1785}
+
+  - gene: FAT3
+    panels: [crc_358_msi]
+    intro: >-
+      FAT3编码FAT非典型钙黏蛋白家族的大型跨膜蛋白，含多段钙黏蛋白重复及Laminin G-like、EGF-like区域，预测参与细胞间黏附和神经组织发育。
+    fixed_domain_text: >-
+      FAT3基因编码的蛋白全长为4557个氨基酸，UniProt注释的主要结构区域包括33个Cadherin结构域（分布于44-3653位氨基酸）、Laminin G-like结构域（3835-4018位氨基酸）和4个EGF-like结构域（分布于3795-4134位氨基酸）。
+    mutation_analysis: >-
+      单个FAT3错义位点、位于重复结构域或肿瘤队列中检出，均不能自动证明细胞黏附功能受损；明确截短、双等位失活、拷贝数或表达事件也需要分别评价。FAT1、FAT2、FAT4及其他癌种的基因级观察不能迁移为当前CRC位点的驱动、预后或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_fat3_pancreatic_family_narrative_and_base_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-120114, url: https://www.ncbi.nlm.nih.gov/gene/120114}
+      - {type: uniprot, id: Q8TDW7, url: https://www.uniprot.org/uniprotkb/Q8TDW7/entry}
+
+  - gene: MAGI2
+    panels: [crc_358_msi]
+    intro: >-
+      MAGI2编码含多个PDZ、WW和guanylate kinase-like区域的膜相关支架蛋白，可组织多蛋白复合物和细胞连接相关信号。
+    mutation_analysis: >-
+      MAGI2缺失、重排、融合、表达变化或特定互作网络异常与普通编码区位点不是同一事件；MAGI1、MAGI3及互作伙伴证据不能跨基因迁移。未知CRC位点需直接功能和临床证据，不能仅凭支架蛋白身份推导抑癌功能缺失或治疗敏感性。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_magi2_generic_tumor_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9863, url: https://www.ncbi.nlm.nih.gov/gene/9863}
+
+  - gene: MGAM
+    panels: [crc_358_msi]
+    intro: >-
+      MGAM编码小肠刷状缘膜上的麦芽糖酶-葡糖淀粉酶，属于糖苷水解酶31家族，参与膳食淀粉消化的末端步骤。
+    mutation_analysis: >-
+      消化酶活性、肠上皮分化或表达状态与肿瘤测序中的普通MGAM序列位点不同；与蔗糖酶-异麦芽糖酶及其他糖苷水解酶的同源性也不能替代本基因证据。当前CRC位点不能仅凭胃肠道表达或代谢功能判定肿瘤驱动、预后或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_mgam_generic_tumor_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-8972, url: https://www.ncbi.nlm.nih.gov/gene/8972}
+
+  - gene: MUC1
+    panels: [crc_358_msi]
+    intro: >-
+      MUC1编码上皮细胞表面的跨膜黏蛋白，含高度多态的串联重复区；蛋白经切割形成异二聚体并参与黏液屏障、细胞黏附和信号调控，其表达定位和糖基化状态可发生改变。
+    mutation_analysis: >-
+      MUC1串联重复拷贝数、蛋白表达、亚细胞定位、糖基化或抗原状态与普通编码区SNV/小indel不是同一检测对象。MUC1抗原相关治疗或其他MUC家族研究不能由单个序列位点自动外推；当前CRC位点需独立功能和临床证据后方可形成驱动或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_muc1_generic_tumor_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4582, url: https://www.ncbi.nlm.nih.gov/gene/4582}
+
+  - gene: MYH11
+    panels: [crc_358_msi]
+    intro: >-
+      MYH11编码平滑肌肌球蛋白重链，是平滑肌收缩装置的主要马达蛋白，通过ATP水解将化学能转化为机械能。
+    fixed_domain_text: >-
+      MYH11基因编码的蛋白全长为1972个氨基酸，UniProt注释的主要结构区域包括Myosin N-terminal SH3-like结构域（31-81位氨基酸）、Myosin motor结构域（85-783位氨基酸）和IQ结构域（786-815位氨基酸）。
+    mutation_analysis: >-
+      CBFB::MYH11相关急性髓系白血病重排，以及MYH11胚系变异相关主动脉或内脏平滑肌疾病，与CRC肿瘤组织中的普通体细胞位点不是同一事件。还需结合样本来源、变异等位基因状态和直接功能证据，不能自动推导融合、胚系疾病、肿瘤驱动或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_myh11_aortic_disease_inference_and_base_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4629, url: https://www.ncbi.nlm.nih.gov/gene/4629}
+      - {type: uniprot, id: P35749, url: https://www.uniprot.org/uniprotkb/P35749/entry}
+
+  - gene: PCLO
+    panels: [crc_358_msi]
+    intro: >-
+      PCLO编码突触前活性区细胞骨架基质蛋白Piccolo，参与突触活性区建立和突触囊泡运输，是一个含PDZ和C2等区域的大型支架蛋白。
+    mutation_analysis: >-
+      PCLO编码区较长，单个位点检出或神经系统相关表型不能证明其为结直肠癌驱动事件；结构域内外位置也不能单独确定功能影响。当前CRC位点需直接功能、复现性和癌种临床证据，不能自动形成预后或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_pclo_generic_tumor_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-27445, url: https://www.ncbi.nlm.nih.gov/gene/27445}
+
+  - gene: PDE4DIP
+    panels: [crc_358_msi]
+    intro: >-
+      PDE4DIP编码PDE4D相互作用蛋白myomegalin，可将PDE4D锚定于高尔基体/中心体区域并参与细胞器和微管相关支架组织。
+    mutation_analysis: >-
+      髓系/嗜酸粒细胞疾病中的PDE4DIP相关染色体异常，以及PDE4D酶活或抑制剂研究，与CRC中的普通PDE4DIP序列位点不是同一事件。未知位点不能仅凭相互作用伙伴、中心体定位或其他谱系证据判定驱动性或治疗敏感性。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_pde4dip_generic_tumor_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9659, url: https://www.ncbi.nlm.nih.gov/gene/9659}
+
+  - gene: PRSS1
+    panels: [crc_358_msi]
+    intro: >-
+      PRSS1编码胰腺分泌的阳离子胰蛋白酶原，在小肠中被激活为丝氨酸蛋白酶并参与蛋白质消化。
+    mutation_analysis: >-
+      PRSS1胚系致病变异相关遗传性胰腺炎，与结直肠肿瘤中的普通体细胞位点需要分开解释；蛋白酶表达/活性、PRSS2等家族成员及高度相似位点的证据也不能迁移。当前CRC位点在确认基因定位后仍需直接功能和癌种证据，不能自动形成胰腺炎、肿瘤驱动或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_prss1_generic_tumor_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5644, url: https://www.ncbi.nlm.nih.gov/gene/5644}
+
+drug_sections: []

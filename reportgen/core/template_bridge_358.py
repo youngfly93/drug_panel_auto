@@ -1658,10 +1658,16 @@ def build_immune_variants(
         special: Set[str] = set()
         for row in rows:
             mode = str(row.get("mode") or "direct").strip()
-            if mode in {"variant_pattern", "cnv_amp"}:
+            if mode in {
+                "variant_pattern",
+                "cnv_amp",
+                "confirmed_functional_loss",
+                "non_sequence_biomarker",
+            }:
                 special |= _row_genes(row)
         return special
 
+    positive_special_genes = _special_genes(panel_config.immune_positive_rows)
     negative_special_genes = _special_genes(panel_config.immune_negative_rows)
     hyper_special_genes = _special_genes(panel_config.immune_hyperprogression_rows)
 
@@ -1755,7 +1761,10 @@ def build_immune_variants(
 
         v = _prepare_immune_variant(v)
 
-        if gene in panel_config.immune_positive_genes:
+        if (
+            gene in panel_config.immune_positive_genes
+            and gene not in positive_special_genes
+        ):
             _append_unique("positive", v)
         if gene in panel_config.immune_negative_genes and gene not in negative_special_genes:
             _append_unique("negative", v)
@@ -2266,6 +2275,12 @@ def _build_nccn_and_immune_fields(
         genes = _genes_from_row(row)
         mode = str(row.get("mode") or "direct").strip() or "direct"
         if not genes:
+            return "未检出有害变异"
+
+        # These rows require evidence that is not established by an ordinary
+        # sequence-variant row.  Keep them visible in the reviewed table, but
+        # do not turn a class-I/II SNV into an immune benefit/resistance claim.
+        if mode in {"confirmed_functional_loss", "non_sequence_biomarker"}:
             return "未检出有害变异"
 
         if mode == "co_mutation":
@@ -3153,6 +3168,19 @@ def enhance_report_data(
                 )
             )
             report_data.set_table("gene_knowledge_sections", gene_knowledge_sections)
+            domain_coverage_builder = getattr(
+                gene_knowledge_provider,
+                "build_gene_domain_coverage",
+                None,
+            )
+            if (
+                str(panel_id or "").strip() == "crc_358_msi"
+                and callable(domain_coverage_builder)
+            ):
+                report_data.set_field(
+                    "gene_domain_coverage",
+                    domain_coverage_builder(gene_knowledge_sections),
+                )
             rendered_variant_keys: List[str] = []
             for index, section in enumerate(gene_knowledge_sections):
                 rendered_key = str(
@@ -3208,29 +3236,28 @@ def enhance_report_data(
                 str(panel_id or "").strip() == "crc_358_msi"
                 and callable(consistency_builder)
             ):
-                contract_checker = getattr(
-                    gene_knowledge_provider,
-                    "has_reviewed_drug_analysis_contract",
-                    None,
-                )
-                consistency_variants = drug_variants
-                consistency_sections = drug_analysis_sections
-                if callable(contract_checker):
-                    consistency_variants = [
-                        row for row in drug_variants if contract_checker(row)
-                    ]
-                    consistency_sections = [
-                        row
-                        for row in drug_analysis_sections
-                        if contract_checker(row)
-                    ]
+                # Every CRC358 Part-2 drug row is a runtime contract: a row
+                # without matching Part-3 analysis is unsafe regardless of
+                # whether its medical prose has already been migrated into a
+                # reviewed overlay.  Migration completeness is tracked
+                # separately below so legacy debt stays visible.
                 report_data.set_field(
                     "drug_analysis_consistency",
                     consistency_builder(
-                        consistency_variants,
-                        consistency_sections,
+                        drug_variants,
+                        drug_analysis_sections,
                     ),
                 )
+                contract_coverage_builder = getattr(
+                    gene_knowledge_provider,
+                    "build_drug_analysis_contract_coverage",
+                    None,
+                )
+                if callable(contract_coverage_builder):
+                    report_data.set_field(
+                        "drug_analysis_contract_coverage",
+                        contract_coverage_builder(drug_variants),
+                    )
 
             # Build references (参考文献) — follows configured Part 3 scope.
             references = gene_knowledge_provider.build_all_references_flat(

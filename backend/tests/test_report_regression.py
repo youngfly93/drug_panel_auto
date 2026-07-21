@@ -478,7 +478,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
     rule = engine.get("drugs")
     rows = rule["approved_drug_rows"]
 
-    assert rule["version"] == "0.6.0"
+    assert rule["version"] == "0.6.1"
     assert rule["status"] == "active"
     assert len(rows) == 7
     assert "瑞戈非尼" in rows[0]["drug"]
@@ -519,7 +519,7 @@ def test_crc_biomarker_rule_contains_active_immune_tables():
     rule = engine.get("biomarkers")
     tables = rule["biomarkers"]["immune_gene_tables"]
 
-    assert rule["version"] == "0.2.1"
+    assert rule["version"] == "0.3.0"
     assert rule["status"] == "active"
     assert len(tables["positive"]["genes"]) == 54
     assert len(tables["negative"]["genes"]) == 12
@@ -532,6 +532,11 @@ def test_crc_biomarker_rule_contains_active_immune_tables():
         "EGFR_L858R",
         "KRAS_STK11",
     }
+    positive_modes = {row["key"]: row["mode"] for row in tables["positive"]["rows"]}
+    negative_modes = {row["key"]: row["mode"] for row in tables["negative"]["rows"]}
+    assert positive_modes["PDCD1LG2"] == "non_sequence_biomarker"
+    assert negative_modes["B2M"] == "confirmed_functional_loss"
+    assert negative_modes["IFNGR12"] == "confirmed_functional_loss"
     assert {row["key"] for row in tables["hyperprogression"]["rows"]} >= {"EGFR_AMP"}
     assert "immune_positive_genes" not in engine.get("panel_rules")
     assert "immune_negative_genes" not in engine.get("panel_rules")
@@ -2102,7 +2107,14 @@ def test_crc301_additional_overlay_is_loaded_after_shared_crc_overlay():
         ]
     )
 
-    assert len(paths) == 2
+    relative_paths = [Path(path).relative_to(ROOT).as_posix() for path in paths]
+    assert relative_paths[:2] == [
+        "panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml",
+        "panels/crc_301_msi/rules/reviewed_part3_knowledge.yaml",
+    ]
+    assert relative_paths[-1] == (
+        "panels/crc_358_msi/rules/reviewed_part3_drug_contracts_20260721.yaml"
+    )
     assert len(sections) == 1
     assert "P-糖蛋白" in sections[0]["intro"]
     assert "任意体细胞变异不能直接解释为化疗耐药" in sections[0]["mutation_analysis"]
@@ -2148,7 +2160,10 @@ def test_provisional_runtime_gene_rows_use_first_pass_conservative_wording():
         )
         assert len(sections) == 1
         assert sections[0]["intro"] == expected[gene]["intro"]
-        assert sections[0]["mutation_analysis"] == expected[gene]["mutation_analysis"]
+        assert sections[0]["mutation_analysis"].endswith(
+            expected[gene]["mutation_analysis"]
+        )
+        assert sections[0]["mutation_analysis"].count("编码的蛋白全长") == 1
 
 
 def test_excel_reader_resolves_msi_sheet_alias_reordered_columns_and_tumor_row(tmp_path):
@@ -3242,6 +3257,22 @@ def test_panel_package_schema_rejects_missing_default_template():
 
     assert not ok
     assert any("default_template" in error for error in errors)
+
+
+def test_panel_package_schema_rejects_cyclic_gene_symbol_aliases():
+    ok, errors = validate_panel_package_config(
+        {
+            "schema_version": "1.0",
+            "panel_id": "bad_alias_panel",
+            "display_name": "Bad Alias Panel",
+            "default_template": "declared",
+            "templates": [{"id": "declared", "file": "templates/a.docx"}],
+            "gene_symbol_aliases": {"GENE_A": "GENE_B", "GENE_B": "GENE_A"},
+        }
+    )
+
+    assert not ok
+    assert any("contains a cycle" in error for error in errors)
 
 
 def test_panel_package_validator_rejects_missing_required_marker(tmp_path):

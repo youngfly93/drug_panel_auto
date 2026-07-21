@@ -1,0 +1,312 @@
+schema_version: 1
+replace_variant_drug_sections: true
+source:
+  panel: crc_358_msi
+  purpose: Exact Part-2/Part-3 drug-analysis contracts for remaining CRC358 runtime rules.
+  source_type: governed_historical_migration_plus_primary_source_review
+  source_id: crc358_part3_drug_contracts_20260721
+  created_at: "2026-07-21"
+  privacy: No patient name, sample ID, report date, or case-specific branch key is stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_exact_drug_contract_first_review_20260721
+  defaults:
+    gene:
+      review_status: needs_review
+      runtime_eligible: false
+      review_basis: drug_contract_overlay_has_no_gene_content
+      evidence_level: not_assessed
+      evidence_as_of: "2026-07-21"
+      cancer_scope: crc358
+      secondary_review_status: pending_report_group_review
+    drug:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_historical_migration_and_primary_source_boundary_check
+      evidence_level: mixed_direct_preclinical_cross_cancer_and_historical_display_contract
+      evidence_as_of: "2026-07-21"
+      cancer_scope: colorectal_report_context_with_row_specific_limits
+      secondary_review_status: pending_report_group_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_primary_source_review
+        reviewed_at: "2026-07-21"
+        risk_level: high
+        secondary_review_status: pending_report_group_review
+gene_sections:
+  - gene: SETD2
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.4930G>T
+    p_hgvs: p.G1644*
+    mutation_analysis: >-
+      SETD2基因编码的蛋白全长为2564个氨基酸，主要包含AWS结构域（第1494-1549位氨基酸）、SET结构域（第1550-1673位氨基酸）和SRI结构域（第2465-2559位氨基酸）。该样本检出的p.G1644*无义突变可导致蛋白翻译提前终止，可能造成SETD2功能缺失。细胞和异种移植模型显示H3K36me3缺失可造成对WEE1抑制剂AZD1775的合成致死敏感性[26602815]；但随后SETD2致病变异实体瘤Ⅱ期研究未观察到客观缓解，提示该临床前信号未转化为可靠的单药肿瘤退缩[38920407]。因此，本位点只能作为受限的研究线索，不能表述为已证实的结直肠癌获益标志。
+    review_status: provisional_runtime
+    runtime_eligible: true
+    review_basis: corrected_setd2_primary_source_and_completed_phase_ii_result
+    evidence_level: preclinical_positive_phase_ii_negative
+    evidence_as_of: "2026-07-21"
+    cancer_scope: pathogenic_setd2_loss_cross_cancer_not_crc_approval
+    secondary_review_status: pending_report_group_review
+    review_metadata:
+      reviewer: codex
+      reviewer_type: ai_assisted_first_pass_primary_source_review
+      reviewed_at: "2026-07-21"
+      risk_level: high
+      secondary_review_status: pending_report_group_review
+    source_refs:
+      - type: pubmed
+        id: PMID:26602815
+        url: https://pubmed.ncbi.nlm.nih.gov/26602815/
+      - type: pubmed
+        id: PMID:38920407
+        url: https://pubmed.ncbi.nlm.nih.gov/38920407/
+      - type: clinical_trial
+        id: NCT03284385
+        url: https://clinicaltrials.gov/study/NCT03284385
+drug_sections:
+  - &setd2_lof_benefit
+    gene: SETD2
+    panels: [crc_301_msi, crc_358_msi]
+    type: benefit
+    applicability: loss_of_function
+    header: SETD2功能缺失型变异相应潜在获益药物
+    drug_name: AZD1775
+    relation: >-
+      SETD2功能缺失可造成H3K36me3下降。细胞和异种移植模型显示，H3K36me3缺失与WEE1抑制剂AZD1775之间存在合成致死效应[26602815]；这一关联只适用于有依据支持功能缺失的变异，不能外推到普通错义变异，也不代表AZD1775已获批用于SETD2变异结直肠癌。
+    clinical: >-
+      NCT03284385纳入18例携带SETD2致病变异的晚期实体瘤患者评估AZD1775单药，两个队列均未观察到客观缓解，研究在第一阶段后停止入组；部分患者出现轻微肿瘤缩小或疾病稳定[38920407]。因此，历史C级显示仅保留为临床前机制和研究线索，现有临床结果不支持把SETD2功能缺失解释为已确证的AZD1775单药获益标志。
+    review_basis: primary_preclinical_signal_with_negative_phase_ii_result
+    evidence_level: preclinical_synthetic_lethality_phase_ii_no_objective_response
+    cancer_scope: pathogenic_setd2_loss_cross_cancer_not_crc_approval
+    variant_evidence_scope: loss_of_function_only_not_any_setd2_variant
+    supersedes: unscoped_setd2_gene_override_and_legacy_p_g1644_star_entry
+    source_refs:
+      - type: pubmed
+        id: PMID:26602815
+        url: https://pubmed.ncbi.nlm.nih.gov/26602815/
+      - type: pubmed
+        id: PMID:38920407
+        url: https://pubmed.ncbi.nlm.nih.gov/38920407/
+      - type: clinical_trial
+        id: NCT03284385
+        url: https://clinicaltrials.gov/study/NCT03284385
+
+  - <<: *setd2_lof_benefit
+    c_hgvs: c.4930G>T
+    p_hgvs: p.G1644*
+    header: SETD2：c.4930G>T，p.G1644*突变相应靶向药物
+
+  - &atm_class_benefit
+    gene: ATM
+    panels: [crc_301_msi, crc_358_msi]
+    type: benefit
+    header: ATM变异相关潜在获益药物
+    drug_name: 奥拉帕利、芦卡帕利、尼拉帕利、他拉唑帕利、AZD6738+奥拉帕利、阿维鲁单抗+他拉唑帕利、LY2606368、盐酸可泮利塞+奥拉帕利+度伐利尤单抗、奥拉帕利+帕博利珠单抗、帕米帕利+替雷利珠单抗、芦卡帕利+阿替利珠单抗、他拉唑帕利+阿替利珠单抗
+    relation: >-
+      ATM参与DNA损伤应答和双链断裂修复。历史规则将PARP、ATR、CHK1及免疫联合候选方案用于ATM异常的研究提示；这些证据主要来自前列腺癌或跨癌种DDR篮式研究，并非任一ATM位点在结直肠癌中的逐药疗效证明。药物列表的命中不等同于这些方案已获批用于ATM变异结直肠癌，尤其不能把证据不足的普通错义变异直接等同于ATM功能缺失。
+    clinical: >-
+      既有研究和试验登记曾评估奥拉帕利、芦卡帕利、尼拉帕利、他拉唑帕利及多种联合方案用于ATM或其他DDR基因异常肿瘤[26510020，NCT01682772，NCT02576444，NCT03413995，NCT04276376]。这些研究的癌种、入组标志和方案不同，ATM亚组证据也不能合并成十二种药物对结直肠癌的同等获益结论；本条仅迁移既有2.1显示合同并显式保留癌种、变异功能和证据等级边界，等待报告组二审。
+    review_basis: historical_atm_display_contract_with_cross_cancer_boundary
+    evidence_level: mixed_cross_cancer_ddr_studies_not_site_specific_crc_efficacy
+    cancer_scope: colorectal_report_display_contract_direct_atm_crc_benefit_unproven
+    variant_evidence_scope: atm_alteration_class_not_any_site_specific_efficacy
+    supersedes: implicit_base_workbook_fallback_for_atm_rule
+    source_refs:
+      - type: pubmed
+        id: PMID:26510020
+        url: https://pubmed.ncbi.nlm.nih.gov/26510020/
+      - type: clinical_trial
+        id: NCT01682772
+        url: https://clinicaltrials.gov/study/NCT01682772
+      - type: clinical_trial
+        id: NCT02576444
+        url: https://clinicaltrials.gov/study/NCT02576444
+      - type: clinical_trial
+        id: NCT03413995
+        url: https://clinicaltrials.gov/study/NCT03413995
+      - type: clinical_trial
+        id: NCT04276376
+        url: https://clinicaltrials.gov/study/NCT04276376
+
+  - <<: *atm_class_benefit
+    c_hgvs: c.6874C>T
+    p_hgvs: p.Q2292*
+    header: ATM：c.6874C>T，p.Q2292*突变相应靶向/免疫药物
+
+  - gene: FLT3
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2537G>A
+    p_hgvs: p.G846D
+    type: benefit
+    header: FLT3：c.2537G>A，p.G846D突变相应靶向药物
+    drug_name: 瑞戈非尼、索拉非尼、舒尼替尼
+    relation: >-
+      该样本检出FLT3基因c.2537G>A，p.G846D错义突变；既有功能研究提示该位点可增强FLT3相关信号[38049555]。瑞戈非尼、索拉非尼和舒尼替尼均为多靶点激酶抑制剂，但其历史依据主要来自FLT3异常血液肿瘤、FLT3扩增实体瘤或非位点特异研究；FLT3扩增、FLT3-ITD与p.G846D不能视为同一生物标志物，也不能由这些资料推导三种药物已被证实对p.G846D结直肠癌有效。
+    clinical: >-
+      个案曾报道一例伴FLT3扩增且同时存在其他基因异常的难治性转移性结直肠癌在索拉非尼治疗后出现临床改善[25848357]；另一项FLT3扩增研究同时观察到患者反应与患者来源细胞对瑞戈非尼/索拉非尼缺乏明显抑制，作者认为FLT3扩增尚不能作为可靠的FLT3抑制剂敏感标志[27906677]。NCT02029001是一项按分子改变匹配用药的晚期实体瘤篮式研究，其中索拉非尼队列允许FLT3突变或扩增，但其设计未限定结直肠癌或p.G846D位点，不能作为该位点疗效已获证实的依据。因此，本条仅迁移历史C级候选药物集合并披露证据冲突，不构成p.G846D结直肠癌逐药疗效结论。
+    review_basis: historical_flt3_g846d_contract_with_amplification_boundary_and_conflict_disclosed
+    evidence_level: functional_variant_signal_plus_cross_event_case_and_conflicting_preclinical_data
+    cancer_scope: colorectal_report_display_contract_direct_g846d_crc_efficacy_unproven
+    variant_evidence_scope: exact_g846d_function_not_equivalent_to_flt3_itd_or_amplification
+    supersedes: crc358_only_historical_part3_flt3_contract
+    source_refs:
+      - type: pubmed
+        id: PMID:38049555
+        url: https://pubmed.ncbi.nlm.nih.gov/38049555/
+      - type: pubmed
+        id: PMID:25848357
+        url: https://pubmed.ncbi.nlm.nih.gov/25848357/
+      - type: pubmed
+        id: PMID:27906677
+        url: https://pubmed.ncbi.nlm.nih.gov/27906677/
+      - type: clinical_trial
+        id: NCT02029001
+        url: https://clinicaltrials.gov/study/NCT02029001
+
+  - gene: TP53
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.821T>A
+    p_hgvs: p.V274D
+    type: benefit
+    header: TP53：c.821T>A，p.V274D突变相应靶向药物
+    drug_name: AZD1775、AZD1775+奥拉帕利、Alisertib、Alisertib+AZD1775、Eprenetapopt
+    relation: >-
+      该样本检出TP53基因c.821T>A，p.V274D错义突变。该位点位于p53蛋白DNA结合结构域；本条药物证据主要来自TP53功能异常或TP53突变类别，而不是p.V274D位点专属疗效研究。AZD1775为WEE1抑制剂，Alisertib为AURKA抑制剂，Eprenetapopt为p53再激活候选药物；这些药物及组合在本报告中均属于跨癌种、早期临床或临床前证据，不等同于已获批的p.V274D结直肠癌适应证[28978051]。
+    clinical: >-
+      早期临床研究曾评估AZD1775单药或联合治疗难治性实体瘤，并观察TP53状态与反应差异[27601554]；其余方案也主要来自TP53异常肿瘤的临床前或早期研究。由于不存在p.V274D结直肠癌的逐位点确证疗效，本条仅迁移既有2.1显示合同，最终用药应结合癌种、病程、正式适应证和报告组二审。
+    variant_evidence_scope: tp53_alteration_class_not_p_v274d_specific
+    source_refs:
+      - type: pubmed
+        id: PMID:28978051
+        url: https://pubmed.ncbi.nlm.nih.gov/28978051/
+      - type: pubmed
+        id: PMID:27601554
+        url: https://pubmed.ncbi.nlm.nih.gov/27601554/
+
+  - gene: EGFR
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2387G>A
+    p_hgvs: p.G796D
+    type: benefit
+    header: EGFR：c.2387G>A，p.G796D突变相应靶向药物
+    drug_name: 阿法替尼（Afatinib）、TQB3804、EMB01、MCLA-129
+    relation: >-
+      该样本检出EGFR基因c.2387G>A，p.G796D错义突变。原始研究将G796D报道为奥希替尼耐药机制，而不是阿法替尼、TQB3804、EMB01或MCLA-129在结直肠癌中的位点专属获益证据[28572531]。本条保留历史CRC358终版的四药显示合同，但明确其证据边界：阿法替尼属于EGFR家族抑制剂，TQB3804为在研EGFR抑制剂，EMB01与MCLA-129为EGFR/MET双靶向候选药物；列表命中本身不等同于已经证实G796D结直肠癌对这些药物敏感。
+    clinical: >-
+      NCT02465060评估阿法替尼治疗携带EGFR激活变异的难治性肿瘤；历史终版另登记了TQB3804和EMB01的早期试验（CTR20192284、CTR20190241）。NCT04868877评估MCLA-129单药或联合方案治疗晚期非小细胞肺癌及其他实体瘤，其中包括部分具有或不具有EGFR/c-MET异常的队列。上述试验均不能作为p.G796D结直肠癌逐位点疗效证明，因此本条仅作历史候选方案和临床试验线索，需报告组二审及临床医生结合适应证判断。
+    review_basis: historical_crc358_final_contract_with_corrected_g796d_resistance_attribution
+    evidence_level: historical_level_c_display_plus_cross_cancer_early_trial_not_g796d_crc_efficacy
+    cancer_scope: colorectal_report_display_contract_direct_g796d_benefit_unproven
+    variant_evidence_scope: exact_g796d_resistance_source_plus_non_variant_specific_candidate_trials
+    supersedes: missing_part3_analysis_for_crc358_egfr_g796d_rule
+    source_refs:
+      - type: historical_report_contract
+        id: sha256:4a9cd21a18670ba51c843859426babef21aa3724bd9ad6ba907cb8c7f5865bfe
+      - type: pubmed
+        id: PMID:28572531
+        url: https://pubmed.ncbi.nlm.nih.gov/28572531/
+      - type: clinical_trial
+        id: NCT02465060
+        url: https://clinicaltrials.gov/study/NCT02465060
+      - type: clinical_trial
+        id: NCT04868877
+        url: https://clinicaltrials.gov/study/NCT04868877
+      - type: clinical_trial_registry
+        id: CTR20192284
+      - type: clinical_trial_registry
+        id: CTR20190241
+
+  - &erbb2_g660d_benefit
+    gene: ERBB2
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.1979G>A
+    p_hgvs: p.G660D
+    type: benefit
+    header: ERBB2：c.1979G>A，p.G660D突变相应靶向药物
+    drug_name: 阿法替尼、曲妥珠单抗、恩美曲妥珠单抗、曲妥珠单抗+帕妥珠单抗、吡咯替尼、德曲妥珠单抗、曲妥珠单抗+图卡替尼、奈拉替尼+依维莫司、奈拉替尼+哌柏西利、奈拉替尼+曲美替尼、波齐替尼、吡咯替尼+曲妥珠单抗、德曲妥珠单抗+奈拉替尼、奈拉替尼±曲妥珠单抗、拉帕替尼
+    relation: >-
+      该样本检出ERBB2基因c.1979G>A，p.G660D错义突变。G660D位于HER2跨膜结构域，原始研究显示该变异可促进HER2激活；曲妥珠单抗、帕妥珠单抗、奈拉替尼和阿法替尼能够在模型中抑制G660D突变体活性[30449325]，阿法替尼还具有G660D相关临床前和跨癌种病例证据[26545934，29146616]。其余ADC、小分子抑制剂及联合方案主要来自HER2突变、扩增或表达异常类别的历史报告合同和早期研究，并非全部具有p.G660D结直肠癌逐药确证证据。
+    clinical: >-
+      NCT01953926等篮式研究评估奈拉替尼单药或联合曲妥珠单抗治疗HER2突变实体瘤，并包含结直肠癌队列；NCT05372614评估德曲妥珠单抗联合奈拉替尼治疗HER2阳性或已知HER2激活突变的实体瘤。既有研究提示G660D具有HER2可靶向生物学基础，但不同癌种、不同药物及联合方案的临床证据强度并不相同。本条完整迁移2.1药物集合，同时明确除直接证据外的药物仅为HER2类别候选，不构成逐药获批适应证。
+    review_basis: historical_crc358_final_contract_plus_primary_g660d_review
+    evidence_level: direct_g660d_preclinical_and_cases_plus_her2_class_early_trials
+    cancer_scope: colorectal_report_g660d_direct_and_her2_class_evidence_separated
+    variant_evidence_scope: exact_g660d_for_afatinib_and_her2_blockade_other_items_class_level
+    supersedes: missing_part3_analysis_for_crc358_erbb2_g660d_benefit_rule
+    source_refs:
+      - type: historical_report_contract
+        id: sha256:0ce44bdd8c4eb37d3e763d294e205832c9d348932847f60f48e0186a4ae3576e
+      - type: pubmed
+        id: PMID:30449325
+        url: https://pubmed.ncbi.nlm.nih.gov/30449325/
+      - type: pubmed
+        id: PMID:26545934
+        url: https://pubmed.ncbi.nlm.nih.gov/26545934/
+      - type: pubmed
+        id: PMID:29146616
+        url: https://pubmed.ncbi.nlm.nih.gov/29146616/
+      - type: clinical_trial
+        id: NCT01953926
+        url: https://clinicaltrials.gov/study/NCT01953926
+      - type: clinical_trial
+        id: NCT05372614
+        url: https://clinicaltrials.gov/study/NCT05372614
+
+  - <<: *erbb2_g660d_benefit
+    p_hgvs: p.Gly660Asp
+    header: ERBB2：c.1979G>A，p.Gly660Asp突变相应靶向药物
+
+  - &erbb2_g660d_caution
+    gene: ERBB2
+    c_hgvs: c.1979G>A
+    p_hgvs: p.G660D
+    type: caution
+    header: ERBB2：c.1979G>A，p.G660D突变相应负相关靶向药物
+    drug_name: 西妥昔单抗、帕尼单抗、奈拉替尼
+    relation: >-
+      HER2激活变异可在结直肠癌模型中旁路激活下游信号并降低西妥昔单抗、帕尼单抗等抗EGFR单抗的作用，因此这两种药物保留为D级负相关提示[26243863]。奈拉替尼单药的方向属于癌种和方案层级：G660D模型存在对奈拉替尼敏感的直接证据[30449325]，但HER2突变结直肠癌篮式队列中奈拉替尼单药总体活性有限；因此其D级慎用提示不能解释为G660D对奈拉替尼的位点专属耐药，亦不否定上方经研究登记的奈拉替尼联合方案。
+    clinical: >-
+      结直肠癌中HER2激活可构成抗EGFR治疗的旁路耐药机制，双重HER2靶向策略在模型或临床研究中与单独抑制EGFR具有不同的证据基础。奈拉替尼单药与奈拉替尼联合曲妥珠单抗等方案也必须分开判断；本条按历史2.1方向保留慎用项，并将“单药癌种层级低活性”与“G660D位点直接耐药”明确区分，等待报告组二审。
+    review_basis: historical_crc358_caution_contract_with_neratinib_direction_conflict_disclosed
+    evidence_level: colorectal_preclinical_anti_egfr_resistance_and_crc_cohort_regimen_level_caution
+    cancer_scope: colorectal_cancer_anti_egfr_and_neratinib_monotherapy_context
+    variant_evidence_scope: her2_activating_class_for_anti_egfr_not_g660d_specific_neratinib_resistance
+    supersedes: missing_part3_analysis_for_crc358_erbb2_g660d_caution_rule
+    source_refs:
+      - type: historical_report_contract
+        id: sha256:0ce44bdd8c4eb37d3e763d294e205832c9d348932847f60f48e0186a4ae3576e
+      - type: pubmed
+        id: PMID:26243863
+        url: https://pubmed.ncbi.nlm.nih.gov/26243863/
+      - type: pubmed
+        id: PMID:30449325
+        url: https://pubmed.ncbi.nlm.nih.gov/30449325/
+      - type: clinical_trial
+        id: NCT01953926
+        url: https://clinicaltrials.gov/study/NCT01953926
+
+  - <<: *erbb2_g660d_caution
+    p_hgvs: p.Gly660Asp
+    header: ERBB2：c.1979G>A，p.Gly660Asp突变相应负相关靶向药物
+
+extra_references:
+  - "PMID:26602815 Inhibiting WEE1 Selectively Kills Histone H3K36me3-Deficient Cancers by dNTP Starvation."
+  - "PMID:38920407 A Phase II Trial of the WEE1 Inhibitor Adavosertib in SETD2-Altered Advanced Solid Tumor Malignancies (NCI 10170)."
+  - "NCT03284385 Testing AZD1775 in Advanced Solid Tumors That Have a Mutation Called SETD2."
+  - "PMID:38049555 Characterisation of FLT3 alterations in childhood acute lymphoblastic leukaemia."
+  - "PMID:25848357 Clinical Response to Sorafenib in a Patient with Metastatic Colorectal Cancer and FLT3 Amplification."
+  - "PMID:27906677 The implication of FLT3 amplification for FLT targeted therapeutics in solid tumors."
+  - "NCT02029001 Adapting Treatment to the Tumor Molecular Alterations for Patients With Advanced Solid Tumors: MyOwnSpecificTreatment."
+  - "PMID:28572531 EGFR G796D mutation mediates resistance to osimertinib."
+  - "PMID:30449325 Actionable Activating Oncogenic ERBB2/HER2 Transmembrane and Juxtamembrane Domain Mutations."
+  - "PMID:26545934 Antitumor effect of afatinib, as a human epidermal growth factor receptor 2-targeted therapy, in lung cancers harboring HER2 oncogene alterations."
+  - "PMID:29146616 Therapeutic Potential of Afatinib for Cancers with ERBB2 (HER2) Transmembrane Domain Mutations G660D and V659E."
+  - "PMID:26243863 HER2 Activating Mutations Are Targets for Colorectal Cancer Treatment."
+  - "PMID:28978051 Mutational status of TP53 defines the efficacy of Wee1 inhibitor AZD1775 in KRAS-mutant non-small cell lung cancer."
+  - "PMID:27601554 Phase I pharmacologic and pharmacodynamic study of the Wee1 kinase inhibitor adavosertib with gemcitabine, cisplatin, or carboplatin in patients with advanced solid tumors."
+  - "NCT02465060 Afatinib in refractory cancers with EGFR activating mutations."
+  - "NCT04868877 MCLA-129 in advanced NSCLC and other solid tumors."
+  - "NCT01953926 Neratinib basket study in solid tumors harboring somatic HER2 or EGFR exon 18 mutations."
+  - "NCT05372614 Trastuzumab deruxtecan plus neratinib for cancers with HER2 alterations."
+  - "CTR20192284 TQB3804 in EGFR-mutated advanced malignancies."
+  - "CTR20190241 EMB01 in EGFR-mutated advanced or metastatic solid tumors."

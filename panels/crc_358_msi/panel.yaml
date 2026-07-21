@@ -10,6 +10,11 @@ aliases:
   - "crc358"
   - "colorectal_358_msi"
 
+# Panel 输入历史上同时使用 WHSC1 和现行官方符号 NSD2。保留原始展示
+# 符号以兼容既有 Excel，但知识查询和同一位点去重按 NSD2 归一化。
+gene_symbol_aliases:
+  WHSC1: NSD2
+
 project_detector_rules:
   keywords:
     - "358基因"
@@ -70,10 +75,78 @@ rules:
 # rule file. ReportGenerator resolves this per-panel for the gene KB provider.
 reviewed_part3_overlay: "rules/reviewed_part3_knowledge.yaml"
 reviewed_part3_overlay_additions:
+  # CRC358 全 Panel 固定蛋白/结构域一审目录；仅含变异无关结构知识，
+  # 来源为官方 UniProt/InterPro，待报告组二审。
+  - "rules/reviewed_part3_domain_catalog.yaml"
   # 脱敏的历史报告组终版迁移层；仅按基因+精确 HGVS 命中，不含病例标识。
   - "rules/reviewed_part3_crc358_reviewed_case_a.yaml"
   # 对历史迁移知识的受治理纠正层；保留旧记录但只让纠正后的条目进入运行时。
   - "rules/reviewed_part3_corrections_20260720.yaml"
+  # 高风险通用 fallback 的基因级一审候选；仅补稳定功能与事件边界，
+  # 精确位点规则仍优先，且本层不新增药物匹配。
+  - "rules/reviewed_part3_gene_fallbacks_20260721.yaml"
+  # CRC 重要基因的第二批一审候选；区分 LoF/表达/胚系/普通 SNV，
+  # 不在基因级正文中创建治疗结论。
+  - "rules/reviewed_part3_crc_important_fallbacks_20260721.yaml"
+  # P2-A 基础药物候选库相关激酶/受体的一审候选；候选存在不等于
+  # 生产用药规则，仅用于阻止融合、扩增、热点与普通 SNV 相互外推。
+  - "rules/reviewed_part3_drug_candidate_fallbacks_p2a_20260721.yaml"
+  # P2-B 表达/扩增/配体轴及细胞周期基因的一审候选；防止把表达、
+  # CNV、融合和普通序列变异当作同一用药证据。
+  - "rules/reviewed_part3_drug_candidate_fallbacks_p2b_20260721.yaml"
+  # P2-C 抑癌/DNA 修复/胚系易感及血液肿瘤语境基因的一审候选；
+  # 单个体细胞位点不等于胚系、双等位失活、HRD 或药物标志物。
+  - "rules/reviewed_part3_drug_candidate_fallbacks_p2c_20260721.yaml"
+  # P3-A DNA 修复和遗传易感长尾基因的一审候选；肿瘤单个位点不
+  # 自动建立胚系、双等位、MMR/HRD 或药物结论。
+  - "rules/reviewed_part3_p3a_dna_hereditary_fallbacks_20260721.yaml"
+  # 修正 P3-A 历史精确位点中的跨癌种/跨事件外推和 RAD52 段落串漏。
+  - "rules/reviewed_part3_p3a_legacy_exact_corrections_20260721.yaml"
+  # P3-B 抗原呈递、IFN-γ 受体和 PD-L2 基因的一审候选；区分普通
+  # 序列变异与功能缺失、表达及免疫治疗预测标志物。
+  - "rules/reviewed_part3_p3b_immune_fallbacks_20260721.yaml"
+  # P3-C 染色质、组蛋白、cohesin、转录和剪接基因的一审候选；
+  # 区分普通序列变异与融合、热点、表达、双等位缺失及血液肿瘤语境。
+  - "rules/reviewed_part3_p3c_chromatin_transcription_fallbacks_20260721.yaml"
+  # 修正 P3-C 历史精确位点中的表达/融合/其他癌种、血液肿瘤或胚系
+  # 证据向当前体细胞位点的跨事件、跨语境外推。
+  - "rules/reviewed_part3_p3c_legacy_exact_corrections_20260721.yaml"
+  # P3-D 对 23 个历史组蛋白符号建立现行 NCBI 身份映射，并阻止
+  # 热点、翻译后修饰和疾病语境在近同源组蛋白拷贝之间迁移。
+  - "rules/reviewed_part3_p3d_histone_fallbacks_20260721.yaml"
+  # P3-E 对双 Panel 剩余 47 个共享长尾基因完成现行身份核对和保守
+  # 事件边界；LBP1B/ZNF278 保留历史运行键但显式映射 UBP1/PATZ1。
+  - "rules/reviewed_part3_p3e_shared_residual_fallbacks_20260721.yaml"
+  # 修正上述基因中 7 条历史精确位点的静态数据库计数、跨事件和
+  # 仅凭结构域位置推断，继续保持精确选择器优先。
+  - "rules/reviewed_part3_p3e_legacy_exact_corrections_20260721.yaml"
+  # P3-F1 对 CRC358 独有的 31 个激酶、PI3K-mTOR、磷酸酶和信号
+  # 衔接基因建立保守事件边界；不新增药物规则，也不外推通路成员证据。
+  - "rules/reviewed_part3_p3f1_signaling_fallbacks_20260721.yaml"
+  # 修正上述基因中 4 条历史精确位点的静态数据库计数、结构域位置
+  # 和跨癌种/跨事件推断，继续保持精确选择器优先。
+  - "rules/reviewed_part3_p3f1_legacy_exact_corrections_20260721.yaml"
+  # P3-F2 对 CRC358 独有的 24 个染色质重塑、DNA/组蛋白修饰及
+  # 转录共抑制基因建立保守边界，并登记 NSD2/WHSC1 身份碰撞合同。
+  - "rules/reviewed_part3_p3f2_chromatin_fallbacks_20260721.yaml"
+  # 修正上述基因中 6 条历史精确位点的静态数据库、结构域、表达、
+  # 小鼠模型和跨谱系外推；不改变精确选择器的最高优先级。
+  - "rules/reviewed_part3_p3f2_legacy_exact_corrections_20260721.yaml"
+  # P3-F3 对 CRC358 独有的 18 个谱系与转录调控基因建立保守边界；
+  # 同时固定 TCF4=Gene 6925，禁止与 TCF7L2 的历史别名混用。
+  - "rules/reviewed_part3_p3f3_lineage_transcription_fallbacks_20260721.yaml"
+  # 修正 RUNX2 p.Q71del 和 TCF12 p.P191L 的数据库/结构域、表达及
+  # 跨癌种外推；继续保持精确选择器优先且不新增药物结论。
+  - "rules/reviewed_part3_p3f3_legacy_exact_corrections_20260721.yaml"
+  # P3-F4 收口 CRC358 最后 11 个结构、黏附、运输、消化与大型支架
+  # 基因；区分重复扩增、融合/重排、胚系病、表达/抗原状态和普通位点。
+  - "rules/reviewed_part3_p3f4_structural_residual_fallbacks_20260721.yaml"
+  # 修正 FAT3、MYH11、PCLO 共 4 条历史精确位点的结构域、家族、
+  # 胚系/谱系外推，并清除 MYH11 旧条目中的 PALB2 病例文本串漏。
+  - "rules/reviewed_part3_p3f4_legacy_exact_corrections_20260721.yaml"
+  # CRC358 运行药物规则的逐位点第三部分迁移层；保证 2.1 每个药物都有
+  # 同一位点/方向的解析，并显式标注直接证据与历史显示合同的边界。
+  - "rules/reviewed_part3_drug_contracts_20260721.yaml"
   # 固定蛋白/结构域字段的一审候选层；不包含药物结论，待报告组二审。
   - "rules/reviewed_part3_domain_overlay_20260720.yaml"
 

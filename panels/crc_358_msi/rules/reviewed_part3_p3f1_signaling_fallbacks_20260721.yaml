@@ -1,0 +1,385 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: >-
+    P3-F1 first-review fallbacks for 31 CRC358-only kinase, PI3K-mTOR,
+    phosphatase, and signaling-adaptor genes remaining after P3-E.
+  source_type: official_gene_identity_plus_conservative_signaling_event_boundary
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_crc358_only_signaling_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    An ordinary sequence variant does not establish a fusion, amplification,
+    expression or phosphorylation state, receptor activation, biallelic loss,
+    germline syndrome, immune-lineage event, pathway activation, or drug
+    response. Evidence is not transferred between paralogs or pathway members.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_p3f1_signaling_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_identity_and_signaling_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_identity_plus_conservative_event_boundary
+      cancer_scope: colorectal_cancer_crc358_only_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+
+symbol_identity_map:
+  - {panel_symbol: ABL2, current_symbol: ABL2, ncbi_gene_id: 27}
+  - {panel_symbol: ACVR1B, current_symbol: ACVR1B, ncbi_gene_id: 91}
+  - {panel_symbol: AXL, current_symbol: AXL, ncbi_gene_id: 558}
+  - {panel_symbol: DDR1, current_symbol: DDR1, ncbi_gene_id: 780}
+  - {panel_symbol: EPHA3, current_symbol: EPHA3, ncbi_gene_id: 2042}
+  - {panel_symbol: EPHB1, current_symbol: EPHB1, ncbi_gene_id: 2047}
+  - {panel_symbol: FLT4, current_symbol: FLT4, ncbi_gene_id: 2324}
+  - {panel_symbol: INPP4A, current_symbol: INPP4A, ncbi_gene_id: 3631}
+  - {panel_symbol: INPPL1, current_symbol: INPPL1, ncbi_gene_id: 3636}
+  - {panel_symbol: INSR, current_symbol: INSR, ncbi_gene_id: 3643}
+  - {panel_symbol: LATS1, current_symbol: LATS1, ncbi_gene_id: 9113}
+  - {panel_symbol: LATS2, current_symbol: LATS2, ncbi_gene_id: 26524}
+  - {panel_symbol: MAP2K7, current_symbol: MAP2K7, ncbi_gene_id: 5609}
+  - {panel_symbol: MAP3K13, current_symbol: MAP3K13, ncbi_gene_id: 9175}
+  - {panel_symbol: MAP3K4, current_symbol: MAP3K4, ncbi_gene_id: 4216}
+  - {panel_symbol: MAP3K6, current_symbol: MAP3K6, ncbi_gene_id: 9064}
+  - {panel_symbol: PASK, current_symbol: PASK, ncbi_gene_id: 23178}
+  - {panel_symbol: PIK3CD, current_symbol: PIK3CD, ncbi_gene_id: 5293}
+  - {panel_symbol: PIK3CG, current_symbol: PIK3CG, ncbi_gene_id: 5294}
+  - {panel_symbol: PREX2, current_symbol: PREX2, ncbi_gene_id: 80243}
+  - {panel_symbol: PTPRB, current_symbol: PTPRB, ncbi_gene_id: 5787}
+  - {panel_symbol: PTPRC, current_symbol: PTPRC, ncbi_gene_id: 5788}
+  - {panel_symbol: PTPRD, current_symbol: PTPRD, ncbi_gene_id: 5789}
+  - {panel_symbol: PTPRK, current_symbol: PTPRK, ncbi_gene_id: 5796}
+  - {panel_symbol: PTPRS, current_symbol: PTPRS, ncbi_gene_id: 5802}
+  - {panel_symbol: RICTOR, current_symbol: RICTOR, ncbi_gene_id: 253260}
+  - {panel_symbol: RPTOR, current_symbol: RPTOR, ncbi_gene_id: 57521}
+  - {panel_symbol: SMAD3, current_symbol: SMAD3, ncbi_gene_id: 4088}
+  - {panel_symbol: SOS1, current_symbol: SOS1, ncbi_gene_id: 6654}
+  - {panel_symbol: VAV1, current_symbol: VAV1, ncbi_gene_id: 7409}
+  - {panel_symbol: VAV2, current_symbol: VAV2, ncbi_gene_id: 7410}
+
+gene_sections:
+  - gene: ABL2
+    panels: [crc_358_msi]
+    intro: >-
+      ABL2编码Abelson家族非受体酪氨酸激酶，包含SH3、SH2和激酶区域，并通过C端肌动蛋白及微管结合序列参与细胞骨架重排。
+    mutation_analysis: >-
+      白血病中的ETV6-ABL2融合与ABL2普通编码区序列变异不是同一事件，ABL1的热点、融合和用药证据也不能直接套用ABL2。未知结直肠癌位点需直接的激酶功能和肿瘤证据，不能自动匹配ABL抑制剂。
+    supersedes: base_templated_abl2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-27, url: https://www.ncbi.nlm.nih.gov/gene/27}
+      - {type: pubmed, id: PMID-12406085, url: https://pubmed.ncbi.nlm.nih.gov/12406085/}
+
+  - gene: ACVR1B
+    panels: [crc_358_msi]
+    intro: >-
+      ACVR1B编码Activin AⅠB型丝氨酸/苏氨酸激酶受体，与Ⅱ型受体组成复合体并向SMAD等下游传递TGF-β超家族信号。
+    mutation_analysis: >-
+      明确失活、双等位改变、表达缺失和普通错义位点对ACVR1B功能的证据不同；也不能直接套用ACVR2A、TGFBR1或其他受体成员的结论。未知位点不得仅凭通路位置判定抑癌功能缺失或治疗意义。
+    supersedes: base_templated_acvr1b_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-91, url: https://www.ncbi.nlm.nih.gov/gene/91}
+
+  - gene: AXL
+    panels: [crc_358_msi]
+    intro: >-
+      AXL编码TAM家族受体酪氨酸激酶，可与GAS6配体结合并参与细胞存活、迁移、黏附和炎症调节。
+    mutation_analysis: >-
+      AXL过表达、GAS6配体依赖、蛋白磷酸化或扩增与AXL编码区序列变异不能互相替代。单个未验证位点不能证明受体持续激活，也不能由体外抑制剂或其他癌种研究直接形成结直肠癌用药结论。
+    supersedes: base_templated_axl_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-558, url: https://www.ncbi.nlm.nih.gov/gene/558}
+
+  - gene: DDR1
+    panels: [crc_358_msi]
+    intro: >-
+      DDR1编码可被胶原激活的受体酪氨酸激酶，主要在上皮细胞表达并参与细胞与细胞外基质之间的信号调控。
+    mutation_analysis: >-
+      DDR1表达、胶原诱导磷酸化、融合或明确激活事件与普通错义位点不是同一证据。位于激酶结构域本身不能证明功能改变，未知结直肠癌位点不得自动推导侵袭、通路激活或DDR1抑制剂敏感性。
+    supersedes: base_templated_ddr1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-780, url: https://www.ncbi.nlm.nih.gov/gene/780}
+
+  - gene: EPHA3
+    panels: [crc_358_msi]
+    intro: >-
+      EPHA3编码Eph家族受体酪氨酸激酶，与ephrin-A类配体介导细胞定位、组织边界和迁移相关信号。
+    mutation_analysis: >-
+      EPHA3表达、配体结合、拷贝数和编码区位点需要分别解释；不同Eph受体的位点证据也不能跨成员转移。未知错义变异需直接功能资料，不能自动视为受体激活/失活或形成治疗结论。
+    supersedes: base_templated_epha3_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-2042, url: https://www.ncbi.nlm.nih.gov/gene/2042}
+
+  - gene: EPHB1
+    panels: [crc_358_msi]
+    intro: >-
+      EPHB1编码EphB类受体酪氨酸激酶，与膜结合ephrin-B配体共同调节细胞定位、黏附和组织发育信号。
+    mutation_analysis: >-
+      EPHB1截短、表达或甲基化变化与普通错义位点不是同一事件，EPHB2或其他Eph家族证据也不能直接套用。未知位点需受体功能和结直肠癌直接证据，不能仅凭结构域位置推导抑癌或治疗意义。
+    supersedes: base_templated_ephb1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-2047, url: https://www.ncbi.nlm.nih.gov/gene/2047}
+
+  - gene: FLT4
+    panels: [crc_358_msi]
+    intro: >-
+      FLT4又称VEGFR3，编码VEGF-C/VEGF-D受体酪氨酸激酶，参与淋巴管生成和淋巴内皮维持。
+    mutation_analysis: >-
+      FLT4配体信号、受体表达或扩增、胚系淋巴水肿变异与肿瘤体细胞位点具有不同语境。未知结直肠癌位点不能自动证明淋巴管生成增强，也不能据此形成抗血管生成或激酶抑制剂结论。
+    supersedes: base_templated_flt4_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-2324, url: https://www.ncbi.nlm.nih.gov/gene/2324}
+
+  - gene: INPP4A
+    panels: [crc_358_msi]
+    intro: >-
+      INPP4A编码肌醇多磷酸4-磷酸酶，可水解PI(3,4)P2等磷脂信号分子的4位磷酸并参与磷脂信号稳态。
+    mutation_analysis: >-
+      INPP4A表达或拷贝数降低、明确催化失活和普通错义位点不能统一解释；其功能也不能直接等同于PTEN或INPPL1。未知位点需催化活性及通路功能证据，不能自动推定PI3K-AKT激活或药物敏感性。
+    supersedes: base_templated_inpp4a_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-3631, url: https://www.ncbi.nlm.nih.gov/gene/3631}
+
+  - gene: INPPL1
+    panels: [crc_358_msi]
+    intro: >-
+      INPPL1又称SHIP2，编码含SH2结构域的肌醇5-磷酸酶，参与胰岛素、EGFR和肌动蛋白重塑相关信号调节。
+    mutation_analysis: >-
+      SHIP2表达、磷酸酶活性、胚系疾病和肿瘤体细胞位点是不同证据层。单个未验证错义变异不能自动判定PI3K信号增强或减弱，也不能由乳腺癌表达研究或其他磷酸酶证据推导结直肠癌临床意义。
+    supersedes: base_templated_inppl1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-3636, url: https://www.ncbi.nlm.nih.gov/gene/3636}
+
+  - gene: INSR
+    panels: [crc_358_msi]
+    intro: >-
+      INSR编码胰岛素受体酪氨酸激酶，前体经加工形成α/β亚基异源四聚体并调节葡萄糖、脂质和蛋白代谢信号。
+    mutation_analysis: >-
+      胚系严重胰岛素抵抗综合征变异、受体表达或配体刺激和肿瘤体细胞位点不能互相替代。未知结直肠癌位点需受体激酶功能证据，不能据此推导代谢表型、肿瘤驱动或靶向治疗反应。
+    supersedes: base_templated_insr_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-3643, url: https://www.ncbi.nlm.nih.gov/gene/3643}
+
+  - gene: LATS1
+    panels: [crc_358_msi]
+    intro: >-
+      LATS1编码Hippo通路核心丝氨酸/苏氨酸激酶之一，参与细胞周期和YAP/TAZ等下游效应因子的调控。
+    mutation_analysis: >-
+      LATS1缺失、表达降低、激酶失活和普通错义位点需要不同证据，且不能直接套用LATS2事件。单个未验证位点不能自动证明Hippo通路失活、YAP激活或治疗敏感性。
+    supersedes: base_templated_lats1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9113, url: https://www.ncbi.nlm.nih.gov/gene/9113}
+
+  - gene: LATS2
+    panels: [crc_358_msi]
+    intro: >-
+      LATS2编码Hippo通路相关丝氨酸/苏氨酸激酶，参与中心体、纺锤体、p53反馈及YAP/TAZ信号调控。
+    mutation_analysis: >-
+      LATS2双等位缺失、表达变化或明确激酶失活与普通序列位点不是同一事件，LATS1证据也不能跨成员替代。未知错义变异不得仅凭Hippo通路角色判定驱动性或形成治疗结论。
+    supersedes: base_templated_lats2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-26524, url: https://www.ncbi.nlm.nih.gov/gene/26524}
+
+  - gene: MAP2K7
+    panels: [crc_358_msi]
+    intro: >-
+      MAP2K7编码双特异性激酶MKK7，可被上游MAP3K激活并磷酸化JNK家族成员，参与炎症因子和环境应激反应。
+    mutation_analysis: >-
+      MAP2K7蛋白磷酸化、表达或明确失活与普通错义位点不能相互替代，MAP2K1/2的激活位点及用药证据也不能套用MKK7。未知位点需JNK通路功能资料，不能自动形成驱动或治疗结论。
+    supersedes: base_templated_map2k7_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5609, url: https://www.ncbi.nlm.nih.gov/gene/5609}
+
+  - gene: MAP3K13
+    panels: [crc_358_msi]
+    intro: >-
+      MAP3K13编码含双亮氨酸拉链区域的丝氨酸/苏氨酸激酶，可形成二聚体并参与MKK7-JNK信号调节。
+    mutation_analysis: >-
+      MAP3K13表达、二聚或磷酸化状态与编码区序列变异不是同一检测事件，其他MAP3K成员证据也不能直接转移。未知结直肠癌位点需激酶和JNK通路功能证据，不能自动推定激活或用药意义。
+    supersedes: base_templated_map3k13_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9175, url: https://www.ncbi.nlm.nih.gov/gene/9175}
+
+  - gene: MAP3K4
+    panels: [crc_358_msi]
+    intro: >-
+      MAP3K4编码MAP激酶激酶激酶MEKK4，位于应激相关MAPK级联上游并可调节JNK和p38等信号。
+    mutation_analysis: >-
+      MAP3K4激酶活性、蛋白复合体或表达变化与普通序列位点不同，也不能由其他MAP3K成员推断本基因位点功能。未知错义变异需直接功能和肿瘤证据，不能自动解释为MAPK通路激活或治疗标志物。
+    supersedes: base_templated_map3k4_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4216, url: https://www.ncbi.nlm.nih.gov/gene/4216}
+
+  - gene: MAP3K6
+    panels: [crc_358_msi]
+    intro: >-
+      MAP3K6编码丝氨酸/苏氨酸激酶ASK2，是蛋白激酶信号级联成员并参与应激及VEGF表达相关调控。
+    mutation_analysis: >-
+      MAP3K6表达、应激激活或蛋白磷酸化与编码区位点不能互相替代，MAP3K5等同家族证据也不能直接套用。单个未知位点不足以证明通路激活、血管生成改变或治疗意义。
+    supersedes: base_templated_map3k6_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9064, url: https://www.ncbi.nlm.nih.gov/gene/9064}
+
+  - gene: PASK
+    panels: [crc_358_msi]
+    intro: >-
+      PASK编码含PAS感受区域的丝氨酸/苏氨酸激酶，可参与葡萄糖应答、胰岛素表达和细胞代谢状态调节。
+    mutation_analysis: >-
+      PASK代谢表达、激酶活性和胚系代谢相关观察与肿瘤体细胞序列位点具有不同证据边界。未知结直肠癌位点不能仅凭代谢功能推定肿瘤驱动或形成激酶靶向结论。
+    supersedes: base_templated_pask_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-23178, url: https://www.ncbi.nlm.nih.gov/gene/23178}
+
+  - gene: PIK3CD
+    panels: [crc_358_msi]
+    intro: >-
+      PIK3CD编码Ⅰ类PI3K催化亚基p110δ，主要在白细胞中表达并参与免疫受体和RAS相关磷脂信号。
+    mutation_analysis: >-
+      胚系PIK3CD激活或失活导致的免疫缺陷、血液/免疫谱系事件和结直肠癌普通体细胞位点不能互相替代。PIK3CA热点及其药物证据也不能套用p110δ，未知位点不得自动形成PI3Kδ抑制剂结论。
+    supersedes: base_templated_pik3cd_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5293, url: https://www.ncbi.nlm.nih.gov/gene/5293}
+
+  - gene: PIK3CG
+    panels: [crc_358_msi]
+    intro: >-
+      PIK3CG编码Ⅰ类PI3K催化亚基p110γ，参与免疫细胞和G蛋白偶联受体相关磷脂信号调节。
+    mutation_analysis: >-
+      PIK3CG表达、免疫微环境活性、染色体缺失和编码区序列位点是不同事件；PIK3CA或PIK3CD的热点和用药证据不能跨亚基转移。未知结直肠癌位点不能自动判定PI3K通路激活或药物敏感性。
+    supersedes: base_templated_pik3cg_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5294, url: https://www.ncbi.nlm.nih.gov/gene/5294}
+
+  - gene: PREX2
+    panels: [crc_358_msi]
+    intro: >-
+      PREX2编码受PIP3调节的Rac鸟嘌呤核苷酸交换因子，包含DHPH、DEP和PDZ等区域并参与Rac及PI3K相关信号。
+    mutation_analysis: >-
+      PREX2截短、结构域破坏、表达变化和普通错义位点对Rac/PI3K信号的影响不能统一推断；与PTEN相互作用研究也不能替代位点功能证据。未知结直肠癌位点不得自动形成通路或用药结论。
+    supersedes: base_templated_prex2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-80243, url: https://www.ncbi.nlm.nih.gov/gene/80243}
+
+  - gene: PTPRB
+    panels: [crc_358_msi]
+    intro: >-
+      PTPRB编码受体型蛋白酪氨酸磷酸酶，具有胞外黏附相关区域、跨膜区和胞内催化区，并参与血管内皮信号稳态。
+    mutation_analysis: >-
+      PTPRB明确截短或催化失活、表达改变和普通错义位点需要不同证据；结构域外位置也不能证明无功能影响。未知结直肠癌位点不得自动推定血管生成、抑癌功能缺失或治疗意义。
+    supersedes: base_templated_ptprb_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5787, url: https://www.ncbi.nlm.nih.gov/gene/5787}
+
+  - gene: PTPRC
+    panels: [crc_358_msi]
+    intro: >-
+      PTPRC编码白细胞共同抗原CD45，是含双胞内磷酸酶区域的受体型蛋白酪氨酸磷酸酶，参与T/B细胞抗原受体信号调节。
+    mutation_analysis: >-
+      PTPRC具有显著免疫细胞谱系属性；肿瘤组织测序中的位点需结合样本来源、肿瘤纯度和变异证据判断，不能直接视为结直肠上皮肿瘤驱动。免疫缺陷或血液肿瘤事件也不能自动形成本位点的治疗结论。
+    supersedes: base_templated_ptprc_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5788, url: https://www.ncbi.nlm.nih.gov/gene/5788}
+
+  - gene: PTPRD
+    panels: [crc_358_msi]
+    intro: >-
+      PTPRD编码具有胞外Ig样/FN3区域和胞内双磷酸酶区域的受体型蛋白酪氨酸磷酸酶，参与细胞黏附和磷酸化信号调控。
+    mutation_analysis: >-
+      PTPRD纯合缺失、截短或催化失活与普通错义位点不能统一解释，表达或甲基化变化也不是序列变异证据。未知位点需等位基因和磷酸酶功能资料，不能自动判定抑癌功能缺失或药物意义。
+    supersedes: base_templated_ptprd_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5789, url: https://www.ncbi.nlm.nih.gov/gene/5789}
+
+  - gene: PTPRK
+    panels: [crc_358_msi]
+    intro: >-
+      PTPRK编码受体型蛋白酪氨酸磷酸酶，胞外MAM、Ig样和FN3区域可参与同源细胞相互作用，胞内区域调节磷酸化信号。
+    mutation_analysis: >-
+      PTPRK融合、缺失、表达改变和普通编码区位点属于不同事件，也不能由PTPRD或PTPRS证据直接替代。未知错义变异需细胞黏附和磷酸酶功能验证，不能自动推定抑癌或治疗意义。
+    supersedes: base_templated_ptprk_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5796, url: https://www.ncbi.nlm.nih.gov/gene/5796}
+
+  - gene: PTPRS
+    panels: [crc_358_msi]
+    intro: >-
+      PTPRS编码受体型蛋白酪氨酸磷酸酶，包含胞外Ig样/FN3区域、跨膜区和胞内双磷酸酶区域，参与细胞黏附及信号调控。
+    mutation_analysis: >-
+      PTPRS明确失活、拷贝数或表达变化与普通错义位点不能相互替代，其他受体型PTP成员的位点证据也不能跨基因转移。未知位点需催化和黏附功能证据，不能自动形成抑癌或用药结论。
+    supersedes: base_templated_ptprs_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5802, url: https://www.ncbi.nlm.nih.gov/gene/5802}
+
+  - gene: RICTOR
+    panels: [crc_358_msi]
+    intro: >-
+      RICTOR编码mTOR复合体2的核心组分，与MTOR等蛋白整合生长因子和营养信号，并参与AKT及细胞骨架调控。
+    mutation_analysis: >-
+      RICTOR扩增、表达或mTORC2复合体活性与RICTOR编码区序列变异不是同一事件，RPTOR/mTORC1证据也不能替代。单个未知位点不能证明mTORC2激活或形成mTOR/AKT相关用药结论。
+    supersedes: base_templated_rictor_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-253260, url: https://www.ncbi.nlm.nih.gov/gene/253260}
+
+  - gene: RPTOR
+    panels: [crc_358_msi]
+    intro: >-
+      RPTOR编码mTOR复合体1的调节组分，可连接mTOR与S6K、4E-BP1等下游底物并参与营养和胰岛素应答。
+    mutation_analysis: >-
+      RPTOR表达、拷贝数和mTORC1活性与普通编码区位点不能互相替代，RICTOR/mTORC2事件也不是同一证据。未知错义变异不得仅凭复合体成员身份推定通路激活或药物敏感性。
+    supersedes: base_templated_rptor_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-57521, url: https://www.ncbi.nlm.nih.gov/gene/57521}
+
+  - gene: SMAD3
+    panels: [crc_358_msi]
+    intro: >-
+      SMAD3编码TGF-β通路胞内信号转导和转录调控蛋白，可与其他SMAD形成复合体并将受体信号传递至细胞核。
+    mutation_analysis: >-
+      胚系动脉瘤-骨关节炎综合征变异、肿瘤中的明确功能缺失和普通体细胞错义位点不能相互替代；SMAD4或其他SMAD成员证据也不能直接套用。未知位点不得自动推定TGF-β通路失活或治疗意义。
+    supersedes: base_templated_smad3_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-4088, url: https://www.ncbi.nlm.nih.gov/gene/4088}
+
+  - gene: SOS1
+    panels: [crc_358_msi]
+    intro: >-
+      SOS1编码RAS/RAC鸟嘌呤核苷酸交换因子，可促进RAS由GDP结合状态转换为GTP结合活化状态并参与受体下游信号。
+    mutation_analysis: >-
+      胚系Noonan综合征或牙龈纤维瘤变异、特定体细胞激活事件和结直肠癌未知位点具有不同证据边界。不能仅凭SOS1位于RAS上游就判定任意错义位点激活RAS，也不能自动形成SOS1或MEK抑制剂结论。
+    supersedes: base_templated_sos1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-6654, url: https://www.ncbi.nlm.nih.gov/gene/6654}
+
+  - gene: VAV1
+    panels: [crc_358_msi]
+    intro: >-
+      VAV1编码Rho家族GTP酶鸟嘌呤核苷酸交换因子，主要参与造血及T/B细胞发育、免疫受体信号和细胞骨架重排。
+    mutation_analysis: >-
+      血液肿瘤中的VAV1融合、结构域特定激活事件或免疫细胞表达与结直肠癌普通体细胞位点不能互相替代。VAV2证据也不能跨成员转移，未知位点不得自动形成驱动或治疗结论。
+    supersedes: base_templated_vav1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7409, url: https://www.ncbi.nlm.nih.gov/gene/7409}
+
+  - gene: VAV2
+    panels: [crc_358_msi]
+    intro: >-
+      VAV2编码广泛表达的Rho家族GTP酶鸟嘌呤核苷酸交换因子，可参与细胞骨架、迁移和受体下游信号调节。
+    mutation_analysis: >-
+      VAV2蛋白磷酸化、表达或明确结构域激活与普通错义位点不是同一事件，VAV1的造血谱系事件也不能直接套用。未知结直肠癌位点需GEF功能证据，不能自动推定Rho信号激活或治疗意义。
+    supersedes: base_templated_vav2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7410, url: https://www.ncbi.nlm.nih.gov/gene/7410}
+
+drug_sections: []

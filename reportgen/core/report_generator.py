@@ -687,6 +687,12 @@ class ReportGenerator:
                 provider_cfg = {
                     "enabled": True,
                     "panel_id": state.canonical_project_type,
+                    "gene_symbol_aliases": (
+                        (getattr(state.panel_package, "raw", None) or {}).get(
+                            "gene_symbol_aliases"
+                        )
+                        or {}
+                    ),
                     "gene_knowledge_db": gene_kb_cfg,
                     "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
                 }

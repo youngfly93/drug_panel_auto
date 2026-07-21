@@ -1359,6 +1359,7 @@ def _build_style_checks(
         "variant_summary_table": 0,
         "variant_detail_table": 0,
         "biomarker_table": 0,
+        "approved_drug_table": 0,
     }
 
     for table_idx, table in enumerate(doc.tables):
@@ -1391,6 +1392,12 @@ def _build_style_checks(
                     table_idx=table_idx,
                     style=_style_config(style, "biomarker_table"),
                 )
+            )
+        if _is_approved_drug_table(table):
+            table_counts["approved_drug_table"] += 1
+            checked += 1
+            failures.extend(
+                _check_approved_drug_brand_style(table, table_idx=table_idx)
             )
 
     if not checked:
@@ -1438,6 +1445,52 @@ def _style_issues(checks: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
             "code": "DOCX_STYLE_RULES",
             "message": str(check.get("message") or "DOCX style rules failed."),
         }
+
+
+def _is_approved_drug_table(table: Any) -> bool:
+    return bool(
+        table.rows
+        and _table_col_count(table) == 3
+        and (table.rows[0].cells[0].text or "").strip() == "药物名称"
+    )
+
+
+def _check_approved_drug_brand_style(
+    table: Any,
+    *,
+    table_idx: int,
+) -> List[Dict[str, Any]]:
+    bracket_re = re.compile(r"(?:\[[^\[\]\r\n]+\])|(?:［[^［］\r\n]+］)")
+    failures: List[Dict[str, Any]] = []
+    for row_idx, row in enumerate(table.rows[1:], start=1):
+        for paragraph in row.cells[0].paragraphs:
+            offset = 0
+            run_spans: List[tuple[int, int, Any]] = []
+            for run in paragraph.runs:
+                text = run.text or ""
+                run_spans.append((offset, offset + len(text), run))
+                offset += len(text)
+            full_text = "".join((run.text or "") for run in paragraph.runs)
+            for match in bracket_re.finditer(full_text):
+                overlapping = [
+                    run
+                    for start, end, run in run_spans
+                    if start < match.end() and end > match.start()
+                ]
+                if overlapping and all(run.bold is True for run in overlapping):
+                    continue
+                failures.append(
+                    _style_failure(
+                        "approved_drug_table",
+                        table_idx,
+                        row_idx,
+                        0,
+                        "brand_bracket_bold",
+                        True,
+                        match.group(0),
+                    )
+                )
+    return failures
 
 
 def _style_config(root: Mapping[str, Any], table_name: str) -> Dict[str, Any]:
@@ -1842,6 +1895,53 @@ def _build_business_checks(
             "duplicates": list(raw_drug_consistency.get("duplicates") or []),
         }
 
+    raw_drug_contract_coverage = context.get("drug_analysis_contract_coverage")
+    if isinstance(raw_drug_contract_coverage, Mapping):
+        coverage_status = str(raw_drug_contract_coverage.get("status") or "")
+        checks["drug_analysis_contract_coverage"] = {
+            "status": "PASS" if coverage_status == "PASS" else "WARN",
+            "expected_variant_count": raw_drug_contract_coverage.get(
+                "expected_variant_count", 0
+            ),
+            "governed_variant_count": raw_drug_contract_coverage.get(
+                "governed_variant_count", 0
+            ),
+            "coverage_percent": raw_drug_contract_coverage.get(
+                "coverage_percent", 0.0
+            ),
+            "legacy_uncontracted": list(
+                raw_drug_contract_coverage.get("legacy_uncontracted") or []
+            ),
+        }
+
+    raw_domain_coverage = context.get("gene_domain_coverage")
+    if isinstance(raw_domain_coverage, Mapping):
+        checks["gene_domain_coverage"] = {
+            "status": (
+                "PASS" if raw_domain_coverage.get("status") == "PASS" else "FAIL"
+            ),
+            "expected_gene_count": raw_domain_coverage.get(
+                "expected_gene_count", 0
+            ),
+            "covered_gene_count": raw_domain_coverage.get(
+                "covered_gene_count", 0
+            ),
+            "coverage_percent": raw_domain_coverage.get(
+                "coverage_percent", 0.0
+            ),
+            "missing_genes": list(raw_domain_coverage.get("missing_genes") or []),
+            "missing_variant_keys": list(
+                raw_domain_coverage.get("missing_variant_keys") or []
+            ),
+            "duplicate_fixed_domain_genes": list(
+                raw_domain_coverage.get("duplicate_fixed_domain_genes") or []
+            ),
+            "duplicate_fixed_domain_variant_keys": list(
+                raw_domain_coverage.get("duplicate_fixed_domain_variant_keys")
+                or []
+            ),
+        }
+
     tmb_status = str(context.get("tmb_status") or "").strip()
     if tmb_status:
         checks["tmb_status_text"] = {
@@ -1871,6 +1971,12 @@ def _business_issues(checks: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
         ),
         "drug_analysis_consistency": (
             "Part-2 drug table and Part-3 drug analysis are inconsistent."
+        ),
+        "drug_analysis_contract_coverage": (
+            "Part-3 drug analysis contains legacy rows pending reviewed-contract migration."
+        ),
+        "gene_domain_coverage": (
+            "Part-3 gene knowledge has missing or duplicate fixed protein/domain content."
         ),
         "tmb_status_text": "TMB status from context was not found in rendered text.",
         "msi_status_text": "MSI status from context was not found in rendered text.",

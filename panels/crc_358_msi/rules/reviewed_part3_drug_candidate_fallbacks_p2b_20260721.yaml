@@ -1,0 +1,182 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    P2-B first-review gene-level fallbacks for expression, amplification, ligand,
+    and cell-cycle genes represented in the base targeted-drug candidate database.
+  source_type: official_gene_function_plus_crc_reporting_guideline
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_drug_candidate_gene_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    These rows prevent expression, amplification, fusion, pathway activation, and
+    ordinary sequence variants from being treated as interchangeable. Candidate
+    database membership does not create a drug match. Exact reviewed rules retain
+    precedence and this overlay contains no drug sections.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p2b_drug_candidate_gene_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_gene_function_and_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_function_plus_conservative_variant_boundary
+      cancer_scope: colorectal_cancer_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: AR
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      AR编码由雄激素配体激活的核受体和转录因子，包含转录激活、DNA结合及配体结合功能区。AR表达、扩增、配体结合区特定功能性变异与普通序列变异属于不同事件；结直肠癌未收录位点不得套用前列腺癌中的雄激素依赖或抗雄激素治疗证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-367
+        url: https://www.ncbi.nlm.nih.gov/gene/367
+
+  - gene: BCL2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      BCL2编码定位于线粒体外膜并抑制部分细胞凋亡的蛋白；BCL2与免疫球蛋白重链位点易位造成的持续表达是滤泡性淋巴瘤的重要背景。BCL2易位、扩增或蛋白高表达与普通编码区变异不能等同；结直肠癌未收录位点不得直接生成BCL2抑制剂获益或耐药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-596
+        url: https://www.ncbi.nlm.nih.gov/gene/596
+
+  - gene: CCND1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CCND1编码cyclin D1，可与CDK4或CDK6形成复合物并参与细胞周期G1/S转换。CCND1扩增、过表达和具体序列变异是不同证据事件；普通错义变异不能替代拷贝数或表达结果，也不能在未评估RB、CDKN2A等通路背景时单独推导CDK4/6抑制剂获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-595
+        url: https://www.ncbi.nlm.nih.gov/gene/595
+
+  - gene: CCND2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CCND2编码cyclin D2，可作为CDK4或CDK6复合物的调节亚基并参与细胞周期G1/S转换。CCND2表达升高、扩增与具体序列变异不能相互替代；结直肠癌普通错义变异不得单独证明细胞周期通路依赖，也不得直接形成CDK4/6抑制剂结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-894
+        url: https://www.ncbi.nlm.nih.gov/gene/894
+
+  - gene: CDK4
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CDK4编码调控细胞周期G1期进展的丝氨酸/苏氨酸激酶，可受D型cyclin和p16INK4A调节并参与RB磷酸化。CDK4扩增、过表达、特定功能性位点与普通错义变异具有不同意义；未收录位点不能脱离RB和CDKN2A等通路状态直接推导CDK4/6抑制剂获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-1019
+        url: https://www.ncbi.nlm.nih.gov/gene/1019
+
+  - gene: CDK6
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      CDK6编码参与细胞周期G1期和G1/S转换的丝氨酸/苏氨酸激酶，并受D型cyclin及INK4家族抑制蛋白调节。CDK6扩增、表达异常和具体功能性变异与普通单核苷酸变异不能等同；未收录位点不得在缺少完整通路证据时生成CDK4/6抑制剂结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-1021
+        url: https://www.ncbi.nlm.nih.gov/gene/1021
+
+  - gene: ESR1
+    panels: [crc_301_msi]
+    mutation_analysis: >-
+      ESR1编码雌激素受体和配体激活型转录因子，参与多种雌激素应答基因的转录调控。ESR1蛋白表达、配体结合区特定功能性变异与普通序列变异具有不同证据边界；结直肠癌未收录位点不得套用乳腺癌或子宫内膜癌的内分泌治疗敏感及耐药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2099
+        url: https://www.ncbi.nlm.nih.gov/gene/2099
+
+  - gene: FGF3
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FGF3编码成纤维细胞生长因子家族配体，参与细胞生长、生存、形态发生和组织修复；该基因在部分肿瘤中可发生扩增。FGF3扩增或表达改变与普通编码区变异并非同一事件，且配体改变不能直接等同于FGFR受体激活；未收录位点不得自动生成FGFR抑制剂结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2248
+        url: https://www.ncbi.nlm.nih.gov/gene/2248
+
+  - gene: FGF4
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FGF4编码成纤维细胞生长因子家族配体，参与细胞生长、生存和发育；FGF4可与邻近的FGF3发生共扩增。FGF4扩增、过表达与普通单核苷酸变异具有不同功能和检测含义，配体基因位点也不能替代FGFR受体的精确事件；未收录位点不得推导FGFR抑制剂获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2249
+        url: https://www.ncbi.nlm.nih.gov/gene/2249
+
+  - gene: HIF1A
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      HIF1A编码缺氧诱导因子1的α亚基，是细胞和机体缺氧应答的重要转录调节因子，可调控代谢、血管生成和凋亡相关基因。缺氧导致的蛋白稳定或表达升高与肿瘤细胞序列变异不是同一事件；普通HIF1A位点不得作为抗血管生成或缺氧通路药物的敏感性标志。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3091
+        url: https://www.ncbi.nlm.nih.gov/gene/3091
+
+  - gene: MDM2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      MDM2编码核内E3泛素连接酶，可促进包括p53在内的抑癌蛋白降解；多种肿瘤可见该位点扩增或过表达。MDM2扩增、过表达和普通序列变异属于不同证据事件，且解释需结合TP53状态；未收录位点不得仅凭基因名称推导MDM2抑制剂获益。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4193
+        url: https://www.ncbi.nlm.nih.gov/gene/4193
+
+  - gene: MYC
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      MYC编码与MAX形成异源二聚体的核内转录因子，参与细胞周期、凋亡和细胞转化调控。MYC扩增、易位或表达升高与普通编码区变异不可互换；未收录位点不能证明MYC依赖，也不得仅由MYC基因检出生成治疗或预后结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4609
+        url: https://www.ncbi.nlm.nih.gov/gene/4609
+
+  - gene: NRG1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      NRG1编码参与细胞间信号的膜糖蛋白，并因可变启动子和剪接产生多种组织特异性亚型。NRG1融合、表达或亚型改变与普通单核苷酸变异具有不同机制；未收录位点不得按NRG1融合处理，也不得据此直接生成ERBB通路药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3084
+        url: https://www.ncbi.nlm.nih.gov/gene/3084
+
+  - gene: PDGFB
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      PDGFB编码可形成同源或异源二聚体并激活PDGF受体酪氨酸激酶的生长因子配体。PDGFB融合或重排、过表达和普通编码区变异属于不同事件；未收录位点不能替代受体激活证据，也不得直接生成PDGFR抑制剂用药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5155
+        url: https://www.ncbi.nlm.nih.gov/gene/5155
+
+  - gene: TOP2A
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      TOP2A编码DNA拓扑异构酶IIα，参与染色体凝缩、姐妹染色单体分离以及复制和转录中的DNA拓扑调控，也是多类细胞毒药物的作用靶点。TOP2A表达、拷贝数、具体耐药相关位点与普通序列变异不能等同；未收录位点不得单独预测药物敏感或耐药。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7153
+        url: https://www.ncbi.nlm.nih.gov/gene/7153
+
+  - gene: VEGFA
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      VEGFA编码促进血管内皮细胞增殖和迁移的生长因子，是生理及病理性血管生成的重要调节因子。肿瘤中的VEGFA表达、分泌及血管生成状态与肿瘤细胞普通序列变异并非同一检测层级；抗VEGF治疗的使用不能由单个VEGFA位点直接推导。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7422
+        url: https://www.ncbi.nlm.nih.gov/gene/7422
+
+drug_sections: []

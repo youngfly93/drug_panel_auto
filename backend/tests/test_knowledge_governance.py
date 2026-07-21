@@ -43,8 +43,30 @@ def test_production_knowledge_release_gate_is_self_contained_and_passes(tmp_path
         assert runtime_quality["complete_percent"] == 100.0
         assert runtime_quality["missing_intro_genes"] == []
         assert runtime_quality["missing_analysis_genes"] == []
+        assert runtime_quality["missing_fixed_domain_genes"] == []
+        assert runtime_quality["duplicate_fixed_domain_genes"] == []
         assert runtime_quality["citation_integrity"]["unresolved_pmids"] == []
         assert panel["clinical_release_readiness"]["status"] == "BLOCKED"
+    contract_inventory = {
+        panel["panel_id"]: panel["drug_analysis_contracts"]
+        for panel in result["panels"]
+    }
+    assert contract_inventory["crc_301_msi"] == {
+        "status": "PASS",
+        "rules_checked": 9,
+        "selector_cases_checked": 10,
+        "expected_item_count": 83,
+        "rendered_item_count": 83,
+        "issues": [],
+    }
+    assert contract_inventory["crc_358_msi"] == {
+        "status": "PASS",
+        "rules_checked": 17,
+        "selector_cases_checked": 18,
+        "expected_item_count": 178,
+        "rendered_item_count": 178,
+        "issues": [],
+    }
     assert {row["panel_id"] for row in result["non_blocking_panel_readiness"]} == {
         "endometrial_29",
         "lung_329_pdl1",

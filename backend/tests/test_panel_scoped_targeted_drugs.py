@@ -44,14 +44,14 @@ def test_targeted_drug_rule_context_matrix():
     assert crc358["summary_display_scope"] == "drug_matched_variants"
     assert crc358["summary_display_variant_levels"] == ["Ⅰ类", "Ⅱ类"]
     assert crc358["source_panel_id"] == "crc_358_msi"
-    assert len(crc358["reviewed_variant_overrides"]) == 15
+    assert len(crc358["reviewed_variant_overrides"]) == 16
     assert len(crc358["applicability_rules"]) == 1
-    assert set(crc358["overrides"]) == {"ATM", "SETD2"}
+    assert set(crc358["overrides"]) == {"ATM"}
 
     assert crc301["enabled"] is True
     assert crc301["source_panel_id"] == "crc_358_msi"
     assert crc301["shared"] is True
-    assert len(crc301["reviewed_variant_overrides"]) == 7
+    assert len(crc301["reviewed_variant_overrides"]) == 8
     assert not any(
         row.get("c_hgvs") in {"c.499C>T", "c.1291delA", "c.34G>T"}
         for row in crc301["reviewed_variant_overrides"]
@@ -181,7 +181,7 @@ def test_enhancer_panel_config_uses_same_request_scoped_drug_policy():
         panel_package=lung,
     )
 
-    assert len(crc301_config.reviewed_variant_overrides) == 7
+    assert len(crc301_config.reviewed_variant_overrides) == 8
     assert lung_config.reviewed_variant_overrides == []
     assert len(crc301_config.approved_drug_rows) == 7
     assert lung_config.approved_drug_rows == []

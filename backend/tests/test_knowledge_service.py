@@ -113,47 +113,48 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
     }
     overlay_expected = {
         "available": True,
-        "gene_rows": 319,
-        "unique_genes": 235,
-        "gene_level_rows": 237,
-        "variant_level_rows": 82,
+            "gene_rows": 919,
+            "unique_genes": 375,
+            "gene_level_rows": 803,
+            "variant_level_rows": 116,
         # Includes two governed KRAS/everolimus correction rows plus the
-        # superseded historical row retained for audit traceability.
-        "drug_rows": 43,
-        "drug_unique_genes": 16,
+        # superseded historical row retained for audit traceability, plus the
+        # exact Part-2/Part-3 drug contracts introduced by this repair.
+        "drug_rows": 54,
+        "drug_unique_genes": 18,
         "targeted_drug_rule_rows": 17,
         "targeted_drug_rule_unique_genes": 15,
         "targeted_drug_applicability_rule_rows": 1,
         "extra_reference_rows": 12,
         "review_status_counts": {
             "legacy_runtime": 336,
-            "provisional_runtime": 25,
+                "provisional_runtime": 636,
             "superseded": 1,
         },
     }
     if panel_id == "crc_301_msi":
         overlay_expected.update(
-            gene_rows=340,
-            unique_genes=271,
-            gene_level_rows=269,
-            variant_level_rows=71,
-            drug_rows=19,
-            drug_unique_genes=8,
+                gene_rows=797,
+                unique_genes=342,
+                gene_level_rows=708,
+                variant_level_rows=89,
+            drug_rows=30,
+            drug_unique_genes=11,
             targeted_drug_rule_rows=9,
             targeted_drug_rule_unique_genes=9,
             review_status_counts={
                 "legacy_runtime": 308,
-                "provisional_runtime": 51,
+                    "provisional_runtime": 519,
             },
         )
     assert payload["reviewed_overlay"] == overlay_expected
     assert payload["overlap"] == {
-        "genes_in_both": 215,
+        "genes_in_both": 286 if panel_id == "crc_301_msi" else 355,
         "overlay_only_genes": 56 if panel_id == "crc_301_msi" else 20,
     }
     expected = {
-        "crc_358_msi": (358, 350, 218, 358, 100.0),
-        "crc_301_msi": (301, 256, 230, 301, 100.0),
+        "crc_358_msi": (358, 350, 358, 358, 100.0),
+        "crc_301_msi": (301, 256, 301, 301, 100.0),
     }[panel_id]
     total, base_covered, overlay_covered, either_covered, percent = expected
     assert payload["declared_gene_coverage"] == {
@@ -177,18 +178,25 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
     )
     assert contract["explicitly_approved_drug_genes"] == 0
     assert contract["panel_rule_status_counts"] == {
-        "legacy_runtime": 12 if panel_id == "crc_358_msi" else 8,
-        "provisional_runtime": 5 if panel_id == "crc_358_msi" else 1,
+        "legacy_runtime": 8 if panel_id == "crc_358_msi" else 4,
+        "provisional_runtime": 9 if panel_id == "crc_358_msi" else 5,
     }
     runtime_quality = contract["runtime_content_quality"]
     assert runtime_quality["complete_percent"] == 100.0
     assert runtime_quality["missing_intro_genes"] == []
     assert runtime_quality["missing_analysis_genes"] == []
     assert runtime_quality["citation_integrity"]["unresolved_pmids"] == []
+    if panel_id == "crc_358_msi":
+        assert runtime_quality["specific_explanation_genes"] == 358
+        assert runtime_quality["specific_explanation_percent"] == 100.0
+        assert runtime_quality["generic_fallback_genes"] == []
+    else:
+        assert runtime_quality["specific_explanation_genes"] == 301
+        assert runtime_quality["generic_fallback_genes"] == []
     assert contract["clinical_release_readiness"]["status"] == "BLOCKED"
-    assert "generic_gene_fallback_requires_content_review" in contract[
-        "clinical_release_readiness"
-    ]["blocking_reasons"]
+    generic_reason = "generic_gene_fallback_requires_content_review"
+    blocking_reasons = contract["clinical_release_readiness"]["blocking_reasons"]
+    assert generic_reason not in blocking_reasons
     multidimensional = contract["multidimensional_coverage"]
     assert multidimensional["gene_explanation"]["percent"] == 100.0
     assert multidimensional["review_governance"]["standardized_percent"] == 100.0
@@ -230,11 +238,45 @@ def test_crc301_specific_overlay_closes_gene_gap_without_leaking_to_crc358():
         page_size=10,
     )
 
-    assert crc301["total"] == 1
-    assert crc301["rows"][0]["provenance"]["origin_panel_id"] == "crc_301_msi"
-    assert crc301["rows"][0]["provenance"]["shared_overlay"] is False
-    assert crc301["rows"][0]["provenance"]["source_type"] == "ncbi_refseq_curated_paraphrase"
+    assert crc301["total"] == 2
+    assert {
+        row["provenance"]["origin_panel_id"] for row in crc301["rows"]
+    } == {"crc_301_msi"}
+    assert all(
+        row["provenance"]["shared_overlay"] is False for row in crc301["rows"]
+    )
+    assert {
+        row["provenance"]["source_type"] for row in crc301["rows"]
+    } == {
+        "ncbi_refseq_curated_paraphrase",
+        "official_reviewed_protein_annotation",
+    }
     assert crc358["total"] == 0
+
+    crc358_only = service.get_catalog_entries(
+        panel_id="crc_358_msi",
+        kind="gene",
+        layer="reviewed_overlay",
+        gene="ABL2",
+        page=1,
+        page_size=10,
+    )
+    crc301_leak = service.get_catalog_entries(
+        panel_id="crc_301_msi",
+        kind="gene",
+        layer="reviewed_overlay",
+        gene="ABL2",
+        page=1,
+        page_size=10,
+    )
+    assert crc358_only["total"] == 2
+    assert {
+        row["provenance"]["source_type"] for row in crc358_only["rows"]
+    } == {
+        "official_gene_identity_plus_conservative_signaling_event_boundary",
+        "official_reviewed_protein_annotation",
+    }
+    assert crc301_leak["total"] == 0
 
 
 def test_drug_candidate_disposition_is_complete_and_not_a_migration_backlog():
@@ -256,28 +298,28 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     genes = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="gene", page=1, page_size=1
     )
-    assert genes["total"] == 696
+    assert genes["total"] == 1296
     assert genes["facets"] == {
-        "layers": {"reviewed_overlay": 319, "base": 377},
+        "layers": {"reviewed_overlay": 919, "base": 377},
         "review_statuses": {
             "legacy_runtime": 680,
-            "provisional_runtime": 16,
+            "provisional_runtime": 616,
         },
-        "match_scopes": {"gene": 614, "variant": 82},
+        "match_scopes": {"gene": 1180, "variant": 116},
     }
 
     drugs = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="drug", page=1, page_size=1
     )
-    assert drugs["total"] == 124
+    assert drugs["total"] == 135
     assert drugs["facets"] == {
-        "layers": {"base": 81, "reviewed_overlay": 43},
+        "layers": {"base": 81, "reviewed_overlay": 54},
         "review_statuses": {
             "legacy_runtime": 114,
-            "provisional_runtime": 9,
+            "provisional_runtime": 20,
             "superseded": 1,
         },
-        "match_scopes": {"gene": 48, "variant": 73, "event": 3},
+        "match_scopes": {"gene": 49, "variant": 82, "event": 4},
     }
 
     targeted = service.get_catalog_entries(
@@ -287,10 +329,10 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     assert targeted["facets"] == {
         "layers": {"base": 811, "reviewed_overlay": 17},
         "review_statuses": {
-            "legacy_runtime": 823,
-            "provisional_runtime": 5,
+            "legacy_runtime": 819,
+            "provisional_runtime": 9,
         },
-        "match_scopes": {"event": 612, "variant": 155, "gene": 61},
+        "match_scopes": {"event": 613, "variant": 155, "gene": 60},
     }
 
     variant_rows = service.get_catalog_entries(
@@ -301,8 +343,8 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
         page=1,
         page_size=100,
     )
-    assert variant_rows["total"] == 82
-    assert len(variant_rows["rows"]) == 82
+    assert variant_rows["total"] == 116
+    assert len(variant_rows["rows"]) == 100
     assert all(row["match_scope"] == "variant" for row in variant_rows["rows"])
 
 
@@ -407,24 +449,338 @@ def test_review_status_filters_distinguish_provisional_and_legacy_runtime():
         page=1,
         page_size=100,
     )
-    assert provisional["total"] == 16
-    assert {row["gene"] for row in provisional["rows"]} == {
+    provisional_rows = list(provisional["rows"])
+    for page in range(2, (provisional["total"] + 99) // 100 + 1):
+        provisional_rows.extend(
+            service.get_catalog_entries(
+                panel_id="crc_358_msi",
+                kind="gene",
+                layer="reviewed_overlay",
+                review_status="provisional_runtime",
+                page=page,
+                page_size=100,
+            )["rows"]
+        )
+    assert provisional["total"] == 616
+    assert len(provisional_rows) == 616
+    domain_rows = [
+        row
+        for row in provisional_rows
+        if row["provenance"]["source_type"]
+        == "official_reviewed_protein_annotation"
+    ]
+    assert len(domain_rows) == 273
+    non_catalog_rows = [row for row in provisional_rows if row not in domain_rows]
+    assert {row["gene"] for row in non_catalog_rows} == {
+        "ABL1",
+        "AKT3",
+        "AR",
+        "ARAF",
+        "ASXL1",
+        "ATRX",
+        "B2M",
+        "BCL2",
+        "BCOR",
+        "BLM",
+        "BMPR1A",
+        "BRD4",
+        "BTK",
+        "CBL",
+        "CCND1",
+        "CCND2",
+        "CDH1",
+        "CDK12",
+        "CDK4",
+        "CDK6",
+        "CDKN2A",
         "CD274",
         "CHD2",
+        "CHEK1",
+        "CHEK2",
+        "CIC",
+        "CREBBP",
+        "CSF1R",
+        "CSF3R",
+        "DDR2",
+        "DEK",
         "DNMT3A",
+        "AKT1",
+        "ALK",
+        "ACVR2A",
+        "AMER1",
+        "EGFR",
+        "EPHA2",
+        "ERBB3",
         "ERCC2",
+        "ERBB2",
+        "ERBB4",
         "ESR2",
+        "EP300",
+        "EP400",
+        "EZH2",
+        "FAM175A",
         "FANCA",
+        "FANCC",
+        "FANCE",
+        "FANCF",
+        "FANCG",
+        "FANCI",
+        "FANCL",
+        "FAT1",
+        "FAT4",
+        "FGF3",
+        "FGF4",
+        "FGFR1",
+        "FGFR3",
+        "FH",
+        "FLCN",
+        "FLT3",
+        "FLT1",
+        "GNA11",
+        "GNAQ",
+        "GALNT12",
+        "GNAS",
+        "H3F3A",
+        "HIST1H1B",
+        "HIST1H1C",
+        "HIST1H1D",
+        "HIST1H1E",
+        "HIST1H2AL",
+        "HIST1H2AM",
+        "HIST1H2BC",
+        "HIST1H2BD",
+        "HIST1H2BG",
+        "HIST1H2BJ",
+        "HIST1H2BK",
+        "HIST1H2BO",
+        "HIST1H3A",
         "HIST1H3B",
+        "HIST1H3C",
+        "HIST1H3D",
+        "HIST1H3E",
+        "HIST1H3F",
+        "HIST1H3G",
+        "HIST1H3H",
+        "HIST1H3I",
+        "HIST1H3J",
+        "HIST1H4I",
+        "HIST3H3",
+        "HLA-A",
+        "HLA-B",
         "HLA-C",
         "HLA-DPA1",
+        "HLA-DPB1",
+        "HLA-DQA1",
+        "HLA-DQB1",
+        "HLA-DRB1",
+        "HLA-DRB5",
+        "HLA-G",
+        "HIF1A",
+        "HNF1A",
+        "HOXB13",
+        "IGF1R",
+        "IFNGR1",
+        "IFNGR2",
+        "JUN",
+        "KAT6A",
+        "KDM6A",
+        "KIT",
+        "KMT2A",
+        "LRP1B",
+        "MDM2",
+        "MET",
+        "MED12",
+        "MRE11A",
+        "MSH3",
+        "MTOR",
+        "MUTYH",
+        "MYC",
+        "MYD88",
+        "NBN",
+        "NF2",
+        "NOTCH2",
+        "NPM1",
+        "NRG1",
         "PALB2",
+        "PDCD1LG2",
+        "PDGFB",
+        "PDGFRA",
+        "PIK3CA",
         "PIK3C2G",
+        "PMS1",
+        "POLD1",
+        "RAD51",
         "RAD51D",
+        "RAD51B",
+        "RAD52",
+        "RAD54B",
+        "RAD54L",
+        "RAF1",
+        "RARA",
+        "RB1",
+        "RBM10",
+        "RECQL4",
+        "RET",
+        "ROS1",
+        "RUNX1",
+        "PTPRT",
+        "SETD2",
+        "SDHC",
+        "SF3B1",
         "SLCO1B1",
+        "SMAD4",
+        "SMARCA1",
+        "SMARCA2",
+        "SMO",
+        "STAG1",
+        "STAG2",
+        "TERC",
+        "TERT",
+        "TET1",
+        "TMEM127",
+        "TOP2A",
+        "TP53BP1",
+        "U2AF1",
+        "VEGFA",
         "WDR90",
+        "WHSC1",
+        "WHSC1L1",
         "XPC",
+        "XRCC2",
+        "ZFHX3",
         "ZNF703",
+        "ZRSR2",
+        "AXIN1",
+        "BCL2L11",
+        "CARD11",
+        "CCNE1",
+        "CD79B",
+        "CDH11",
+        "CRKL",
+        "EPAS1",
+        "ERRFI1",
+        "FGF19",
+        "FOXL2",
+        "GATA3",
+        "IRS1",
+        "JAK3",
+        "KDR",
+        "KEAP1",
+        "KEL",
+        "LBP1B",
+        "MAP2K2",
+        "MAPK1",
+        "MAPK3",
+        "MDM4",
+        "MPL",
+        "MYCN",
+        "PDGFRB",
+        "PIK3R1",
+        "PIM1",
+        "PPP2R2A",
+        "PTCH2",
+        "PTPN11",
+        "RAD21",
+        "SERPINB3",
+        "SERPINB4",
+        "SHH",
+        "SLIT2",
+        "SRC",
+        "SYK",
+        "TEK",
+        "TGFBR1",
+        "TNFAIP3",
+        "TP63",
+        "TSHR",
+        "YAP1",
+        "YES1",
+        "ZNF217",
+        "ZNF278",
+        "ZNF521",
+        "ABL2",
+        "ACVR1B",
+        "AXL",
+        "DDR1",
+        "EPHA3",
+        "EPHB1",
+        "FLT4",
+        "INPP4A",
+        "INPPL1",
+        "INSR",
+        "LATS1",
+        "LATS2",
+        "MAP2K7",
+        "MAP3K13",
+        "MAP3K4",
+        "MAP3K6",
+        "PASK",
+        "PIK3CD",
+        "PIK3CG",
+        "PREX2",
+        "PTPRB",
+        "PTPRC",
+        "PTPRD",
+        "PTPRK",
+        "PTPRS",
+        "RICTOR",
+        "RPTOR",
+        "SMAD3",
+        "SOS1",
+        "VAV1",
+        "VAV2",
+        "ARID1B",
+        "ARID2",
+        "ARID4A",
+        "ASXL2",
+        "BACH2",
+        "BCL11A",
+        "BCORL1",
+        "CHD4",
+        "DNMT1",
+        "DNMT3B",
+        "HDAC4",
+        "HDAC7",
+        "HDAC9",
+        "HIRA",
+        "KDM2B",
+        "KDM4C",
+        "KDM5A",
+        "KMT2B",
+        "NCOR1",
+        "NCOR2",
+        "NSD1",
+        "SETD5",
+        "TET2",
+        "TRRAP",
+        "CUX1",
+        "ETV1",
+        "FLI1",
+        "FOXP1",
+        "FUBP1",
+        "MAX",
+        "MGA",
+        "MYB",
+        "PAX5",
+        "RUNX1T1",
+        "RUNX2",
+        "SOX9",
+        "TCF12",
+        "TCF3",
+        "TCF4",
+        "TLE3",
+        "TLE4",
+        "NCOA4",
+        "ATXN2",
+        "CLTCL1",
+        "DNM2",
+        "FAT3",
+        "MAGI2",
+        "MGAM",
+        "MUC1",
+        "MYH11",
+        "PCLO",
+        "PDE4DIP",
+        "PRSS1",
     }
     assert all(
         row["review"]["status"] == "provisional_runtime"
@@ -433,7 +789,7 @@ def test_review_status_filters_distinguish_provisional_and_legacy_runtime():
         and row["review"]["reviewer"] == "codex"
         and row["review"]["secondary_review_status"]
         == "pending_report_group_review"
-        for row in provisional["rows"]
+        for row in provisional_rows
     )
     assert all(
         row["runtime_behavior"] == "override_base_on_match"
@@ -441,7 +797,7 @@ def test_review_status_filters_distinguish_provisional_and_legacy_runtime():
         == "pending_report_group_review"
         and row["content"]["runtime_eligible"] is True
         and row["provenance"]["source_refs"]
-        for row in provisional["rows"]
+        for row in provisional_rows
     )
 
     legacy_drug_narratives = service.get_catalog_entries(
@@ -466,13 +822,17 @@ def test_review_status_filters_distinguish_provisional_and_legacy_runtime():
         page=1,
         page_size=100,
     )
-    assert provisional_targeted_rules["total"] == 5
+    assert provisional_targeted_rules["total"] == 9
     assert {row["gene"] for row in provisional_targeted_rules["rows"]} == {
+        "EGFR",
+        "ERBB2",
         "FANCA",
         "FANCD2",
         "PALB2",
         "RAD50",
         "RAD51D",
+        "SETD2",
+        "TP53",
     }
     assert all(
         row["provenance"]["source_refs"]

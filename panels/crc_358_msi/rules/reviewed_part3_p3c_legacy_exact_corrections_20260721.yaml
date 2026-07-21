@@ -1,0 +1,85 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    Governed exact-variant corrections for P3-C legacy entries whose prose
+    mixed expression, fusion, other-cancer, hematologic, germline, or database
+    recurrence observations with the clinical meaning of the detected variant.
+  source_type: reviewed_knowledge_correction_overlay
+  source_id: crc_p3c_legacy_exact_corrections_20260721
+  created_at: "2026-07-21"
+  privacy: No patient or sample identifiers are stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p3c_legacy_exact_correction_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_correction_of_legacy_cross_event_or_cross_context_prose
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: exact_variant_not_clinically_established_conservative_interpretation
+      cancer_scope: colorectal_cancer_exact_variant_conservative_correction
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://educate.amp.org/local/catalog/view/product.php?productid=135
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: DEK
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.123G>C
+    p_hgvs: p.E41D
+    mutation_analysis: >-
+      DEK p.E41D为错义变异；当前缺少足够的位点级功能实验或结直肠癌临床证据确定其生物学和临床意义。DEK过表达、融合或其他癌种中的表达与预后观察不能替代本位点证据；数据库收录次数也不等于致病性或驱动性，本位点不得据此形成治疗结论。
+    supersedes: legacy_dek_p_e41d_database_count_and_expression_cross_event_inference
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7913
+        url: https://www.ncbi.nlm.nih.gov/gene/7913
+
+  - gene: EP400
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.8175_8177dup
+    p_hgvs: p.Q2748dup
+    mutation_analysis: >-
+      EP400 p.Q2748dup为框内单个氨基酸重复；按现有蛋白注释不位于主要ATP酶或Myb样区域，但这本身不能确定其功能影响。其他肿瘤中EP400突变的观察或数据库收录不能证明本位点导致染色质重塑缺陷、结直肠癌驱动或治疗敏感性，需直接功能和临床证据确认。
+    supersedes: legacy_ep400_p_q2748dup_database_recurrence_and_other_cancer_inference
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-57634
+        url: https://www.ncbi.nlm.nih.gov/gene/57634
+
+  - gene: JUN
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.89del
+    p_hgvs: p.N30Tfs*5
+    mutation_analysis: >-
+      JUN p.N30Tfs*5为早期移码变异，预计造成提前终止并可能影响蛋白功能，但仍需结合转录本表达、无义介导降解或蛋白功能证据确认实际后果。JUN/AP-1的表达或通路激活研究不能证明本位点在结直肠癌中的驱动性，也不得据此形成治疗结论。
+    supersedes: legacy_jun_p_n30tfs5_ap1_general_function_to_variant_inference
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3725
+        url: https://www.ncbi.nlm.nih.gov/gene/3725
+
+  - gene: ZRSR2
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.1337G>A
+    p_hgvs: p.R446Q
+    mutation_analysis: >-
+      ZRSR2 p.R446Q为错义变异；当前缺少足够的位点级剪接功能和结直肠癌临床证据确定其影响。髓系肿瘤中的ZRSR2截短或功能缺失事件，以及个案中的胚系变异，均不能证明本例肿瘤体细胞错义位点具有相同后果；本位点不得据此形成血液肿瘤、遗传易感或治疗结论。
+    supersedes: legacy_zrsr2_p_r446q_myeloid_and_germline_cross_context_inference
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8233
+        url: https://www.ncbi.nlm.nih.gov/gene/8233
+
+drug_sections: []

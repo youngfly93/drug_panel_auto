@@ -1,0 +1,77 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: >-
+    Governed corrections for four legacy exact-variant narratives among the
+    P3-F1 CRC358-only signaling genes. Static database counts, domain position,
+    cross-tumor observations, and pathway membership are not treated as proof
+    of the detected variant's function or clinical significance.
+  source_type: reviewed_knowledge_correction_overlay
+  source_id: crc358_p3f1_legacy_exact_corrections_20260721
+  created_at: "2026-07-21"
+  privacy: No patient or sample identifiers are stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_p3f1_legacy_exact_correction_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_correction_of_legacy_database_count_domain_or_cross_context_prose
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: exact_variant_not_clinically_established_conservative_interpretation
+      cancer_scope: colorectal_cancer_crc358_only_exact_variant_conservative_correction
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: DDR1
+    panels: [crc_358_msi]
+    c_hgvs: c.1973G>A
+    p_hgvs: p.R658Q
+    mutation_analysis: >-
+      DDR1 p.R658Q为激酶区域错义变异；当前缺少足够的位点级激酶功能和结直肠癌临床证据确定其影响。位于激酶区域、静态数据库收录情况以及胃癌EMT或肾脏表达研究均不能证明本位点导致DDR1激活、肿瘤驱动或治疗敏感性。
+    supersedes: legacy_ddr1_p_r658q_static_database_domain_and_cross_context_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-780, url: https://www.ncbi.nlm.nih.gov/gene/780}
+
+  - gene: EPHB1
+    panels: [crc_358_msi]
+    c_hgvs: c.2647C>T
+    p_hgvs: p.R883W
+    mutation_analysis: >-
+      EPHB1 p.R883W为错义变异；当前缺少足够的位点级受体功能和结直肠癌临床证据确定其影响。静态数据库次数及位于已注释激酶/SAM区域之外均不能证明良性或致病，其他Eph受体证据也不得迁移，本位点不形成治疗结论。
+    supersedes: legacy_ephb1_p_r883w_static_cosmic_count_and_domain_only_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-2047, url: https://www.ncbi.nlm.nih.gov/gene/2047}
+
+  - gene: PTPRB
+    panels: [crc_358_msi]
+    c_hgvs: c.4700G>T
+    p_hgvs: p.G1567V
+    mutation_analysis: >-
+      PTPRB p.G1567V为错义变异；当前缺少足够的位点级磷酸酶/血管内皮功能和结直肠癌临床证据确定其影响。数据库未收录或位于主要催化区域之外均不能证明无功能影响，也不得据此推定血管生成、抑癌功能缺失或治疗意义。
+    supersedes: legacy_ptprb_p_g1567v_database_absence_and_domain_only_inference
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5787, url: https://www.ncbi.nlm.nih.gov/gene/5787}
+
+  - gene: PTPRS
+    panels: [crc_358_msi]
+    c_hgvs: c.3073G>A
+    p_hgvs: p.V1025I
+    mutation_analysis: >-
+      PTPRS p.V1025I为错义变异；当前缺少足够的位点级磷酸酶/黏附功能和结直肠癌临床证据确定其影响。受体型PTP家族通用功能及其他成员事件不能证明本位点具有抑癌、驱动或治疗意义。
+    supersedes: legacy_ptprs_p_v1025i_family_pathway_role_without_direct_variant_evidence
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5802, url: https://www.ncbi.nlm.nih.gov/gene/5802}
+
+drug_sections: []

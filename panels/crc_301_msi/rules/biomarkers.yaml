@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_301_msi"
 rule_id: "biomarkers"
-version: "0.2.0"
-updated: "2026-05-21"
+version: "0.3.0"
+updated: "2026-07-21"
 status: "active"
 description: "CRC biomarker display rules used by the generator."
 
@@ -102,7 +102,8 @@ biomarkers:
           mode: direct
         - key: PDCD1LG2
           genes: [PDCD1LG2]
-          mode: direct
+          mode: non_sequence_biomarker
+          interpretation: "PD-L2表达、拷贝数或重排与普通序列变异不能互相替代；单个序列变异不直接提示免疫治疗获益。"
         - key: PBRM1
           genes: [PBRM1]
           mode: direct
@@ -165,7 +166,8 @@ biomarkers:
           mode: direct
         - key: B2M
           genes: [B2M]
-          mode: direct
+          mode: confirmed_functional_loss
+          interpretation: "仅经确认的双等位功能缺失或蛋白缺失可作为研究性耐药线索；单个序列变异不直接判定。"
         - key: CTNNB1
           genes: [CTNNB1]
           mode: direct
@@ -190,7 +192,8 @@ biomarkers:
           mode: direct
         - key: IFNGR12
           genes: [IFNGR1, IFNGR2]
-          mode: gene_group
+          mode: confirmed_functional_loss
+          interpretation: "仅经功能确认的IFN-γ受体通路缺失可作为研究性耐药线索；单个序列变异不直接判定。"
     hyperprogression:
       genes:
         - MDM2

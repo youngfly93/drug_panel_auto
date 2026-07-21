@@ -1,0 +1,127 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    First-review gene-level mutation-analysis fallbacks for residual CRC-important
+    genes whose previously unseen variants still rendered generic prose.
+  source_type: official_gene_function_plus_crc_reporting_guideline
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_important_gene_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    These rows distinguish stable gene function from variant-specific inference.
+    They do not create drug sensitivity, resistance, prognostic, hereditary, or
+    immune-treatment conclusions. Exact reviewed variant rules retain precedence.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_important_gene_fallback_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_gene_function_and_variant_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_function_plus_conservative_variant_boundary
+      cancer_scope: colorectal_cancer_important_gene_conservative_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: moderate_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: ACVR2A
+    panels: [crc_358_msi]
+    mutation_analysis: >-
+      ACVR2A编码活化素II型跨膜丝氨酸/苏氨酸激酶受体，可通过与不同I型、II型受体及配体形成复合物介导TGF-β超家族相关信号。ACVR2A截短、移码或明确影响受体功能的事件与普通错义变异不能等同；未收录位点需结合变异类型、结构域、MSI背景和功能证据解释，不得直接生成治疗结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-92
+        url: https://www.ncbi.nlm.nih.gov/gene/92
+
+  - gene: AMER1
+    panels: [crc_358_msi]
+    mutation_analysis: >-
+      AMER1编码可与CTNNB1、APC、AXIN1和AXIN2等蛋白相互作用的调节蛋白。AMER1明确截短或功能缺失事件与普通错义变异具有不同证据边界；未收录位点需结合变异类型、蛋白影响和结直肠癌直接证据解释，不能仅因位于该基因而判定通路失活或形成用药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-139285
+        url: https://www.ncbi.nlm.nih.gov/gene/139285
+
+  - gene: ERBB3
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      ERBB3编码EGFR受体家族成员，具有神经调节蛋白结合区但缺少有活性的激酶结构域，可与其他具有激酶活性的ERBB家族成员形成异源二聚体并参与增殖或分化信号。ERBB3扩增、蛋白过表达与具体序列变异属于不同事件；普通单核苷酸变异不得替代表达或扩增结果，也不得在缺少位点证据时生成靶向用药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2065
+        url: https://www.ncbi.nlm.nih.gov/gene/2065
+
+  - gene: FAT1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FAT1编码含多个钙黏蛋白样重复的跨膜蛋白，可能参与细胞黏附、信号传导、发育和细胞间通讯。明确截短、缺失或功能受损事件与普通错义变异不能等同，表达降低也不能由任意DNA变异替代；未收录位点应按变异类型和功能证据保守解释，不单独形成治疗或预后结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2195
+        url: https://www.ncbi.nlm.nih.gov/gene/2195
+
+  - gene: FAT4
+    panels: [crc_358_msi]
+    mutation_analysis: >-
+      FAT4编码原钙黏蛋白家族成员，并可能参与平面细胞极性调控。FAT4蛋白较大且包含多种结构区域，不同变异的功能影响不能仅由基因名称推断；未收录的普通错义变异不得自动视为功能缺失，也不能套用表达、甲基化或其他癌种研究形成治疗结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-79633
+        url: https://www.ncbi.nlm.nih.gov/gene/79633
+
+  - gene: GNAS
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      GNAS是具有复杂印记和多转录本表达的基因座，其中部分转录本编码刺激性G蛋白α亚基，连接受体-配体信号与腺苷酸环化酶激活。GNAS变异解释需核对转录本、具体位点和功能证据；普通错义变异不能自动按激活性事件处理，也不得仅由基因名称生成用药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2778
+        url: https://www.ncbi.nlm.nih.gov/gene/2778
+
+  - gene: LRP1B
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      LRP1B编码低密度脂蛋白受体家族成员，该类受体可通过与多种配体相互作用参与正常细胞功能和发育，LRP1B基因破坏在多种肿瘤中已有报道。明确基因破坏或功能缺失与普通错义变异不能等同；单个未收录位点不能独立作为治疗、免疫疗效或预后判断依据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-53353
+        url: https://www.ncbi.nlm.nih.gov/gene/53353
+
+  - gene: MUTYH
+    panels: [crc_358_msi]
+    mutation_analysis: >-
+      MUTYH编码参与氧化性DNA损伤修复的DNA糖基化酶，可清除与鸟嘌呤、胞嘧啶或8-氧代鸟嘌呤错误配对的腺嘌呤。MUTYH相关息肉病属于遗传易感语境；肿瘤中检出的单个位点不能自动证明胚系来源、双等位致病状态或综合征诊断，需结合变异分级、配对正常样本、合子状态和遗传咨询流程解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4595
+        url: https://www.ncbi.nlm.nih.gov/gene/4595
+
+  - gene: PTPRT
+    panels: [crc_358_msi]
+    mutation_analysis: >-
+      PTPRT编码受体型蛋白酪氨酸磷酸酶，包含胞外区、单次跨膜区和两个胞内催化结构域，可能参与信号传导与细胞黏附。PTPRT明确功能缺失事件与普通错义变异不能等同；未收录位点需结合结构域、功能及结直肠癌证据解释，不得仅凭基因名称形成治疗或预后结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-11122
+        url: https://www.ncbi.nlm.nih.gov/gene/11122
+
+  - gene: ZFHX3
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      ZFHX3编码含多个同源结构域和锌指基序的转录因子，可调控分化、c-Myb及细胞周期抑制相关基因表达。ZFHX3不同变异的功能后果具有位点和结构域依赖性；普通错义变异不能自动视为抑癌功能丧失，也不能由其他癌种的表达或定位研究外推治疗和预后结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-463
+        url: https://www.ncbi.nlm.nih.gov/gene/463
+
+drug_sections: []

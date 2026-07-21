@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 rule_id: "drugs"
-version: "0.6.0"
-updated: "2026-07-20"
+version: "0.6.1"
+updated: "2026-07-21"
 status: "active"
 description: "CRC drug-display rule declarations used by the generator."
 
@@ -72,9 +72,6 @@ targeted_drug_rules:
   summary_display_scope: drug_matched_variants
   summary_display_variant_levels: ["Ⅰ类", "Ⅱ类"]
   overrides:
-    SETD2:
-      benefit_drugs: "AZD1775（C）"
-      caution_drugs: "--"
     ATM:
       benefit_drugs: |-
         奥拉帕利（C）
@@ -107,6 +104,33 @@ targeted_drug_rules:
       reject_when_db_position_missing: true
       note: "P0药物规则护栏：内部库只有基因、无位点/事件的泛化行不进入2.1靶向用药提示；已审核reviewed override仍优先生效。"
   reviewed_variant_overrides:
+    - gene: SETD2
+      panels: [crc_301_msi, crc_358_msi]
+      applicability: "loss_of_function"
+      variant_level:
+        - "Ⅱ类"
+        - "II类"
+        - "2类"
+      benefit_drugs:
+        - "AZD1775（C）"
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: primary_preclinical_signal_with_negative_phase_ii_result
+      evidence_level: preclinical_synthetic_lethality_phase_ii_no_objective_response
+      evidence_as_of: "2026-07-21"
+      cancer_scope: pathogenic_setd2_loss_cross_cancer_not_crc_approval
+      secondary_review_status: pending_report_group_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_primary_source_review
+        reviewed_at: "2026-07-21"
+        risk_level: high
+        secondary_review_status: pending_report_group_review
+        references:
+          - https://pubmed.ncbi.nlm.nih.gov/26602815/
+          - https://pubmed.ncbi.nlm.nih.gov/38920407/
+          - https://clinicaltrials.gov/study/NCT03284385
     - gene: FANCA
       applicability: "loss_of_function"
       variant_level:
@@ -341,6 +365,22 @@ targeted_drug_rules:
         - "Alisertib（C）"
         - "Alisertib+AZD1775（C）"
         - "Eprenetapopt（C）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: exact_part3_contract_migration_from_tp53_alteration_class_evidence
+      evidence_level: cross_cancer_preclinical_and_early_clinical_not_v274d_specific
+      evidence_as_of: "2026-07-21"
+      cancer_scope: colorectal_report_tp53_variant_class_not_v274d_specific
+      secondary_review_status: pending_report_group_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_evidence_boundary_review
+        reviewed_at: "2026-07-21"
+        risk_level: high
+        secondary_review_status: pending_report_group_review
+        references:
+          - https://pubmed.ncbi.nlm.nih.gov/28978051/
+          - https://pubmed.ncbi.nlm.nih.gov/27601554/
     - gene: TSC1
       applicability: "loss_of_function"
       variant_level:
@@ -362,6 +402,23 @@ targeted_drug_rules:
         - "TQB3804（C）"
         - "EMB01（C）"
         - "MCLA-129（C）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: historical_crc358_display_contract_with_corrected_g796d_evidence_boundary
+      evidence_level: historical_display_plus_cross_cancer_early_trial_not_crc_g796d_efficacy
+      evidence_as_of: "2026-07-21"
+      cancer_scope: colorectal_report_display_contract_direct_g796d_benefit_unproven
+      secondary_review_status: pending_report_group_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_primary_source_review
+        reviewed_at: "2026-07-21"
+        risk_level: high
+        secondary_review_status: pending_report_group_review
+        references:
+          - https://pubmed.ncbi.nlm.nih.gov/28572531/
+          - https://clinicaltrials.gov/study/NCT02465060
+          - https://clinicaltrials.gov/study/NCT04868877
     - gene: KRAS
       c_hgvs: "c.34G>A"
       p_hgvs: "p.G12S"
@@ -375,7 +432,8 @@ targeted_drug_rules:
         - "BI 1701963+曲美替尼（C）"
         - "PD0325901+哌柏西利（C）"
         - "奈拉替尼+曲美替尼（C）"
-        - "福巴替尼+贝美替尼（C） Defactinib+Avutometinib（C）"
+        - "福巴替尼+贝美替尼（C）"
+        - "Defactinib+Avutometinib（C）"
         - "依维莫司+Avutometinib（C）"
         - "RMC-6236（C）"
         - "PD0325901（D）"
@@ -464,6 +522,26 @@ targeted_drug_rules:
         - "西妥昔单抗（D）"
         - "帕尼单抗（D）"
         - "奈拉替尼（D）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: historical_crc358_display_contract_plus_primary_g660d_review
+      evidence_level: g660d_preclinical_and_cross_cancer_cases_plus_crc_regimen_evidence
+      evidence_as_of: "2026-07-21"
+      cancer_scope: colorectal_report_g660d_direct_and_her2_class_evidence_separated
+      secondary_review_status: pending_report_group_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_assisted_first_pass_primary_source_review
+        reviewed_at: "2026-07-21"
+        risk_level: high
+        secondary_review_status: pending_report_group_review
+        references:
+          - https://pubmed.ncbi.nlm.nih.gov/30449325/
+          - https://pubmed.ncbi.nlm.nih.gov/26545934/
+          - https://pubmed.ncbi.nlm.nih.gov/29146616/
+          - https://pubmed.ncbi.nlm.nih.gov/26243863/
+          - https://clinicaltrials.gov/study/NCT01953926
+          - https://clinicaltrials.gov/study/NCT05372614
 
 approved_drug_rows:
   - drug:

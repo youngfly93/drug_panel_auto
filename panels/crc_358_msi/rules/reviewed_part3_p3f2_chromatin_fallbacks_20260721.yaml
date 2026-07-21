@@ -1,0 +1,359 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  purpose: >-
+    P3-F2 first-review fallbacks for 24 CRC358-only chromatin remodeling,
+    DNA/histone modification, transcriptional corepressor, and lineage
+    transcription genes remaining after P3-F1.
+  source_type: official_gene_identity_plus_conservative_chromatin_event_boundary
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_crc358_only_chromatin_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    An ordinary tumor sequence variant does not establish a fusion,
+    amplification, deletion, expression or methylation phenotype, protein
+    complex defect, histone-mark change, biallelic loss, germline syndrome,
+    hematologic clone, or drug response. Evidence is not transferred between
+    paralogs, family members, tumor lineages, or molecular event types.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_p3f2_chromatin_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_identity_and_chromatin_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_identity_plus_conservative_event_boundary
+      cancer_scope: colorectal_cancer_crc358_only_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://pubmed.ncbi.nlm.nih.gov/27993330/
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+
+# The CRC358 denominator historically contains both the current symbol NSD2
+# and its alias WHSC1. This is one biological entity, not two independent genes.
+# Keep both declared input keys for compatibility. P3-F3 implements a
+# panel-scoped WHSC1 -> NSD2 identity map: lookup can reuse the governed WHSC1
+# knowledge, while report labels retain the first input symbol and identical
+# alias/canonical variant rows deduplicate on the canonical identity.
+identity_collision_contract:
+  - canonical_symbol: NSD2
+    ncbi_gene_id: 7468
+    historical_aliases: [WHSC1]
+    declared_panel_keys: [NSD2, WHSC1]
+    identity_status: confirmed_same_biological_gene
+    runtime_normalization_status: active_panel_scoped_alias_lookup_and_variant_dedup
+    runtime_mapping: {WHSC1: NSD2}
+    coverage_accounting: retain_both_declared_keys_but_resolve_both_to_one_biological_identity
+    report_display_policy: preserve_first_input_symbol_and_deduplicate_identical_variant_identity
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7468, url: https://www.ncbi.nlm.nih.gov/gene/7468}
+
+symbol_identity_map:
+  - {panel_symbol: ARID1B, current_symbol: ARID1B, ncbi_gene_id: 57492}
+  - {panel_symbol: ARID2, current_symbol: ARID2, ncbi_gene_id: 196528}
+  - {panel_symbol: ARID4A, current_symbol: ARID4A, ncbi_gene_id: 5926}
+  - {panel_symbol: ASXL2, current_symbol: ASXL2, ncbi_gene_id: 55252}
+  - {panel_symbol: BACH2, current_symbol: BACH2, ncbi_gene_id: 60468}
+  - {panel_symbol: BCL11A, current_symbol: BCL11A, ncbi_gene_id: 53335}
+  - {panel_symbol: BCORL1, current_symbol: BCORL1, ncbi_gene_id: 63035}
+  - {panel_symbol: CHD4, current_symbol: CHD4, ncbi_gene_id: 1108}
+  - {panel_symbol: DNMT1, current_symbol: DNMT1, ncbi_gene_id: 1786}
+  - {panel_symbol: DNMT3B, current_symbol: DNMT3B, ncbi_gene_id: 1789}
+  - {panel_symbol: HDAC4, current_symbol: HDAC4, ncbi_gene_id: 9759}
+  - {panel_symbol: HDAC7, current_symbol: HDAC7, ncbi_gene_id: 51564}
+  - {panel_symbol: HDAC9, current_symbol: HDAC9, ncbi_gene_id: 9734}
+  - {panel_symbol: HIRA, current_symbol: HIRA, ncbi_gene_id: 7290}
+  - {panel_symbol: KDM2B, current_symbol: KDM2B, ncbi_gene_id: 84678}
+  - {panel_symbol: KDM4C, current_symbol: KDM4C, ncbi_gene_id: 23081}
+  - {panel_symbol: KDM5A, current_symbol: KDM5A, ncbi_gene_id: 5927}
+  - {panel_symbol: KMT2B, current_symbol: KMT2B, ncbi_gene_id: 9757}
+  - {panel_symbol: NCOR1, current_symbol: NCOR1, ncbi_gene_id: 9611}
+  - {panel_symbol: NCOR2, current_symbol: NCOR2, ncbi_gene_id: 9612}
+  - {panel_symbol: NSD1, current_symbol: NSD1, ncbi_gene_id: 64324}
+  - {panel_symbol: SETD5, current_symbol: SETD5, ncbi_gene_id: 55209}
+  - {panel_symbol: TET2, current_symbol: TET2, ncbi_gene_id: 54790}
+  - {panel_symbol: TRRAP, current_symbol: TRRAP, ncbi_gene_id: 8295}
+
+gene_sections:
+  - gene: ARID1B
+    panels: [crc_358_msi]
+    intro: >-
+      ARID1B编码SWI/SNF染色质重塑复合物的ARID亚基，可与ARID1A形成互斥的复合物组成并参与染色质可及性和转录调控。
+    mutation_analysis: >-
+      ARID1B明确截短、双等位失活或复合物缺陷与普通错义/框内位点需要不同证据，胚系神经发育综合征也不能替代肿瘤体细胞解释。MSI结直肠癌中ARID家族的队列频率不能证明任一未知位点具有抑癌、驱动或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_or_base_arid1b_gene_level_cross_context_or_generic_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-57492, url: https://www.ncbi.nlm.nih.gov/gene/57492}
+      - {type: pubmed, id: PMID-24382590, url: https://pubmed.ncbi.nlm.nih.gov/24382590/}
+
+  - gene: ARID2
+    panels: [crc_358_msi]
+    intro: >-
+      ARID2编码PBAF型SWI/SNF染色质重塑复合物亚基，含ARID DNA相互作用区域并参与核受体相关转录和染色质调控。
+    mutation_analysis: >-
+      ARID2截短、双等位失活或PBAF复合物缺陷与普通错义位点不能统一解释；肝细胞癌或MSI结直肠癌中的基因级观察也不能证明本位点功能。未知位点不得自动推定抑癌功能缺失、免疫表型或药物敏感性。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_arid2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-196528, url: https://www.ncbi.nlm.nih.gov/gene/196528}
+      - {type: pubmed, id: PMID-24382590, url: https://pubmed.ncbi.nlm.nih.gov/24382590/}
+
+  - gene: ARID4A
+    panels: [crc_358_msi]
+    intro: >-
+      ARID4A编码核内转录抑制相关蛋白，可结合视网膜母细胞瘤蛋白并招募组蛋白去乙酰化酶等共抑制因子。
+    mutation_analysis: >-
+      ARID4A表达、pRB/HDAC复合物状态、明确失活和普通序列位点属于不同证据层；MSI结直肠癌中ARID家族的队列突变不能确定单个位点功能。未知位点不得仅凭家族或通路角色判定驱动、抑癌或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_arid4a_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5926, url: https://www.ncbi.nlm.nih.gov/gene/5926}
+      - {type: pubmed, id: PMID-24382590, url: https://pubmed.ncbi.nlm.nih.gov/24382590/}
+
+  - gene: ASXL2
+    panels: [crc_358_msi]
+    intro: >-
+      ASXL2编码表观遗传调控蛋白，可与多类组蛋白修饰因子协同并参与特定位点的转录复合物组装。
+    mutation_analysis: >-
+      ASXL2明确截短、结构域破坏、表达变化和普通错义位点不能统一解释；ASXL1的髓系肿瘤热点/截短证据也不能跨成员套用。未知结直肠癌位点需直接染色质功能证据，不能自动形成驱动或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_asxl2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-55252, url: https://www.ncbi.nlm.nih.gov/gene/55252}
+
+  - gene: BACH2
+    panels: [crc_358_msi]
+    intro: >-
+      BACH2编码序列特异性转录调控因子，在B细胞和T细胞适应性免疫分化与功能维持中具有重要作用。
+    mutation_analysis: >-
+      BACH2胚系免疫缺陷、淋巴细胞谱系中的重排/表达事件和结直肠上皮肿瘤体细胞位点不能互相替代。肿瘤组织检出位点还需考虑免疫细胞来源，未知位点不得自动推导免疫治疗获益、耐药或肿瘤驱动。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_bach2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-60468, url: https://www.ncbi.nlm.nih.gov/gene/60468}
+
+  - gene: BCL11A
+    panels: [crc_358_msi]
+    intro: >-
+      BCL11A编码C2H2型锌指转录因子，参与造血和淋巴细胞分化，并调节红系发育相关转录程序。
+    mutation_analysis: >-
+      B细胞恶性肿瘤中的易位或表达失调、胚系发育性变异和结直肠癌普通体细胞位点具有不同证据边界；BCL11B证据也不能直接转移。未知位点不得仅凭造血功能推定肿瘤驱动或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_bcl11a_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-53335, url: https://www.ncbi.nlm.nih.gov/gene/53335}
+
+  - gene: BCORL1
+    panels: [crc_358_msi]
+    intro: >-
+      BCORL1编码转录共抑制蛋白，可由DNA结合因子招募至启动子并与多种Ⅱ类组蛋白去乙酰化酶相互作用。
+    mutation_analysis: >-
+      髓系肿瘤中的截短/失活、X染色体等位状态、表达变化和普通错义位点需分别解释；BCOR事件也不能直接套用BCORL1。未知结直肠癌位点不能自动证明共抑制复合物缺陷、驱动性或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_bcorl1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-63035, url: https://www.ncbi.nlm.nih.gov/gene/63035}
+
+  - gene: CHD4
+    panels: [crc_358_msi]
+    intro: >-
+      CHD4编码SNF2/RAD54家族ATP依赖染色质重塑蛋白，是核小体重塑和去乙酰化（NuRD）复合物的重要组成。
+    mutation_analysis: >-
+      CHD4明确失活、NuRD复合物缺陷、表达改变和普通序列位点不是同一事件；胚系发育综合征或浆液性子宫内膜肿瘤证据也不能直接迁移到结直肠癌。未知位点需直接功能资料，不能自动形成治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_chd4_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-1108, url: https://www.ncbi.nlm.nih.gov/gene/1108}
+
+  - gene: DNMT1
+    panels: [crc_358_msi]
+    intro: >-
+      DNMT1编码主要的维持型DNA甲基转移酶，偏好半甲基化DNA并在复制后维持基因组甲基化模式。
+    mutation_analysis: >-
+      肿瘤全局/位点甲基化表型、DNMT1表达或药物抑制、胚系神经系统疾病变异和肿瘤体细胞序列位点不能互相替代。未知位点不得自动证明甲基转移酶功能改变、抑癌基因沉默或治疗反应。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_dnmt1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-1786, url: https://www.ncbi.nlm.nih.gov/gene/1786}
+
+  - gene: DNMT3B
+    panels: [crc_358_msi]
+    intro: >-
+      DNMT3B编码主要参与从头DNA甲基化的核内DNA甲基转移酶，并具有多个剪接异构体。
+    mutation_analysis: >-
+      DNMT3B表达、启动子/全基因组甲基化、多态性或胚系ICF综合征与肿瘤体细胞位点不能互相替代。miR-124下调DNMT3B表达的细胞研究不证明任意DNMT3B位点具有相同作用，未知位点不得自动推导甲基化表型或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_dnmt3b_expression_polymorphism_and_cross_tumor_gene_level_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-1789, url: https://www.ncbi.nlm.nih.gov/gene/1789}
+      - {type: pubmed, id: PMID-32552060, url: https://pubmed.ncbi.nlm.nih.gov/32552060/}
+
+  - gene: HDAC4
+    panels: [crc_358_msi]
+    intro: >-
+      HDAC4编码Ⅱa类组蛋白去乙酰化酶相关转录共抑制蛋白，可通过MEF2等转录因子及HDAC3复合物调节染色质和转录。
+    mutation_analysis: >-
+      HDAC4表达、磷酸化、核质转位、复合物活性和编码区序列位点是不同检测事件；泛HDAC抑制剂或其他HDAC成员证据也不能套用。未知结直肠癌位点不能自动证明去乙酰化异常或药物敏感性。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_hdac4_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9759, url: https://www.ncbi.nlm.nih.gov/gene/9759}
+
+  - gene: HDAC7
+    panels: [crc_358_msi]
+    intro: >-
+      HDAC7编码Ⅱa类组蛋白去乙酰化酶相关蛋白，可参与SMRT等共抑制复合物介导的转录调节。
+    mutation_analysis: >-
+      HDAC7表达、蛋白磷酸化、核质定位或泛HDAC抑制与普通错义位点不能互相替代；其他HDAC成员和血液/免疫谱系研究也不能直接迁移。未知结直肠癌位点不得自动形成驱动或用药结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_hdac7_cross_lineage_expression_gene_level_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-51564, url: https://www.ncbi.nlm.nih.gov/gene/51564}
+
+  - gene: HDAC9
+    panels: [crc_358_msi]
+    intro: >-
+      HDAC9编码Ⅱa类组蛋白去乙酰化酶家族蛋白，存在多个剪接异构体，并可通过共抑制复合物调节MEF2相关转录。
+    mutation_analysis: >-
+      HDAC9表达、异构体、免疫细胞功能、敲除/药物抑制和普通序列位点属于不同证据层。小鼠Treg/结肠炎研究不是结直肠肿瘤位点证据，未知位点不得据此推导免疫治疗或HDAC抑制剂反应。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_hdac9_other_tumor_and_disease_database_gene_level_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9734, url: https://www.ncbi.nlm.nih.gov/gene/9734}
+      - {type: pubmed, id: PMID-19879272, url: https://pubmed.ncbi.nlm.nih.gov/19879272/}
+
+  - gene: HIRA
+    panels: [crc_358_msi]
+    intro: >-
+      HIRA编码组蛋白伴侣蛋白，优先参与组蛋白变体H3.3的非复制依赖性核小体装配及衰老相关染色质调控。
+    mutation_analysis: >-
+      HIRA拷贝缺失/单倍剂量不足、H3.3装配或衰老表型与普通错义位点不能相互替代；DiGeorge区域胚系缺失和H3F3A热点证据也不能套用。未知结直肠癌位点不能自动证明染色质重编程或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_hira_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-7290, url: https://www.ncbi.nlm.nih.gov/gene/7290}
+
+  - gene: KDM2B
+    panels: [crc_358_msi]
+    intro: >-
+      KDM2B编码含JmjC、CXXC和F-box等区域的赖氨酸去甲基化酶/染色质调控蛋白，参与染色质和转录复合物调节。
+    mutation_analysis: >-
+      KDM2B表达、染色质募集、催化活性、胚系神经发育异常和肿瘤体细胞序列位点需分别解释；KDM2A或其他KDM成员证据不能直接转移。未知位点不得自动推定组蛋白标记改变、驱动或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_kdm2b_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-84678, url: https://www.ncbi.nlm.nih.gov/gene/84678}
+
+  - gene: KDM4C
+    panels: [crc_358_msi]
+    intro: >-
+      KDM4C编码Jumonji家族赖氨酸去甲基化酶，可调节特定组蛋白三甲基标记、基因表达和染色体分离。
+    mutation_analysis: >-
+      KDM4C扩增、表达升高、催化活性和普通编码区位点不能互相替代；KDM4A/B/D等家族成员证据也不能跨基因迁移。未知结直肠癌位点需直接酶学和肿瘤证据，不能自动形成治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_kdm4c_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-23081, url: https://www.ncbi.nlm.nih.gov/gene/23081}
+
+  - gene: KDM5A
+    panels: [crc_358_msi]
+    intro: >-
+      KDM5A编码JARID1/KDM5家族组蛋白H3K4去甲基化酶，并可与视网膜母细胞瘤蛋白等转录调控因子相互作用。
+    mutation_analysis: >-
+      KDM5A表达/扩增、药物耐受细胞状态、催化活性和普通序列位点是不同事件；其他KDM5成员证据不能直接套用。未知结直肠癌位点不得仅凭通路功能推定耐药、驱动或用药意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_kdm5a_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-5927, url: https://www.ncbi.nlm.nih.gov/gene/5927}
+
+  - gene: KMT2B
+    panels: [crc_358_msi]
+    intro: >-
+      KMT2B编码含CXXC、PHD和SET等区域的KMT2/MLL家族赖氨酸甲基转移酶，参与H3K4甲基化相关转录调控。
+    mutation_analysis: >-
+      KMT2B扩增/表达、胚系肌张力障碍、明确催化失活和普通肿瘤错义位点不能相互替代；KMT2A融合或其他KMT2成员证据也不能跨基因套用。未知结直肠癌位点不能自动证明H3K4重编程、驱动或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: legacy_kmt2b_genecards_amplification_and_cross_tumor_gene_level_narrative
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9757, url: https://www.ncbi.nlm.nih.gov/gene/9757}
+
+  - gene: NCOR1
+    panels: [crc_358_msi]
+    intro: >-
+      NCOR1编码核受体共抑制蛋白，可与组蛋白去乙酰化酶和其他转录调控因子组成复合物，促进染色质凝聚和转录抑制。
+    mutation_analysis: >-
+      NCOR1表达、核受体配体状态、共抑制复合物活性、明确失活和普通错义位点不能统一解释；NCOR2证据也不能直接替代。未知结直肠癌位点不得自动推定内分泌信号、HDAC活性或药物反应。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_ncor1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9611, url: https://www.ncbi.nlm.nih.gov/gene/9611}
+
+  - gene: NCOR2
+    panels: [crc_358_msi]
+    intro: >-
+      NCOR2又称SMRT，编码核受体共抑制蛋白，可与组蛋白去乙酰化酶等组成复合物并抑制靶基因基础转录。
+    mutation_analysis: >-
+      NCOR2表达、核受体环境、共抑制复合物状态和普通序列位点属于不同证据层；NCOR1或其他共抑制因子证据不能直接套用。未知结直肠癌位点不能自动形成驱动、预后或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_ncor2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-9612, url: https://www.ncbi.nlm.nih.gov/gene/9612}
+
+  - gene: NSD1
+    panels: [crc_358_msi]
+    intro: >-
+      NSD1编码含SET、PHD和核受体结合区域的核内赖氨酸甲基转移/转录调控蛋白。
+    mutation_analysis: >-
+      胚系NSD1变异导致的Sotos/Weaver综合征、髓系肿瘤NUP98-NSD1融合、表达变化和结直肠癌普通体细胞位点不能互相替代；NSD2证据也不能跨成员迁移。未知位点不得自动证明甲基化重编程或治疗意义。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_nsd1_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-64324, url: https://www.ncbi.nlm.nih.gov/gene/64324}
+
+  - gene: SETD5
+    panels: [crc_358_msi]
+    intro: >-
+      SETD5编码含SET区域的染色质和转录调控相关蛋白；官方RefSeq记录仍提示其确切酶学功能尚未完全确定。
+    mutation_analysis: >-
+      SETD5胚系神经发育异常、表达或复合物功能和肿瘤体细胞序列位点不能互相替代；也不能仅凭SET区域名称断言其具有特定组蛋白甲基转移酶活性。未知结直肠癌位点不得自动形成驱动或治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_setd5_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-55209, url: https://www.ncbi.nlm.nih.gov/gene/55209}
+
+  - gene: TET2
+    panels: [crc_358_msi]
+    intro: >-
+      TET2编码甲基胞嘧啶双加氧酶，可将5-甲基胞嘧啶氧化为5-羟甲基胞嘧啶并参与造血和DNA去甲基化相关调控。
+    mutation_analysis: >-
+      TET2是克隆性造血和髓系肿瘤常见基因；实体瘤样本中的位点需结合样本来源、肿瘤纯度、VAF及必要时配对血液判断来源。单个未知位点不能自动视为结直肠癌细胞驱动、双等位失活、免疫治疗标志物或药物靶点。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_tet2_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-54790, url: https://www.ncbi.nlm.nih.gov/gene/54790}
+      - {type: pubmed, id: PMID-29866652, url: https://pubmed.ncbi.nlm.nih.gov/29866652/}
+      - {type: pubmed, id: PMID-29872864, url: https://pubmed.ncbi.nlm.nih.gov/29872864/}
+
+  - gene: TRRAP
+    panels: [crc_358_msi]
+    intro: >-
+      TRRAP编码PIKK家族大型支架蛋白，是多种组蛋白乙酰转移酶复合物的共同组分，并参与染色质募集、转录和DNA修复调控。
+    mutation_analysis: >-
+      TRRAP表达、HAT复合物装配、胚系发育/听觉表型和普通肿瘤序列位点不能互相替代；其PIKK家族归属也不等于具有PI3K或mTOR药物靶点性质。未知结直肠癌位点需直接复合物和功能证据，不能自动形成治疗结论。
+    replace_fields: [intro, mutation_analysis]
+    supersedes: base_templated_trrap_generic_fallback
+    source_refs:
+      - {type: ncbi_gene, id: NCBI-Gene-8295, url: https://www.ncbi.nlm.nih.gov/gene/8295}
+
+drug_sections: []

@@ -58,6 +58,21 @@ Supported package and template statuses:
 Every active or pilot panel must declare at least one synthetic golden case.
 Production customer files must not be placed under `golden_cases/`.
 
+Optional `gene_symbol_aliases` is a panel-scoped `historical_alias -> current_symbol`
+mapping for assays whose historical input keys differ from the current official
+gene symbol:
+
+```yaml
+gene_symbol_aliases:
+  WHSC1: NSD2
+```
+
+The mapping normalizes knowledge lookup and identical Part 3 variant identity,
+but does not rewrite the first input symbol displayed in the report. It must not
+be used as a global synonym table: symbol history can be assay-specific or
+ambiguous (for example, `TCF4` and the historical `TCF7L2` alias). Keys and
+values must be non-empty strings; self-maps and cycles are invalid.
+
 ## `qa.yaml` Minimum Fields
 
 Every panel package must include a QA profile:
@@ -149,6 +164,7 @@ The validator checks:
   severities.
 - golden case ids are unique and runnable.
 - registry aliases do not collide across packages.
+- `gene_symbol_aliases`, when declared, is a non-cyclic string-to-string map.
 
 The runtime `PanelRegistry` also rejects alias collisions during registration,
 so a package cannot silently steal another panel's project type.

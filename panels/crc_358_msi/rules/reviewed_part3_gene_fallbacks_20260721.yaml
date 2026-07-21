@@ -1,0 +1,118 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    First-review gene-level mutation-analysis fallbacks for high-risk CRC panel
+    genes whose previously unseen variants still rendered generic prose.
+  source_type: official_gene_function_plus_crc_reporting_guideline
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_conservative_gene_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    These rows describe stable gene function and alteration-class boundaries.
+    They do not create a targeted-drug match, evidence grade, sensitivity claim,
+    or resistance claim. Exact reviewed variant rules retain higher precedence.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_gene_fallback_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_gene_function_and_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_function_plus_conservative_variant_boundary
+      cancer_scope: colorectal_cancer_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: AKT1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      AKT1编码PI3K/AKT信号轴中的丝氨酸/苏氨酸激酶，参与细胞增殖、生存、代谢和血管生成调控。AKT1变异的功能与临床意义依赖具体位点和变异类型；只有经功能或临床证据确认的激活性事件才能按相应精确规则解释，未收录位点不得仅因基因名称推导靶向用药。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-207
+        url: https://www.ncbi.nlm.nih.gov/gene/207
+
+  - gene: ALK
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      ALK编码受体酪氨酸激酶；肿瘤中可见重排、突变或扩增，其中染色体重排形成融合基因是常见的致癌激活方式。ALK普通单核苷酸变异不能等同于ALK融合、扩增或已知激活性突变；应结合事件类型、具体位点、结构域和癌种证据解释，未命中精确规则时不得生成用药结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-238
+        url: https://www.ncbi.nlm.nih.gov/gene/238
+
+  - gene: EGFR
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      EGFR编码表皮生长因子受体酪氨酸激酶，配体结合后可诱导受体二聚和酪氨酸自磷酸化并促进细胞增殖。EGFR变异的意义具有癌种、位点和事件类型特异性；结直肠癌中的抗EGFR治疗判断不能由任意EGFR单核苷酸变异单独推出，需结合RAS等通路标志物、具体位点及独立药物规则。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-1956
+        url: https://www.ncbi.nlm.nih.gov/gene/1956
+
+  - gene: ERBB2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      ERBB2编码ERBB家族受体酪氨酸激酶共受体，可与其他配体结合的ERBB家族成员形成异源二聚体并增强MAPK和PI3K相关信号。ERBB2扩增或过表达与具体序列变异属于不同证据事件；未收录的ERBB2单核苷酸变异不得等同于HER2扩增或已知激活位点，需按具体事件和癌种证据解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2064
+        url: https://www.ncbi.nlm.nih.gov/gene/2064
+
+  - gene: FLT3
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      FLT3编码调控造血的III类受体酪氨酸激酶，持续激活性变异在急性髓系和淋系白血病中具有明确的疾病背景。结直肠癌中检出的普通FLT3单核苷酸变异不能套用血液肿瘤中的FLT3证据；应核对是否为经验证的激活事件及是否存在结直肠癌直接证据，未命中精确规则时不得生成药物结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2322
+        url: https://www.ncbi.nlm.nih.gov/gene/2322
+
+  - gene: MET
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      MET编码肝细胞生长因子受体酪氨酸激酶，受体激活参与细胞存活、迁移和侵袭。MET序列变异、扩增和过表达属于不同的生物学事件，证据边界不可互换；普通单核苷酸变异不得替代扩增或已知功能性事件，需结合具体位点、事件类型和癌种证据解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4233
+        url: https://www.ncbi.nlm.nih.gov/gene/4233
+
+  - gene: RET
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      RET编码受体酪氨酸激酶，可通过细胞遗传学重排或特定激活性点突变发生致癌激活。RET重排或融合与点突变的适用癌种及证据不可互换；未收录的RET单核苷酸变异不得按RET融合或已知热点处理，需结合具体位点、结构域和精确规则解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5979
+        url: https://www.ncbi.nlm.nih.gov/gene/5979
+
+  - gene: ROS1
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      ROS1编码具有酪氨酸激酶活性的跨膜受体样蛋白，可能参与细胞生长或分化调控。ROS1变异的功能取决于具体事件类型和位点；普通单核苷酸变异不能自动视为致癌激活事件，也不能仅凭基因名称生成用药结论，需结合功能、癌种及精确规则证据解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-6098
+        url: https://www.ncbi.nlm.nih.gov/gene/6098
+
+  - gene: SETD2
+    panels: [crc_301_msi, crc_358_msi]
+    mutation_analysis: >-
+      SETD2编码组蛋白H3第36位赖氨酸特异性甲基转移酶，并与活跃染色质及RNA聚合酶II相关。SETD2临床解释应区分有依据支持的功能缺失事件与普通错义变异；只有满足既定功能缺失边界并有相应证据的事件才能命中精确规则，未证实功能影响的位点不得外推为药物敏感。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-29072
+        url: https://www.ncbi.nlm.nih.gov/gene/29072
+
+drug_sections: []

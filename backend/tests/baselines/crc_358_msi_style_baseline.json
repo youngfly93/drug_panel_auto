@@ -6,9 +6,9 @@
       "unrendered_placeholders": 0,
       "variant_count_text": 2
     },
-    "part3_bullet_color": null,
+    "part3_bullet_color": "000000",
     "references": {
-      "count": 6,
+      "count": 10,
       "titleless": 0
     },
     "signature": {

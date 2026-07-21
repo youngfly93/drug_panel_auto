@@ -1,0 +1,181 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    P3-B first-review gene-level fallbacks for antigen-presentation,
+    interferon-gamma-receptor, and PD-1-ligand genes shared by both CRC panels.
+  source_type: official_gene_function_plus_immunotherapy_reporting_boundary
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_immune_gene_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    A single tumor sequence variant does not establish antigen-presentation loss,
+    interferon-gamma-pathway loss, immune-checkpoint expression, or immunotherapy
+    benefit or resistance. MSI/MMR and other validated biomarkers remain separate.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p3b_immune_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_gene_function_and_immunotherapy_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_function_plus_conservative_immunotherapy_boundary
+      cancer_scope: colorectal_cancer_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://educate.amp.org/local/catalog/view/product.php?productid=135
+        - type: guideline
+          id: CAP-MMR-MSI-testing-for-ICI-2022
+          url: https://www.cap.org/cap-guidelines/mismatch-repair-and-microsatellite-instability-testing-for-immune-checkpoint-inhibitor-therapy/
+gene_sections:
+  - gene: B2M
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      B2M编码β2微球蛋白，是几乎所有有核细胞表面HLA I类复合物的轻链组分，参与稳定HLA I类分子并支持内源性肽抗原呈递。
+    mutation_analysis: >-
+      经证实的B2M双等位功能缺失或蛋白缺失可造成HLA I类抗原呈递异常，并可在部分研究语境中与免疫逃逸相关；但单个肿瘤序列变异不能自动证明双等位失活、蛋白缺失或免疫检查点抑制剂耐药。需结合变异功能、合子/拷贝数状态、蛋白表达、治疗时序和癌种证据解释。
+    supersedes: legacy_b2m_expression_and_prognosis_only_gene_intro
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-567
+        url: https://www.ncbi.nlm.nih.gov/gene/567
+      - type: pubmed
+        id: PMID-37801341
+        url: https://pubmed.ncbi.nlm.nih.gov/37801341/
+
+  - gene: HLA-A
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HLA-A编码经典HLA I类重链，与B2M形成复合物，在多数有核细胞表面呈递内源性肽供细胞毒性T细胞识别；其肽结合区具有高度等位基因多态性。
+    mutation_analysis: >-
+      HLA胚系分型、肿瘤体细胞序列变异、杂合性缺失、拷贝数改变和蛋白表达缺失属于不同事件。单个HLA-A序列变异不足以证明抗原呈递功能缺失，也不能直接判定免疫治疗获益或耐药；需结合等位基因、合子状态、表达及经审核的癌种证据。
+    supersedes: legacy_hla_a_expression_loss_cross_cancer_intro
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3105
+        url: https://www.ncbi.nlm.nih.gov/gene/3105
+
+  - gene: HLA-B
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HLA-B编码经典HLA I类重链，与B2M组成细胞表面复合物并呈递内源性肽；其肽结合区具有高度等位基因多态性，可影响所呈递肽谱。
+    mutation_analysis: >-
+      HLA-B常见胚系多态、肿瘤体细胞变异、杂合性缺失和表达下调不能相互替代。单个肿瘤序列变异不足以证明抗原呈递缺陷，也不得直接生成免疫治疗获益或耐药结论；需要结合等位基因、功能、合子状态和表达证据。
+    supersedes: legacy_hla_b_expression_loss_cross_cancer_intro
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3106
+        url: https://www.ncbi.nlm.nih.gov/gene/3106
+
+  - gene: HLA-DPB1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HLA-DPB1编码HLA-DP II类分子的β链，与DPA链形成异二聚体，主要在抗原呈递细胞表面呈递来源于细胞外蛋白的肽。
+    mutation_analysis: >-
+      HLA-DPB1胚系等位基因分型与肿瘤体细胞序列变异不是同一证据类型。单个位点不能自动证明HLA II类抗原呈递缺陷或形成免疫治疗预测结论；需结合等位基因背景、表达、合子状态和直接功能证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3115
+        url: https://www.ncbi.nlm.nih.gov/gene/3115
+
+  - gene: HLA-DQA1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HLA-DQA1编码HLA-DQ II类分子的α链，可与DQB1编码的β链组成异二聚体，在抗原呈递细胞表面呈递细胞外来源肽并参与CD4阳性T细胞免疫应答。
+    mutation_analysis: >-
+      HLA-DQA1具有显著胚系多态性；常见等位基因、肿瘤体细胞变异和表达改变不能相互替代。单个序列变异不足以证明抗原呈递功能异常，也不能直接推导免疫治疗获益或耐药。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3117
+        url: https://www.ncbi.nlm.nih.gov/gene/3117
+
+  - gene: HLA-DQB1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HLA-DQB1编码HLA-DQ II类分子的β链，与DQA链形成异二聚体并参与细胞外来源肽的呈递；其肽结合区具有高度胚系多态性。
+    mutation_analysis: >-
+      HLA-DQB1胚系单倍型关联、肿瘤体细胞序列变异、拷贝数和表达状态属于不同层面的证据。单个位点不能自动证明HLA II类功能缺失或作为免疫治疗预测标志。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3119
+        url: https://www.ncbi.nlm.nih.gov/gene/3119
+
+  - gene: HLA-DRB1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HLA-DRB1编码HLA-DR II类分子的主要β链，与DRA链形成异二聚体，在抗原呈递细胞表面呈递细胞外来源肽；该基因具有广泛的胚系等位基因多态性。
+    mutation_analysis: >-
+      其他疾病或其他癌种中的HLA-DRB1胚系等位基因关联不能用于解释结直肠肿瘤中的任意体细胞位点。单个序列变异不足以证明抗原呈递异常，也不得直接生成免疫治疗获益、耐药或患病风险结论。
+    supersedes: legacy_hla_drb1_cervical_and_prostate_germline_association_intro
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3123
+        url: https://www.ncbi.nlm.nih.gov/gene/3123
+
+  - gene: HLA-DRB5
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HLA-DRB5编码部分HLA-DR单倍型中的II类β链，可与DRA链形成异二聚体并参与抗原呈递；其是否存在及等位基因背景与HLA单倍型有关。
+    mutation_analysis: >-
+      HLA-DRB5单倍型、胚系多态、体细胞序列变异和表达状态不能混为同一事件。单个肿瘤位点不能自动证明HLA II类抗原呈递功能缺失，也不能直接推导免疫治疗结论。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3127
+        url: https://www.ncbi.nlm.nih.gov/gene/3127
+
+  - gene: HLA-G
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HLA-G编码非经典HLA I类分子，具有膜结合和可溶性异构体，在特定组织和免疫调节环境中参与调控免疫细胞反应。
+    mutation_analysis: >-
+      HLA-G表达、可溶性蛋白、剪接异构体、胚系多态与肿瘤体细胞序列变异是不同证据。单个序列变异不足以证明免疫抑制表型，也不能直接作为免疫检查点治疗获益或耐药标志。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3135
+        url: https://www.ncbi.nlm.nih.gov/gene/3135
+
+  - gene: IFNGR1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      IFNGR1编码IFN-γ受体的配体结合链，与IFNGR2组成异二聚体受体复合物，参与将IFN-γ信号传递至细胞内反应通路。
+    mutation_analysis: >-
+      经功能证实的受体通路缺失与普通错义或未验证剪接变异不能等同。单个IFNGR1肿瘤序列变异不足以证明IFN-γ通路失活，也不得直接判定免疫检查点抑制剂耐药；需结合双等位/拷贝数状态、蛋白或信号功能及治疗时序。
+    supersedes: legacy_ifngr1_expression_cross_cancer_intro
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3459
+        url: https://www.ncbi.nlm.nih.gov/gene/3459
+
+  - gene: IFNGR2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      IFNGR2编码IFN-γ受体的非配体结合信号链，与IFNGR1共同构成功能性受体复合物并支持下游信号传导。
+    mutation_analysis: >-
+      单个IFNGR2序列变异不能自动证明受体复合物或IFN-γ信号功能缺失，也不能直接生成免疫治疗耐药结论；需要结合位点功能、双等位/拷贝数状态、表达或功能检测和临床治疗背景。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3460
+        url: https://www.ncbi.nlm.nih.gov/gene/3460
+
+  - gene: PDCD1LG2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      PDCD1LG2编码程序性死亡配体2（PD-L2/CD273），可与PD-1结合并参与调节活化T细胞反应；其表达受细胞类型和炎症信号调控。
+    mutation_analysis: >-
+      PD-L2蛋白或RNA表达、拷贝数/重排与普通PDCD1LG2序列变异不是同一检测指标。单个肿瘤序列变异不能证明PD-L2高表达或低表达，也不得直接作为免疫检查点抑制剂获益或耐药标志；免疫治疗判断仍需使用经验证的癌种相关生物标志物和检测方法。
+    supersedes: legacy_pdcd1lg2_expression_only_intro
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-80380
+        url: https://www.ncbi.nlm.nih.gov/gene/80380
+
+drug_sections: []

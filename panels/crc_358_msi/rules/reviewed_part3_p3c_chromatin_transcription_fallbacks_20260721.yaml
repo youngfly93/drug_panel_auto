@@ -1,0 +1,330 @@
+schema_version: 1
+source:
+  panel: crc_358_msi
+  shared_with: [crc_301_msi]
+  purpose: >-
+    P3-C first-review gene-level fallbacks for chromatin, histone, cohesin,
+    transcription, and RNA-splicing regulators shared by both CRC panels.
+  source_type: official_gene_function_plus_somatic_reporting_boundary
+  curated_at: "2026-07-21"
+  scope: colorectal_cancer_chromatin_transcription_conservative_fallback
+  privacy: No patient or sample identifiers are stored.
+  content_boundary: >-
+    An ordinary tumor sequence variant does not establish a fusion or
+    rearrangement, amplification or expression phenotype, recurrent hotspot,
+    biallelic or protein-level loss, germline syndrome, hematologic diagnosis,
+    or drug sensitivity. Exact reviewed variant entries retain precedence.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_p3c_chromatin_transcription_first_review_20260721
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_gene_function_and_event_boundary
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: "2026-07-21"
+      evidence_as_of: "2026-07-21"
+      evidence_level: official_gene_function_plus_conservative_somatic_boundary
+      cancer_scope: colorectal_cancer_conservative_gene_fallback
+      secondary_review_status: pending_report_group_review
+      risk_level: high_requires_secondary_review
+      source_refs:
+        - type: guideline
+          id: AMP-ASCO-CAP-somatic-variant-interpretation-2017
+          url: https://educate.amp.org/local/catalog/view/product.php?productid=135
+        - type: guideline
+          id: CAP-ASCP-AMP-ASCO-CRC-biomarker-guideline-2017
+          url: https://www.cap.org/cap-guidelines/molecular-biomarkers-for-the-evaluation-of-colorectal-carcinoma/
+gene_sections:
+  - gene: ASXL1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      ASXL1编码染色质相关调控蛋白，参与表观遗传复合物募集、组蛋白修饰和转录调节；其功能依赖具体细胞背景和蛋白复合物状态。
+    mutation_analysis: >-
+      髓系肿瘤中复发的截短型ASXL1变异、克隆性造血事件与结直肠肿瘤中的普通序列变异不能等同。单个位点不足以证明ASXL1功能缺失、肿瘤驱动或治疗意义，也不能据肿瘤检测结果判断其是否来自胚系或克隆性造血。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-171023
+        url: https://www.ncbi.nlm.nih.gov/gene/171023
+
+  - gene: BRD4
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      BRD4属于BET溴结构域蛋白家族，可识别乙酰化赖氨酸并参与染色质依赖的转录调控和转录延伸。
+    mutation_analysis: >-
+      BRD4融合、扩增或过表达以及药物抑制实验与普通BRD4序列变异不是同一证据事件。单个位点不能自动证明BRD4依赖性、转录激活表型或BET抑制剂敏感性，需结合事件类型、功能和癌种证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-23476
+        url: https://www.ncbi.nlm.nih.gov/gene/23476
+
+  - gene: CIC
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      CIC编码含HMG-box DNA结合区域的转录抑制因子，可调控受体酪氨酸激酶/RAS-MAPK通路下游靶基因的表达。
+    mutation_analysis: >-
+      经证实的CIC功能缺失、双等位失活或特定重排与普通错义变异不能等同；中枢神经系统肿瘤或肉瘤中的分子分类证据也不能直接迁移到结直肠癌任意位点。需结合位点功能、第二击及癌种证据解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-23152
+        url: https://www.ncbi.nlm.nih.gov/gene/23152
+
+  - gene: CREBBP
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      CREBBP编码转录共激活因子和赖氨酸乙酰转移酶，可与多种转录因子结合并通过组蛋白及非组蛋白底物乙酰化调节基因表达。
+    mutation_analysis: >-
+      乙酰转移酶结构域热点、明确功能缺失、融合或拷贝数事件与普通CREBBP序列变异不能等同。单个位点不足以证明乙酰转移酶活性丧失或形成治疗结论；还需结合结构域、功能、合子状态和癌种证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-1387
+        url: https://www.ncbi.nlm.nih.gov/gene/1387
+
+  - gene: DEK
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      DEK编码核内染色质相关蛋白，参与染色质结构、DNA拓扑和RNA加工等过程；其生物学作用与蛋白表达和细胞环境有关。
+    mutation_analysis: >-
+      DEK融合、扩增或过表达与普通DEK序列变异不是同一事件。单个位点不能由表达研究或其他癌种观察自动解释为功能获得、肿瘤驱动或治疗标志，需以位点级功能和结直肠癌证据为准。
+    supersedes: legacy_dek_expression_and_cross_cancer_gene_intro
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7913
+        url: https://www.ncbi.nlm.nih.gov/gene/7913
+
+  - gene: EP300
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      EP300编码转录共激活因子和赖氨酸乙酰转移酶，可通过乙酰化组蛋白及多种转录调控蛋白参与染色质开放和基因表达调节。
+    mutation_analysis: >-
+      明确功能缺失、乙酰转移酶结构域事件、融合和拷贝数改变与普通EP300序列变异不能等同。单个位点不足以证明酶活性缺失、表观遗传表型或药物敏感性，需结合功能、合子状态和癌种证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-2033
+        url: https://www.ncbi.nlm.nih.gov/gene/2033
+
+  - gene: EP400
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      EP400编码ATP依赖的染色质重塑蛋白，是TIP60/染色质修饰复合物成员，参与组蛋白变体交换、转录调节和DNA损伤应答。
+    mutation_analysis: >-
+      EP400表达改变、复合物缺陷、明确ATP酶功能丧失与普通错义或框内重复事件不能等同。单个序列变异不足以证明染色质重塑失活、肿瘤驱动或治疗意义，需结合结构域和直接功能证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-57634
+        url: https://www.ncbi.nlm.nih.gov/gene/57634
+
+  - gene: H3F3A
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      H3F3A现行官方符号为H3-3A，编码复制非依赖性组蛋白H3.3，参与染色质组装、转录活跃区域及特定基因组区域的核小体更新。
+    mutation_analysis: >-
+      H3.3特定氨基酸热点事件具有肿瘤类型和位点依赖性，不能推广到任意H3F3A/H3-3A变异。普通序列变异不足以建立特定组蛋白驱动亚型、表观遗传状态或治疗结论，需精确核对位点、肿瘤类型和分子背景。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3020
+        url: https://www.ncbi.nlm.nih.gov/gene/3020
+
+  - gene: JUN
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      JUN编码含碱性亮氨酸拉链区域的转录因子，可与FOS或其他伙伴形成AP-1复合物并响应多种细胞外信号调节转录。
+    mutation_analysis: >-
+      JUN表达升高、上游信号激活、AP-1活性或特定融合与普通JUN序列变异不是同一证据。单个位点不能自动证明AP-1激活、肿瘤驱动或治疗意义；截短事件也需结合转录本、功能和癌种证据评估。
+    supersedes: legacy_jun_expression_activation_gene_intro
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-3725
+        url: https://www.ncbi.nlm.nih.gov/gene/3725
+
+  - gene: KAT6A
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      KAT6A编码MYST家族赖氨酸乙酰转移酶，是染色质调控复合物成员，可参与组蛋白乙酰化和转录调节。
+    mutation_analysis: >-
+      KAT6A融合、扩增、表达异常和明确功能缺失与普通序列变异不能等同。单个位点不足以证明乙酰转移酶活性改变、肿瘤驱动或药物敏感性，需结合事件类别、结构域及直接功能证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7994
+        url: https://www.ncbi.nlm.nih.gov/gene/7994
+
+  - gene: KDM6A
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      KDM6A编码染色质调控蛋白，可参与去除组蛋白H3第27位赖氨酸的甲基化标记并与转录调控复合物协同作用。
+    mutation_analysis: >-
+      经证实的KDM6A功能缺失、蛋白缺失或双等位事件与普通错义变异不能等同。单个位点不足以证明H3K27表观遗传状态改变、合成致死关系或药物敏感性，需结合功能、合子状态和癌种证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7403
+        url: https://www.ncbi.nlm.nih.gov/gene/7403
+
+  - gene: KMT2A
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      KMT2A编码组蛋白赖氨酸甲基转移酶复合物的核心蛋白，参与H3K4甲基化、发育相关基因表达和转录调控。
+    mutation_analysis: >-
+      KMT2A重排或融合是特定血液肿瘤中的独立事件，不能由普通KMT2A序列变异替代。单个位点不足以套用白血病分子分类、预后或治疗结论；需分别核对重排、拷贝数、序列变异及其功能证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-4297
+        url: https://www.ncbi.nlm.nih.gov/gene/4297
+
+  - gene: MED12
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      MED12编码Mediator转录调控复合物成员，参与连接转录因子信号与RNA聚合酶II介导的基因转录。
+    mutation_analysis: >-
+      特定肿瘤中的MED12复发热点、表达改变或复合物功能异常与任意结直肠癌序列变异不能等同。单个位点不足以证明Mediator复合物失活、肿瘤驱动或药物反应，需结合精确位点和癌种证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-9968
+        url: https://www.ncbi.nlm.nih.gov/gene/9968
+
+  - gene: RARA
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      RARA编码视黄酸受体α，是配体依赖的核受体转录因子，可与RXR形成复合物并调节视黄酸响应基因的转录。
+    mutation_analysis: >-
+      RARA融合或重排，尤其特定血液肿瘤中的融合事件，与普通RARA序列变异不是同一证据。单个位点不能套用急性早幼粒细胞白血病的诊断或治疗语境，也不能自动证明视黄酸通路异常。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-5914
+        url: https://www.ncbi.nlm.nih.gov/gene/5914
+
+  - gene: RBM10
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      RBM10编码RNA结合蛋白，参与前体mRNA可变剪接调控，并可影响多个转录本的外显子选择。
+    mutation_analysis: >-
+      经证实的RBM10功能缺失、剪接异常与普通未验证序列变异不能等同；其他癌种中的复发事件也不能直接迁移到结直肠癌。单个位点不足以证明全局剪接缺陷、肿瘤驱动或治疗意义。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8241
+        url: https://www.ncbi.nlm.nih.gov/gene/8241
+
+  - gene: RUNX1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      RUNX1编码DNA结合转录因子，是核心结合因子复合物成员，在造血细胞分化和基因表达调控中发挥重要作用。
+    mutation_analysis: >-
+      RUNX1融合、血液肿瘤中的驱动变异和胚系易感变异与结直肠肿瘤中的普通体细胞位点不能等同。单个位点不足以建立血液肿瘤分类、遗传易感或治疗结论，需结合样本来源、事件类别和胚系验证。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-861
+        url: https://www.ncbi.nlm.nih.gov/gene/861
+
+  - gene: SF3B1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SF3B1编码U2型剪接体SF3b复合物核心成员，参与识别分支点并促进前体mRNA剪接体组装。
+    mutation_analysis: >-
+      SF3B1复发热点具有位点和疾病背景依赖性，不能推广到任意序列变异；血液肿瘤或其他特定肿瘤中的分类和预后证据也不能直接迁移到结直肠癌。需核对精确位点、剪接功能和癌种证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-23451
+        url: https://www.ncbi.nlm.nih.gov/gene/23451
+
+  - gene: SMARCA1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SMARCA1编码ISWI家族ATP依赖染色质重塑酶，可利用ATP水解调节核小体位置和染色质可及性。
+    mutation_analysis: >-
+      明确ATP酶功能缺失、复合物异常与普通SMARCA1错义变异不能等同。单个位点不足以证明染色质重塑缺陷、肿瘤驱动或药物敏感性，需结合结构域、功能和合子状态。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-6594
+        url: https://www.ncbi.nlm.nih.gov/gene/6594
+
+  - gene: SMARCA2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SMARCA2编码SWI/SNF染色质重塑复合物的ATP酶亚基之一，可通过ATP依赖方式改变核小体和染色质结构并调节转录。
+    mutation_analysis: >-
+      蛋白缺失、明确失活或完整SWI/SNF复合物缺陷与普通SMARCA2序列变异不能等同。单个位点不足以证明复合物依赖性、合成致死关系或药物敏感性，需结合功能、表达和复合物背景。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-6595
+        url: https://www.ncbi.nlm.nih.gov/gene/6595
+
+  - gene: STAG1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      STAG1编码cohesin复合物成员，参与姐妹染色单体黏连、染色体分离、DNA修复和染色质结构调控。
+    mutation_analysis: >-
+      经证实的STAG1功能缺失、双等位事件或cohesin复合物缺陷与普通错义变异不能等同。单个位点不足以证明染色体不稳定、合成致死关系或治疗意义，需结合第二击、蛋白和功能证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-10274
+        url: https://www.ncbi.nlm.nih.gov/gene/10274
+
+  - gene: STAG2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      STAG2编码cohesin复合物成员，参与姐妹染色单体黏连、染色体分离以及基因组三维结构和转录调控。
+    mutation_analysis: >-
+      经证实的STAG2功能缺失或蛋白缺失与普通未验证序列变异不能等同；其他肿瘤中的cohesin缺陷表型也不能直接迁移。单个位点不足以证明染色体不稳定、肿瘤驱动或药物敏感性。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-10735
+        url: https://www.ncbi.nlm.nih.gov/gene/10735
+
+  - gene: TET1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      TET1编码双加氧酶，可将5-甲基胞嘧啶逐步氧化并参与DNA去甲基化和转录调控。
+    mutation_analysis: >-
+      TET1表达或甲基化改变、融合以及明确催化功能缺失与普通序列变异不能等同。单个位点不足以证明全局DNA甲基化状态改变、肿瘤驱动或治疗意义，需结合结构域、酶功能和癌种证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-80312
+        url: https://www.ncbi.nlm.nih.gov/gene/80312
+
+  - gene: U2AF1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      U2AF1编码U2辅助因子异二聚体的小亚基，参与识别前体mRNA的3'剪接位点并促进剪接体组装。
+    mutation_analysis: >-
+      U2AF1复发热点及其剪接改变具有位点和疾病背景依赖性，不能推广到任意变异；血液肿瘤中的分类或预后证据也不能直接用于结直肠癌。单个位点需结合精确位置、剪接功能及克隆来源解释。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7307
+        url: https://www.ncbi.nlm.nih.gov/gene/7307
+
+  - gene: WHSC1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      WHSC1现行官方符号为NSD2，编码组蛋白赖氨酸甲基转移酶，可参与H3K36甲基化、染色质状态和转录调控。
+    mutation_analysis: >-
+      NSD2特定易位、扩增、过表达或复发热点与普通WHSC1/NSD2序列变异不能等同。单个位点不足以证明H3K36甲基化重编程、肿瘤驱动或药物敏感性，需结合事件类别和直接功能证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-7468
+        url: https://www.ncbi.nlm.nih.gov/gene/7468
+
+  - gene: WHSC1L1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      WHSC1L1现行官方符号为NSD3，编码NSD家族组蛋白赖氨酸甲基转移酶，参与染色质和转录调控。
+    mutation_analysis: >-
+      NSD3融合、扩增或过表达与普通WHSC1L1/NSD3序列变异不是同一证据。单个位点不足以证明甲基转移酶活性改变、肿瘤驱动或治疗意义，需结合具体事件、结构域和癌种证据。
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-54904
+        url: https://www.ncbi.nlm.nih.gov/gene/54904
+
+  - gene: ZRSR2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      ZRSR2编码剪接体相关蛋白，尤其参与U12型小内含子的识别和剪接；其功能异常可造成特定转录本的内含子保留。
+    mutation_analysis: >-
+      髓系肿瘤中的ZRSR2功能缺失、截短事件和克隆背景与结直肠肿瘤中的普通错义变异不能等同。单个位点不足以证明小剪接体功能缺陷、血液肿瘤相关性、胚系易感或治疗意义。
+    supersedes: legacy_zrsr2_myeloid_and_germline_cross_context_gene_intro
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene-8233
+        url: https://www.ncbi.nlm.nih.gov/gene/8233
+
+drug_sections: []

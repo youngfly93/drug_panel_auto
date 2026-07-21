@@ -1,0 +1,593 @@
+schema_version: 1
+source:
+  panel: crc_301_msi
+  purpose: Panel-wide fixed protein/domain first-review catalog.
+  source_type: official_reviewed_protein_annotation
+  curated_at: '2026-07-21'
+  uniprot_release: '2026_02'
+  uniprot_release_date: 10-June-2026
+  scope: pan_cancer_protein_structure_only
+  privacy: No patient or sample identifiers are stored.
+  consumer_panels:
+  - crc_301_msi
+governance:
+  schema_version: '1.0'
+  policy_id: crc_301_msi_fixed_domain_catalog_first_review
+  defaults:
+    gene:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: codex_first_review_official_protein_annotation
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: '2026-07-21'
+      evidence_as_of: '2026-07-21'
+      evidence_level: curated_protein_structure
+      cancer_scope: pan_cancer_protein_structure_only
+      secondary_review_status: pending_report_group_review
+      risk_level: content_requires_secondary_review
+gene_sections:
+- gene: ABCB1
+  fixed_domain_text: ABCB1基因编码的蛋白全长为1280个氨基酸，UniProt/InterPro注释的主要结构区域包括ABC transmembrane type-1 1结构域（51-357位氨基酸）、ABC transporter 1结构域（392-628位氨基酸）、ABC transmembrane type-1 2结构域（711-1000位氨基酸）、ABC transporter 2结构域（1035-1273位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P08183
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P08183
+    url: https://www.uniprot.org/uniprotkb/P08183/entry
+  panels:
+  - crc_301_msi
+- gene: ALDH1A1
+  fixed_domain_text: ALDH1A1基因编码的蛋白全长为501个氨基酸，UniProt/InterPro注释的主要结构区域包括Aldehyde/histidinol dehydrogenase结构域（13-496位氨基酸）、Aldehyde dehydrogenase结构域（29-492位氨基酸）、Aldehyde dehydrogenase, N-terminal结构域（34-492位氨基酸）、Aldehyde dehydrogenase, C-terminal结构域（274-463位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P00352
+  interpro_entries:
+  - IPR015590
+  - IPR016161
+  - IPR016162
+  - IPR016163
+  source_refs:
+  - type: uniprot
+    id: P00352
+    url: https://www.uniprot.org/uniprotkb/P00352/entry
+  - type: interpro
+    id: P00352
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/P00352/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: AREG
+  fixed_domain_text: AREG基因编码的蛋白全长为252个氨基酸，UniProt/InterPro注释的主要结构区域包括EGF-like结构域（142-182位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P15514
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P15514
+    url: https://www.uniprot.org/uniprotkb/P15514/entry
+  panels:
+  - crc_301_msi
+- gene: C8ORF34
+  fixed_domain_text: C8ORF34基因编码的蛋白全长为538个氨基酸，UniProt/InterPro注释的主要结构区域包括Protein of unknown function DUF5586家族区域（87-538位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q49A92
+  interpro_entries:
+  - IPR040687
+  source_refs:
+  - type: uniprot
+    id: Q49A92
+    url: https://www.uniprot.org/uniprotkb/Q49A92/entry
+  - type: interpro
+    id: Q49A92
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/Q49A92/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: CBR3
+  fixed_domain_text: CBR3基因编码的蛋白全长为277个氨基酸，UniProt/InterPro注释的主要结构区域包括NAD(P)-binding结构域（6-269位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: O75828
+  interpro_entries:
+  - IPR036291
+  source_refs:
+  - type: uniprot
+    id: O75828
+    url: https://www.uniprot.org/uniprotkb/O75828/entry
+  - type: interpro
+    id: O75828
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/O75828/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: CDA
+  fixed_domain_text: CDA基因编码的蛋白全长为146个氨基酸，UniProt/InterPro注释的主要结构区域包括CMP/dCMP-type deaminase结构域（13-140位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P32320
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P32320
+    url: https://www.uniprot.org/uniprotkb/P32320/entry
+  panels:
+  - crc_301_msi
+- gene: CEP72
+  fixed_domain_text: CEP72基因编码的蛋白全长为647个氨基酸，UniProt/InterPro注释的主要结构区域包括LRR 1重复区（29-50位氨基酸）、LRR 2重复区（55-76位氨基酸）、LRR 3重复区（77-98位氨基酸）、LRRCT结构域（111-150位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q9P209
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q9P209
+    url: https://www.uniprot.org/uniprotkb/Q9P209/entry
+  panels:
+  - crc_301_msi
+- gene: CTLA4
+  fixed_domain_text: CTLA4基因编码的蛋白全长为223个氨基酸，UniProt/InterPro注释的主要结构区域包括Ig-like V-type结构域（39-140位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P16410
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P16410
+    url: https://www.uniprot.org/uniprotkb/P16410/entry
+  panels:
+  - crc_301_msi
+- gene: CXCL12
+  fixed_domain_text: CXCL12基因编码的蛋白全长为93个氨基酸，UniProt/InterPro注释的主要结构区域包括信号肽区域（1-21位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P48061
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P48061
+    url: https://www.uniprot.org/uniprotkb/P48061/entry
+  panels:
+  - crc_301_msi
+- gene: CYP19A1
+  fixed_domain_text: CYP19A1基因编码的蛋白全长为503个氨基酸，UniProt/InterPro注释的主要结构区域包括跨膜区域（19-39位氨基酸）、跨膜区域（303-323位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P11511
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P11511
+    url: https://www.uniprot.org/uniprotkb/P11511/entry
+  panels:
+  - crc_301_msi
+- gene: CYP2D6
+  fixed_domain_text: CYP2D6基因编码的蛋白全长为497个氨基酸，UniProt/InterPro注释的主要结构区域包括Cytochrome P450 superfamily结构域（24-497位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P10635
+  interpro_entries:
+  - IPR036396
+  source_refs:
+  - type: uniprot
+    id: P10635
+    url: https://www.uniprot.org/uniprotkb/P10635/entry
+  - type: interpro
+    id: P10635
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/P10635/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: CYP2E1
+  fixed_domain_text: CYP2E1基因编码的蛋白全长为493个氨基酸，UniProt/InterPro注释的主要结构区域包括Cytochrome P450 superfamily结构域（23-493位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P05181
+  interpro_entries:
+  - IPR036396
+  source_refs:
+  - type: uniprot
+    id: P05181
+    url: https://www.uniprot.org/uniprotkb/P05181/entry
+  - type: interpro
+    id: P05181
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/P05181/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: DCK
+  fixed_domain_text: DCK基因编码的蛋白全长为260个氨基酸，UniProt/InterPro注释的主要结构区域包括P-loop containing nucleoside triphosphate hydrolase结构域（20-260位氨基酸）、Deoxynucleoside kinase结构域（23-257位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P27707
+  interpro_entries:
+  - IPR027417
+  - IPR031314
+  source_refs:
+  - type: uniprot
+    id: P27707
+    url: https://www.uniprot.org/uniprotkb/P27707/entry
+  - type: interpro
+    id: P27707
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/P27707/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: DOK5
+  fixed_domain_text: DOK5基因编码的蛋白全长为306个氨基酸，UniProt/InterPro注释的主要结构区域包括PH结构域（8-112位氨基酸）、IRS-type PTB结构域（132-237位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q9P104
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q9P104
+    url: https://www.uniprot.org/uniprotkb/Q9P104/entry
+  panels:
+  - crc_301_msi
+- gene: DPYD
+  fixed_domain_text: DPYD基因编码的蛋白全长为1025个氨基酸，UniProt/InterPro注释的主要结构区域包括4Fe-4S ferredoxin-type 1结构域（69-100位氨基酸）、4Fe-4S ferredoxin-type 2结构域（944-976位氨基酸）、4Fe-4S ferredoxin-type 3结构域（978-1007位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q12882
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q12882
+    url: https://www.uniprot.org/uniprotkb/Q12882/entry
+  panels:
+  - crc_301_msi
+- gene: DYNC2H1
+  fixed_domain_text: DYNC2H1基因编码的蛋白全长为4307个氨基酸，UniProt/InterPro注释的主要结构区域包括Stem区域（1-1650位氨基酸）、卷曲螺旋区域（1074-1103位氨基酸）、AAA 1区域（1651-1875位氨基酸）、AAA 2区域（1938-2161位氨基酸）、AAA 3区域（2251-2505位氨基酸）、AAA 4区域（2617-2863位氨基酸）、Stalk区域（2881-3169位氨基酸）、卷曲螺旋区域（2897-2982位氨基酸）、卷曲螺旋区域（3109-3200位氨基酸）、AAA
+    5区域（3244-3473位氨基酸）、卷曲螺旋区域（3408-3442位氨基酸）、AAA 6区域（3690-3905位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q8NCM8
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q8NCM8
+    url: https://www.uniprot.org/uniprotkb/Q8NCM8/entry
+  panels:
+  - crc_301_msi
+- gene: ERCC1
+  fixed_domain_text: ERCC1基因编码的蛋白全长为297个氨基酸，UniProt/InterPro注释的主要结构区域包括HhH2, dimerization with ERCC4/XPF区域（220-297位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P07992
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P07992
+    url: https://www.uniprot.org/uniprotkb/P07992/entry
+  panels:
+  - crc_301_msi
+- gene: ERCC2
+  fixed_domain_text: ERCC2基因编码的蛋白全长为760个氨基酸，UniProt/InterPro注释的主要结构区域包括Helicase ATP-binding结构域（7-283位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P18074
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P18074
+    url: https://www.uniprot.org/uniprotkb/P18074/entry
+  panels:
+  - crc_301_msi
+- gene: ESR1
+  fixed_domain_text: ESR1基因编码的蛋白全长为595个氨基酸，UniProt/InterPro注释的主要结构区域包括NR LBD结构域（311-547位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P03372
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P03372
+    url: https://www.uniprot.org/uniprotkb/P03372/entry
+  panels:
+  - crc_301_msi
+- gene: ESR2
+  fixed_domain_text: ESR2基因编码的蛋白全长为530个氨基酸，UniProt/InterPro注释的主要结构区域包括NR LBD结构域（264-498位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q92731
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q92731
+    url: https://www.uniprot.org/uniprotkb/Q92731/entry
+  panels:
+  - crc_301_msi
+- gene: FANCA
+  fixed_domain_text: FANCA基因编码的蛋白全长为1455个氨基酸，UniProt/InterPro注释的主要结构区域包括Fanconi anaemia group A protein, N-terminal结构域（170-524位氨基酸）、Fanconi anaemia group A protein, helical结构域（544-625位氨基酸）、Fanconi anaemia group A protein, arcN subdomain结构域（648-880位氨基酸）、Fanconi
+    anaemia group A protein, C-terminal结构域（1225-1431位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: O15360
+  interpro_entries:
+  - IPR031729
+  - IPR055277
+  - IPR055386
+  - IPR055387
+  source_refs:
+  - type: uniprot
+    id: O15360
+    url: https://www.uniprot.org/uniprotkb/O15360/entry
+  - type: interpro
+    id: O15360
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/O15360/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: GALNT14
+  fixed_domain_text: GALNT14基因编码的蛋白全长为552个氨基酸，UniProt/InterPro注释的主要结构区域包括Ricin B-type lectin结构域（415-550位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q96FL9
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q96FL9
+    url: https://www.uniprot.org/uniprotkb/Q96FL9/entry
+  panels:
+  - crc_301_msi
+- gene: GATA3
+  fixed_domain_text: GATA3基因编码的蛋白全长为443个氨基酸，UniProt/InterPro注释的主要结构区域包括Flexible linker区域（288-316位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P23771
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P23771
+    url: https://www.uniprot.org/uniprotkb/P23771/entry
+  panels:
+  - crc_301_msi
+- gene: GGH
+  fixed_domain_text: GGH基因编码的蛋白全长为318个氨基酸，UniProt/InterPro注释的主要结构区域包括Gamma-glutamyl hydrolase结构域（25-318位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q92820
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q92820
+    url: https://www.uniprot.org/uniprotkb/Q92820/entry
+  panels:
+  - crc_301_msi
+- gene: GSTM1
+  fixed_domain_text: GSTM1基因编码的蛋白全长为218个氨基酸，UniProt/InterPro注释的主要结构区域包括GST N-terminal结构域（2-88位氨基酸）、GST C-terminal结构域（90-208位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P09488
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P09488
+    url: https://www.uniprot.org/uniprotkb/P09488/entry
+  panels:
+  - crc_301_msi
+- gene: GSTP1
+  fixed_domain_text: GSTP1基因编码的蛋白全长为210个氨基酸，UniProt/InterPro注释的主要结构区域包括GST N-terminal结构域（2-81位氨基酸）、GST C-terminal结构域（83-204位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P09211
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P09211
+    url: https://www.uniprot.org/uniprotkb/P09211/entry
+  panels:
+  - crc_301_msi
+- gene: MTHFR
+  fixed_domain_text: MTHFR基因编码的蛋白全长为656个氨基酸，UniProt/InterPro注释的主要结构区域包括Methylenetetrahydrofolate reductase-like, catalytic结构域（48-337位氨基酸）、FAD-linked oxidoreductase-like结构域（48-339位氨基酸）、Methylenetetrahydrofolate reductase, catalytic domain, eukaryotes结构域（59-341位氨基酸）、MTHFR,
+    SAM-binding regulatory结构域（344-644位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P42898
+  interpro_entries:
+  - IPR003171
+  - IPR004621
+  - IPR029041
+  - IPR053806
+  source_refs:
+  - type: uniprot
+    id: P42898
+    url: https://www.uniprot.org/uniprotkb/P42898/entry
+  - type: interpro
+    id: P42898
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/P42898/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: MTRR
+  fixed_domain_text: MTRR基因编码的蛋白全长为698个氨基酸，UniProt/InterPro注释的主要结构区域包括Flavodoxin-like结构域（5-147位氨基酸）、FAD-binding FR-type结构域（271-533位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q9UBK8
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q9UBK8
+    url: https://www.uniprot.org/uniprotkb/Q9UBK8/entry
+  panels:
+  - crc_301_msi
+- gene: NQO1
+  fixed_domain_text: NQO1基因编码的蛋白全长为274个氨基酸，UniProt/InterPro注释的主要结构区域包括Important for apoenzyme conformational stability区域（225-274位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P15559
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P15559
+    url: https://www.uniprot.org/uniprotkb/P15559/entry
+  panels:
+  - crc_301_msi
+- gene: NT5C3A
+  fixed_domain_text: NT5C3A基因编码的蛋白全长为336个氨基酸，UniProt/InterPro注释的主要结构区域包括HAD-like superfamily结构域（47-336位氨基酸）、HAD superfamily结构域（75-332位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q9H0P0
+  interpro_entries:
+  - IPR023214
+  - IPR036412
+  source_refs:
+  - type: uniprot
+    id: Q9H0P0
+    url: https://www.uniprot.org/uniprotkb/Q9H0P0/entry
+  - type: interpro
+    id: Q9H0P0
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/Q9H0P0/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: PALB2
+  fixed_domain_text: PALB2基因编码的蛋白全长为1186个氨基酸，UniProt/InterPro注释的主要结构区域包括WD 1重复区（854-915位氨基酸）、WD 2重复区（917-961位氨基酸）、WD 3重复区（962-1009位氨基酸）、WD 4重复区（1010-1052位氨基酸）、WD 5重复区（1058-1109位氨基酸）、WD 6重复区（1115-1153位氨基酸）、WD 7重复区（1155-1186位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q86YC2
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q86YC2
+    url: https://www.uniprot.org/uniprotkb/Q86YC2/entry
+  panels:
+  - crc_301_msi
+- gene: RAD51D
+  fixed_domain_text: RAD51D基因编码的蛋白全长为328个氨基酸，UniProt/InterPro注释的主要结构区域包括preferentially binds ssDNA区域（1-83位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: O75771
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: O75771
+    url: https://www.uniprot.org/uniprotkb/O75771/entry
+  panels:
+  - crc_301_msi
+- gene: RRM1
+  fixed_domain_text: RRM1基因编码的蛋白全长为792个氨基酸，UniProt/InterPro注释的主要结构区域包括ATP-cone结构域（1-92位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P23921
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P23921
+    url: https://www.uniprot.org/uniprotkb/P23921/entry
+  panels:
+  - crc_301_msi
+- gene: SEMA3C
+  fixed_domain_text: SEMA3C基因编码的蛋白全长为751个氨基酸，UniProt/InterPro注释的主要结构区域包括Sema结构域（28-511位氨基酸）、Ig-like C2-type结构域（571-655位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q99985
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q99985
+    url: https://www.uniprot.org/uniprotkb/Q99985/entry
+  panels:
+  - crc_301_msi
+- gene: SLC19A1
+  fixed_domain_text: SLC19A1基因编码的蛋白全长为591个氨基酸，UniProt/InterPro注释的主要结构区域包括跨膜区域（30-50位氨基酸）、跨膜区域（65-87位氨基酸）、跨膜区域（92-112位氨基酸）、跨膜区域（117-139位氨基酸）、跨膜区域（154-178位氨基酸）、跨膜区域（184-202位氨基酸）、跨膜区域（267-292位氨基酸）、跨膜区域（305-327位氨基酸）、跨膜区域（334-354位氨基酸）、跨膜区域（361-384位氨基酸）、跨膜区域（399-422位氨基酸）、跨膜区域（431-455位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P41440
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P41440
+    url: https://www.uniprot.org/uniprotkb/P41440/entry
+  panels:
+  - crc_301_msi
+- gene: SLC22A12
+  fixed_domain_text: SLC22A12基因编码的蛋白全长为553个氨基酸，UniProt/InterPro注释的主要结构区域包括跨膜区域（9-29位氨基酸）、跨膜区域（146-166位氨基酸）、跨膜区域（174-194位氨基酸）、跨膜区域（195-215位氨基酸）、跨膜区域（232-252位氨基酸）、跨膜区域（260-280位氨基酸）、跨膜区域（351-371位氨基酸）、跨膜区域（378-398位氨基酸）、跨膜区域（407-427位氨基酸）、跨膜区域（435-455位氨基酸）、跨膜区域（466-486位氨基酸）、跨膜区域（495-515位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q96S37
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q96S37
+    url: https://www.uniprot.org/uniprotkb/Q96S37/entry
+  panels:
+  - crc_301_msi
+- gene: SLC28A3
+  fixed_domain_text: SLC28A3基因编码的蛋白全长为691个氨基酸，UniProt/InterPro注释的主要结构区域包括跨膜区域（103-123位氨基酸）、跨膜区域（129-149位氨基酸）、跨膜区域（174-194位氨基酸）、跨膜区域（198-219位氨基酸）、跨膜区域（228-247位氨基酸）、跨膜区域（285-305位氨基酸）、跨膜区域（362-384位氨基酸）、跨膜区域（387-408位氨基酸）、跨膜区域（444-469位氨基酸）、跨膜区域（567-577位氨基酸）、跨膜区域（591-613位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q9HAS3
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q9HAS3
+    url: https://www.uniprot.org/uniprotkb/Q9HAS3/entry
+  panels:
+  - crc_301_msi
+- gene: SLC29A1
+  fixed_domain_text: SLC29A1基因编码的蛋白全长为456个氨基酸，UniProt/InterPro注释的主要结构区域包括跨膜区域（15-36位氨基酸）、跨膜区域（80-103位氨基酸）、跨膜区域（109-131位氨基酸）、跨膜区域（141-163位氨基酸）、跨膜区域（173-194位氨基酸）、跨膜区域（203-224位氨基酸）、跨膜区域（289-312位氨基酸）、跨膜区域（329-350位氨基酸）、跨膜区域（359-377位氨基酸）、跨膜区域（394-416位氨基酸）、跨膜区域（431-450位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q99808
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q99808
+    url: https://www.uniprot.org/uniprotkb/Q99808/entry
+  panels:
+  - crc_301_msi
+- gene: SLCO1B1
+  fixed_domain_text: SLCO1B1基因编码的蛋白全长为691个氨基酸，UniProt/InterPro注释的主要结构区域包括Kazal-like结构域（453-508位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q9Y6L6
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q9Y6L6
+    url: https://www.uniprot.org/uniprotkb/Q9Y6L6/entry
+  panels:
+  - crc_301_msi
+- gene: SOD2
+  fixed_domain_text: SOD2基因编码的蛋白全长为222个氨基酸，UniProt/InterPro注释的主要结构区域包括Manganese/iron superoxide dismutase, N-terminal结构域（24-111位氨基酸）、Manganese/iron superoxide dismutase, N-terminal结构域（25-106位氨基酸）、Manganese/iron superoxide dismutase, C-terminal结构域（107-222位氨基酸）、Manganese/iron
+    superoxide dismutase, C-terminal结构域（113-216位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P04179
+  interpro_entries:
+  - IPR019831
+  - IPR019832
+  - IPR036314
+  - IPR036324
+  source_refs:
+  - type: uniprot
+    id: P04179
+    url: https://www.uniprot.org/uniprotkb/P04179/entry
+  - type: interpro
+    id: P04179
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/P04179/?page_size=200
+  panels:
+  - crc_301_msi
+- gene: UGT1A1
+  fixed_domain_text: UGT1A1基因编码的蛋白全长为533个氨基酸，UniProt/InterPro注释的主要结构区域包括信号肽区域（1-25位氨基酸）、跨膜区域（491-507位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P22309
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P22309
+    url: https://www.uniprot.org/uniprotkb/P22309/entry
+  panels:
+  - crc_301_msi
+- gene: UMPS
+  fixed_domain_text: UMPS基因编码的蛋白全长为480个氨基酸，UniProt/InterPro注释的主要结构区域包括OPRTase区域（2-214位氨基酸）、Domain linker区域（215-220位氨基酸）、OMPdecase区域（221-480位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P11172
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P11172
+    url: https://www.uniprot.org/uniprotkb/P11172/entry
+  panels:
+  - crc_301_msi
+- gene: XPC
+  fixed_domain_text: XPC基因编码的蛋白全长为940个氨基酸，UniProt/InterPro注释的主要结构区域包括DNA-binding; preference for heteroduplex DNA区域（607-741位氨基酸）、Minimal sensor domain involved in damage recognition区域（607-766位氨基酸）、DNA-binding; preference for single stranded DNA;
+    required for formation of stable nucleoprotein complex区域（767-831位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q01831
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q01831
+    url: https://www.uniprot.org/uniprotkb/Q01831/entry
+  panels:
+  - crc_301_msi
+- gene: XRCC1
+  fixed_domain_text: XRCC1基因编码的蛋白全长为633个氨基酸，UniProt/InterPro注释的主要结构区域包括BRCT 1结构域（315-403位氨基酸）、BRCT 2结构域（538-629位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P18887
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P18887
+    url: https://www.uniprot.org/uniprotkb/P18887/entry
+  panels:
+  - crc_301_msi
+- gene: XRCC3
+  fixed_domain_text: XRCC3基因编码的蛋白全长为346个氨基酸，UniProt/InterPro注释的主要结构区域包括XRCC3/RAD51 homolog 2, helix-hairpin-helix结构域（4-56位氨基酸）、P-loop containing nucleoside triphosphate hydrolase结构域（77-341位氨基酸）、DNA recombination and repair protein RecA-like,
+    ATP-binding结构域（78-259位氨基酸）、Rad51-like, C-terminal结构域（81-338位氨基酸）、DNA repair protein XRCC3-like, C-terminal结构域（89-325位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: O43542
+  interpro_entries:
+  - IPR013632
+  - IPR020588
+  - IPR027417
+  - IPR047348
+  - IPR058766
+  source_refs:
+  - type: uniprot
+    id: O43542
+    url: https://www.uniprot.org/uniprotkb/O43542/entry
+  - type: interpro
+    id: O43542
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/O43542/?page_size=200
+  panels:
+  - crc_301_msi
+drug_sections: []

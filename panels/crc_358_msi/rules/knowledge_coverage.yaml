@@ -5,6 +5,7 @@ status: "active"
 source: "golden template 检测基因列表"
 contract:
   gene_explanation: "每个报告基因必须有基础库或 reviewed overlay 解释"
+  fixed_domain_knowledge: "每个进入第三部分的蛋白编码基因必须有变异无关的固定蛋白/结构域描述；非蛋白编码基因必须有显式不适用说明，缺失时报告 QA 与发布门禁均阻断"
   drug_knowledge: "区分显式规则、动态数据库匹配、安全过滤和无候选证据；不得把被过滤公共候选误报为迁移缺口"
 drug_review_disposition:
   historical_review_batch: "batch15_final_disposition_20260614"

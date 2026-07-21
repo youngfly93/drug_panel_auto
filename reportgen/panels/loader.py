@@ -269,6 +269,41 @@ def validate_panel_package_config(cfg: Any) -> tuple[bool, List[str]]:
     if aliases is not None and not _is_str_list(aliases):
         errors.append("aliases must be a list[str]")
 
+    gene_symbol_aliases = cfg.get("gene_symbol_aliases", {})
+    if gene_symbol_aliases is not None and not isinstance(
+        gene_symbol_aliases, Mapping
+    ):
+        errors.append("gene_symbol_aliases must be a dict[str, str]")
+    elif isinstance(gene_symbol_aliases, Mapping):
+        normalized_aliases: Dict[str, str] = {}
+        for alias, canonical in gene_symbol_aliases.items():
+            if not isinstance(alias, str) or not alias.strip():
+                errors.append("gene_symbol_aliases keys must be non-empty strings")
+                continue
+            if not isinstance(canonical, str) or not canonical.strip():
+                errors.append(
+                    "gene_symbol_aliases values must be non-empty strings"
+                )
+                continue
+            alias_key = alias.strip().upper()
+            canonical_key = canonical.strip().upper()
+            if alias_key == canonical_key:
+                errors.append(
+                    f"gene_symbol_aliases cannot map {alias!r} to itself"
+                )
+                continue
+            normalized_aliases[alias_key] = canonical_key
+        for alias, canonical in normalized_aliases.items():
+            visited = {alias}
+            while canonical in normalized_aliases:
+                if canonical in visited:
+                    errors.append(
+                        f"gene_symbol_aliases contains a cycle at {alias!r}"
+                    )
+                    break
+                visited.add(canonical)
+                canonical = normalized_aliases[canonical]
+
     templates = cfg.get("templates")
     if not isinstance(templates, list) or not templates:
         errors.append("templates must be a non-empty list")
