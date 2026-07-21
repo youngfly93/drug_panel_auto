@@ -8,7 +8,11 @@ BASE_URL="${WEB_SMOKE_BASE_URL:-http://${HOST}:${PORT}}"
 RUN_BUILD="${WEB_SMOKE_BUILD:-1}"
 KEEP_SERVER="${WEB_SMOKE_KEEP_SERVER:-0}"
 OUTPUT_ROOT="${WEB_SMOKE_OUTPUT_ROOT:-${ROOT}/tmp/web_smoke/$(date +%Y%m%d_%H%M%S)}"
-TMP_ROOT="${WEB_SMOKE_TMPDIR:-${ROOT}/tmp/web_smoke_tmp}"
+# LibreOffice isolated profiles are not reliable on every external-volume
+# filesystem (notably exFAT). Keep the default profile/temp root on the host's
+# native temporary filesystem even when the repository itself is external.
+SYSTEM_TMP_ROOT="${TMPDIR:-/tmp}"
+TMP_ROOT="${WEB_SMOKE_TMPDIR:-${SYSTEM_TMP_ROOT%/}/reportgen_web_smoke_tmp}"
 PYTHON="${PYTHON:-}"
 SERVER_PID=""
 STARTED_SERVER=0
