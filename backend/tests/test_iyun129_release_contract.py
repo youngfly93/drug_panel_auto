@@ -192,6 +192,12 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert "RG_WEB_DISABLED_PROJECT_TYPES" in deploy
     assert "REPORTGEN_DISABLED_PROJECT_TYPES" in deploy
     assert "VITE_DISABLED_PROJECT_TYPES" in deploy
+    assert 'RG_WEB_DISABLED_PROJECT_TYPES=""' in deploy
+    assert 'REPORTGEN_DISABLED_PROJECT_TYPES=""' in deploy
+    assert 'VITE_DISABLED_PROJECT_TYPES=""' in deploy
+    assert deploy.index('REPORTGEN_DISABLED_PROJECT_TYPES=""') < deploy.index(
+        "make release-check"
+    )
     assert "backend/app/api/health.py" in deploy
     assert "TUNNEL_METRICS_URL" in deploy
     assert "check_signature_registry.py" in deploy
@@ -236,6 +242,61 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert "reportgen-web-storage" in iyun129_maintenance
     assert "SSH_HOST:-iyun129" in iyun129_alerts
     assert "PORT:-18082" in iyun129_alerts
+
+
+def test_deploy_preflight_clears_runtime_panel_guards(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    fake_bin = tmp_path / "fake-bin"
+    capture = tmp_path / "preflight.env"
+    (repo / "frontend").mkdir(parents=True)
+    (repo / "scripts").mkdir()
+    fake_bin.mkdir()
+    (repo / "frontend/package.json").write_text("{}\n", encoding="utf-8")
+    for name in ("iyun62_start_reportgen.sh", "iyun62_watchdog.sh"):
+        (repo / "scripts" / name).write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    fake_make = fake_bin / "make"
+    fake_make.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s|%s|%s\\n' "
+        '"${RG_WEB_DISABLED_PROJECT_TYPES-<unset>}" '
+        '"${REPORTGEN_DISABLED_PROJECT_TYPES-<unset>}" '
+        '"${VITE_DISABLED_PROJECT_TYPES-<unset>}" > "$CAPTURE_FILE"\n'
+        "exit 42\n",
+        encoding="utf-8",
+    )
+    fake_make.chmod(0o755)
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Synthetic Release Test"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "release-test@example.invalid"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "synthetic release"], cwd=repo, check=True)
+
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/iyun62_deploy_clean.sh")],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "CAPTURE_FILE": str(capture),
+            "RG_WEB_DISABLED_PROJECT_TYPES": "crc_301_msi",
+            "REPORTGEN_DISABLED_PROJECT_TYPES": "crc_301_msi",
+            "VITE_DISABLED_PROJECT_TYPES": "crc_301_msi",
+        },
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+    assert result.returncode == 42
+    assert capture.read_text(encoding="utf-8") == "||\n"
 
 
 @pytest.mark.parametrize(

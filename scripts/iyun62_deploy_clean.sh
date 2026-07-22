@@ -87,7 +87,15 @@ if [ "$RUN_PREFLIGHT" = "1" ]; then
         echo "Use the dedicated release-switch command for an existing rollback release." >&2
         exit 1
     fi
-    make release-check
+    # Production panel guards belong to the compiled/runtime release, not to
+    # the regression harness.  The preflight must continue exercising every
+    # protected panel golden (including panels intentionally disabled in this
+    # production scope), then the original values are used below for the
+    # frontend build and deployment.env.
+    RG_WEB_DISABLED_PROJECT_TYPES="" \
+    REPORTGEN_DISABLED_PROJECT_TYPES="" \
+    VITE_DISABLED_PROJECT_TYPES="" \
+        make release-check
 fi
 if [ "$SYNC_SIGNATURE_ASSETS" = "1" ]; then
     test -d "$SIGNATURE_ASSET_DIR"
