@@ -149,6 +149,7 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     start = _read("scripts/iyun62_start_reportgen.sh")
     watchdog = _read("scripts/iyun62_watchdog.sh")
     release = _read("scripts/iyun129_release.sh")
+    iyun129_deploy = _read("scripts/iyun129_deploy_clean.sh")
 
     assert "deployment.env.next" in deploy
     assert "resolved_ref" in deploy
@@ -156,6 +157,10 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
     assert "wait_public_health" in deploy
     assert "PUBLIC_HEALTH_RETRIES" in deploy
     assert "PUBLIC_HEALTH_RETRY_INTERVAL_SECONDS" in deploy
+    assert 'HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"' in deploy
+    assert "printf 'HEALTH_TIMEOUT_SECONDS=%q\\n'" in deploy
+    assert 'HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"' in start
+    assert 'export HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"' in iyun129_deploy
     assert deploy.index("Restart Cloudflare connector") < deploy.rindex("wait_public_health")
     assert 'DEPLOYMENT_ENV="${DEPLOYMENT_ENV:-$RUNTIME_DIR/deployment.env}"' in start
     assert start.index('if start_release "$RELEASE_DIR"; then') < start.index(

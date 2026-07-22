@@ -28,7 +28,10 @@ HOST="${HOST:-0.0.0.0}"
 APP_MODULE="${APP_MODULE:-app.main:app}"
 LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
 LEGACY_LOCAL_HEALTH_URL="${LEGACY_LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/tasks/stats}"
-HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-60}"
+# A cold immutable release can spend ~40 seconds importing the application on
+# iyun129 before database/task-recovery and renderer startup begin.  Keep the
+# gate fail-closed, but allow the complete cold-start path to finish.
+HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"
 HEALTH_STABLE_CHECKS="${HEALTH_STABLE_CHECKS:-2}"
 
 LOG_DIR="$RUNTIME_DIR/logs"

@@ -21,6 +21,7 @@ export PORT="${PORT:-18082}"
 export LOCAL_HEALTH_URL="${LOCAL_HEALTH_URL:-http://127.0.0.1:$PORT/api/v1/healthz}"
 export PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v1/healthz}"
 export TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
+export HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"
 export RG_WEB_DOCS_ENABLED="${RG_WEB_DOCS_ENABLED:-0}"
 export RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
 # CRC301 remains outside this release until its case-level UAT is complete.
