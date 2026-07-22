@@ -32,6 +32,7 @@ from reportgen.knowledge.quality import profile_panel_runtime_content  # noqa: E
 from reportgen.knowledge.release_gate import (  # noqa: E402
     _clinical_readiness,
     _clinical_release_registry,
+    _secondary_review_receipt,
 )
 from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
 from reportgen.rules.targeted_drugs import (  # noqa: E402
@@ -571,8 +572,8 @@ def _panel_summary(package: Any) -> dict[str, Any]:
         "needs_review",
         "rejected",
         "provisional_runtime",
-        "legacy_runtime",
         "approved_for_runtime",
+        "legacy_runtime",
     ):
         if candidate in row_statuses:
             review_status = candidate
@@ -1524,10 +1525,16 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
     )
     clinical_status_counts = Counter(review_counts)
     clinical_status_counts.update(panel_rule_status_counts)
+    clinical_registry = _clinical_release_registry(_project_root())
     clinical_release_readiness = _clinical_readiness(
-        _clinical_release_registry(_project_root()),
+        clinical_registry,
         panel_id,
         clinical_status_counts,
+        _secondary_review_receipt(
+            _project_root(),
+            clinical_registry,
+            panel_id,
+        ),
     )
     if runtime_content_quality and runtime_content_quality["generic_fallback_count"]:
         clinical_release_readiness["status"] = "BLOCKED"

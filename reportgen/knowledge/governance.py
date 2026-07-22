@@ -166,6 +166,7 @@ def structured_source_refs(
             "mutation_analysis",
             "relation",
             "clinical",
+            "research_drugs",
             "indication",
             "review_basis",
             "source_note",
@@ -352,9 +353,28 @@ def validate_knowledge_rows(
                 "provisional runtime row must declare secondary review status",
             )
         if kind == "drug":
-            for field in ("drug_name", "relation", "clinical"):
-                if not _clean(row.get(field)):
-                    add("INCOMPLETE_DRUG_ROW", f"missing {field}")
+            drug_type = _clean(row.get("type") or "benefit").lower()
+            if drug_type not in {"benefit", "caution", "research"}:
+                add("INVALID_DRUG_TYPE", f"unsupported drug type: {drug_type}")
+            if bool(row.get("suppress")):
+                if not _clean(row.get("supersedes")):
+                    add(
+                        "INCOMPLETE_DRUG_SUPPRESSION",
+                        "suppression row must declare supersedes",
+                    )
+                if not (
+                    _clean(row.get("c_hgvs"))
+                    or _clean(row.get("p_hgvs"))
+                    or _clean(row.get("applicability"))
+                ):
+                    add(
+                        "UNSCOPED_DRUG_SUPPRESSION",
+                        "suppression row must declare variant or applicability scope",
+                    )
+            else:
+                for field in ("drug_name", "relation", "clinical"):
+                    if not _clean(row.get(field)):
+                        add("INCOMPLETE_DRUG_ROW", f"missing {field}")
         text = row_text(row)
         for name, pattern in PII_PATTERNS.items():
             if pattern.search(text):

@@ -18,7 +18,7 @@ governance:
   policy_id: crc_p3a_dna_hereditary_first_review_20260721
   defaults:
     gene:
-      review_status: provisional_runtime
+      review_status: approved_for_runtime
       runtime_eligible: true
       review_basis: codex_first_review_official_gene_function_and_somatic_boundary
       reviewer: codex
@@ -27,7 +27,7 @@ governance:
       evidence_as_of: "2026-07-21"
       evidence_level: official_gene_function_plus_conservative_somatic_boundary
       cancer_scope: colorectal_cancer_conservative_gene_fallback
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
       risk_level: high_requires_secondary_review
       source_refs:
         - type: guideline

@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 display_name: "结直肠癌358基因+MSI"
-version: "0.2.1"
+version: "0.2.2"
 status: "active"
 description: "CRC 358 + MSI panel package for the report production pipeline."
 
@@ -75,8 +75,8 @@ rules:
 # rule file. ReportGenerator resolves this per-panel for the gene KB provider.
 reviewed_part3_overlay: "rules/reviewed_part3_knowledge.yaml"
 reviewed_part3_overlay_additions:
-  # CRC358 全 Panel 固定蛋白/结构域一审目录；仅含变异无关结构知识，
-  # 来源为官方 UniProt/InterPro，待报告组二审。
+  # CRC358 全 Panel 固定蛋白/结构域目录；仅含变异无关结构知识，
+  # 来源为官方 UniProt/InterPro，报告组二审状态由发布登记与哈希凭据约束。
   - "rules/reviewed_part3_domain_catalog.yaml"
   # 脱敏的历史报告组终版迁移层；仅按基因+精确 HGVS 命中，不含病例标识。
   - "rules/reviewed_part3_crc358_reviewed_case_a.yaml"
@@ -149,6 +149,9 @@ reviewed_part3_overlay_additions:
   - "rules/reviewed_part3_drug_contracts_20260721.yaml"
   # 固定蛋白/结构域字段的一审候选层；不包含药物结论，待报告组二审。
   - "rules/reviewed_part3_domain_overlay_20260720.yaml"
+  # 2026-07-22 医学更正：区分临床获益/耐药结论与
+  # 临床试验或研究性方案，并修正已识别的来源外推和简介事实问题。
+  - "rules/reviewed_part3_medical_corrections_20260722.yaml"
 
 input_contract:
   required_tables:

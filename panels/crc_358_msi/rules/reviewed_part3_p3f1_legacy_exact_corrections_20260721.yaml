@@ -15,7 +15,7 @@ governance:
   policy_id: crc358_p3f1_legacy_exact_correction_first_review_20260721
   defaults:
     gene:
-      review_status: provisional_runtime
+      review_status: approved_for_runtime
       runtime_eligible: true
       review_basis: codex_first_review_correction_of_legacy_database_count_domain_or_cross_context_prose
       reviewer: codex
@@ -24,7 +24,7 @@ governance:
       evidence_as_of: "2026-07-21"
       evidence_level: exact_variant_not_clinically_established_conservative_interpretation
       cancer_scope: colorectal_cancer_crc358_only_exact_variant_conservative_correction
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
       risk_level: high_requires_secondary_review
       source_refs:
         - type: guideline

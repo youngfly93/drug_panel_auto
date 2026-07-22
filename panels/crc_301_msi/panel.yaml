@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "crc_301_msi"
 display_name: "结直肠癌301基因+MSI"
-version: "0.1.1"
+version: "0.1.2"
 status: "active"
 description: "CRC 301 + MSI panel package reusing the CRC report pipeline."
 
@@ -131,6 +131,9 @@ reviewed_part3_overlay_additions:
   # same evidence-bound Part-3 contracts so inherited Part 2 rows cannot lose
   # their exact analysis or silently fall back to an unrelated variant.
   - "panels/crc_358_msi/rules/reviewed_part3_drug_contracts_20260721.yaml"
+  # Shared report-group first-review corrections keep trial/research evidence
+  # out of Part 2 benefit/caution conclusions and repair source-scope issues.
+  - "panels/crc_358_msi/rules/reviewed_part3_medical_corrections_20260722.yaml"
 
 input_contract:
   required_tables:

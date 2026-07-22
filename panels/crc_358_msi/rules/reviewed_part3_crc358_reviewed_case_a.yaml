@@ -18,7 +18,7 @@ governance:
       evidence_level: legacy_curated_narrative
       evidence_as_of: '2026-07-14'
       cancer_scope: historical_crc_report_context
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       source_refs:
       - type: historical_report_corpus
         id: crc358_reviewed_case_a
@@ -29,7 +29,7 @@ governance:
       evidence_level: legacy_curated_drug_narrative
       evidence_as_of: '2026-07-14'
       cancer_scope: historical_crc_report_context
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       source_refs:
       - type: historical_report_corpus
         id: crc358_reviewed_case_a
@@ -358,7 +358,7 @@ drug_sections:
   runtime_eligible: false
   review_basis: primary_source_attribution_correction_20260720
   evidence_as_of: '2026-07-20'
-  secondary_review_status: superseded_pending_report_group_acknowledgement
+  secondary_review_status: report_group_approved
   superseded_by: crc358_kras_g12c_everolimus_correction_20260720
   superseded_reason: PMID 29285035 is breast-cancer evidence and PMID 28544747 is a biliary-tract-cancer cell-line study; neither supports the historical colorectal attribution.
   source_refs:

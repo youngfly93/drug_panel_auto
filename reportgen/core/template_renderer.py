@@ -877,10 +877,14 @@ class TemplateRenderer:
             "基因变异解析：",
             "基因变异与药物关联分析：",
             "药物疗效临床解析：",
+            "基因变异与研究方案关联：",
+            "临床试验/研究证据：",
         }
         drug_analysis_labels = {
             "基因变异与药物关联分析：",
             "药物疗效临床解析：",
+            "基因变异与研究方案关联：",
+            "临床试验/研究证据：",
         }
         main_headings = {
             "基因变异解析",
@@ -889,13 +893,20 @@ class TemplateRenderer:
         sub_headings = {
             "潜在获益靶向/免疫药物解析",
             "潜在负相关靶向/免疫药物解析",
+            "临床试验/研究性方案解析",
         }
         variant_header_re = re.compile(r"^u\s+[^：]{1,20}：.+[；;]\s*\d")
-        drug_variant_re = re.compile(r"^[A-Za-z0-9_-]+：.+突变相应.*药物$")
+        drug_variant_re = re.compile(
+            r"^[A-Za-z0-9_-]+：.+突变相应.*(?:药物|方案)$"
+        )
         summary_prefix = "在本次检测范围内，检出体细胞变异"
         context_drug_names = {
             line.strip()
-            for section_key in ("drug_benefit_sections", "drug_caution_sections")
+            for section_key in (
+                "drug_benefit_sections",
+                "drug_caution_sections",
+                "drug_research_sections",
+            )
             for item in (context.get(section_key) or [])
             for line in str((item or {}).get("drug_name") or "").splitlines()
             if line.strip()
@@ -3776,6 +3787,7 @@ class TemplateRenderer:
         sections = context.get("gene_knowledge_sections", [])
         benefit_sections = context.get("drug_benefit_sections", [])
         caution_sections = context.get("drug_caution_sections", [])
+        research_sections = context.get("drug_research_sections", [])
         references = context.get("gene_references", [])
         total_count = context.get("total_variants_count", 0)
         targeted_or_immune_count = context.get(
@@ -4012,7 +4024,7 @@ class TemplateRenderer:
                 current = add_text_block(current, analysis, **body_options)
 
         # === 靶向药物解析 ===
-        if benefit_sections or caution_sections:
+        if benefit_sections or caution_sections or research_sections:
             current = add_para_after(current, "")
             current = add_para_after(
                 current,
@@ -4165,6 +4177,80 @@ class TemplateRenderer:
                     )
                     current = add_text_block(current, clinical, **body_options)
 
+        # 研究性方案与临床试验入组线索单独展示，不混入“潜在获益”或
+        # “负相关”方向。该分区用于保留报告组需要的药物解析可见性，
+        # 同时避免把机制研究/试验资格误写成疗效结论。
+        if research_sections:
+            current = add_para_after(
+                current,
+                "临床试验/研究性方案解析",
+                bold=True,
+                size=12,
+                spacing_before=200,
+                keep_next=True,
+                num_id=9,
+                ilvl=1,
+            )
+
+            prev_header = None
+            for ds in research_sections:
+                gene = ds.get("gene", "")
+                variant = ds.get("variant", "")
+                drug_name = ds.get("drug_name", "")
+                clinical = ds.get("clinical", "")
+                header = ds.get("header")
+                if header is None:
+                    header = f"{gene}：{variant}突变相应临床试验/研究性方案"
+
+                if header and header != prev_header:
+                    current = add_para_after(
+                        current,
+                        header,
+                        bold=True,
+                        size=12,
+                        color="C65911",
+                        justify=True,
+                        spacing_before=200,
+                        left_twips=420,
+                        hanging_twips=420,
+                        num_id=11,
+                        keep_next=True,
+                    )
+                prev_header = header
+                if drug_name:
+                    current = add_text_block(
+                        current,
+                        drug_name,
+                        bold=True,
+                        size=12,
+                        color="0000FF",
+                        underline=True,
+                        justify=True,
+                        spacing_before=200,
+                        spacing_after=200,
+                        left_twips=420,
+                        hanging_twips=420,
+                        num_id=12,
+                        keep_next=True,
+                    )
+                relation = ds.get("relation", "")
+                if relation:
+                    current = add_para_after(
+                        current,
+                        "基因变异与研究方案关联：",
+                        **label_options,
+                        justify=True,
+                    )
+                    current = add_text_block(current, relation, **body_options)
+                if clinical:
+                    current = add_para_after(
+                        current,
+                        "临床试验/研究证据：",
+                        **label_options,
+                        justify=True,
+                    )
+                    current = add_text_block(current, clinical, **body_options)
+
         # === 参考文献 ===
         # The CRC golden template keeps the reviewed appendix-level reference
         # section. Only inline references when a marker-only template has no
@@ -4202,6 +4288,7 @@ class TemplateRenderer:
             sections=len(sections),
             benefit=len(benefit_sections),
             caution=len(caution_sections),
+            research=len(research_sections),
             references=len(references),
         )
 

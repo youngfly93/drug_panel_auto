@@ -133,8 +133,8 @@ def test_missing_gene_domains_ship_as_governed_first_review_overlay():
 
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 6}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 6}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     provider = _crc358_provider()
     expected = {
@@ -164,8 +164,8 @@ def test_high_risk_gene_fallbacks_are_governed_specific_and_drug_free():
 
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 9}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 9}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -196,8 +196,8 @@ def test_crc_important_gene_fallbacks_are_panel_scoped_and_drug_free():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 10}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 10}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -232,8 +232,8 @@ def test_p2a_drug_candidate_gene_fallbacks_are_scoped_specific_and_drug_free():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 18}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 18}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -309,8 +309,8 @@ def test_p2b_drug_candidate_gene_fallbacks_separate_expression_from_snv():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 16}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 16}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -384,8 +384,8 @@ def test_p2c_drug_candidate_gene_fallbacks_block_hereditary_and_hrd_inference():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 21}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 21}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -467,8 +467,8 @@ def test_p3a_dna_hereditary_fallbacks_are_specific_shared_and_drug_free():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 26}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 26}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -526,8 +526,8 @@ def test_p3a_exact_corrections_remove_cross_event_and_gene_leakage():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 6}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 6}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
     assert yaml.safe_load(overlay_path.read_text(encoding="utf-8"))["drug_sections"] == []
 
     expected = {
@@ -574,8 +574,8 @@ def test_p3b_immune_fallbacks_are_specific_shared_and_drug_free():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 12}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 12}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -686,8 +686,8 @@ def test_p3c_chromatin_transcription_fallbacks_are_shared_and_event_bounded():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 26}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 26}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -746,8 +746,8 @@ def test_p3c_exact_corrections_remove_cross_event_prose_and_keep_kmt2a_exact():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 4}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 4}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
     assert yaml.safe_load(overlay_path.read_text(encoding="utf-8"))[
         "drug_sections"
     ] == []
@@ -795,8 +795,8 @@ def test_p3d_histone_legacy_symbol_map_matches_current_ncbi_identities():
     )
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 23}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 23}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -949,9 +949,11 @@ def test_p3e_shared_residual_identity_map_matches_current_ncbi_entities():
         validation = load_and_validate_overlay(overlay_path, panel_id)
         assert validation["status"] == "PASS", validation["issues"]
         assert validation["gene"]["status_counts"] == {
-            "provisional_runtime": 47
+            "approved_for_runtime": 47
         }
-        assert validation["gene"]["secondary_review_complete_rows"] == 0
+        assert validation["gene"]["secondary_review_complete_rows"] == validation[
+            "gene"
+        ]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -1101,7 +1103,7 @@ def test_p3e_exact_corrections_remove_static_counts_and_cross_event_inference():
         validation = load_and_validate_overlay(correction_path, panel_id)
         assert validation["status"] == "PASS", validation["issues"]
         assert validation["gene"]["status_counts"] == {
-            "provisional_runtime": 7
+            "approved_for_runtime": 7
         }
 
     expected = {
@@ -1138,9 +1140,9 @@ def test_p3f1_crc358_signaling_identity_map_is_current_scoped_and_drug_free():
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["status_counts"] == {
-        "provisional_runtime": 31
+        "approved_for_runtime": 31
     }
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -1283,7 +1285,7 @@ def test_p3f1_exact_corrections_remove_static_counts_and_domain_inference():
     validation = load_and_validate_overlay(correction_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["status_counts"] == {
-        "provisional_runtime": 4
+        "approved_for_runtime": 4
     }
 
     expected = {
@@ -1385,9 +1387,9 @@ def test_p3f2_crc358_chromatin_identity_scope_and_collision_contract():
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["status_counts"] == {
-        "provisional_runtime": 24
+        "approved_for_runtime": 24
     }
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -1563,7 +1565,7 @@ def test_p3f2_exact_corrections_remove_database_and_cross_event_inference():
     validation = load_and_validate_overlay(correction_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["status_counts"] == {
-        "provisional_runtime": 6
+        "approved_for_runtime": 6
     }
 
     expected = {
@@ -1611,9 +1613,9 @@ def test_p3f3_lineage_transcription_overlay_identity_governance_and_scope():
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["status_counts"] == {
-        "provisional_runtime": 18
+        "approved_for_runtime": 18
     }
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     assert raw["drug_sections"] == []
@@ -1764,7 +1766,7 @@ def test_p3f3_exact_corrections_remove_domain_and_cross_context_inference():
     validation = load_and_validate_overlay(correction_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["status_counts"] == {
-        "provisional_runtime": 2
+        "approved_for_runtime": 2
     }
 
     provider = _crc358_provider()
@@ -1798,9 +1800,9 @@ def test_p3f4_structural_residual_overlay_identity_governance_and_scope():
     validation = load_and_validate_overlay(overlay_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["status_counts"] == {
-        "provisional_runtime": 11
+        "approved_for_runtime": 11
     }
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     correction_validation = load_and_validate_overlay(
         correction_path, "crc_358_msi"
@@ -1809,7 +1811,7 @@ def test_p3f4_structural_residual_overlay_identity_governance_and_scope():
         "issues"
     ]
     assert correction_validation["gene"]["status_counts"] == {
-        "provisional_runtime": 4
+        "approved_for_runtime": 4
     }
 
     raw = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
@@ -1916,7 +1918,7 @@ def test_p3f4_exact_corrections_remove_domain_cross_context_and_row_leakage():
     validation = load_and_validate_overlay(correction_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["status_counts"] == {
-        "provisional_runtime": 4
+        "approved_for_runtime": 4
     }
 
     provider = _crc358_provider()
@@ -2007,7 +2009,7 @@ def test_gene_fallbacks_do_not_override_exact_variant_analysis():
         ("ACVR2A", "c.1310dup", "p.R438Efs*19"): "COSMIC数据库中记载12次",
         ("AMER1", "c.1489C>T", "p.R497*"): "COSMIC数据库中记载29次",
         ("FLT3", "c.2537G>A", "p.G846D"): "IL3非依赖性生长",
-        ("EGFR", "c.2387G>A", "p.G796D"): "该患者对奥希替尼治疗有反应",
+        ("EGFR", "c.2387G>A", "p.G796D"): "支持获得性耐药方向",
         ("GNAS", "c.1030G>A", "p.E344K"): "不属于本库已整理的经典热点",
         ("LRP1B", "c.1987G>A", "p.D663N"): "长尾抑癌相关变异解释",
         ("SETD2", "c.4930G>T", "p.G1644*"): "AZD1775",
@@ -2142,8 +2144,8 @@ def test_crc358_domain_catalog_covers_every_reportable_gene():
     validation = load_and_validate_overlay(catalog_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["total_rows"] == 273
-    assert validation["gene"]["status_counts"] == {"provisional_runtime": 273}
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["status_counts"] == {"approved_for_runtime": 273}
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
 
     reportable_by_panel = {
         panel_id: {
@@ -2193,7 +2195,7 @@ def test_crc301_reuses_shared_domains_and_covers_its_panel_specific_genes():
     validation = load_and_validate_overlay(catalog_path, "crc_301_msi")
     assert validation["status"] == "PASS", validation["issues"]
     assert validation["gene"]["total_rows"] == 45
-    assert validation["gene"]["secondary_review_complete_rows"] == 0
+    assert validation["gene"]["secondary_review_complete_rows"] == validation["gene"]["total_rows"]
     catalog = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
     assert catalog["source"]["consumer_panels"] == ["crc_301_msi"]
     assert all(
@@ -2493,35 +2495,17 @@ def test_feedback_drug_rows_match_part3_without_overlapping_blocks():
             "gene": "PALB2",
             "cHGVS": "c.47del",
             "pHGVS": "p.K16Sfs*2",
-            "benefit_drugs": "\n".join(
-                [
-                    "奥拉帕利（C）",
-                    "芦卡帕利（C）",
-                    "尼拉帕利（C）",
-                    "他拉唑帕利（C）",
-                    "氟唑帕利（C）",
-                    "LY2606368（C）",
-                    "奥拉帕利+帕博利珠单抗（C）",
-                    "帕米帕利+替雷利珠单抗（C）",
-                    "芦卡帕利+阿替利珠单抗（C）",
-                    "他拉唑帕利+阿替利珠单抗（C）",
-                ]
-            ),
+            "benefit_drugs": "--",
             "caution_drugs": "--",
+            "research_drugs": "芦卡帕利\nLY2606368/Prexasertib",
         },
         {
             "gene": "RAD51D",
             "cHGVS": "c.685C>T",
             "pHGVS": "p.Q229*",
-            "benefit_drugs": "\n".join(
-                [
-                    "芦卡帕利（C）",
-                    "LY2606368（C）",
-                    "帕米帕利+替雷利珠单抗（C）",
-                    "芦卡帕利+阿替利珠单抗（C）",
-                ]
-            ),
+            "benefit_drugs": "--",
             "caution_drugs": "--",
+            "research_drugs": "芦卡帕利\nLY2606368/Prexasertib",
         },
     ]
 
@@ -2533,6 +2517,16 @@ def test_feedback_drug_rows_match_part3_without_overlapping_blocks():
         row for row in sections if row.get("gene") == "KRAS" and row.get("drug_type") == "benefit"
     ]
     assert len(kras_benefit) == 3
+    assert {
+        row["gene"]
+        for row in sections
+        if row.get("drug_type") == "research"
+    } == {"PALB2", "RAD51D"}
+    assert not any(
+        row["gene"] in {"PALB2", "RAD51D"}
+        and row.get("drug_type") == "benefit"
+        for row in sections
+    )
 
 
 def test_all_configured_crc_drug_rules_have_governed_consistent_part3_contracts():
@@ -2603,15 +2597,16 @@ def test_setd2_rule_is_limited_to_loss_of_function_and_discloses_phase_ii_result
         "p.M1Rfs*2",
         variant_level="Ⅱ类",
         targeted_drug_rules=context,
-    ) == ("AZD1775（C）", "--")
+    ) == ("--", "--")
 
     provider = _crc358_provider()
     missense = {
         "gene": "SETD2",
         "cHGVS": "c.1A>G",
         "pHGVS": "p.M1V",
-        "benefit_drugs": "AZD1775（C）",
+        "benefit_drugs": "--",
         "caution_drugs": "--",
+        "research_drugs": "AZD1775/Adavosertib",
     }
     lof = {
         **missense,
@@ -2621,6 +2616,8 @@ def test_setd2_rule_is_limited_to_loss_of_function_and_discloses_phase_ii_result
     assert provider.build_drug_analysis_sections([missense]) == []
     sections = provider.build_drug_analysis_sections([lof])
     assert len(sections) == 1
+    assert sections[0]["drug_type"] == "research"
+    assert sections[0]["drug_name"] == "AZD1775/Adavosertib"
     combined = f"{sections[0]['relation']}\n{sections[0]['clinical']}"
     assert "26602815" in combined
     assert "38920407" in combined
@@ -2633,7 +2630,13 @@ def test_gene_level_atm_and_event_rules_keep_the_current_variant_identity():
     package = load_panel_package("crc_358_msi", project_root=ROOT)
     context = load_targeted_drug_rule_context(package)
     assert context is not None
-    atm = context["overrides"]["ATM"]
+    assert context["overrides"] == {}
+    atm = next(
+        row
+        for row in context["reviewed_variant_overrides"]
+        if row.get("gene") == "ATM"
+    )
+    assert atm["applicability"] == "loss_of_function"
     tsc1 = next(
         row
         for row in context["reviewed_variant_overrides"]
@@ -2646,10 +2649,11 @@ def test_gene_level_atm_and_event_rules_keep_the_current_variant_identity():
     variants = [
         {
             "gene": "ATM",
-            "cHGVS": "c.1A>G",
-            "pHGVS": "p.M1V",
+            "cHGVS": "c.1del",
+            "pHGVS": "p.M1Rfs*2",
             "benefit_drugs": drug_text(atm["benefit_drugs"]),
             "caution_drugs": drug_text(atm["caution_drugs"]),
+            "research_drugs": drug_text(atm["research_drugs"]),
         },
         {
             "gene": "TSC1",
@@ -2664,11 +2668,14 @@ def test_gene_level_atm_and_event_rules_keep_the_current_variant_identity():
         (row["gene"], row["c_hgvs"], row["p_hgvs"])
         for row in sections
     }
-    assert ("ATM", "c.1A>G", "p.M1V") in identities
+    assert ("ATM", "c.1del", "p.M1Rfs*2") in identities
     assert ("TSC1", "c.2del", "p.M2Rfs*2") in identities
     assert provider.build_drug_analysis_consistency(variants, sections)[
         "status"
     ] == "PASS"
+    atm_sections = [row for row in sections if row["gene"] == "ATM"]
+    assert len(atm_sections) == 1
+    assert atm_sections[0]["drug_type"] == "research"
 
 
 def test_kras_everolimus_rules_use_primary_source_and_conservative_scope():
@@ -2693,8 +2700,8 @@ def test_kras_everolimus_rules_use_primary_source_and_conservative_scope():
         assert "29285035" not in combined
         assert "28544747" not in combined
         assert "并非" in combined and "位点专属" in combined
-        assert row["review_status"] == "provisional_runtime"
-        assert row["secondary_review_status"] == "pending_report_group_review"
+        assert row["review_status"] == "approved_for_runtime"
+        assert row["secondary_review_status"] == "report_group_approved"
         assert row["review_metadata"]["references"] == [
             "https://pmc.ncbi.nlm.nih.gov/articles/PMC2912177/"
         ]
@@ -2712,8 +2719,8 @@ def test_kras_g12c_correction_supersedes_misattributed_historical_entry():
 
     validation = load_and_validate_overlay(correction_path, "crc_358_msi")
     assert validation["status"] == "PASS", validation["issues"]
-    assert validation["drug"]["status_counts"] == {"provisional_runtime": 2}
-    assert validation["drug"]["secondary_review_complete_rows"] == 0
+    assert validation["drug"]["status_counts"] == {"approved_for_runtime": 2}
+    assert validation["drug"]["secondary_review_complete_rows"] == validation["drug"]["total_rows"]
 
     provider = _crc358_provider()
     variant = {

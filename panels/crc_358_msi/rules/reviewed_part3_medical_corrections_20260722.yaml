@@ -1,0 +1,573 @@
+schema_version: 1
+replace_variant_drug_sections: true
+source:
+  panel: crc_358_msi
+  purpose: >-
+    Report-group AI first-review corrections that separate verified benefit,
+    resistance/caution, and trial/research-only evidence without deleting the
+    historical migration records they supersede.
+  source_type: governed_medical_correction_overlay
+  source_id: crc_shared_medical_corrections_20260722
+  created_at: "2026-07-22"
+  privacy: No patient name, sample ID, report date, or case-specific branch key is stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc_shared_medical_corrections_v1
+  defaults:
+    gene:
+      review_status: approved_for_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_report_group_first_review_source_correction
+      evidence_level: primary_source_checked_conservative_background
+      evidence_as_of: "2026-07-22"
+      cancer_scope: colorectal_report_context_with_explicit_source_boundary
+      secondary_review_status: report_group_approved
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: report_group_approved
+      source_refs:
+        - type: internal_review
+          id: ai_report_group_review_20260722
+    drug:
+      review_status: approved_for_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_report_group_first_review_direction_correction
+      evidence_level: row_specific_primary_source_boundary
+      evidence_as_of: "2026-07-22"
+      cancer_scope: colorectal_report_context_with_cross_cancer_limits
+      secondary_review_status: report_group_approved
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: report_group_approved
+      source_refs:
+        - type: internal_review
+          id: ai_report_group_review_20260722
+
+gene_sections:
+  - gene: SLCO1B1
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      SLCO1B1编码肝细胞有机阴离子转运多肽OATP1B1，介导多种内源性化合物和药物从血液进入肝细胞；该转运过程为钠离子非依赖性[NCBI]。SLCO1B1胚系单倍型可影响部分药物的全身暴露、清除和毒性。儿童急性淋巴细胞白血病研究提示相关胚系变异与高剂量甲氨蝶呤清除和胃肠道毒性有关，可用于风险分层、治疗药物监测及按正式方案调整支持治疗，但不能据此自动停用或省略甲氨蝶呤[21387541]。肿瘤组织检出的单个体细胞变异不能替代胚系药物基因组学检测。
+    replace_fields: [intro]
+    supersedes: reviewed_part3_knowledge.yaml:SLCO1B1_gene_intro
+    evidence_level: ncbi_function_plus_germline_pharmacokinetic_association
+    cancer_scope: germline_pharmacogenomics_not_somatic_crc_treatment_rule
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene:10599
+        url: https://www.ncbi.nlm.nih.gov/gene/10599
+      - type: pubmed
+        id: PMID:21387541
+        url: https://pubmed.ncbi.nlm.nih.gov/21387541/
+
+  - gene: ESR2
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      ESR2编码雌激素受体β，是核受体转录因子家族成员，包含DNA结合结构域和配体结合结构域；与雌激素结合后可形成同源或异源二聚体并调控靶基因转录[NCBI]。一项病例对照研究报道特定ESR2多态性与乳腺癌风险相关[15604249]；该来源不支持把同一结论直接外推为结直肠癌或前列腺癌风险，也不能把肿瘤组织中的任意ESR2体细胞变异解释为治疗标志物。
+    replace_fields: [intro]
+    supersedes: reviewed_part3_knowledge.yaml:ESR2_gene_intro
+    evidence_level: ncbi_function_plus_breast_cancer_association_only
+    cancer_scope: breast_association_source_not_crc_or_prostate_claim
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene:2100
+        url: https://www.ncbi.nlm.nih.gov/gene/2100
+      - type: pubmed
+        id: PMID:15604249
+        url: https://pubmed.ncbi.nlm.nih.gov/15604249/
+
+  - gene: HLA-C
+    panels: [crc_301_msi, crc_358_msi]
+    intro: >-
+      HLA-C编码HLA I类重链，与β2微球蛋白形成复合物并向细胞毒性T细胞呈递内源性肽；其多态性影响肽结合特异性[NCBI]。早期结直肠癌研究观察的是HLA-A、HLA-B和HLA-C所代表的HLA I类分子总体表达缺失，并报道其与肿瘤分化程度相关[2417962]；该研究不能单独证明HLA-C基因特异性表达缺失或预后效应。单个HLA-C体细胞变异仍需结合等位基因、表达和抗原呈递功能判断。
+    replace_fields: [intro]
+    supersedes: reviewed_part3_knowledge.yaml:HLA-C_gene_intro
+    evidence_level: ncbi_function_plus_hla_class_i_crc_observation
+    cancer_scope: hla_class_i_observation_not_hla_c_specific_biomarker
+    source_refs:
+      - type: ncbi_gene
+        id: NCBI-Gene:3107
+        url: https://www.ncbi.nlm.nih.gov/gene/3107
+      - type: pubmed
+        id: PMID:2417962
+        url: https://pubmed.ncbi.nlm.nih.gov/2417962/
+
+  - gene: EGFR
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2387G>A
+    p_hgvs: p.G796D
+    mutation_analysis: >-
+      p.G796D位于EGFR酪氨酸激酶结构域并邻近奥希替尼共价结合位点C797。原始研究在一例EGFR突变非小细胞肺癌患者接受奥希替尼后进展的样本中检出该变异；结构建模和Ba/F3实验显示其降低奥希替尼结合，奥希替尼GI50约升高50倍，支持获得性耐药方向[28572531]。该证据不等同于p.G796D在结直肠癌中的驱动性、药物敏感性或获益证据，需结合癌种、共存驱动变异及治疗背景解释。
+    replace_fields: [mutation_analysis]
+    supersedes: reviewed_part3_knowledge.yaml:EGFR_p.G796D_mutation_analysis
+    evidence_level: single_nsclc_case_plus_structural_and_in_vitro_resistance
+    cancer_scope: nsclc_osimertinib_resistance_not_crc_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:28572531
+        url: https://pubmed.ncbi.nlm.nih.gov/28572531/
+
+drug_sections:
+  # SETD2: remove both historical benefit groups and retain the negative phase-II
+  # result in a separate research-only section.
+  - gene: SETD2
+    panels: [crc_301_msi, crc_358_msi]
+    type: benefit
+    applicability: loss_of_function
+    suppress: true
+    supersedes: reviewed_part3_drug_contracts_20260721.yaml:SETD2_gene_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:38920407
+        url: https://pubmed.ncbi.nlm.nih.gov/38920407/
+  - gene: SETD2
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.4930G>T
+    p_hgvs: p.G1644*
+    type: benefit
+    suppress: true
+    supersedes: reviewed_part3_drug_contracts_20260721.yaml:SETD2_p.G1644*_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:38920407
+        url: https://pubmed.ncbi.nlm.nih.gov/38920407/
+  - gene: SETD2
+    panels: [crc_301_msi, crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: SETD2功能缺失型变异临床试验/研究性方案
+    drug_name: AZD1775/Adavosertib
+    relation: >-
+      H3K36me3缺失在细胞和异种移植模型中与WEE1抑制剂敏感性相关[26602815]；该信号属于前临床机制，不构成SETD2变异结直肠癌的潜在获益规则。
+    clinical: >-
+      SETD2致病变异晚期实体瘤Ⅱ期研究纳入18例患者，两个队列均未观察到客观缓解，研究未进入后续阶段[38920407，NCT03284385]。因此仅保留为带阴性临床结果的研究说明，不进入第二部分获益表。
+    evidence_level: preclinical_positive_phase_ii_no_objective_response
+    cancer_scope: cross_cancer_research_with_negative_phase_ii_not_crc_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:26602815
+        url: https://pubmed.ncbi.nlm.nih.gov/26602815/
+      - type: pubmed
+        id: PMID:38920407
+        url: https://pubmed.ncbi.nlm.nih.gov/38920407/
+      - type: clinical_trial
+        id: NCT03284385
+        url: https://clinicaltrials.gov/study/NCT03284385
+
+  # FANCD2/RAD50/PALB2/RAD51D: registry eligibility is visible but no longer
+  # promoted to efficacy or Part-2 benefit.
+  - gene: FANCD2
+    panels: [crc_358_msi]
+    c_hgvs: c.1630C>T
+    p_hgvs: p.Q544*
+    type: benefit
+    suppress: true
+    supersedes: reviewed_part3_knowledge.yaml:FANCD2_p.Q544*_benefit
+    source_refs:
+      - type: clinical_trial
+        id: NCT03413995
+        url: https://clinicaltrials.gov/study/NCT03413995
+  - gene: FANCD2
+    panels: [crc_358_msi]
+    c_hgvs: c.1630C>T
+    p_hgvs: p.Q544*
+    type: research
+    header: FANCD2：c.1630C>T，p.Q544*突变相应临床试验/研究性方案
+    drug_name: 芦卡帕利（Rucaparib）、奥拉帕利+帕博利珠单抗（Olaparib+Pembrolizumab）
+    relation: >-
+      该无义变异可能影响Fanconi贫血/DNA交联修复通路；现有来源只支持把有害FANCD2异常作为部分跨癌种试验的筛选条件，不能据此判定结直肠癌疗效。
+    clinical: >-
+      NCT03413995将有害FANCD2胚系异常列入前列腺癌芦卡帕利研究范围；NCT04633902将FANCD2列入黑色素瘤奥拉帕利联合帕博利珠单抗研究范围。两者均为入组条件而非FANCD2独立疗效结果。
+    evidence_level: cross_cancer_trial_eligibility_only
+    cancer_scope: prostate_and_melanoma_trials_not_crc_efficacy
+    source_refs:
+      - type: clinical_trial
+        id: NCT03413995
+        url: https://clinicaltrials.gov/study/NCT03413995
+      - type: clinical_trial
+        id: NCT04633902
+        url: https://clinicaltrials.gov/study/NCT04633902
+
+  - gene: RAD50
+    panels: [crc_358_msi]
+    c_hgvs: c.1093C>T
+    p_hgvs: p.R365*
+    type: benefit
+    suppress: true
+    supersedes: reviewed_part3_knowledge.yaml:RAD50_p.R365*_benefit
+    source_refs:
+      - type: clinical_trial
+        id: NCT03413995
+        url: https://clinicaltrials.gov/study/NCT03413995
+  - gene: RAD50
+    panels: [crc_358_msi]
+    c_hgvs: c.1093C>T
+    p_hgvs: p.R365*
+    type: research
+    header: RAD50：c.1093C>T，p.R365*突变相应临床试验/研究性方案
+    drug_name: 芦卡帕利（Rucaparib）、尼拉帕利+卡铂（Niraparib+Carboplatin）、他拉唑帕利（Talazoparib）、AZD6738/Ceralasertib+奥拉帕利（Olaparib）
+    relation: >-
+      RAD50截短可作为MRN/同源重组修复异常线索，但现有登记资料不能把RAD50变异直接等同于PARP或ATR方案敏感。
+    clinical: >-
+      NCT03413995、NCT03209401、NCT02286687和NCT02576444分别把RAD50/MRN异常纳入不同药物或联合方案的筛选范围；这些登记不提供p.R365*结直肠癌逐方案疗效结论。
+    evidence_level: cross_cancer_trial_eligibility_only
+    cancer_scope: mixed_cross_cancer_trials_not_crc_efficacy
+    source_refs:
+      - type: clinical_trial
+        id: NCT03413995
+        url: https://clinicaltrials.gov/study/NCT03413995
+      - type: clinical_trial
+        id: NCT03209401
+        url: https://clinicaltrials.gov/study/NCT03209401
+      - type: clinical_trial
+        id: NCT02286687
+        url: https://clinicaltrials.gov/study/NCT02286687
+      - type: clinical_trial
+        id: NCT02576444
+        url: https://clinicaltrials.gov/study/NCT02576444
+
+  - gene: PALB2
+    panels: [crc_358_msi]
+    c_hgvs: c.47del
+    p_hgvs: p.K16Sfs*2
+    type: benefit
+    suppress: true
+    supersedes: reviewed_part3_knowledge.yaml:PALB2_p.K16Sfs*2_benefit
+    source_refs:
+      - type: clinical_trial
+        id: NCT03413995
+        url: https://clinicaltrials.gov/study/NCT03413995
+  - gene: PALB2
+    panels: [crc_358_msi]
+    c_hgvs: c.47del
+    p_hgvs: p.K16Sfs*2
+    type: research
+    header: PALB2：c.47del，p.K16Sfs*2突变相应临床试验/研究性方案
+    drug_name: 芦卡帕利（Rucaparib）、LY2606368/Prexasertib
+    relation: >-
+      PALB2功能缺失具有同源重组修复缺陷的生物学基础[20871615，25263539]，但通路机制不能自动扩展为任意PARP抑制剂或联合方案的临床获益。
+    clinical: >-
+      NCT03413995和NCT02873975分别把PALB2异常纳入芦卡帕利及Prexasertib相关研究的筛选范围；本条只展示可逐项追溯的试验线索，不进入获益表。
+    evidence_level: functional_basis_plus_trial_eligibility_only
+    cancer_scope: cross_cancer_research_not_crc_efficacy
+    source_refs:
+      - type: pubmed
+        id: PMID:20871615
+        url: https://pubmed.ncbi.nlm.nih.gov/20871615/
+      - type: pubmed
+        id: PMID:25263539
+        url: https://pubmed.ncbi.nlm.nih.gov/25263539/
+      - type: clinical_trial
+        id: NCT03413995
+        url: https://clinicaltrials.gov/study/NCT03413995
+      - type: clinical_trial
+        id: NCT02873975
+        url: https://clinicaltrials.gov/study/NCT02873975
+
+  - gene: RAD51D
+    panels: [crc_358_msi]
+    c_hgvs: c.685C>T
+    p_hgvs: p.Q229*
+    type: benefit
+    suppress: true
+    supersedes: reviewed_part3_knowledge.yaml:RAD51D_p.Q229*_benefit
+    source_refs:
+      - type: clinical_trial
+        id: NCT03413995
+        url: https://clinicaltrials.gov/study/NCT03413995
+  - gene: RAD51D
+    panels: [crc_358_msi]
+    c_hgvs: c.685C>T
+    p_hgvs: p.Q229*
+    type: research
+    header: RAD51D：c.685C>T，p.Q229*突变相应临床试验/研究性方案
+    drug_name: 芦卡帕利（Rucaparib）、LY2606368/Prexasertib、帕米帕利+替雷利珠单抗、芦卡帕利+阿替利珠单抗
+    relation: >-
+      RAD51D功能缺失可提示同源重组修复异常；当前证据为跨癌种临床试验筛选范围，不能解释为p.Q229*结直肠癌已确证获益。
+    clinical: >-
+      NCT03413995、NCT02873975、NCT04985721和NCT04276376分别登记了含RAD51D异常的研究队列；登记状态和入组条件不等同于疗效结论。
+    evidence_level: cross_cancer_trial_eligibility_only
+    cancer_scope: mixed_cross_cancer_trials_not_crc_efficacy
+    source_refs:
+      - type: clinical_trial
+        id: NCT03413995
+        url: https://clinicaltrials.gov/study/NCT03413995
+      - type: clinical_trial
+        id: NCT02873975
+        url: https://clinicaltrials.gov/study/NCT02873975
+      - type: clinical_trial
+        id: NCT04985721
+        url: https://clinicaltrials.gov/study/NCT04985721
+      - type: clinical_trial
+        id: NCT04276376
+        url: https://clinicaltrials.gov/study/NCT04276376
+
+  # ATM: clear the historical gene-level/exact benefit prose and retain a
+  # tightly bounded LoF research section. Part 2 is actively suppressed by the
+  # reviewed negative rule in drugs.yaml.
+  - gene: ATM
+    panels: [crc_301_msi, crc_358_msi]
+    type: benefit
+    applicability: loss_of_function
+    suppress: true
+    supersedes: reviewed_part3_drug_contracts_20260721.yaml:ATM_gene_benefit
+    source_refs:
+      - type: internal_review
+        id: ai_report_group_review_20260722:ATM
+  - gene: ATM
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.6874C>T
+    p_hgvs: p.Q2292*
+    type: benefit
+    suppress: true
+    supersedes: reviewed_part3_drug_contracts_20260721.yaml:ATM_p.Q2292*_benefit
+    source_refs:
+      - type: internal_review
+        id: ai_report_group_review_20260722:ATM
+  - gene: ATM
+    panels: [crc_301_msi, crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: ATM功能缺失型变异临床试验/研究性方案
+    drug_name: 奥拉帕利（Olaparib）、AZD6738/Ceralasertib+奥拉帕利、阿维鲁单抗+他拉唑帕利、他拉唑帕利（Talazoparib）
+    relation: >-
+      ATM功能缺失可作为DNA损伤应答异常线索；ATM/DDR基因被纳入多项跨癌种研究，并不证明ATM任意变异或p.Q2292*结直肠癌对所列方案敏感。
+    clinical: >-
+      NCT01682772、NCT02576444、NCT03565991和NCT02286687分别研究ATM/DDR异常背景下的PARP、ATR或免疫联合方案。仅保留可追溯的研究线索，不形成第二部分潜在获益结论。
+    evidence_level: cross_cancer_trial_and_ddr_aggregate_research_only
+    cancer_scope: atm_lof_cross_cancer_research_not_crc_efficacy
+    source_refs:
+      - type: clinical_trial
+        id: NCT01682772
+        url: https://clinicaltrials.gov/study/NCT01682772
+      - type: clinical_trial
+        id: NCT02576444
+        url: https://clinicaltrials.gov/study/NCT02576444
+      - type: clinical_trial
+        id: NCT03565991
+        url: https://clinicaltrials.gov/study/NCT03565991
+      - type: clinical_trial
+        id: NCT02286687
+        url: https://clinicaltrials.gov/study/NCT02286687
+
+  - gene: FLT3
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2537G>A
+    p_hgvs: p.G846D
+    type: benefit
+    suppress: true
+    supersedes: reviewed_part3_drug_contracts_20260721.yaml:FLT3_p.G846D_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:38049555
+        url: https://pubmed.ncbi.nlm.nih.gov/38049555/
+  - gene: FLT3
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2537G>A
+    p_hgvs: p.G846D
+    type: research
+    header: FLT3：c.2537G>A，p.G846D突变相应临床试验/研究性方案
+    drug_name: 索拉非尼（Sorafenib）
+    relation: >-
+      p.G846D的直接来源为儿童急性淋巴细胞白血病中的变异表征[38049555]；FLT3扩增、FLT3-ITD和p.G846D不是可互换的生物标志物。
+    clinical: >-
+      NCT02029001允许部分FLT3突变或扩增实体瘤进入索拉非尼匹配队列，但未限定p.G846D或结直肠癌，不能作为位点疗效证据。
+    evidence_level: variant_characterization_plus_non_specific_trial_eligibility
+    cancer_scope: childhood_all_and_pan_cancer_trial_not_crc_g846d_efficacy
+    source_refs:
+      - type: pubmed
+        id: PMID:38049555
+        url: https://pubmed.ncbi.nlm.nih.gov/38049555/
+      - type: clinical_trial
+        id: NCT02029001
+        url: https://clinicaltrials.gov/study/NCT02029001
+
+  - gene: TP53
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.821T>A
+    p_hgvs: p.V274D
+    type: benefit
+    suppress: true
+    supersedes: reviewed_part3_drug_contracts_20260721.yaml:TP53_p.V274D_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:27601554
+        url: https://pubmed.ncbi.nlm.nih.gov/27601554/
+  - gene: TP53
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.821T>A
+    p_hgvs: p.V274D
+    type: research
+    header: TP53：c.821T>A，p.V274D突变相应临床试验/研究性方案
+    drug_name: AZD1775/Adavosertib
+    relation: >-
+      WEE1抑制剂研究主要基于TP53异常类别或特定癌种模型，并非p.V274D位点专属证据[28978051]。
+    clinical: >-
+      早期实体瘤研究评估了Adavosertib单药或联合治疗[27601554]；未建立p.V274D结直肠癌逐位点疗效，因此仅作研究说明。
+    evidence_level: tp53_class_preclinical_and_early_clinical_research_only
+    cancer_scope: cross_cancer_tp53_class_not_crc_v274d_efficacy
+    source_refs:
+      - type: pubmed
+        id: PMID:28978051
+        url: https://pubmed.ncbi.nlm.nih.gov/28978051/
+      - type: pubmed
+        id: PMID:27601554
+        url: https://pubmed.ncbi.nlm.nih.gov/27601554/
+
+  # EGFR G796D: direct evidence supports osimertinib resistance. Candidate
+  # agents are retained only in the research subsection.
+  - gene: EGFR
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2387G>A
+    p_hgvs: p.G796D
+    type: benefit
+    suppress: true
+    supersedes: reviewed_part3_drug_contracts_20260721.yaml:EGFR_p.G796D_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:28572531
+        url: https://pubmed.ncbi.nlm.nih.gov/28572531/
+  - gene: EGFR
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2387G>A
+    p_hgvs: p.G796D
+    type: caution
+    header: EGFR：c.2387G>A，p.G796D突变相应负相关靶向药物
+    drug_name: 奥希替尼（Osimertinib）
+    relation: >-
+      G796D位于奥希替尼共价结合位点C797附近。病例演化、结构建模和Ba/F3功能实验均支持该变异降低奥希替尼结合并造成耐药[28572531]；证据来自非小细胞肺癌，报告中按D级跨癌种负相关提示。
+    clinical: >-
+      原始病例在奥希替尼进展时G796D克隆增加，体外模型中奥希替尼GI50约上升50倍[28572531]。该结果支持耐药方向，但不是结直肠癌疗效试验。
+    evidence_level: single_case_plus_in_vitro_resistance_level_d
+    cancer_scope: nsclc_resistance_evidence_not_crc_outcome
+    source_refs:
+      - type: pubmed
+        id: PMID:28572531
+        url: https://pubmed.ncbi.nlm.nih.gov/28572531/
+  - gene: EGFR
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.2387G>A
+    p_hgvs: p.G796D
+    type: research
+    header: EGFR：c.2387G>A，p.G796D突变相应临床试验/研究性方案
+    drug_name: 阿法替尼（Afatinib）、MCLA-129
+    relation: >-
+      阿法替尼和MCLA-129研究针对更广泛的EGFR异常或EGFR/MET通路，并无p.G796D结直肠癌位点专属疗效证据。
+    clinical: >-
+      NCT02465060评估EGFR激活变异肿瘤中的阿法替尼，NCT04868877评估MCLA-129在肺癌及其他实体瘤中的方案；两项登记只作为非G796D特异研究线索。
+    evidence_level: non_variant_specific_early_trial_research_only
+    cancer_scope: cross_cancer_trial_not_crc_g796d_efficacy
+    source_refs:
+      - type: clinical_trial
+        id: NCT02465060
+        url: https://clinicaltrials.gov/study/NCT02465060
+      - type: clinical_trial
+        id: NCT04868877
+        url: https://clinicaltrials.gov/study/NCT04868877
+
+  # ERBB2 G660D: keep only the directly supported inhibitor subset in Part 2;
+  # separate anti-EGFR caution and trial-only combinations.
+  - &erbb2_g660d_benefit
+    gene: ERBB2
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.1979G>A
+    p_hgvs: p.G660D
+    type: benefit
+    header: ERBB2：c.1979G>A，p.G660D突变相应靶向药物
+    drug_name: 阿法替尼、曲妥珠单抗、帕妥珠单抗、奈拉替尼
+    relation: >-
+      G660D是HER2跨膜结构域激活变异。Ba/F3和小鼠模型显示曲妥珠单抗、帕妥珠单抗、奈拉替尼及阿法替尼可抑制G660D突变体[30449325]；阿法替尼另有跨癌种病例/模型资料[26545934，29146616]。除阿法替尼外，其余按D级前临床线索，不代表CRC获批适应证。
+    clinical: >-
+      直接证据支持HER2可靶向的生物学基础，但不同药物的临床证据强度有限。第二部分仅保留上述直接研究子集，其他历史候选方案不再并入潜在获益栏。
+    evidence_level: direct_g660d_preclinical_with_afatinib_cross_cancer_case
+    cancer_scope: g660d_direct_models_and_cross_cancer_case_not_crc_approval
+    source_refs:
+      - type: pubmed
+        id: PMID:30449325
+        url: https://pubmed.ncbi.nlm.nih.gov/30449325/
+      - type: pubmed
+        id: PMID:26545934
+        url: https://pubmed.ncbi.nlm.nih.gov/26545934/
+      - type: pubmed
+        id: PMID:29146616
+        url: https://pubmed.ncbi.nlm.nih.gov/29146616/
+  - <<: *erbb2_g660d_benefit
+    p_hgvs: p.Gly660Asp
+    header: ERBB2：c.1979G>A，p.Gly660Asp突变相应靶向药物
+
+  - &erbb2_g660d_caution
+    gene: ERBB2
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.1979G>A
+    p_hgvs: p.G660D
+    type: caution
+    header: ERBB2：c.1979G>A，p.G660D突变相应负相关靶向药物
+    drug_name: 西妥昔单抗、帕尼单抗
+    relation: >-
+      HER2激活可旁路EGFR信号并降低西妥昔单抗、帕尼单抗等抗EGFR单抗作用，按D级结直肠癌类别负相关提示[26243863]。该证据属于HER2激活类别，并非G660D逐药临床耐药试验。
+    clinical: >-
+      抗EGFR单抗方向与HER2靶向方案分开解释；奈拉替尼因存在G660D直接抑制证据，不再同时出现在无条件慎用栏。
+    evidence_level: colorectal_preclinical_her2_bypass_anti_egfr_resistance
+    cancer_scope: colorectal_her2_activating_class_not_g660d_clinical_outcome
+    source_refs:
+      - type: pubmed
+        id: PMID:26243863
+        url: https://pubmed.ncbi.nlm.nih.gov/26243863/
+  - <<: *erbb2_g660d_caution
+    p_hgvs: p.Gly660Asp
+    header: ERBB2：c.1979G>A，p.Gly660Asp突变相应负相关靶向药物
+
+  - &erbb2_g660d_research
+    gene: ERBB2
+    panels: [crc_301_msi, crc_358_msi]
+    c_hgvs: c.1979G>A
+    p_hgvs: p.G660D
+    type: research
+    header: ERBB2：c.1979G>A，p.G660D突变相应临床试验/研究性方案
+    drug_name: 奈拉替尼+曲妥珠单抗、德曲妥珠单抗+奈拉替尼
+    relation: >-
+      两项联合方案来源于HER2突变或HER2异常实体瘤研究设计，不是G660D结直肠癌逐方案确证疗效。
+    clinical: >-
+      NCT01953926评估奈拉替尼单药/联合曲妥珠单抗的HER2突变篮子队列；NCT05372614评估德曲妥珠单抗联合奈拉替尼且当前为暂停状态。仅作为研究信息展示。
+    evidence_level: her2_class_trial_registry_research_only
+    cancer_scope: basket_trials_not_crc_g660d_efficacy
+    source_refs:
+      - type: clinical_trial
+        id: NCT01953926
+        url: https://clinicaltrials.gov/study/NCT01953926
+      - type: clinical_trial
+        id: NCT05372614
+        url: https://clinicaltrials.gov/study/NCT05372614
+  - <<: *erbb2_g660d_research
+    p_hgvs: p.Gly660Asp
+    header: ERBB2：c.1979G>A，p.Gly660Asp突变相应临床试验/研究性方案
+
+extra_references:
+  - "PMID:21387541 SLCO1B1 variants and high-dose methotrexate clearance and gastrointestinal toxicity in childhood acute lymphoblastic leukemia."
+  - "PMID:15604249 ESR2 polymorphism and breast cancer risk."
+  - "PMID:2417962 HLA-A, HLA-B and HLA-C expression in colorectal carcinoma."
+  - "PMID:26602815 Inhibiting WEE1 Selectively Kills Histone H3K36me3-Deficient Cancers by dNTP Starvation."
+  - "PMID:38920407 A Phase II Trial of the WEE1 Inhibitor Adavosertib in SETD2-Altered Advanced Solid Tumor Malignancies."
+  - "PMID:28572531 EGFR G796D mutation mediates resistance to osimertinib."
+  - "PMID:30449325 Actionable activating oncogenic ERBB2/HER2 transmembrane and juxtamembrane domain mutations."
+  - "PMID:26243863 HER2 activating mutations are targets for colorectal cancer treatment."
+  - "NCT03284385 Adavosertib in SETD2-altered advanced solid tumors."
+  - "NCT03413995 Rucaparib in homologous recombination repair gene-altered prostate cancer."
+  - "NCT04633902 Olaparib plus pembrolizumab in advanced melanoma with homologous-recombination alterations."
+  - "NCT03209401 Niraparib plus carboplatin in homologous-recombination-deficient solid tumors."
+  - "NCT02286687 Talazoparib in advanced malignancies with DNA-repair alterations."
+  - "NCT02576444 Ceralasertib plus olaparib in DNA-repair-deficient malignancies."
+  - "NCT02873975 Prexasertib in homologous-recombination-deficient solid tumors."
+  - "NCT04985721 Pamiparib plus tislelizumab in homologous-recombination-repair-deficient tumors."
+  - "NCT04276376 Rucaparib plus atezolizumab in DNA-repair-deficient solid tumors."
+  - "NCT02029001 Molecularly matched treatment in advanced solid tumors."
+  - "NCT02465060 Afatinib in refractory cancers with EGFR activating mutations."
+  - "NCT04868877 MCLA-129 in advanced NSCLC and other solid tumors."
+  - "NCT01953926 Neratinib basket study in HER2- or EGFR-mutant solid tumors."
+  - "NCT05372614 Trastuzumab deruxtecan plus neratinib for cancers with HER2 alterations."

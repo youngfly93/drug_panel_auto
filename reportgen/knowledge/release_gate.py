@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,8 +49,188 @@ def _clinical_release_registry(project_root: Path) -> dict[str, Any]:
     }
 
 
+def _secondary_review_receipt(
+    project_root: Path,
+    registry: Mapping[str, Any],
+    panel_id: str,
+) -> dict[str, Any]:
+    """Validate that report-group approval is bound to the current file bytes."""
+    record = (registry.get("panels") or {}).get(panel_id) or {}
+    declared_path = str(record.get("secondary_review_receipt") or "").strip()
+    issues: list[dict[str, Any]] = []
+    if not declared_path:
+        return {
+            "status": "FAIL",
+            "path": "",
+            "receipt_id": "",
+            "reviewed_at": "",
+            "reviewer_group": "",
+            "artifacts": [],
+            "issues": [
+                {
+                    "code": "MISSING_SECONDARY_REVIEW_RECEIPT",
+                    "message": f"{panel_id} has no secondary review receipt",
+                }
+            ],
+        }
+
+    path = (project_root / declared_path).resolve()
+    try:
+        path.relative_to(project_root)
+    except ValueError:
+        issues.append(
+            {
+                "code": "INVALID_SECONDARY_REVIEW_RECEIPT_PATH",
+                "message": declared_path,
+            }
+        )
+    if not path.exists() or not path.is_file():
+        issues.append(
+            {
+                "code": "MISSING_SECONDARY_REVIEW_RECEIPT",
+                "message": declared_path,
+            }
+        )
+        return {
+            "status": "FAIL",
+            "path": declared_path,
+            "receipt_id": "",
+            "reviewed_at": "",
+            "reviewer_group": "",
+            "artifacts": [],
+            "issues": issues,
+        }
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    receipt_id = str(raw.get("receipt_id") or "").strip()
+    reviewed_at = str(raw.get("reviewed_at") or "").strip()
+    reviewer_group = str((raw.get("reviewer") or {}).get("group") or "").strip()
+    expected_receipt_id = str(record.get("secondary_review_receipt_id") or "").strip()
+    if str(raw.get("schema_version") or "") != "1.0":
+        issues.append(
+            {
+                "code": "INVALID_SECONDARY_REVIEW_RECEIPT_SCHEMA",
+                "message": declared_path,
+            }
+        )
+    if str(raw.get("status") or "").strip().lower() != "approved":
+        issues.append(
+            {
+                "code": "SECONDARY_REVIEW_NOT_APPROVED",
+                "message": declared_path,
+            }
+        )
+    if str(raw.get("decision") or "").strip().lower() != "approved_for_runtime":
+        issues.append(
+            {
+                "code": "INVALID_SECONDARY_REVIEW_DECISION",
+                "message": declared_path,
+            }
+        )
+    if not receipt_id or (expected_receipt_id and receipt_id != expected_receipt_id):
+        issues.append(
+            {
+                "code": "SECONDARY_REVIEW_RECEIPT_ID_MISMATCH",
+                "message": f"expected={expected_receipt_id} actual={receipt_id}",
+            }
+        )
+    if not reviewed_at or not reviewer_group:
+        issues.append(
+            {
+                "code": "INCOMPLETE_SECONDARY_REVIEWER_METADATA",
+                "message": declared_path,
+            }
+        )
+    panels = {
+        str(value).strip()
+        for value in (raw.get("scope") or {}).get("panels") or []
+        if str(value).strip()
+    }
+    if panel_id not in panels:
+        issues.append(
+            {
+                "code": "SECONDARY_REVIEW_PANEL_SCOPE_MISMATCH",
+                "message": f"{panel_id} is not covered by {receipt_id}",
+            }
+        )
+
+    artifact_results: list[dict[str, Any]] = []
+    artifacts = raw.get("artifacts") or []
+    if not isinstance(artifacts, list) or not artifacts:
+        issues.append(
+            {
+                "code": "EMPTY_SECONDARY_REVIEW_ARTIFACTS",
+                "message": declared_path,
+            }
+        )
+        artifacts = []
+    for artifact in artifacts:
+        artifact = artifact if isinstance(artifact, Mapping) else {}
+        relative = str(artifact.get("path") or "").strip()
+        expected = str(artifact.get("sha256") or "").strip().lower()
+        target = (project_root / relative).resolve()
+        valid_path = bool(relative)
+        try:
+            target.relative_to(project_root)
+        except ValueError:
+            valid_path = False
+        exists = valid_path and target.exists() and target.is_file()
+        actual = _sha256(target) if exists else ""
+        matches = bool(re.fullmatch(r"[0-9a-f]{64}", expected)) and actual == expected
+        artifact_results.append(
+            {
+                "path": relative,
+                "expected_sha256": expected,
+                "actual_sha256": actual,
+                "sha256_matches": matches,
+            }
+        )
+        if not matches:
+            issues.append(
+                {
+                    "code": "SECONDARY_REVIEW_ARTIFACT_MISMATCH",
+                    "message": relative or "<missing path>",
+                }
+            )
+    declared_bundle = str(
+        (raw.get("candidate_identity") or {}).get("value") or ""
+    ).strip().lower()
+    bundle_digest = hashlib.sha256()
+    for artifact in sorted(artifact_results, key=lambda item: item["path"]):
+        bundle_digest.update(artifact["path"].encode("utf-8"))
+        bundle_digest.update(b"\0")
+        bundle_digest.update(artifact["actual_sha256"].encode("ascii"))
+        bundle_digest.update(b"\n")
+    actual_bundle = bundle_digest.hexdigest()
+    if not re.fullmatch(r"[0-9a-f]{64}", declared_bundle) or (
+        declared_bundle != actual_bundle
+    ):
+        issues.append(
+            {
+                "code": "SECONDARY_REVIEW_BUNDLE_MISMATCH",
+                "message": (
+                    f"expected={declared_bundle} actual={actual_bundle}"
+                ),
+            }
+        )
+    return {
+        "status": "PASS" if not issues else "FAIL",
+        "path": declared_path,
+        "receipt_id": receipt_id,
+        "reviewed_at": reviewed_at,
+        "reviewer_group": reviewer_group,
+        "expected_bundle_sha256": declared_bundle,
+        "actual_bundle_sha256": actual_bundle,
+        "artifacts": artifact_results,
+        "issues": issues,
+    }
+
+
 def _clinical_readiness(
-    registry: Mapping[str, Any], panel_id: str, status_counts: Counter[str]
+    registry: Mapping[str, Any],
+    panel_id: str,
+    status_counts: Counter[str],
+    secondary_receipt: Mapping[str, Any],
 ) -> dict[str, Any]:
     policy = registry.get("policy") or {}
     record = (registry.get("panels") or {}).get(panel_id) or {}
@@ -65,6 +246,11 @@ def _clinical_readiness(
         "needs_review", 0
     )
     reasons: list[str] = []
+    secondary_status = str(record.get("secondary_review_status") or "not_recorded")
+    if secondary_status not in {"completed", "approved", "report_group_approved"}:
+        reasons.append("secondary_review_registry_not_completed")
+    if secondary_receipt.get("status") != "PASS":
+        reasons.append("secondary_review_receipt_invalid")
     if pending_rows:
         reasons.append("pending_report_group_secondary_review")
     if reviewed < minimum:
@@ -75,8 +261,9 @@ def _clinical_readiness(
         "status": "READY" if not reasons else "BLOCKED",
         "secondary_review": {
             "owner": str(record.get("secondary_review_owner") or "report_group"),
-            "status": str(record.get("secondary_review_status") or "not_recorded"),
+            "status": secondary_status,
             "pending_runtime_rows": pending_rows,
+            "receipt": dict(secondary_receipt),
         },
         "uat": {
             "status": str(uat.get("status") or "not_recorded"),
@@ -252,9 +439,20 @@ def _validate_drug_rules(package: Any) -> dict[str, Any]:
         )
     policy = raw.get("targeted_drug_rules") or {}
     rows: list[dict[str, Any]] = []
-    for gene, rule in (policy.get("overrides") or {}).items():
+    gene_overrides = policy.get("overrides") or {}
+    for gene, rule in gene_overrides.items():
         if isinstance(rule, Mapping):
             rows.append({"gene": gene, **dict(rule)})
+            issues.append(
+                {
+                    "code": "UNSCOPED_GENE_LEVEL_TARGETED_DRUG_OVERRIDE",
+                    "message": (
+                        f"{package.panel_id} gene-level targeted-drug override "
+                        f"for {str(gene).upper()} has no variant/event selector"
+                    ),
+                    "gene": str(gene).upper(),
+                }
+            )
     rows.extend(
         dict(row)
         for row in policy.get("reviewed_variant_overrides") or []
@@ -483,8 +681,14 @@ def _panel_report(
         + status_counts.get("rejected", 0)
         + status_counts.get("superseded", 0)
     )
+    secondary_receipt = _secondary_review_receipt(
+        project_root, clinical_registry, panel_id
+    )
     clinical_readiness = _clinical_readiness(
-        clinical_registry, panel_id, clinical_status_counts
+        clinical_registry,
+        panel_id,
+        clinical_status_counts,
+        secondary_receipt,
     )
     if runtime_content["generic_fallback_count"]:
         clinical_readiness["status"] = "BLOCKED"

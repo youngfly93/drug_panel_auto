@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 from __future__ import annotations
 
 import hashlib
@@ -39,7 +40,10 @@ def test_crc358_historical_contract_is_deidentified_and_structured() -> None:
         "targeted_or_immune_related": 8,
     }
     assert contract["medical_uat"]["status"] == "blocked"
-    assert contract["medical_uat"]["blockers"][0]["id"] == ("KRAS_G12C_DRUG_RECONFIRMATION")
+    assert contract["source"]["secondary_review_status"] == "report_group_approved"
+    assert contract["medical_uat"]["blockers"][0]["id"] == (
+        "HISTORICAL_CASE_UAT_NOT_RECORDED"
+    )
     assert len(contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"]) == 41
     assert contract["expectations"]["part3"]["gene_section_count"] == 11
     assert contract["expectations"]["part3"]["drug_section_count"] == 18

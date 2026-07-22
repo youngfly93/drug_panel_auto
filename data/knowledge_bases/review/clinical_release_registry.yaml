@@ -3,11 +3,15 @@ registry_id: knowledge_clinical_release_registry_v1
 policy:
   uat_pass_rate_threshold_percent: 90.0
   minimum_reviewed_reports: 10
-  description: 工程发布状态与医学发布就绪度分开记录；一级审核不能替代报告组二审或真实报告 UAT。
+  description: 工程发布状态、报告组医学二审与真实报告 UAT 分开记录；二审通过不能替代病例 UAT。
 panels:
   crc_301_msi:
     secondary_review_owner: report_group
-    secondary_review_status: pending
+    secondary_review_status: completed
+    secondary_review_completed_at: '2026-07-22'
+    secondary_review_receipt_id: report_group_crc_knowledge_secondary_review_20260722
+    secondary_review_receipt: data/knowledge_bases/review/report_group_secondary_review_20260722.yaml
+    attestation: project_owner_confirmed_report_group_review_complete
     uat:
       reviewed_reports: 0
       passed_reports: 0
@@ -15,7 +19,11 @@ panels:
       status: pending
   crc_358_msi:
     secondary_review_owner: report_group
-    secondary_review_status: pending
+    secondary_review_status: completed
+    secondary_review_completed_at: '2026-07-22'
+    secondary_review_receipt_id: report_group_crc_knowledge_secondary_review_20260722
+    secondary_review_receipt: data/knowledge_bases/review/report_group_secondary_review_20260722.yaml
+    attestation: project_owner_confirmed_report_group_review_complete
     uat:
       reviewed_reports: 0
       passed_reports: 0

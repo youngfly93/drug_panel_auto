@@ -354,13 +354,46 @@ class GeneKnowledgeProvider:
                 variant_key = self._variant_key(
                     row.get("gene"), row.get("c_hgvs"), row.get("p_hgvs")
                 )
-                drug_type = self._norm_text(row.get("type")) or "benefit"
+                drug_type = (
+                    self._norm_text(row.get("type")) or "benefit"
+                ).lower()
+                drug_type_cn = {
+                    "benefit": "潜在获益药物",
+                    "caution": "慎用药物",
+                    "research": "临床试验/研究性方案",
+                }.get(drug_type, "临床试验/研究性方案")
+
+                # A later medical correction may explicitly suppress a
+                # historical direction without deleting the historical source
+                # row.  Suppression is fail-closed: it must name the record it
+                # supersedes, and it clears only the exact gene/variant and
+                # direction declared by the correction row.  No placeholder
+                # drug is inserted into the runtime knowledge map.
+                if bool(row.get("suppress")):
+                    if not self._norm_text(row.get("supersedes")):
+                        _log.warning(
+                            "ignored drug-section suppression without supersedes: %s (%s)",
+                            row.get("gene"),
+                            path,
+                        )
+                        continue
+                    if variant_key:
+                        group_key = (variant_key, drug_type)
+                        self._reviewed_drug_section_overrides[group_key] = []
+                        replaced_drug_groups.add(group_key)
+                    else:
+                        gene_key = self._hgvs_key(row.get("gene"))
+                        if gene_key:
+                            self._gene_level_drug_overrides[
+                                (gene_key, drug_type)
+                            ] = []
+                    continue
                 clean_row = {
                     "gene": self._norm_text(row.get("gene")).upper(),
                     "c_hgvs": self._norm_text(row.get("c_hgvs")),
                     "p_hgvs": self._norm_text(row.get("p_hgvs")),
                     "drug_type": drug_type,
-                    "drug_type_cn": "慎用药物" if drug_type == "caution" else "潜在获益药物",
+                    "drug_type_cn": drug_type_cn,
                     "header": self._norm_text(row.get("header")),
                     "drug_name": self._norm_text(row.get("drug_name")),
                     "relation": self._norm_text(row.get("relation")),
@@ -1620,7 +1653,7 @@ class GeneKnowledgeProvider:
             用药提示解析章节列表，每个元素包含:
             - gene: 基因名称
             - drug_name: 药物名称
-            - drug_type: 药物类型 (benefit/caution)
+            - drug_type: 药物类型 (benefit/caution/research)
             - relation: 基因变异与药物关联分析
             - clinical: 药物疗效临床解析
         """
@@ -2040,6 +2073,11 @@ class GeneKnowledgeProvider:
                 section.get("p_hgvs"),
             )
             direction = str(section.get("drug_type") or "benefit").lower()
+            # Research-only sections deliberately have no Part-2 counterpart.
+            # They are rendered in a separate Part-3 subsection and therefore
+            # must never be treated as an unexpected benefit/caution row.
+            if direction not in {"benefit", "caution"}:
+                continue
             key = (variant_key, direction)
             if not variant_key:
                 continue
@@ -2223,11 +2261,15 @@ class GeneKnowledgeProvider:
             for drug_type, source_field in (
                 ("benefit", "benefit_drugs"),
                 ("caution", "caution_drugs"),
+                ("research", ""),
             ):
                 key = (variant_key, drug_type)
                 visited.add(key)
-                overrides = self._reviewed_drug_section_overrides.get(key)
-                if not overrides:
+                if key in self._reviewed_drug_section_overrides:
+                    # Presence with an empty list is an explicit suppression;
+                    # do not fall through to an older gene-level rule.
+                    overrides = self._reviewed_drug_section_overrides[key]
+                else:
                     # fall back to gene-level drug override (variant-agnostic)
                     overrides = self._gene_level_drug_overrides.get(
                         (self._hgvs_key(variant.get("gene")), drug_type)
@@ -2238,7 +2280,12 @@ class GeneKnowledgeProvider:
                         for override in overrides
                         if self._drug_override_matches_variant(override, variant)
                     ]
-                if overrides and self._has_drug_text(variant.get(source_field)):
+                source_is_present = self._has_drug_text(
+                    variant.get(
+                        "research_drugs" if drug_type == "research" else source_field
+                    )
+                )
+                if overrides and source_is_present:
                     variant_display = self._variant_display_from_row(variant)
                     current_gene = self._norm_text(variant.get("gene")).upper()
                     current_c_hgvs = self._norm_text(

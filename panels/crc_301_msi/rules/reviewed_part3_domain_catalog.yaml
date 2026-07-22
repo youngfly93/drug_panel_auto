@@ -15,7 +15,7 @@ governance:
   policy_id: crc_301_msi_fixed_domain_catalog_first_review
   defaults:
     gene:
-      review_status: provisional_runtime
+      review_status: approved_for_runtime
       runtime_eligible: true
       review_basis: codex_first_review_official_protein_annotation
       reviewer: codex
@@ -24,7 +24,7 @@ governance:
       evidence_as_of: '2026-07-21'
       evidence_level: curated_protein_structure
       cancer_scope: pan_cancer_protein_structure_only
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
       risk_level: content_requires_secondary_review
 gene_sections:
 - gene: ABCB1

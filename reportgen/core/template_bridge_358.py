@@ -1324,6 +1324,13 @@ def _drugs_from_override(override: Optional[Dict[str, Any]]) -> Tuple[str, str]:
     )
 
 
+def _research_drugs_from_override(override: Optional[Dict[str, Any]]) -> str:
+    """Return research-only candidates from the matched reviewed rule."""
+    if not override:
+        return ""
+    return _join_text_value(override.get("research_drugs"))
+
+
 def _compact_drug_display_value(
     value: Any, *, max_items: Optional[int] = DRUG_DISPLAY_MAX_ITEMS
 ) -> str:
@@ -1488,6 +1495,7 @@ def build_variants_for_template(
             benefit_drugs = drug if drug and drug not in ("*", "-") else "--"
             caution_drugs = "--"
         override_benefit, override_caution = _drugs_from_override(reviewed_override)
+        research_drugs = _research_drugs_from_override(reviewed_override)
         if override_benefit or override_caution:
             benefit_drugs = override_benefit or "--"
             caution_drugs = override_caution or "--"
@@ -1508,6 +1516,11 @@ def build_variants_for_template(
             "clinical_significance": clinical_significance,
             "benefit_drugs": benefit_drugs,
             "caution_drugs": caution_drugs,
+            # Research-only candidates are carried only when the same
+            # panel/class/event rule matched this concrete variant.  Keeping
+            # this marker separate prevents a Part-3 research overlay from
+            # leaking into class-III or otherwise ineligible variants.
+            "research_drugs": research_drugs or "--",
         }
         variants.append(variant)
 
@@ -1583,6 +1596,7 @@ def build_summary_variants(
             "clinical_significance": clinical_significance,
             "benefit_drugs": v["benefit_drugs"],
             "caution_drugs": v["caution_drugs"],
+            "research_drugs": v.get("research_drugs") or "--",
         }
         summary_variants.append(summary)
     return summary_variants
@@ -2676,9 +2690,11 @@ def _patch_reviewed_variant_override_rows(
         if not override:
             continue
         benefit, caution = _drugs_from_override(override)
-        if benefit or caution:
+        research = _research_drugs_from_override(override)
+        if benefit or caution or research:
             row["benefit_drugs"] = benefit or "--"
             row["caution_drugs"] = caution or "--"
+            row["research_drugs"] = research or "--"
             changed = True
     if changed:
         report_data.set_table("variants_2_1", rows)
@@ -3220,8 +3236,12 @@ def enhance_report_data(
             drug_caution_sections = [
                 ds for ds in drug_analysis_sections if ds.get("drug_type") == "caution"
             ]
+            drug_research_sections = [
+                ds for ds in drug_analysis_sections if ds.get("drug_type") == "research"
+            ]
             report_data.set_table("drug_benefit_sections", drug_benefit_sections)
             report_data.set_table("drug_caution_sections", drug_caution_sections)
+            report_data.set_table("drug_research_sections", drug_research_sections)
             consistency_builder = getattr(
                 gene_knowledge_provider,
                 "build_drug_analysis_consistency",

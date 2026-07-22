@@ -478,7 +478,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
     rule = engine.get("drugs")
     rows = rule["approved_drug_rows"]
 
-    assert rule["version"] == "0.6.1"
+    assert rule["version"] == "0.7.0"
     assert rule["status"] == "active"
     assert len(rows) == 7
     assert "瑞戈非尼" in rows[0]["drug"]
@@ -491,14 +491,19 @@ def test_crc_drug_rule_contains_active_approved_rows():
     assert transition == {
         "proposed_contract_id": "crc358_dynamic_7_drug_differencing_20260720",
         "prior_contract_id": "crc358_reviewed_historical_table_contract",
-        "transition_status": "pending_report_group_supersession_ack",
+        "transition_status": "report_group_approved_supersession",
+        "approved_at": "2026-07-22",
+        "approval_receipt_id": (
+            "report_group_crc_knowledge_secondary_review_20260722"
+        ),
         "source_ref": {
             "type": "report_group_feedback",
             "id": "feedback_20260720_crc_approved_drug_dynamic_display",
         },
     }
-    assert rows[0]["secondary_review_status"] == (
-        "report_group_rule_stated_pending_supersession_ack"
+    assert rows[0]["secondary_review_status"] == "report_group_approved"
+    assert rows[0]["secondary_review_receipt_id"] == (
+        "report_group_crc_knowledge_secondary_review_20260722"
     )
     assert "crc_approved_drugs" not in engine.get("panel_rules")
 
@@ -1596,9 +1601,14 @@ def test_crc_targeted_summary_only_displays_drug_matched_variants(tmp_path):
         targeted_drug_rules=context,
     )
 
-    assert [row["gene"] for row in rows] == ["ATM"]
-    atm = rows[0]
-    assert "奥拉帕利（C）" in atm["benefit_drugs"]
+    assert rows == []
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "ATM",
+        "c.3673C>T",
+        "p.Q1225*",
+        variant_level="Ⅱ类",
+        targeted_drug_rules=context,
+    ) == ("--", "--")
 
 
 def test_immune_positive_summary_includes_class_i_ii_without_clnsig(tmp_path):
@@ -1969,21 +1979,59 @@ def test_report_group_feedback_variants_have_exact_panel_scoped_rules():
         (ROOT / "panels/crc_358_msi/rules/drugs.yaml").read_text(encoding="utf-8")
     )["targeted_drug_rules"]["reviewed_variant_overrides"]
     expected = {
-        "FANCD2": ("c.1630C>T", "p.Q544*", 5),
-        "RAD50": ("c.1093C>T", "p.R365*", 5),
-        "PALB2": ("c.47del", "p.K16Sfs*2", 10),
+        "FANCD2": ("c.1630C>T", "p.Q544*", 2),
+        "RAD50": ("c.1093C>T", "p.R365*", 4),
+        "PALB2": ("c.47del", "p.K16Sfs*2", 2),
         "RAD51D": ("c.685C>T", "p.Q229*", 4),
     }
 
-    for gene, (c_hgvs, p_hgvs, drug_count) in expected.items():
+    for gene, (c_hgvs, p_hgvs, research_count) in expected.items():
         rule = next(row for row in rules if row.get("gene") == gene and row.get("c_hgvs") == c_hgvs)
         assert rule["panels"] == ["crc_358_msi"]
-        assert rule["review_status"] == "provisional_runtime"
-        assert rule["secondary_review_status"] == "pending_report_group_reconfirmation"
-        assert len(rule["benefit_drugs"]) == drug_count
+        assert rule["review_status"] == "approved_for_runtime"
+        assert rule["secondary_review_status"] == "report_group_approved"
+        assert rule["benefit_drugs"] == ["--"]
+        assert rule["caution_drugs"] == ["--"]
+        assert len(rule["research_drugs"]) == research_count
         assert _variant_override_matches(rule, gene, c_hgvs, p_hgvs, gene_class="Ⅱ类")
         assert not _variant_override_matches(rule, gene, "c.999999A>G", "p.X1Y", gene_class="Ⅱ类")
         assert not _variant_override_matches(rule, gene, c_hgvs, p_hgvs, gene_class="Ⅲ类")
+
+
+def test_research_only_drugs_follow_the_same_class_boundary_as_part2(tmp_path):
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    panel_config = load_panel_config(
+        base_path=str(ROOT),
+        panel_id="crc_358_msi",
+        panel_package=package,
+        config_path=str(package.resolve_rule_file("panel_rules")),
+    )
+
+    def build(level):
+        return build_variants_for_template(
+            _excel(
+                tmp_path,
+                variations=[
+                    {
+                        "Gene_Symbol": "FANCD2",
+                        "Transcript": "NM_001018115.3",
+                        "Chr": "3",
+                        "ExIn_ID": "EX19",
+                        "cHGVS": "c.1630C>T",
+                        "pHGVS_S": "p.Q544*",
+                        "Freq(%)": 12.3,
+                        "ExistInsmall358": 1,
+                        "ExistIn552": level,
+                    }
+                ],
+            ),
+            filter_class_i_ii_only=False,
+            important_genes_only=False,
+            panel_config=panel_config,
+        )[0]
+
+    assert "芦卡帕利" in build("Ⅱ类")["research_drugs"]
+    assert build("Ⅲ类")["research_drugs"] == "--"
 
 
 def test_feedback_ddr_genes_are_in_runtime_immune_rows():
@@ -2017,8 +2065,9 @@ def test_reviewed_part3_drug_sections_bind_to_exact_feedback_variants():
             "cHGVS": c_hgvs,
             "pHGVS": p_hgvs,
             "frequency": "1.00",
-            "benefit_drugs": "评审后药物（C）",
+            "benefit_drugs": "--",
             "caution_drugs": "--",
+            "research_drugs": "研究性方案",
         }
         for gene, c_hgvs, p_hgvs in (
             ("FANCD2", "c.1630C>T", "p.Q544*"),
@@ -2036,8 +2085,9 @@ def test_reviewed_part3_drug_sections_bind_to_exact_feedback_variants():
         "PALB2",
         "RAD51D",
     ]
+    assert all(section["drug_type"] == "research" for section in sections)
     assert all("NCT" in section["clinical"] for section in sections)
-    assert all("结直肠癌" in section["relation"] for section in sections)
+    assert all("不能" in section["relation"] for section in sections)
 
 
 def test_immune_only_part3_variant_is_marked_as_therapy_associated(tmp_path):
@@ -2112,15 +2162,16 @@ def test_crc301_additional_overlay_is_loaded_after_shared_crc_overlay():
         "panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml",
         "panels/crc_301_msi/rules/reviewed_part3_knowledge.yaml",
     ]
-    assert relative_paths[-1] == (
-        "panels/crc_358_msi/rules/reviewed_part3_drug_contracts_20260721.yaml"
-    )
+    assert relative_paths[-2:] == [
+        "panels/crc_358_msi/rules/reviewed_part3_drug_contracts_20260721.yaml",
+        "panels/crc_358_msi/rules/reviewed_part3_medical_corrections_20260722.yaml",
+    ]
     assert len(sections) == 1
     assert "P-糖蛋白" in sections[0]["intro"]
     assert "任意体细胞变异不能直接解释为化疗耐药" in sections[0]["mutation_analysis"]
 
 
-def test_provisional_runtime_gene_rows_use_first_pass_conservative_wording():
+def test_report_group_approved_gene_rows_keep_reviewed_conservative_wording():
     package = load_panel_package("crc_358_msi", project_root=ROOT)
     provider = GeneKnowledgeProvider(
         {
@@ -2144,7 +2195,7 @@ def test_provisional_runtime_gene_rows_use_first_pass_conservative_wording():
     expected = {
         row["gene"]: row
         for row in overlay["gene_sections"]
-        if row.get("review_status") == "provisional_runtime"
+        if row.get("review_status") == "approved_for_runtime"
     }
 
     for gene in ("CHD2", "HIST1H3B", "HLA-DPA1", "WDR90", "ZNF703"):
@@ -2457,6 +2508,15 @@ def test_part3_marker_renders_from_context_without_case_stub(tmp_path):
                 }
             ],
             "drug_caution_sections": [],
+            "drug_research_sections": [
+                {
+                    "gene": "BRAF",
+                    "variant": "c.1799T>A，p.V600E",
+                    "drug_name": "研究方案甲",
+                    "relation": "仅为临床试验筛选线索。",
+                    "clinical": "不构成潜在获益结论。",
+                }
+            ],
             "gene_references": ["BRAF reference"],
         },
     )
@@ -2467,6 +2527,10 @@ def test_part3_marker_renders_from_context_without_case_stub(tmp_path):
     assert "BRAF：c.1799T>A，p.V600E；12.30%" in text
     assert "其中与靶向/免疫药物相关的变异：2个" in text
     assert "维莫非尼" in text
+    assert "临床试验/研究性方案解析" in text
+    assert "研究方案甲" in text
+    assert "基因变异与研究方案关联：" in text
+    assert "临床试验/研究证据：" in text
     assert "BRAF reference" not in text
     assert paragraphs.count("3. 阅读说明") == 1
     assert "p.G12S" not in text

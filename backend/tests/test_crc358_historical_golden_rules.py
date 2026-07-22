@@ -49,9 +49,10 @@ def test_crc358_exact_summary_rules_match_historical_contract_and_stay_panel_sco
     cases = [
         ("PIK3CA", "c.1624G>A", "p.E542K", 15, 2, False),
         ("TP53", "c.499C>T", "p.Q167*", 5, 0, False),
-        # FLT3 summary rule already existed as a shared CRC-family rule; this
-        # migration adds its exact Part-3 narrative without changing CRC301.
-        ("FLT3", "c.2537G>A", "p.G846D", 3, 0, True),
+        # FLT3 G846D remains shared across CRC panels, but the historical
+        # three-drug benefit display is now research-only because the sources
+        # do not establish variant-specific CRC efficacy.
+        ("FLT3", "c.2537G>A", "p.G846D", 0, 0, True),
         ("ATR", "c.1291delA", "p.R431Gfs*8", 8, 0, False),
         ("KRAS", "c.34G>T", "p.G12C", 38, 3, False),
     ]
@@ -65,7 +66,7 @@ def test_crc358_exact_summary_rules_match_historical_contract_and_stay_panel_sco
         )
         assert result is not None
         benefit, caution = result
-        assert len(benefit.splitlines()) == benefit_count
+        assert (0 if benefit == "--" else len(benefit.splitlines())) == benefit_count
         assert (0 if caution == "--" else len(caution.splitlines())) == caution_count
 
         inherited_result = mapper._lookup_reviewed_variant_override_drugs(
@@ -114,8 +115,9 @@ def test_exact_part3_overlay_replaces_dynamic_candidates_without_gene_level_leak
             "gene": "FLT3",
             "cHGVS": "c.2537G>A",
             "pHGVS": "p.G846D",
-            "benefit_drugs": "瑞戈非尼（C）\n索拉非尼（C）\n舒尼替尼（C）",
+            "benefit_drugs": "--",
             "caution_drugs": "--",
+            "research_drugs": "索拉非尼（泛FLT3异常试验入组线索）",
         },
         {
             "gene": "ATR",
@@ -133,7 +135,9 @@ def test_exact_part3_overlay_replaces_dynamic_candidates_without_gene_level_leak
     assert counts == {"KRAS": 8, "TP53": 3, "FLT3": 1, "ATR": 1}
     assert any(row["drug_name"] == "安卓健（Antroquinonol）" for row in rows)
     assert any(
-        row["gene"] == "FLT3" and "NCT02029001" in row["clinical"]
+        row["gene"] == "FLT3"
+        and row["drug_type"] == "research"
+        and "NCT02029001" in row["clinical"]
         for row in rows
     )
 
@@ -144,15 +148,16 @@ def test_exact_part3_overlay_replaces_dynamic_candidates_without_gene_level_leak
                 "gene": "TP53",
                 "cHGVS": "c.821T>A",
                 "pHGVS": "p.V274D",
-                "benefit_drugs": "AZD1775（C）",
+                "benefit_drugs": "--",
                 "caution_drugs": "--",
+                "research_drugs": "AZD1775/Adavosertib",
             }
         ]
     )
     assert not any("p.Q167*" in row.get("relation", "") for row in unrelated)
 
 
-def test_historical_overlay_is_deidentified_and_explicitly_pending_reconfirmation():
+def test_historical_overlay_is_deidentified_and_report_group_approved():
     path = (
         ROOT
         / "panels/crc_358_msi/rules/reviewed_part3_crc358_reviewed_case_a.yaml"
@@ -163,7 +168,7 @@ def test_historical_overlay_is_deidentified_and_explicitly_pending_reconfirmatio
     assert data["source"]["privacy"].startswith("No patient name")
     assert data["governance"]["defaults"]["drug"][
         "secondary_review_status"
-    ] == "pending_report_group_reconfirmation"
+    ] == "report_group_approved"
     assert data["replace_variant_drug_sections"] is True
     assert len(data["gene_sections"]) == 11
     assert len(data["drug_sections"]) == 18

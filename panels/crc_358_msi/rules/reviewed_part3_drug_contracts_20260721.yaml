@@ -18,21 +18,21 @@ governance:
       evidence_level: not_assessed
       evidence_as_of: "2026-07-21"
       cancer_scope: crc358
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
     drug:
-      review_status: provisional_runtime
+      review_status: approved_for_runtime
       runtime_eligible: true
       review_basis: codex_first_review_historical_migration_and_primary_source_boundary_check
       evidence_level: mixed_direct_preclinical_cross_cancer_and_historical_display_contract
       evidence_as_of: "2026-07-21"
       cancer_scope: colorectal_report_context_with_row_specific_limits
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
         reviewer_type: ai_assisted_first_pass_primary_source_review
         reviewed_at: "2026-07-21"
         risk_level: high
-        secondary_review_status: pending_report_group_review
+        secondary_review_status: report_group_approved
 gene_sections:
   - gene: SETD2
     panels: [crc_301_msi, crc_358_msi]
@@ -40,19 +40,19 @@ gene_sections:
     p_hgvs: p.G1644*
     mutation_analysis: >-
       SETD2基因编码的蛋白全长为2564个氨基酸，主要包含AWS结构域（第1494-1549位氨基酸）、SET结构域（第1550-1673位氨基酸）和SRI结构域（第2465-2559位氨基酸）。该样本检出的p.G1644*无义突变可导致蛋白翻译提前终止，可能造成SETD2功能缺失。细胞和异种移植模型显示H3K36me3缺失可造成对WEE1抑制剂AZD1775的合成致死敏感性[26602815]；但随后SETD2致病变异实体瘤Ⅱ期研究未观察到客观缓解，提示该临床前信号未转化为可靠的单药肿瘤退缩[38920407]。因此，本位点只能作为受限的研究线索，不能表述为已证实的结直肠癌获益标志。
-    review_status: provisional_runtime
+    review_status: approved_for_runtime
     runtime_eligible: true
     review_basis: corrected_setd2_primary_source_and_completed_phase_ii_result
     evidence_level: preclinical_positive_phase_ii_negative
     evidence_as_of: "2026-07-21"
     cancer_scope: pathogenic_setd2_loss_cross_cancer_not_crc_approval
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
     review_metadata:
       reviewer: codex
       reviewer_type: ai_assisted_first_pass_primary_source_review
       reviewed_at: "2026-07-21"
       risk_level: high
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
     source_refs:
       - type: pubmed
         id: PMID:26602815

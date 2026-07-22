@@ -45,7 +45,7 @@ governance:
       evidence_level: legacy_curated_narrative
       evidence_as_of: '2026-06-14'
       cancer_scope: mixed_legacy_evidence_in_crc_report_context
-      secondary_review_status: historical_not_row_bound
+      secondary_review_status: report_group_approved
       source_refs:
       - type: historical_report_corpus
         id: crc_reviewed_final_reports_migration_20260614
@@ -56,7 +56,7 @@ governance:
       evidence_level: legacy_curated_drug_narrative
       evidence_as_of: '2026-06-14'
       cancer_scope: mixed_legacy_evidence_in_crc_report_context
-      secondary_review_status: historical_not_row_bound
+      secondary_review_status: report_group_approved
       source_refs:
       - type: historical_report_corpus
         id: crc_reviewed_final_reports_migration_20260614
@@ -421,13 +421,13 @@ gene_sections:
     亚家族。研究表明，ERCC2 基因缺陷可能导致三种不同疾病，分别为癌症倾向综合征着色性干皮互补D组、毛发低硫营养不良和科凯恩综合征[NCBI]。同时，ERCC2
     基因多态性与多种癌症的易感性相关，如肺癌、乳腺癌、前列腺癌、胃癌等。
   mutation_analysis: ERCC2/XPD是TFIIH复合物和核苷酸切除修复通路的关键解旋酶。体细胞变异的临床意义取决于位点致病性、等位基因状态及是否造成修复功能缺陷；不能仅因检出ERCC2变异就在结直肠癌中外推铂类或其他DNA损伤药物敏感性。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: ai_assisted_first_pass_conservative_gene_level_batch
   evidence_level: functional_background_only
   evidence_as_of: '2026-07-12'
   cancer_scope: colorectal_report_background_no_automatic_drug_claim
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   first_pass_review:
     status: completed
     reviewer: codex
@@ -436,7 +436,7 @@ gene_sections:
     evidence_as_of: '2026-07-12'
     decision: accepted_with_conservative_scope
     risk_level: medium
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
   source_refs:
   - type: ncbi_gene
     id: GeneID:2068
@@ -471,13 +471,13 @@ gene_sections:
   intro: HLA-C基因属于HLA I类重链旁系同源物。该I类分子是由重链和轻链（β-2微球蛋白）组成的异二聚体，其通过呈递来自内质网腔的肽在免疫系统中发挥核心作用。I类分子几乎在所有细胞中表达，其中，重链锚定在膜中。重链大约45kDa，其基因含有8个外显子。外显子1编码前导肽，外显子2和3编码α1和α2结构域，它们都结合肽，外显子4编码α3结构域，外显子5编码跨膜区，外显子6和7编码细胞质尾。外显子2和外显子3内的多态性负责肽结合特异性。
     对于这些多态性的分型通常用于骨髓和肾移植[NCBI]。研究表明，在结直肠癌中，HLA-C表达缺失，与分化程度呈负相关[2417962]。
   mutation_analysis: HLA-C参与HLA I类抗原呈递和免疫识别。单个HLA-C体细胞变异的影响取决于位点、等位基因状态、表达及是否导致抗原呈递缺陷，不能单独作为免疫治疗获益或耐药标志；需结合HLA表达或缺失、MSI/TMB和癌种证据。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: ai_assisted_first_pass_conservative_gene_level_batch
   evidence_level: functional_background_only
   evidence_as_of: '2026-07-12'
   cancer_scope: colorectal_report_background_no_automatic_drug_claim
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   first_pass_review:
     status: completed
     reviewer: codex
@@ -486,7 +486,7 @@ gene_sections:
     evidence_as_of: '2026-07-12'
     decision: accepted_with_conservative_scope
     risk_level: medium
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
   source_refs:
   - type: ncbi_gene
     id: GeneID:3107
@@ -627,13 +627,13 @@ gene_sections:
 - gene: ESR2
   intro: ESR2基因编码蛋白为雌激素受体和核受体转录因子超家族的成员。ESR2蛋白由N-末端DNA结合域和C末端配体结合结构域组成，并位于细胞核、细胞质和线粒体中。当结合17-β-雌二醇或相关配位体后，该蛋白质形成同源或异源二聚体，与特定的DNA序列相互作用以激活转录。一些异构体显著抑制其他雌激素受体家族成员的活性。有研究报道，ESR2基因多态性与乳腺癌、结直肠癌以及前列腺癌的发生相关[15604249]。
   mutation_analysis: ESR2编码雌激素受体β并参与配体依赖的转录调控。ESR2序列变异与受体表达、激素通路活性或内分泌治疗敏感性并非等价；结直肠癌中的单个位点需结合功能证据和变异分级，不能独立形成治疗结论。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: ai_assisted_first_pass_conservative_gene_level_batch
   evidence_level: functional_background_only
   evidence_as_of: '2026-07-12'
   cancer_scope: colorectal_report_background_no_automatic_drug_claim
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   first_pass_review:
     status: completed
     reviewer: codex
@@ -642,7 +642,7 @@ gene_sections:
     evidence_as_of: '2026-07-12'
     decision: accepted_with_conservative_scope
     risk_level: medium
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
   source_refs:
   - type: ncbi_gene
     id: GeneID:2100
@@ -672,13 +672,13 @@ gene_sections:
 - gene: PIK3C2G
   intro: PIK3C2G基因编码的蛋白属于磷酸肌醇3-激酶（PI3K）家族。PI3K在细胞增殖、致癌转化、细胞存活、细胞迁移和细胞内蛋白运输的信号通路中起作用。该蛋白含有脂质激酶催化结构域以及C端C2结构域，这是II型PI3K的特征。C2结构域作为钙依赖性磷脂结合基序，其介导蛋白向膜的移位，并且还可介导蛋白之间的相互作用[NCBI]。有研究表明，PIK3C2G低拷贝数是III期结直肠癌预后的重要且独立的预测因子[25785104]。
   mutation_analysis: PIK3C2G编码II类磷脂酰肌醇3-激酶家族成员，参与膜运输和细胞信号调控。当前缺乏充分证据将结直肠癌中的任意PIK3C2G序列变异解释为明确驱动或PI3K抑制剂用药标志；具体意义需结合位点功能、拷贝数和变异分级。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: ai_assisted_first_pass_conservative_gene_level_batch
   evidence_level: functional_background_only
   evidence_as_of: '2026-07-12'
   cancer_scope: colorectal_report_background_no_automatic_drug_claim
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   first_pass_review:
     status: completed
     reviewer: codex
@@ -687,7 +687,7 @@ gene_sections:
     evidence_as_of: '2026-07-12'
     decision: accepted_with_conservative_scope
     risk_level: low
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
   source_refs:
   - type: ncbi_gene
     id: GeneID:5288
@@ -740,13 +740,13 @@ gene_sections:
     PD-L1 会通过诱导 E3 泛素连接酶CBL-b 的表达上调，在抗原呈递过程中下调 T 细胞受体，从而起到抑制 T 细胞激活和细胞因子产生的作用[21739608]。在孕期、组织的同种异体移植、自身免疫疾病以及肝炎等情况下，PD-L1
     在维持免疫反应稳态以抑制自身免疫的过程中发挥重要作用[12847137，18650228]。目前，CD274抑制剂是肿瘤免疫治疗药物的研究热点，并且在临床案例中取得了较好的效果[24217091]。
   mutation_analysis: CD274编码PD-L1并参与PD-1/PD-L1免疫检查点调控。单个CD274体细胞序列变异不能等同于PD-L1蛋白表达升高，也不能单独预测免疫检查点抑制剂疗效；报告解读需结合PD-L1 IHC、MSI/TMB、变异分级及癌种证据。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: ai_assisted_first_pass_conservative_gene_level_batch
   evidence_level: functional_background_only
   evidence_as_of: '2026-07-12'
   cancer_scope: colorectal_report_background_no_automatic_drug_claim
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   first_pass_review:
     status: completed
     reviewer: codex
@@ -755,7 +755,7 @@ gene_sections:
     evidence_as_of: '2026-07-12'
     decision: accepted_with_conservative_scope
     risk_level: medium
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
   source_refs:
   - type: ncbi_gene
     id: GeneID:29126
@@ -1121,13 +1121,13 @@ gene_sections:
   intro: SLCO1B1基因编码的蛋白是有机阴离子转运蛋白家族中肝特异性组件之一，是一种跨膜受体，介导许多钠离子依赖性的内源性化合物（包括胆红素，17-β-葡萄糖醛酸雌二醇和白三烯C4）的摄取，也参与除去药物化合物（如他汀类药物，四溴酚酞磺酸钠和利福平）从血液进入肝细胞。该基因编码蛋白过程中的多态性与转运体功能受损有关[NCBI]。SLCO1B1基因多态性对黄酮类抗肿瘤药的临床用药疗效相关联[21072184]。SLCO1B1*15/15*基因型肺癌患者伊立替康的化疗后表现出严重毒性癌[17898662]。SLCO1B1
     rs4149081，rs11045879 突变型的急性淋巴细胞白血病儿童可以不进行甲氨蝶呤（MTX）治疗来避免其带来的毒副作用[21387541]。
   mutation_analysis: SLCO1B1编码肝细胞有机阴离子转运体，其临床药物基因组学证据主要来自胚系单倍型对药物暴露和毒性的影响。肿瘤组织检出的单个体细胞变异不能直接替代胚系分型或预测全身药代动力学；需结合样本来源、胚系确认及相应药物指南。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: ai_assisted_first_pass_conservative_gene_level_batch
   evidence_level: functional_background_only
   evidence_as_of: '2026-07-12'
   cancer_scope: colorectal_report_background_no_automatic_drug_claim
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   first_pass_review:
     status: completed
     reviewer: codex
@@ -1136,7 +1136,7 @@ gene_sections:
     evidence_as_of: '2026-07-12'
     decision: accepted_with_conservative_scope
     risk_level: high
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
   source_refs:
   - type: ncbi_gene
     id: GeneID:10599
@@ -1147,13 +1147,13 @@ gene_sections:
 - gene: XPC
   intro: XPC基因编码的蛋白是核苷酸切除修复途径（NER）中的一种作用蛋白。XPC在全基因组早期核苷酸切除修复，特别是损伤识别、开放复合物的形成、修复蛋白复合物的形成过程中起重要作用。XPC基因或其他NER组件突变导致着色性干皮病的发生，这是一种罕见的常染色体隐性遗传病，多见于幼年时期，表现为对阳光的敏感度增加，并伴随有癌变的发生[NCBI]。
   mutation_analysis: XPC参与全基因组核苷酸切除修复的损伤识别。单个XPC体细胞变异是否造成修复缺陷取决于位点致病性、等位基因状态和功能证据；在结直肠癌中不能据此单独推断DNA损伤药物敏感性或免疫治疗获益。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: ai_assisted_first_pass_conservative_gene_level_batch
   evidence_level: functional_background_only
   evidence_as_of: '2026-07-12'
   cancer_scope: colorectal_report_background_no_automatic_drug_claim
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   first_pass_review:
     status: completed
     reviewer: codex
@@ -1162,7 +1162,7 @@ gene_sections:
     evidence_as_of: '2026-07-12'
     decision: accepted_with_conservative_scope
     risk_level: medium
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
   source_refs:
   - type: ncbi_gene
     id: GeneID:7508
@@ -1302,7 +1302,7 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/1106
   evidence_level: functional_background_only
   cancer_scope: colorectal_cancer_background_only
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   first_pass_review:
     status: completed
@@ -1310,9 +1310,9 @@ gene_sections:
     reviewer_type: ai_assisted_evidence_review
     reviewed_at: '2026-07-12'
     evidence_as_of: '2026-07-12'
-    decision: accept_conservative_wording_pending_secondary_review
+    decision: accept_conservative_wording_secondary_review_approved
     risk_level: low
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
     references:
     - https://www.ncbi.nlm.nih.gov/gene/1106
     - https://pubmed.ncbi.nlm.nih.gov/25621013/
@@ -1323,7 +1323,7 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/8358
   evidence_level: functional_background_only
   cancer_scope: colorectal_cancer_background_only
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   first_pass_review:
     status: completed
@@ -1331,9 +1331,9 @@ gene_sections:
     reviewer_type: ai_assisted_evidence_review
     reviewed_at: '2026-07-12'
     evidence_as_of: '2026-07-12'
-    decision: accept_conservative_wording_pending_secondary_review
+    decision: accept_conservative_wording_secondary_review_approved
     risk_level: low
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
     references:
     - https://www.ncbi.nlm.nih.gov/gene/8358
 - gene: HLA-DPA1
@@ -1343,7 +1343,7 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/3113
   evidence_level: functional_background_only
   cancer_scope: colorectal_cancer_background_only
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   first_pass_review:
     status: completed
@@ -1351,9 +1351,9 @@ gene_sections:
     reviewer_type: ai_assisted_evidence_review
     reviewed_at: '2026-07-12'
     evidence_as_of: '2026-07-12'
-    decision: accept_conservative_wording_pending_secondary_review
+    decision: accept_conservative_wording_secondary_review_approved
     risk_level: medium
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
     references:
     - https://www.ncbi.nlm.nih.gov/gene/3113
     - https://pubmed.ncbi.nlm.nih.gov/33473191/
@@ -1364,7 +1364,7 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/197335
   evidence_level: functional_background_only
   cancer_scope: colorectal_cancer_background_only
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   first_pass_review:
     status: completed
@@ -1372,9 +1372,9 @@ gene_sections:
     reviewer_type: ai_assisted_evidence_review
     reviewed_at: '2026-07-12'
     evidence_as_of: '2026-07-12'
-    decision: accept_conservative_wording_pending_secondary_review
+    decision: accept_conservative_wording_secondary_review_approved
     risk_level: low
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
     references:
     - https://www.ncbi.nlm.nih.gov/gene/197335
     - https://pubmed.ncbi.nlm.nih.gov/32946374/
@@ -1385,7 +1385,7 @@ gene_sections:
   source_url: https://www.ncbi.nlm.nih.gov/gene/80139
   evidence_level: exploratory_crc_expression_evidence
   cancer_scope: colorectal_cancer_background_only
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   first_pass_review:
     status: completed
@@ -1393,9 +1393,9 @@ gene_sections:
     reviewer_type: ai_assisted_evidence_review
     reviewed_at: '2026-07-12'
     evidence_as_of: '2026-07-12'
-    decision: accept_with_revision_pending_secondary_review
+    decision: accept_with_revision_secondary_review_approved
     risk_level: medium
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
     references:
     - https://www.ncbi.nlm.nih.gov/gene/80139
     - https://pubmed.ncbi.nlm.nih.gov/25017610/
@@ -1409,20 +1409,20 @@ drug_sections:
   drug_name: 奥拉帕利（Olaparib）
   relation: FANCA是Fanconi贫血DNA交联修复通路核心成员。无义、移码或关键剪接等功能缺失型变异可提示DNA损伤修复缺陷，并为PARP抑制剂相关研究提供生物学依据；该关联不能外推至普通错义变异，也不代表奥拉帕利已获批用于FANCA变异结直肠癌。
   clinical: 一项转移性去势抵抗性前列腺癌Ⅱ期研究纳入50例患者；可评估的49例中，16例检出DNA修复基因纯合缺失或有害变异，包括BRCA1/2、ATM、Fanconi贫血相关基因及CHEK2，其中14例对奥拉帕利产生研究定义的应答。该证据来自前列腺癌DDR联合分组，并非FANCA变异结直肠癌的独立疗效结论，报告中按D级跨癌种研究证据提示[26510020]。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: ai_assisted_first_pass_conservative_cross_cancer_scope
   evidence_level: cross_cancer_level_d
   evidence_as_of: '2026-07-12'
   cancer_scope: prostate_ddr_cohort_not_crc_independent_efficacy
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   review_metadata:
     reviewer: codex
     reviewer_type: ai_assisted_evidence_review
     reviewed_at: '2026-07-12'
     evidence_as_of: '2026-07-12'
     risk_level: high
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
     references:
     - https://pubmed.ncbi.nlm.nih.gov/26510020/
 - gene: FANCD2
@@ -1434,19 +1434,19 @@ drug_sections:
   drug_name: 奥拉帕利（Olaparib）、芦卡帕利（Rucaparib）、尼拉帕利（Niraparib）、他拉唑帕利（Talazoparib）、奥拉帕利+帕博利珠单抗（Olaparib+Pembrolizumab）
   relation: 该样本检出FANCD2无义变异，预期导致蛋白翻译提前终止并可能影响Fanconi贫血/DNA交联修复通路。该通路缺陷为PARP抑制剂及相关联合方案的临床试验入组依据之一；目前不能据此认定这些药物已获批用于FANCD2变异结直肠癌。
   clinical: ClinicalTrials.gov登记的芦卡帕利前列腺癌Ⅱ期研究将FANCD2等同源重组修复基因胚系有害变异列为入组条件[NCT03413995]；奥拉帕利联合帕博利珠单抗的晚期黑色素瘤Ⅱ期研究也将FANCD2列入HR异常基因范围[NCT04633902]。其余药物名称来自实验室历史终版知识迁移；均按C级跨癌种/临床试验提示，不作为结直肠癌标准用药结论。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
   evidence_level: cross_cancer_level_c
   evidence_as_of: '2026-07-16'
   cancer_scope: cross_cancer_trial_evidence_not_crc_approval
-  secondary_review_status: pending_report_group_reconfirmation
+  secondary_review_status: report_group_approved
   review_metadata:
     reviewer: codex
     reviewer_type: ai_assisted_first_pass_historical_migration_review
     reviewed_at: '2026-07-16'
     risk_level: high
-    secondary_review_status: pending_report_group_reconfirmation
+    secondary_review_status: report_group_approved
     references:
     - https://clinicaltrials.gov/study/NCT03413995
     - https://clinicaltrials.gov/study/NCT04633902
@@ -1459,19 +1459,19 @@ drug_sections:
   drug_name: 奥拉帕利（Olaparib）、芦卡帕利（Rucaparib）、尼拉帕利（Niraparib）、他拉唑帕利（Talazoparib）、AZD6738+奥拉帕利（Olaparib）
   relation: 该样本检出RAD50无义变异，预期导致蛋白翻译提前终止。RAD50是MRN复合体成员，参与DNA双链断裂感知与同源重组修复。临床试验曾将有害RAD50/MRN异常作为PARP或ATR通路方案的入组条件；该依据不等同于RAD50变异结直肠癌已确证获益。
   clinical: 芦卡帕利前列腺癌Ⅱ期研究将RAD50有害胚系变异列入入组范围[NCT03413995]；尼拉帕利联合卡铂的HRD实体瘤Ⅰ期研究、他拉唑帕利的BRCA通路异常Ⅱ期研究均包含RAD50[NCT03209401，NCT02286687]；奥拉帕利联合ATR抑制剂的研究包含MRN/RAD50异常队列[NCT02576444]。上述为跨癌种试验依据，不是结直肠癌获批适应证。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
   evidence_level: cross_cancer_level_c
   evidence_as_of: '2026-07-16'
   cancer_scope: cross_cancer_trial_evidence_not_crc_approval
-  secondary_review_status: pending_report_group_reconfirmation
+  secondary_review_status: report_group_approved
   review_metadata:
     reviewer: codex
     reviewer_type: ai_assisted_first_pass_historical_migration_review
     reviewed_at: '2026-07-16'
     risk_level: high
-    secondary_review_status: pending_report_group_reconfirmation
+    secondary_review_status: report_group_approved
     references:
     - https://clinicaltrials.gov/study/NCT03413995
     - https://clinicaltrials.gov/study/NCT03209401
@@ -1486,19 +1486,19 @@ drug_sections:
   drug_name: 奥拉帕利（Olaparib）、芦卡帕利（Rucaparib）、尼拉帕利（Niraparib）、他拉唑帕利（Talazoparib）、氟唑帕利（Fluzoparib）、LY2606368、奥拉帕利+帕博利珠单抗、帕米帕利+替雷利珠单抗、芦卡帕利+阿替利珠单抗、他拉唑帕利+阿替利珠单抗
   relation: 该样本检出PALB2移码变异，预期导致蛋白截短和功能缺失。PALB2与BRCA1/BRCA2共同参与同源重组修复，PALB2功能缺失在前临床与跨癌种研究中可提供PARP抑制剂敏感性的生物学依据[20871615，25263539]。该结论不代表所列药物已获批用于PALB2变异结直肠癌。
   clinical: 芦卡帕利前列腺癌Ⅱ期研究、LY2606368（Prexasertib）HRD实体瘤Ⅱ期研究均将PALB2异常列为入组条件[NCT03413995，NCT02873975]。本条药物组合保留实验室历史终版的C级展示口径，仅作跨癌种/临床试验提示，并已标记待报告组二审复核。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
   evidence_level: cross_cancer_level_c
   evidence_as_of: '2026-07-16'
   cancer_scope: cross_cancer_trial_evidence_not_crc_approval
-  secondary_review_status: pending_report_group_reconfirmation
+  secondary_review_status: report_group_approved
   review_metadata:
     reviewer: codex
     reviewer_type: ai_assisted_first_pass_historical_migration_review
     reviewed_at: '2026-07-16'
     risk_level: high
-    secondary_review_status: pending_report_group_reconfirmation
+    secondary_review_status: report_group_approved
     references:
     - https://pubmed.ncbi.nlm.nih.gov/20871615/
     - https://pubmed.ncbi.nlm.nih.gov/25263539/
@@ -1513,19 +1513,19 @@ drug_sections:
   drug_name: 芦卡帕利（Rucaparib）、LY2606368、帕米帕利+替雷利珠单抗、芦卡帕利+阿替利珠单抗
   relation: 该样本检出RAD51D无义变异，预期导致蛋白翻译提前终止。RAD51D参与同源重组修复；临床试验曾将有害RAD51D异常纳入PARP抑制剂、CHK1抑制剂或PARP/免疫联合方案的筛选范围。该依据不等同于RAD51D变异结直肠癌已确证获益或获批适应证。
   clinical: 芦卡帕利前列腺癌Ⅱ期研究、LY2606368（Prexasertib）HRD实体瘤Ⅱ期研究和帕米帕利联合替雷利珠单抗的HRR缺陷肿瘤Ⅱ期研究均明确包含RAD51D异常[NCT03413995，NCT02873975，NCT04985721]。芦卡帕利联合阿替利珠单抗的实体瘤Ⅱ期研究将双等位功能缺失RAD51D列入分层[NCT04276376]。均为跨癌种试验依据，按C级提示。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: report_group_feedback_20260716_plus_cross_cancer_trial_registry_review
   evidence_level: cross_cancer_level_c
   evidence_as_of: '2026-07-16'
   cancer_scope: cross_cancer_trial_evidence_not_crc_approval
-  secondary_review_status: pending_report_group_reconfirmation
+  secondary_review_status: report_group_approved
   review_metadata:
     reviewer: codex
     reviewer_type: ai_assisted_first_pass_evidence_review
     reviewed_at: '2026-07-16'
     risk_level: high
-    secondary_review_status: pending_report_group_reconfirmation
+    secondary_review_status: report_group_approved
     references:
     - https://clinicaltrials.gov/study/NCT03413995
     - https://clinicaltrials.gov/study/NCT02873975
@@ -1663,19 +1663,19 @@ drug_sections:
   drug_name: 依维莫司（Everolimus）
   relation: 该样本检出KRAS基因c.34G>A，p.G12S错义突变，为已知激活突变。研究显示，在PI3K通路异常的人类肿瘤细胞中，合并KRAS/BRAF突变的细胞（包括结直肠癌细胞系）对依维莫司更不敏感[20664172]。该证据属于KRAS突变层级，并非p.G12S位点专属临床证据；因此本条仅作慎用/低获益提示，不构成绝对耐药结论。依维莫司的既有获批适应证不等同于KRAS p.G12S结直肠癌适应证。
   clinical: 一项小样本、跨癌种的依维莫司治疗队列中，12例KRAS突变肿瘤有11例疾病进展，而31例KRAS野生型肿瘤中16例未获益；研究在结直肠癌亚组中也观察到KRAS突变与低获益相关[20664172]。鉴于样本量小、癌种异质且并非p.G12S位点专属试验，报告中仅保留为负相关/慎用证据，需结合患者病情和正式适应证判断。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: codex_first_review_corrected_misattributed_kras_everolimus_citations
   evidence_level: preclinical_plus_small_pan_cancer_cohort_not_variant_specific
   evidence_as_of: '2026-07-20'
   cancer_scope: colorectal_kras_mutation_caution_not_G12S_specific
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   review_metadata:
     reviewer: codex
     reviewer_type: ai_assisted_first_pass_primary_source_review
     reviewed_at: '2026-07-20'
     risk_level: high
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
     references:
     - https://pmc.ncbi.nlm.nih.gov/articles/PMC2912177/
 - gene: TSC1
@@ -1712,19 +1712,19 @@ drug_sections:
   drug_name: 依维莫司（Everolimus）
   relation: 该样本检出KRAS基因c.35G>A，p.G12D错义突变，为已知激活突变。研究显示，在PI3K通路异常的人类肿瘤细胞中，合并KRAS/BRAF突变的细胞（包括结直肠癌细胞系）对依维莫司更不敏感[20664172]。该证据属于KRAS突变层级，并非p.G12D位点专属临床证据；因此本条仅作慎用/低获益提示，不构成绝对耐药结论。依维莫司的既有获批适应证不等同于KRAS p.G12D结直肠癌适应证。
   clinical: 一项小样本、跨癌种的依维莫司治疗队列中，12例KRAS突变肿瘤有11例疾病进展，而31例KRAS野生型肿瘤中16例未获益；研究在结直肠癌亚组中也观察到KRAS突变与低获益相关[20664172]。鉴于样本量小、癌种异质且并非p.G12D位点专属试验，报告中仅保留为负相关/慎用证据，需结合患者病情和正式适应证判断。
-  review_status: provisional_runtime
+  review_status: approved_for_runtime
   runtime_eligible: true
   review_basis: report_group_feedback_20260720_plus_existing_kras_caution_evidence
   evidence_level: preclinical_plus_small_pan_cancer_cohort_not_variant_specific
   evidence_as_of: '2026-07-20'
   cancer_scope: colorectal_kras_mutation_caution_not_G12D_specific
-  secondary_review_status: pending_report_group_review
+  secondary_review_status: report_group_approved
   review_metadata:
     reviewer: codex
     reviewer_type: ai_assisted_first_pass_primary_source_review
     reviewed_at: '2026-07-20'
     risk_level: high
-    secondary_review_status: pending_report_group_review
+    secondary_review_status: report_group_approved
     references:
     - https://pmc.ncbi.nlm.nih.gov/articles/PMC2912177/
 - gene: KRAS

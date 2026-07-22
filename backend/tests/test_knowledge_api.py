@@ -86,13 +86,13 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
                 "page_size": 10,
             },
         )
-        provisional_response = client.get(
+        approved_response = client.get(
             "/api/v1/knowledge/entries",
             params={
                 "panel_id": "crc_358_msi",
                 "kind": "gene",
                 "layer": "reviewed_overlay",
-                "review_status": "provisional_runtime",
+                "review_status": "approved_for_runtime",
                 "page_size": 10,
             },
         )
@@ -105,7 +105,7 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
 
     assert entries_response.status_code == 200
     entries = entries_response.json()["data"]
-    assert entries["total"] == 797
+    assert entries["total"] == 801
     assert len(entries["rows"]) == 10
     assert all(row["layer"] == "reviewed_overlay" for row in entries["rows"])
     assert {row["provenance"]["origin_panel_id"] for row in entries["rows"]} == {
@@ -135,13 +135,13 @@ def test_catalog_panels_entries_and_coverage_are_typed_and_sanitized():
     assert targeted["total"] == 9
     assert all(row["kind"] == "targeted_drug" for row in targeted["rows"])
 
-    assert provisional_response.status_code == 200
-    provisional = provisional_response.json()["data"]
-    assert provisional["total"] == 616
+    assert approved_response.status_code == 200
+    approved = approved_response.json()["data"]
+    assert approved["total"] == 620
     assert all(
         row["review"]["runtime_eligible"] is True
         and row["provenance"]["source_refs"]
-        for row in provisional["rows"]
+        for row in approved["rows"]
     )
 
     serialized = json.dumps(

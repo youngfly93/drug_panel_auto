@@ -9,13 +9,14 @@ source:
   type: historical_report_group_final
   reference_docx_sha256: a2dc7e1fee96ae6b5e2c49a864c18853516edf85edeea8c796c65b9ad6c33931
   review_binding: historical_final_report_migration
-  secondary_review_status: pending_report_group_reconfirmation
+  secondary_review_status: report_group_approved
+  secondary_review_receipt_id: report_group_crc_knowledge_secondary_review_20260722
 medical_uat:
   status: blocked
   blockers:
-    - id: KRAS_G12C_DRUG_RECONFIRMATION
-      reason: report_group_feedback_conflicts_with_historical_final_drug_list
-      scope: KRAS_c.34G>T_p.G12C
+    - id: HISTORICAL_CASE_UAT_NOT_RECORDED
+      reason: report_group_secondary_review_complete_but_case_level_uat_not_recorded
+      scope: crc358_reviewed_case_a
 expectations:
   table_count: 29
   variant_counts:
@@ -188,4 +189,4 @@ intentional_deviations:
     historical_behavior: [KRAS, TP53, BRCA1, PMS2, ATR]
     candidate_behavior: [KRAS, BRCA1, TP53, PMS2, ATR]
     reason: shared_grouped_vaf_sorting_contract
-    approval_status: engineering_spec_approved_pending_report_group_reconfirmation
+    approval_status: report_group_approved

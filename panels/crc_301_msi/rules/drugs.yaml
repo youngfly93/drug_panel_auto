@@ -17,7 +17,7 @@ governance:
       evidence_level: guideline_and_regulatory_summary
       evidence_as_of: "2022-12-31"
       cancer_scope: colorectal_cancer
-      secondary_review_status: historical_not_row_bound
+      secondary_review_status: report_group_approved
       source_refs:
         - type: guideline_summary
           id: legacy_crc_approved_drug_table

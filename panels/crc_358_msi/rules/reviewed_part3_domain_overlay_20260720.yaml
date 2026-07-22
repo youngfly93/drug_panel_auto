@@ -11,7 +11,7 @@ governance:
   policy_id: crc358_fixed_domain_first_review_20260720
   defaults:
     gene:
-      review_status: provisional_runtime
+      review_status: approved_for_runtime
       runtime_eligible: true
       review_basis: codex_first_review_report_group_domain_gap
       reviewer: codex
@@ -20,7 +20,7 @@ governance:
       evidence_as_of: "2026-07-20"
       evidence_level: curated_protein_structure
       cancer_scope: pan_cancer_protein_structure_only
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
 gene_sections:
   - gene: FANCA
     fixed_domain_text: FANCA基因编码的蛋白全长为1455个氨基酸，主要包含N端结构域（170-524位氨基酸）、螺旋结构域（544-625位氨基酸）、ArcN结构域（648-880位氨基酸）和C端结构域（1225-1431位氨基酸）。

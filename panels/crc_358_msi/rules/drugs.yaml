@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 rule_id: "drugs"
-version: "0.6.1"
-updated: "2026-07-21"
+version: "0.7.0"
+updated: "2026-07-22"
 status: "active"
 description: "CRC drug-display rule declarations used by the generator."
 
@@ -17,7 +17,7 @@ governance:
       evidence_level: legacy_curated_rule
       evidence_as_of: "2026-06-14"
       cancer_scope: colorectal_report_context
-      secondary_review_status: historical_not_row_bound
+      secondary_review_status: report_group_approved
       source_refs:
         - type: panel_rule
           id: crc358_targeted_drug_rules_legacy_migration
@@ -28,7 +28,7 @@ governance:
       evidence_level: guideline_and_regulatory_summary
       evidence_as_of: "2022-12-31"
       cancer_scope: colorectal_cancer
-      secondary_review_status: historical_not_row_bound
+      secondary_review_status: report_group_approved
       source_refs:
         - type: guideline_summary
           id: legacy_crc_approved_drug_table
@@ -43,7 +43,9 @@ drug_rules:
   approved_drug_rows_contract_transition:
     proposed_contract_id: crc358_dynamic_7_drug_differencing_20260720
     prior_contract_id: crc358_reviewed_historical_table_contract
-    transition_status: pending_report_group_supersession_ack
+    transition_status: report_group_approved_supersession
+    approved_at: "2026-07-22"
+    approval_receipt_id: report_group_crc_knowledge_secondary_review_20260722
     source_ref:
       type: report_group_feedback
       id: feedback_20260720_crc_approved_drug_dynamic_display
@@ -71,22 +73,10 @@ targeted_drug_rules:
   # 药物列表不再压缩为“另 X 项”，不是把无用药结论的检出变异填入该表。
   summary_display_scope: drug_matched_variants
   summary_display_variant_levels: ["Ⅰ类", "Ⅱ类"]
-  overrides:
-    ATM:
-      benefit_drugs: |-
-        奥拉帕利（C）
-        芦卡帕利（C）
-        尼拉帕利（C）
-        他拉唑帕利（C）
-        AZD6738+奥拉帕利（C）
-        阿维鲁单抗+他拉唑帕利（C）
-        LY2606368（C）
-        盐酸可泮利塞+奥拉帕利+度伐利尤单抗（C）
-        奥拉帕利+帕博利珠单抗（C）
-        帕米帕利+替雷利珠单抗（C）
-        芦卡帕利+阿替利珠单抗（C）
-        他拉唑帕利+阿替利珠单抗（C）
-      caution_drugs: "--"
+  # Gene-level drug overrides are forbidden by the release gate.  Every
+  # production rule must be bounded by an exact variant or a reviewed event
+  # class under reviewed_variant_overrides.
+  overrides: {}
   applicability_rules:
     - genes:
         - EGFR
@@ -99,6 +89,7 @@ targeted_drug_rules:
         - NTRK3
         - TP53
         - TSC1
+        - ATM
       sources:
         - internal
       reject_when_db_position_missing: true
@@ -111,26 +102,56 @@ targeted_drug_rules:
         - "Ⅱ类"
         - "II类"
         - "2类"
-      benefit_drugs:
-        - "AZD1775（C）"
+      benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
+      research_drugs:
+        - "AZD1775/Adavosertib（研究性；Ⅱ期未观察到客观缓解）"
+      review_status: approved_for_runtime
       runtime_eligible: true
-      review_basis: primary_preclinical_signal_with_negative_phase_ii_result
-      evidence_level: preclinical_synthetic_lethality_phase_ii_no_objective_response
-      evidence_as_of: "2026-07-21"
+      review_basis: ai_report_group_first_review_reclassified_as_research_only
+      evidence_level: preclinical_signal_with_negative_phase_ii_not_benefit_rule
+      evidence_as_of: "2026-07-22"
       cancer_scope: pathogenic_setd2_loss_cross_cancer_not_crc_approval
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
-        reviewer_type: ai_assisted_first_pass_primary_source_review
-        reviewed_at: "2026-07-21"
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
         risk_level: high
-        secondary_review_status: pending_report_group_review
+        secondary_review_status: report_group_approved
         references:
           - https://pubmed.ncbi.nlm.nih.gov/26602815/
           - https://pubmed.ncbi.nlm.nih.gov/38920407/
           - https://clinicaltrials.gov/study/NCT03284385
+    - gene: ATM
+      panels: [crc_301_msi, crc_358_msi]
+      applicability: "loss_of_function"
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "奥拉帕利（跨癌种DDR研究）"
+        - "AZD6738/Ceralasertib+奥拉帕利（研究性联合）"
+        - "阿维鲁单抗+他拉唑帕利（研究性联合）"
+        - "他拉唑帕利（研究性）"
+      review_status: approved_for_runtime
+      runtime_eligible: true
+      review_basis: gene_level_12_drug_override_replaced_by_lof_research_only_rule
+      evidence_level: cross_cancer_trial_eligibility_not_crc_efficacy
+      evidence_as_of: "2026-07-22"
+      cancer_scope: pathogenic_atm_loss_cross_cancer_research_not_crc_approval
+      secondary_review_status: report_group_approved
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: report_group_approved
+        references:
+          - https://clinicaltrials.gov/study/NCT01682772
+          - https://clinicaltrials.gov/study/NCT02576444
+          - https://clinicaltrials.gov/study/NCT03565991
+          - https://clinicaltrials.gov/study/NCT02286687
     - gene: FANCA
       applicability: "loss_of_function"
       variant_level:
@@ -140,19 +161,19 @@ targeted_drug_rules:
       benefit_drugs:
         - "奥拉帕利（D）"
       review_basis: "PMID:26510020; cross-cancer phase II DDR cohort; CRC off-label evidence only"
-      review_status: provisional_runtime
+      review_status: approved_for_runtime
       runtime_eligible: true
       evidence_level: cross_cancer_level_d
       evidence_as_of: "2026-07-12"
       cancer_scope: prostate_ddr_cohort_not_crc_independent_efficacy
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
         reviewer_type: ai_assisted_evidence_review
         reviewed_at: "2026-07-12"
         evidence_as_of: "2026-07-12"
         risk_level: high
-        secondary_review_status: pending_report_group_review
+        secondary_review_status: report_group_approved
         references:
           - https://pubmed.ncbi.nlm.nih.gov/26510020/
     - gene: FANCD2
@@ -161,26 +182,24 @@ targeted_drug_rules:
       p_hgvs: "p.Q544*"
       variant_site: "c.1630C>T,\np.Q544*"
       variant_level: ["Ⅱ类", "II类", "2类"]
-      benefit_drugs:
-        - "奥拉帕利（C）"
-        - "芦卡帕利（C）"
-        - "尼拉帕利（C）"
-        - "他拉唑帕利（C）"
-        - "奥拉帕利+帕博利珠单抗（C）"
+      benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
+      research_drugs:
+        - "芦卡帕利（试验入组线索）"
+        - "奥拉帕利+帕博利珠单抗（试验入组线索）"
+      review_status: approved_for_runtime
       runtime_eligible: true
-      review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
-      evidence_level: cross_cancer_level_c
-      evidence_as_of: "2026-07-16"
+      review_basis: ai_report_group_first_review_trial_eligibility_not_efficacy
+      evidence_level: cross_cancer_trial_eligibility_research_only
+      evidence_as_of: "2026-07-22"
       cancer_scope: cross_cancer_trial_evidence_not_crc_approval
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
-        reviewer_type: ai_assisted_first_pass_historical_migration_review
-        reviewed_at: "2026-07-16"
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
         risk_level: high
-        secondary_review_status: pending_report_group_reconfirmation
+        secondary_review_status: report_group_approved
         references:
           - https://clinicaltrials.gov/study/NCT03413995
           - https://clinicaltrials.gov/study/NCT04633902
@@ -190,26 +209,26 @@ targeted_drug_rules:
       p_hgvs: "p.R365*"
       variant_site: "c.1093C>T,\np.R365*"
       variant_level: ["Ⅱ类", "II类", "2类"]
-      benefit_drugs:
-        - "奥拉帕利（C）"
-        - "芦卡帕利（C）"
-        - "尼拉帕利（C）"
-        - "他拉唑帕利（C）"
-        - "AZD6738+奥拉帕利（C）"
+      benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
+      research_drugs:
+        - "芦卡帕利（试验入组线索）"
+        - "尼拉帕利+卡铂（研究性联合）"
+        - "他拉唑帕利（试验入组线索）"
+        - "AZD6738/Ceralasertib+奥拉帕利（研究性联合）"
+      review_status: approved_for_runtime
       runtime_eligible: true
-      review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
-      evidence_level: cross_cancer_level_c
-      evidence_as_of: "2026-07-16"
+      review_basis: ai_report_group_first_review_trial_eligibility_not_efficacy
+      evidence_level: cross_cancer_trial_eligibility_research_only
+      evidence_as_of: "2026-07-22"
       cancer_scope: cross_cancer_trial_evidence_not_crc_approval
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
-        reviewer_type: ai_assisted_first_pass_historical_migration_review
-        reviewed_at: "2026-07-16"
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
         risk_level: high
-        secondary_review_status: pending_report_group_reconfirmation
+        secondary_review_status: report_group_approved
         references:
           - https://clinicaltrials.gov/study/NCT03413995
           - https://clinicaltrials.gov/study/NCT02286687
@@ -220,31 +239,24 @@ targeted_drug_rules:
       p_hgvs: "p.K16Sfs*2"
       variant_site: "c.47del,\np.K16Sfs*2"
       variant_level: ["Ⅱ类", "II类", "2类"]
-      benefit_drugs:
-        - "奥拉帕利（C）"
-        - "芦卡帕利（C）"
-        - "尼拉帕利（C）"
-        - "他拉唑帕利（C）"
-        - "氟唑帕利（C）"
-        - "LY2606368（C）"
-        - "奥拉帕利+帕博利珠单抗（C）"
-        - "帕米帕利+替雷利珠单抗（C）"
-        - "芦卡帕利+阿替利珠单抗（C）"
-        - "他拉唑帕利+阿替利珠单抗（C）"
+      benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
+      research_drugs:
+        - "芦卡帕利（试验入组线索）"
+        - "LY2606368/Prexasertib（试验入组线索）"
+      review_status: approved_for_runtime
       runtime_eligible: true
-      review_basis: historical_final_report_migration_plus_report_group_feedback_20260716
-      evidence_level: cross_cancer_level_c
-      evidence_as_of: "2026-07-16"
+      review_basis: ai_report_group_first_review_pathway_evidence_not_per_drug_efficacy
+      evidence_level: functional_and_trial_eligibility_research_only
+      evidence_as_of: "2026-07-22"
       cancer_scope: cross_cancer_trial_evidence_not_crc_approval
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
-        reviewer_type: ai_assisted_first_pass_historical_migration_review
-        reviewed_at: "2026-07-16"
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
         risk_level: high
-        secondary_review_status: pending_report_group_reconfirmation
+        secondary_review_status: report_group_approved
         references:
           - https://pubmed.ncbi.nlm.nih.gov/20871615/
           - https://pubmed.ncbi.nlm.nih.gov/25263539/
@@ -256,38 +268,56 @@ targeted_drug_rules:
       p_hgvs: "p.Q229*"
       variant_site: "c.685C>T,\np.Q229*"
       variant_level: ["Ⅱ类", "II类", "2类"]
-      benefit_drugs:
-        - "芦卡帕利（C）"
-        - "LY2606368（C）"
-        - "帕米帕利+替雷利珠单抗（C）"
-        - "芦卡帕利+阿替利珠单抗（C）"
+      benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
+      research_drugs:
+        - "芦卡帕利（试验入组线索）"
+        - "LY2606368/Prexasertib（试验入组线索）"
+        - "帕米帕利+替雷利珠单抗（研究性联合）"
+        - "芦卡帕利+阿替利珠单抗（研究性联合）"
+      review_status: approved_for_runtime
       runtime_eligible: true
-      review_basis: report_group_feedback_20260716_plus_cross_cancer_trial_registry_review
-      evidence_level: cross_cancer_level_c
-      evidence_as_of: "2026-07-16"
+      review_basis: ai_report_group_first_review_trial_eligibility_not_efficacy
+      evidence_level: cross_cancer_trial_eligibility_research_only
+      evidence_as_of: "2026-07-22"
       cancer_scope: cross_cancer_trial_evidence_not_crc_approval
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
-        reviewer_type: ai_assisted_first_pass_evidence_review
-        reviewed_at: "2026-07-16"
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
         risk_level: high
-        secondary_review_status: pending_report_group_reconfirmation
+        secondary_review_status: report_group_approved
         references:
           - https://clinicaltrials.gov/study/NCT03413995
           - https://clinicaltrials.gov/study/NCT02873975
           - https://clinicaltrials.gov/study/NCT04985721
           - https://clinicaltrials.gov/study/NCT04276376
     - gene: FLT3
+      panels: [crc_301_msi, crc_358_msi]
       c_hgvs: "c.2537G>A"
       p_hgvs: "p.G846D"
       variant_site: "c.2537G>A,\np.G846D"
-      benefit_drugs:
-        - "瑞戈非尼（C）"
-        - "索拉非尼（C）"
-        - "舒尼替尼（C）"
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "索拉非尼（泛FLT3异常试验入组线索，非G846D疗效）"
+      review_status: approved_for_runtime
+      runtime_eligible: true
+      review_basis: ai_report_group_first_review_g846d_not_per_drug_efficacy
+      evidence_level: variant_characterization_plus_non_specific_trial_eligibility
+      evidence_as_of: "2026-07-22"
+      cancer_scope: childhood_all_variant_data_and_cross_cancer_trial_not_crc_efficacy
+      secondary_review_status: report_group_approved
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: report_group_approved
+        references:
+          - https://pubmed.ncbi.nlm.nih.gov/38049555/
+          - https://clinicaltrials.gov/study/NCT02029001
     - gene: PIK3CA
       panels: [crc_358_msi]
       c_hgvs: "c.1624G>A"
@@ -316,7 +346,7 @@ targeted_drug_rules:
       runtime_eligible: true
       review_basis: historical_final_report_migration
       evidence_as_of: "2026-07-14"
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       source_ref: crc358_reviewed_case_a
     - gene: TP53
       panels: [crc_358_msi]
@@ -333,7 +363,7 @@ targeted_drug_rules:
       runtime_eligible: true
       review_basis: historical_final_report_migration
       evidence_as_of: "2026-07-14"
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       source_ref: crc358_reviewed_case_a
     - gene: ATR
       panels: [crc_358_msi]
@@ -353,31 +383,30 @@ targeted_drug_rules:
       runtime_eligible: true
       review_basis: historical_final_report_migration
       evidence_as_of: "2026-07-14"
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       source_ref: crc358_reviewed_case_a
     - gene: TP53
+      panels: [crc_301_msi, crc_358_msi]
       c_hgvs: "c.821T>A"
       p_hgvs: "p.V274D"
       variant_site: "c.821T>A,\np.V274D"
-      benefit_drugs:
-        - "AZD1775（C）"
-        - "AZD1775+奥拉帕利（C）"
-        - "Alisertib（C）"
-        - "Alisertib+AZD1775（C）"
-        - "Eprenetapopt（C）"
-      review_status: provisional_runtime
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "AZD1775/Adavosertib（TP53类别研究线索，非V274D位点疗效）"
+      review_status: approved_for_runtime
       runtime_eligible: true
-      review_basis: exact_part3_contract_migration_from_tp53_alteration_class_evidence
-      evidence_level: cross_cancer_preclinical_and_early_clinical_not_v274d_specific
-      evidence_as_of: "2026-07-21"
+      review_basis: ai_report_group_first_review_tp53_class_not_v274d_efficacy
+      evidence_level: tp53_class_early_clinical_research_only
+      evidence_as_of: "2026-07-22"
       cancer_scope: colorectal_report_tp53_variant_class_not_v274d_specific
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
-        reviewer_type: ai_assisted_first_pass_evidence_boundary_review
-        reviewed_at: "2026-07-21"
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
         risk_level: high
-        secondary_review_status: pending_report_group_review
+        secondary_review_status: report_group_approved
         references:
           - https://pubmed.ncbi.nlm.nih.gov/28978051/
           - https://pubmed.ncbi.nlm.nih.gov/27601554/
@@ -394,27 +423,29 @@ targeted_drug_rules:
         - "依维莫司+Buparlisib（C）"
         - "Sapanisertib（C）"
     - gene: EGFR
+      panels: [crc_301_msi, crc_358_msi]
       c_hgvs: "c.2387G>A"
       p_hgvs: "p.G796D"
       variant_site: "c.2387G>A,\np.G796D"
-      benefit_drugs:
-        - "阿法替尼（C）"
-        - "TQB3804（C）"
-        - "EMB01（C）"
-        - "MCLA-129（C）"
-      review_status: provisional_runtime
+      benefit_drugs: ["--"]
+      caution_drugs:
+        - "奥希替尼（D）"
+      research_drugs:
+        - "阿法替尼（非G796D特异研究）"
+        - "MCLA-129（非G796D特异研究）"
+      review_status: approved_for_runtime
       runtime_eligible: true
-      review_basis: historical_crc358_display_contract_with_corrected_g796d_evidence_boundary
-      evidence_level: historical_display_plus_cross_cancer_early_trial_not_crc_g796d_efficacy
-      evidence_as_of: "2026-07-21"
-      cancer_scope: colorectal_report_display_contract_direct_g796d_benefit_unproven
-      secondary_review_status: pending_report_group_review
+      review_basis: ai_report_group_first_review_direct_resistance_direction
+      evidence_level: single_case_and_in_vitro_osimertinib_resistance_level_d
+      evidence_as_of: "2026-07-22"
+      cancer_scope: nsclc_resistance_evidence_not_crc_benefit
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
-        reviewer_type: ai_assisted_first_pass_primary_source_review
-        reviewed_at: "2026-07-21"
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
         risk_level: high
-        secondary_review_status: pending_report_group_review
+        secondary_review_status: report_group_approved
         references:
           - https://pubmed.ncbi.nlm.nih.gov/28572531/
           - https://clinicaltrials.gov/study/NCT02465060
@@ -493,9 +524,10 @@ targeted_drug_rules:
       runtime_eligible: true
       review_basis: historical_final_report_migration
       evidence_as_of: "2026-07-14"
-      secondary_review_status: pending_report_group_reconfirmation
+      secondary_review_status: report_group_approved
       source_ref: crc358_reviewed_case_a
     - gene: ERBB2
+      panels: [crc_301_msi, crc_358_msi]
       c_hgvs: "c.1979G>A"
       p_hgvs:
         - "p.G660D"
@@ -504,37 +536,28 @@ targeted_drug_rules:
       variant_site: "c.1979G>A,\np.G660D"
       benefit_drugs:
         - "阿法替尼（C）"
-        - "曲妥珠单抗（C）"
-        - "恩美曲妥珠单抗（C）"
-        - "曲妥珠单抗+帕妥珠单抗（C）"
-        - "吡咯替尼（C）"
-        - "德曲妥珠单抗（C）"
-        - "曲妥珠单抗+图卡替尼（C）"
-        - "奈拉替尼+依维莫司（C）"
-        - "奈拉替尼+哌柏西利（C）"
-        - "奈拉替尼+曲美替尼（C）"
-        - "波齐替尼（C）"
-        - "吡咯替尼+曲妥珠单抗（C）"
-        - "德曲妥珠单抗+奈拉替尼（C）"
-        - "奈拉替尼±曲妥珠单抗（C）"
-        - "拉帕替尼（D）"
+        - "曲妥珠单抗（D）"
+        - "帕妥珠单抗（D）"
+        - "奈拉替尼（D）"
       caution_drugs:
         - "西妥昔单抗（D）"
         - "帕尼单抗（D）"
-        - "奈拉替尼（D）"
-      review_status: provisional_runtime
+      research_drugs:
+        - "奈拉替尼+曲妥珠单抗（篮子试验方案）"
+        - "德曲妥珠单抗+奈拉替尼（暂停试验方案）"
+      review_status: approved_for_runtime
       runtime_eligible: true
-      review_basis: historical_crc358_display_contract_plus_primary_g660d_review
-      evidence_level: g660d_preclinical_and_cross_cancer_cases_plus_crc_regimen_evidence
-      evidence_as_of: "2026-07-21"
+      review_basis: ai_report_group_first_review_direct_subset_plus_research_separation
+      evidence_level: direct_g660d_preclinical_with_afatinib_cross_cancer_case
+      evidence_as_of: "2026-07-22"
       cancer_scope: colorectal_report_g660d_direct_and_her2_class_evidence_separated
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
       review_metadata:
         reviewer: codex
-        reviewer_type: ai_assisted_first_pass_primary_source_review
-        reviewed_at: "2026-07-21"
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
         risk_level: high
-        secondary_review_status: pending_report_group_review
+        secondary_review_status: report_group_approved
         references:
           - https://pubmed.ncbi.nlm.nih.gov/30449325/
           - https://pubmed.ncbi.nlm.nih.gov/26545934/
@@ -552,7 +575,8 @@ approved_drug_rows:
     review_status: legacy_runtime
     runtime_eligible: true
     review_basis: historical_guideline_table_plus_report_group_rule_stated_20260720
-    secondary_review_status: report_group_rule_stated_pending_supersession_ack
+    secondary_review_status: report_group_approved
+    secondary_review_receipt_id: report_group_crc_knowledge_secondary_review_20260722
     source_refs:
       - type: guideline_summary
         id: legacy_crc_approved_drug_table

@@ -254,6 +254,10 @@ def _representative_targeted_drug_cases(
                             rule.get("caution_drugs")
                         )
                         or "--",
+                        "research_drugs": _drug_rule_text(
+                            rule.get("research_drugs")
+                        )
+                        or "--",
                     }
                 )
     return cases

@@ -13,7 +13,7 @@ governance:
     provisional_runtime: 一级审核通过且仅提供保守基因级解释，等待报告组二审，暂允许运行。
   defaults:
     gene:
-      review_status: provisional_runtime
+      review_status: approved_for_runtime
       runtime_eligible: true
       review_basis: ai_assisted_first_pass_conservative_gene_level_batch
       reviewer: codex
@@ -23,7 +23,7 @@ governance:
       evidence_level: functional_background_only
       cancer_scope: colorectal_report_background_no_automatic_drug_claim
       risk_level: low_to_medium
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
       source_refs:
       - type: database
         id: NCBI_GENE_REFSEQ
@@ -34,7 +34,7 @@ governance:
       evidence_level: not_applicable
       evidence_as_of: '2026-07-12'
       cancer_scope: colorectal_cancer
-      secondary_review_status: pending_report_group_review
+      secondary_review_status: report_group_approved
 gene_sections:
 - gene: ABCB1
   intro: "ABCB1编码P-糖蛋白，是ATP依赖性跨膜外排转运体，可转运多种外源化合物和药物，并参与多药耐药表型。"
