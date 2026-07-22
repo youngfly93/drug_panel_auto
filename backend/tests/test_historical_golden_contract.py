@@ -67,20 +67,25 @@ def test_targeted_brand_config_order_matches_historical_contract() -> None:
     assert all(drug in config["brands"] for drug in expected_drugs)
 
 
-def test_approved_reference_deviation_requires_exact_semantic_fingerprint() -> None:
+def test_approved_reference_deviation_requires_exact_full_report_fingerprint() -> None:
     diff = {
         "status": "FAIL",
+        "summary": {"failures": 2, "warnings": 2},
+        "issues": [{"level": "error", "code": "REVIEWED_CHANGE"}],
         "sections": {
+            "documents": {"status": "PASS", "issues": []},
             "text": {"status": "WARN", "samples": ["reviewed text"]},
             "tables": {"status": "FAIL", "samples": ["reviewed table"]},
             "part3": {"status": "FAIL", "samples": ["reviewed part3"]},
+            "styles": {"status": "WARN", "samples": ["reviewed style"]},
+            "qa": {"status": "PASS", "issues": []},
         },
     }
-    fingerprint = release_gate._semantic_diff_sha256(diff)
+    fingerprint = release_gate._normalized_report_diff_sha256(diff)
     contract = {
         "approved_reference_deviation": {
-            "policy": "exact_semantic_diff_v1",
-            "semantic_diff_sha256": fingerprint,
+            "policy": "exact_normalized_report_diff_v1",
+            "normalized_report_diff_sha256": fingerprint,
             "approval_status": "report_group_approved",
             "supersedes": "historical_exact_output",
         }
@@ -88,6 +93,39 @@ def test_approved_reference_deviation_requires_exact_semantic_fingerprint() -> N
 
     assert _approved_reference_deviation(contract, diff)["approved"] is True
     diff["sections"]["part3"]["samples"].append("unexpected change")
+    assert _approved_reference_deviation(contract, diff)["approved"] is False
+
+
+@pytest.mark.parametrize("section", ["documents", "styles", "qa"])
+def test_approved_reference_deviation_blocks_nonsemantic_section_change(
+    section: str,
+) -> None:
+    diff = {
+        "status": "FAIL",
+        "summary": {"failures": 1, "warnings": 0},
+        "issues": [{"level": "error", "code": "REVIEWED_CHANGE"}],
+        "sections": {
+            "documents": {"status": "PASS", "issues": []},
+            "text": {"status": "PASS", "samples": []},
+            "tables": {"status": "PASS", "samples": []},
+            "part3": {"status": "FAIL", "samples": ["reviewed correction"]},
+            "styles": {"status": "PASS", "samples": []},
+            "qa": {"status": "PASS", "issues": []},
+        },
+    }
+    contract = {
+        "approved_reference_deviation": {
+            "policy": "exact_normalized_report_diff_v1",
+            "normalized_report_diff_sha256": (
+                release_gate._normalized_report_diff_sha256(diff)
+            ),
+            "approval_status": "report_group_approved",
+            "supersedes": "historical_exact_output",
+        }
+    }
+
+    assert _approved_reference_deviation(contract, diff)["approved"] is True
+    diff["sections"][section]["unexpected"] = "not reviewed"
     assert _approved_reference_deviation(contract, diff)["approved"] is False
 
 
@@ -565,8 +603,10 @@ def test_manifest_gate_binds_candidate_and_qa_to_current_revision(tmp_path, monk
     }
     contract_payload = yaml.safe_load(contract.read_text(encoding="utf-8"))
     contract_payload["approved_reference_deviation"] = {
-        "policy": "exact_semantic_diff_v1",
-        "semantic_diff_sha256": release_gate._semantic_diff_sha256(approved_diff),
+        "policy": "exact_normalized_report_diff_v1",
+        "normalized_report_diff_sha256": (
+            release_gate._normalized_report_diff_sha256(approved_diff)
+        ),
         "approval_status": "report_group_approved",
         "supersedes": "historical_exact_output",
     }

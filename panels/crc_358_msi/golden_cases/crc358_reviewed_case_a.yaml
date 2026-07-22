@@ -182,8 +182,8 @@ intentional_deviations:
     reason: shared_grouped_vaf_sorting_contract
     approval_status: report_group_approved
 approved_reference_deviation:
-  policy: exact_semantic_diff_v1
-  semantic_diff_sha256: 2e683559330c6311c53104a2fe90bc52433717a053a1857b6daa6ad7f29dbae8
+  policy: exact_normalized_report_diff_v1
+  normalized_report_diff_sha256: bb47ece7225a2291d0f5145c6938bebdf37d2040f53a0fac728a2cbb18af8f3f
   approval_status: report_group_approved
   approval_receipt_id: report_group_crc_knowledge_secondary_review_20260722
   supersedes: historical_final_exact_output_contract

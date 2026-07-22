@@ -66,22 +66,23 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _semantic_diff_sha256(diff_result: dict[str, Any]) -> str:
-    """Fingerprint the business-bearing diff without paths or timestamps.
+def _normalized_report_diff_sha256(diff_result: dict[str, Any]) -> str:
+    """Fingerprint every stable report-diff field without paths/timestamps.
 
-    The payload intentionally includes full text/table/Part-3 comparison
-    structures in memory, but only the SHA-256 is persisted in a committed
-    contract.  This lets a reviewed historical reference retain its original
-    hash while requiring an exact, auditable match for a later approved
-    correction set.
+    The normalized payload covers the overall result, summary, issue list and
+    every comparison section (including text, tables, Part 3, styles, QA and
+    document structure).  Only its SHA-256 is persisted in the committed
+    contract, so the historical reference keeps its original hash while any
+    unreviewed difference category invalidates the approved deviation.
     """
-    sections = diff_result.get("sections") or {}
-    semantic = {
-        name: sections.get(name)
-        for name in ("text", "tables", "part3")
+    normalized = {
+        "status": diff_result.get("status"),
+        "summary": diff_result.get("summary"),
+        "issues": diff_result.get("issues"),
+        "sections": diff_result.get("sections"),
     }
     encoded = json.dumps(
-        semantic,
+        normalized,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -95,13 +96,15 @@ def _approved_reference_deviation(
 ) -> dict[str, Any]:
     """Validate an exact, committed deviation from a historical reference."""
     policy = contract.get("approved_reference_deviation") or {}
-    actual_sha = _semantic_diff_sha256(diff_result)
-    expected_sha = str(policy.get("semantic_diff_sha256") or "").strip().lower()
+    actual_sha = _normalized_report_diff_sha256(diff_result)
+    expected_sha = (
+        str(policy.get("normalized_report_diff_sha256") or "").strip().lower()
+    )
     approval_status = str(policy.get("approval_status") or "").strip()
     supersedes = str(policy.get("supersedes") or "").strip()
     approved = (
         diff_result.get("status") == "FAIL"
-        and policy.get("policy") == "exact_semantic_diff_v1"
+        and policy.get("policy") == "exact_normalized_report_diff_v1"
         and approval_status == "report_group_approved"
         and bool(supersedes)
         and re.fullmatch(r"[0-9a-f]{64}", expected_sha) is not None
@@ -112,8 +115,8 @@ def _approved_reference_deviation(
         "policy": policy.get("policy"),
         "approval_status": approval_status,
         "supersedes": supersedes,
-        "expected_semantic_diff_sha256": expected_sha,
-        "actual_semantic_diff_sha256": actual_sha,
+        "expected_normalized_report_diff_sha256": expected_sha,
+        "actual_normalized_report_diff_sha256": actual_sha,
     }
 
 
@@ -240,11 +243,13 @@ def validate_contract_registry() -> dict[str, Any]:
             errors.append(f"{alias}: blocked medical UAT requires at least one blocker")
         deviation = contract.get("approved_reference_deviation") or {}
         if deviation:
-            if deviation.get("policy") != "exact_semantic_diff_v1":
+            if deviation.get("policy") != "exact_normalized_report_diff_v1":
                 errors.append(f"{alias}: unsupported approved reference deviation policy")
-            deviation_sha = str(deviation.get("semantic_diff_sha256") or "").lower()
+            deviation_sha = str(
+                deviation.get("normalized_report_diff_sha256") or ""
+            ).lower()
             if not re.fullmatch(r"[0-9a-f]{64}", deviation_sha):
-                errors.append(f"{alias}: invalid approved semantic diff SHA256")
+                errors.append(f"{alias}: invalid approved normalized report diff SHA256")
             if deviation.get("approval_status") != "report_group_approved":
                 errors.append(f"{alias}: approved reference deviation lacks report-group approval")
             if not str(deviation.get("supersedes") or "").strip():
