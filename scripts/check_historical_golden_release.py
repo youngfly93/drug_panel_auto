@@ -76,6 +76,7 @@ def _normalized_report_diff_sha256(diff_result: dict[str, Any]) -> str:
     unreviewed difference category invalidates the approved deviation.
     """
     normalized = {
+        "schema_version": diff_result.get("schema_version"),
         "status": diff_result.get("status"),
         "summary": diff_result.get("summary"),
         "issues": diff_result.get("issues"),

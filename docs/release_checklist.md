@@ -188,7 +188,8 @@ replace the historical reference or suppress broad diff categories. The
 committed historical contract may carry an
 `approved_reference_deviation` only when it records report-group approval, the
 superseded contract, and an exact SHA-256 over the normalized text/table/Part-3
-diff plus all other stable diff categories (document structure, styles and QA).
+diff plus the diff schema and all other stable categories (document structure,
+styles and QA).
 A matching fingerprint is reported as `PASS_WITH_APPROVED_DEVIATION`; any
 additional change in any comparison category remains a hard failure. This
 engineering exception does not change a blocked medical-UAT status.

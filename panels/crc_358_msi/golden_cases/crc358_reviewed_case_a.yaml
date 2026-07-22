@@ -183,7 +183,7 @@ intentional_deviations:
     approval_status: report_group_approved
 approved_reference_deviation:
   policy: exact_normalized_report_diff_v1
-  normalized_report_diff_sha256: bb47ece7225a2291d0f5145c6938bebdf37d2040f53a0fac728a2cbb18af8f3f
+  normalized_report_diff_sha256: 82d87db4d284782d9aa9c67fe36347d085149f1e39cc279e8bc812cf5c9f013f
   approval_status: report_group_approved
   approval_receipt_id: report_group_crc_knowledge_secondary_review_20260722
   supersedes: historical_final_exact_output_contract
