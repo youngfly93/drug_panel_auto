@@ -22,6 +22,7 @@ from reportgen.core.historical_golden_contract import (
 from scripts import check_historical_golden_release as release_gate
 from scripts.attest_historical_golden_manifest import attest_manifest
 from scripts.check_historical_golden_release import (
+    _approved_reference_deviation,
     _candidate_renderer_fingerprint,
     _required_sha256,
     _sha256_files,
@@ -34,19 +35,19 @@ def test_crc358_historical_contract_is_deidentified_and_structured() -> None:
     contract = load_historical_golden_contract(CONTRACT)
     assert contract["case_alias"] == "crc358_reviewed_case_a"
     assert contract["privacy"]["contains_phi"] is False
-    assert contract["expectations"]["targeted_summary"]["row_count"] == 7
+    assert contract["expectations"]["targeted_summary"]["row_count"] == 5
     assert contract["expectations"]["variant_counts"] == {
-        "targeted_drug_related": 7,
-        "targeted_or_immune_related": 8,
+        "targeted_drug_related": 4,
+        "targeted_or_immune_related": 7,
     }
     assert contract["medical_uat"]["status"] == "blocked"
     assert contract["source"]["secondary_review_status"] == "report_group_approved"
     assert contract["medical_uat"]["blockers"][0]["id"] == (
         "HISTORICAL_CASE_UAT_NOT_RECORDED"
     )
-    assert len(contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"]) == 41
+    assert len(contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"]) == 34
     assert contract["expectations"]["part3"]["gene_section_count"] == 11
-    assert contract["expectations"]["part3"]["drug_section_count"] == 18
+    assert contract["expectations"]["part3"]["drug_section_count"] == 15
     assert contract["expectations"]["part3"]["group_by_gene"] is True
     assert contract["expectations"]["part3"]["gene_order_by_max_vaf_descending"] is True
     assert contract["expectations"]["part3"]["within_gene_vaf_descending"] is True
@@ -61,8 +62,33 @@ def test_targeted_brand_config_order_matches_historical_contract() -> None:
         for pair in contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"]
     ]
 
-    assert config["targeted_summary_order"] == expected_drugs
+    configured = config["targeted_summary_order"]
+    assert expected_drugs == [drug for drug in configured if drug in expected_drugs]
     assert all(drug in config["brands"] for drug in expected_drugs)
+
+
+def test_approved_reference_deviation_requires_exact_semantic_fingerprint() -> None:
+    diff = {
+        "status": "FAIL",
+        "sections": {
+            "text": {"status": "WARN", "samples": ["reviewed text"]},
+            "tables": {"status": "FAIL", "samples": ["reviewed table"]},
+            "part3": {"status": "FAIL", "samples": ["reviewed part3"]},
+        },
+    }
+    fingerprint = release_gate._semantic_diff_sha256(diff)
+    contract = {
+        "approved_reference_deviation": {
+            "policy": "exact_semantic_diff_v1",
+            "semantic_diff_sha256": fingerprint,
+            "approval_status": "report_group_approved",
+            "supersedes": "historical_exact_output",
+        }
+    }
+
+    assert _approved_reference_deviation(contract, diff)["approved"] is True
+    diff["sections"]["part3"]["samples"].append("unexpected change")
+    assert _approved_reference_deviation(contract, diff)["approved"] is False
 
 
 def test_historical_contract_loader_rejects_phi_contract(tmp_path) -> None:
@@ -527,6 +553,42 @@ def test_manifest_gate_binds_candidate_and_qa_to_current_revision(tmp_path, monk
 
     passed = release_gate.run_manifest_gate(manifest, tmp_path / "out-pass")
     assert passed["status"] == "PASS"
+
+    approved_diff = {
+        "status": "FAIL",
+        "issues": [{"level": "error", "code": "PART3_GENE_SECTION_DIFF"}],
+        "sections": {
+            "text": {"status": "WARN", "samples": []},
+            "tables": {"status": "PASS", "samples": []},
+            "part3": {"status": "FAIL", "samples": ["reviewed correction"]},
+        },
+    }
+    contract_payload = yaml.safe_load(contract.read_text(encoding="utf-8"))
+    contract_payload["approved_reference_deviation"] = {
+        "policy": "exact_semantic_diff_v1",
+        "semantic_diff_sha256": release_gate._semantic_diff_sha256(approved_diff),
+        "approval_status": "report_group_approved",
+        "supersedes": "historical_exact_output",
+    }
+    contract.write_text(
+        yaml.safe_dump(contract_payload, allow_unicode=True),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        release_gate,
+        "compare_reports",
+        lambda _options: approved_diff,
+    )
+    approved = release_gate.run_manifest_gate(manifest, tmp_path / "out-approved")
+    assert approved["status"] == "PASS"
+    assert approved["cases"][0]["diff_status"] == (
+        "PASS_WITH_APPROVED_DEVIATION"
+    )
+
+    approved_diff["sections"]["part3"]["samples"].append("unexpected change")
+    mismatched = release_gate.run_manifest_gate(manifest, tmp_path / "out-mismatch")
+    assert mismatched["status"] == "FAIL"
+    assert any("historical report diff failed" in item for item in mismatched["errors"])
 
     payload["cases"][0]["candidate_source_revision"] = "0" * 40
     manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")

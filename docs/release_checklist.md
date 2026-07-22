@@ -183,6 +183,16 @@ verify that a synthetic CRC358 report still completes with QA `PASS`. This
 scoped engineering release does not convert remaining pending rows or a
 blocked panel-level UAT state into medical approval.
 
+When reviewed corrections intentionally supersede the historical final, do not
+replace the historical reference or suppress broad diff categories. The
+committed historical contract may carry an
+`approved_reference_deviation` only when it records report-group approval, the
+superseded contract, and an exact SHA-256 over the normalized text/table/Part-3
+diff. A matching fingerprint is reported as
+`PASS_WITH_APPROVED_DEVIATION`; any additional semantic change remains a hard
+failure. This engineering exception does not change a blocked medical-UAT
+status.
+
 `current_release` is a status pointer, not a deployment command. Do not edit it
 manually. Use the deployment or release-switch scripts below so the process,
 pointer, `REVISION`, and health state change together.

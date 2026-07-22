@@ -1,14 +1,14 @@
 schema_version: "1.0"
 case_alias: crc358_reviewed_case_a
 panel_id: crc_358_msi
-status: active_regression_contract
+status: active_limited_release_contract
 privacy:
   contains_phi: false
   real_case_id_location: external_runtime_registry_only
 source:
   type: historical_report_group_final
   reference_docx_sha256: a2dc7e1fee96ae6b5e2c49a864c18853516edf85edeea8c796c65b9ad6c33931
-  review_binding: historical_final_report_migration
+  review_binding: historical_final_plus_reviewed_limited_release_deviation
   secondary_review_status: report_group_approved
   secondary_review_receipt_id: report_group_crc_knowledge_secondary_review_20260722
 medical_uat:
@@ -20,11 +20,11 @@ medical_uat:
 expectations:
   table_count: 29
   variant_counts:
-    targeted_drug_related: 7
-    targeted_or_immune_related: 8
+    targeted_drug_related: 4
+    targeted_or_immune_related: 7
   targeted_summary:
-    row_count: 7
-    gene_order: [PIK3CA, KRAS, BRCA1, TP53, FLT3, PMS2, ATR]
+    row_count: 5
+    gene_order: [PIK3CA, KRAS, TP53, FLT3, ATR]
   targeted_drug_brand_summary:
     ordered_pairs:
       - "依维莫司[飞尼妥]"
@@ -52,12 +52,6 @@ expectations:
       - "芦卡帕利[RUBRACA]"
       - "尼拉帕利[则乐]"
       - "他拉唑帕利[泰泽纳]"
-      - "氟唑帕利[艾瑞颐]"
-      - "帕米帕利[百汇泽]"
-      - "阿维鲁单抗[巴文西亚]"
-      - "瑞戈非尼[拜万戈]"
-      - "索拉非尼[多吉美]"
-      - "舒尼替尼[索坦]"
       - "西妥昔单抗[爱必妥]"
       - "哌柏西利[爱博新]"
       - "厄洛替尼[特罗凯]"
@@ -67,7 +61,6 @@ expectations:
       - "纳武利尤单抗[欧狄沃]"
       - "帕博利珠单抗[可瑞达]"
       - "阿替利珠单抗[泰圣奇]"
-      - "替雷利珠单抗[百泽安]"
   biomarker_summary:
     # The historical final placed TP53 before higher-VAF BRCA1. The hardened
     # pipeline intentionally uses the shared VAF policy in every summary.
@@ -83,7 +76,7 @@ expectations:
   signature_drawings_min: 2
   part3:
     gene_section_count: 11
-    drug_section_count: 18
+    drug_section_count: 15
     group_by_gene: true
     gene_order_by_max_vaf_descending: true
     within_gene_vaf_descending: true
@@ -107,9 +100,9 @@ expectations:
       - ATR|C.1291DEL|P.R431GFS*8
     required_gene_sections:
       - key: KRAS|C.34G>T|P.G12C
-        normalized_text_sha256: b4975a4b2bd02788ba174ef0733b9863d705e3419409ea20347f2baf2a2264fa
+        normalized_text_sha256: 93f5c08e44b369732d97e5a58bef01d4e4441b954eeda7ba20d48b441c61a7f6
       - key: TP53|C.499C>T|P.Q167*
-        normalized_text_sha256: afc41467ddf6e74b3aa4b107e4f5670259ecffaf746adeb1adfb9cfba7eb1641
+        normalized_text_sha256: 4f1153dc125847ca22ff204252825eb6b7a2ee6968f99cb4f9668c8136db85e1
       - key: FLT3|C.2537G>A|P.G846D
         normalized_text_sha256: a94331bb923b481dc436873090138582751c91cbacd1fccd0267d787453ccd4c
       - key: ATR|C.1291DEL|P.R431GFS*8
@@ -133,14 +126,12 @@ expectations:
         normalized_text_sha256: a355d2701462424fc6a081292931ae5050d45bd6aaacbee34c8fd3ce28aa5940
       - key_prefix: benefit:TP53|C.499C>T|P.Q167*|Eprenetapopt
         normalized_text_sha256: 5b935e87e03929db8917be08f8620e442c790dfa3eeaf61cb4137775a4ca3442
-      - key_prefix: benefit:FLT3|C.2537G>A|P.G846D|索拉非尼
-        normalized_text_sha256: 6b2acadb5b75bf2fb1b2b62d897a2bb286399e56bc5aad15d251dc8240f8ccf6
       - key_prefix: benefit:ATR|C.1291DEL|P.R431GFS*8|奥拉帕利
         normalized_text_sha256: 1c26bdb3aff71de8668320290ade5f0f4e7d65e9d05df69514326bf855843ec2
       - key_prefix: caution:KRAS|C.34G>T|P.G12C|西妥昔单抗
         normalized_text_sha256: 0cac5e8d86129a885f517d43f1b8deadcf4b2094aea7a4711dfb02a557c543dd
       - key_prefix: caution:KRAS|C.34G>T|P.G12C|依维莫司
-        normalized_text_sha256: 61f54eb0d131eb91ebc7a0b1994fd66716c3ae6e7b533f5f8a6d92657ec8f78f
+        normalized_text_sha256: 7435ac2f1b586609f7877ebdc596627578717b39646de3a23b2f6b8dc4a2a23d
   reviewed_variant_rows:
     - gene: PIK3CA
       c_hgvs: c.1624G>A
@@ -158,7 +149,7 @@ expectations:
       c_hgvs: c.505C>T
       p_hgvs: p.Q169*
       vaf: 1.37
-      benefit_count: 14
+      benefit_count: 0
       caution_count: 0
     - gene: TP53
       c_hgvs: c.499C>T
@@ -170,13 +161,13 @@ expectations:
       c_hgvs: c.2537G>A
       p_hgvs: p.G846D
       vaf: 1.02
-      benefit_count: 3
+      benefit_count: 0
       caution_count: 0
     - gene: PMS2
       c_hgvs: c.1273del
       p_hgvs: p.S425Lfs*23
       vaf: 1.0
-      benefit_count: 1
+      benefit_count: 0
       caution_count: 0
     - gene: ATR
       c_hgvs: c.1291del
@@ -190,3 +181,14 @@ intentional_deviations:
     candidate_behavior: [KRAS, BRCA1, TP53, PMS2, ATR]
     reason: shared_grouped_vaf_sorting_contract
     approval_status: report_group_approved
+approved_reference_deviation:
+  policy: exact_semantic_diff_v1
+  semantic_diff_sha256: 2e683559330c6311c53104a2fe90bc52433717a053a1857b6daa6ad7f29dbae8
+  approval_status: report_group_approved
+  approval_receipt_id: report_group_crc_knowledge_secondary_review_20260722
+  supersedes: historical_final_exact_output_contract
+  reasons:
+    - pending_medical_rules_fail_closed_before_legacy_fallback
+    - corrected_kras_g12c_everolimus_evidence_attribution
+    - reviewed_gene_domain_and_variant_narrative_updates
+    - reviewed_dynamic_approved_drug_and_immune_wording_contracts

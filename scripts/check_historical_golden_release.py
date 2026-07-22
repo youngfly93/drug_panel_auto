@@ -66,6 +66,57 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _semantic_diff_sha256(diff_result: dict[str, Any]) -> str:
+    """Fingerprint the business-bearing diff without paths or timestamps.
+
+    The payload intentionally includes full text/table/Part-3 comparison
+    structures in memory, but only the SHA-256 is persisted in a committed
+    contract.  This lets a reviewed historical reference retain its original
+    hash while requiring an exact, auditable match for a later approved
+    correction set.
+    """
+    sections = diff_result.get("sections") or {}
+    semantic = {
+        name: sections.get(name)
+        for name in ("text", "tables", "part3")
+    }
+    encoded = json.dumps(
+        semantic,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _approved_reference_deviation(
+    contract: dict[str, Any],
+    diff_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate an exact, committed deviation from a historical reference."""
+    policy = contract.get("approved_reference_deviation") or {}
+    actual_sha = _semantic_diff_sha256(diff_result)
+    expected_sha = str(policy.get("semantic_diff_sha256") or "").strip().lower()
+    approval_status = str(policy.get("approval_status") or "").strip()
+    supersedes = str(policy.get("supersedes") or "").strip()
+    approved = (
+        diff_result.get("status") == "FAIL"
+        and policy.get("policy") == "exact_semantic_diff_v1"
+        and approval_status == "report_group_approved"
+        and bool(supersedes)
+        and re.fullmatch(r"[0-9a-f]{64}", expected_sha) is not None
+        and actual_sha == expected_sha
+    )
+    return {
+        "approved": approved,
+        "policy": policy.get("policy"),
+        "approval_status": approval_status,
+        "supersedes": supersedes,
+        "expected_semantic_diff_sha256": expected_sha,
+        "actual_semantic_diff_sha256": actual_sha,
+    }
+
+
 def _current_revision() -> str:
     return subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -187,6 +238,17 @@ def validate_contract_registry() -> dict[str, Any]:
         blockers = list(medical_uat.get("blockers") or [])
         if medical_uat_status == "blocked" and not blockers:
             errors.append(f"{alias}: blocked medical UAT requires at least one blocker")
+        deviation = contract.get("approved_reference_deviation") or {}
+        if deviation:
+            if deviation.get("policy") != "exact_semantic_diff_v1":
+                errors.append(f"{alias}: unsupported approved reference deviation policy")
+            deviation_sha = str(deviation.get("semantic_diff_sha256") or "").lower()
+            if not re.fullmatch(r"[0-9a-f]{64}", deviation_sha):
+                errors.append(f"{alias}: invalid approved semantic diff SHA256")
+            if deviation.get("approval_status") != "report_group_approved":
+                errors.append(f"{alias}: approved reference deviation lacks report-group approval")
+            if not str(deviation.get("supersedes") or "").strip():
+                errors.append(f"{alias}: approved reference deviation lacks supersedes")
         brand_order = list(
             (expectations.get("targeted_drug_brand_summary") or {}).get(
                 "ordered_pairs"
@@ -326,6 +388,10 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
                 style_metric_policy="warn",
             )
         )
+        approved_deviation = _approved_reference_deviation(contract, diff_result)
+        effective_diff_status = str(diff_result.get("status") or "")
+        if approved_deviation["approved"]:
+            effective_diff_status = "PASS_WITH_APPROVED_DEVIATION"
         qa_status = "MISSING"
         qa_payload: dict[str, Any] = {}
         if candidate_qa and candidate_qa.is_file():
@@ -394,7 +460,7 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
             )
         if contract_result.get("status") != "PASS":
             case_errors.append("historical contract failed")
-        if diff_result.get("status") == "FAIL":
+        if diff_result.get("status") == "FAIL" and not approved_deviation["approved"]:
             case_errors.append("historical report diff failed")
         if qa_status not in allowed_qa:
             case_errors.append(f"candidate QA status is {qa_status}")
@@ -406,7 +472,9 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
                 "panel_id": contract.get("panel_id"),
                 "status": "PASS" if not case_errors else "FAIL",
                 "contract_status": contract_result.get("status"),
-                "diff_status": diff_result.get("status"),
+                "diff_status": effective_diff_status,
+                "raw_diff_status": diff_result.get("status"),
+                "approved_reference_deviation": approved_deviation,
                 "qa_status": qa_status,
                 "medical_uat_status": medical_uat_status,
                 "medical_uat_blockers": medical_uat_blockers,
