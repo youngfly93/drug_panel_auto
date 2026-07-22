@@ -2459,6 +2459,46 @@ def test_drug_consistency_gate_detects_missing_and_duplicate_items():
     assert result["duplicates"][0]["drugs"] == ["甲药（Drug A）"]
 
 
+def test_targeted_drug_ingestion_restores_missing_grade_delimiters():
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+
+    assert mapper._normalize_drug_evidence_label(
+        "NXP800（C）Tuvusertib+Peposertib（C）"
+    ) == "NXP800（C）\nTuvusertib+Peposertib（C）"
+    assert mapper._normalize_drug_evidence_label(
+        "替西罗莫司（C）Tuvusertib+Peposertib（C）"
+    ) == "替西罗莫司（C）\nTuvusertib+Peposertib（C）"
+    assert mapper._normalize_drug_evidence_label("A+B（C）") == "A+B（C）"
+
+
+def test_crc358_historical_multidrug_cells_have_one_item_per_line():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    rules = load_targeted_drug_rule_context(package)
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+
+    arid1a, _, arid1a_score = mapper._lookup_targeted_drugs_for_variant(
+        "ARID1A",
+        c_point="c.5965C>T",
+        p_point="p.R1989*",
+        variant_level="Ⅱ类",
+        cancer_type="结直肠癌",
+        targeted_drug_rules=rules,
+    )
+    fbxw7, _, fbxw7_score = mapper._lookup_targeted_drugs_for_variant(
+        "FBXW7",
+        c_point="c.979G>T",
+        p_point="p.E327*",
+        variant_level="Ⅱ类",
+        cancer_type="结直肠癌",
+        targeted_drug_rules=rules,
+    )
+
+    assert arid1a_score > 0
+    assert "NXP800（C）\nTuvusertib+Peposertib（C）" in arid1a
+    assert fbxw7_score > 0
+    assert "替西罗莫司（C）\nTuvusertib+Peposertib（C）" in fbxw7
+
+
 def test_feedback_drug_rows_match_part3_without_overlapping_blocks():
     provider = _crc358_provider()
     variants = [

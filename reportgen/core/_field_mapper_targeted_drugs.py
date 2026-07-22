@@ -33,10 +33,21 @@ class TargetedDrugMixin:
             return value
         import re
 
-        return re.sub(
+        normalized = re.sub(
             r"[（(]\s*(?:CIViC|CGI)[^）)]*?Level\s*([A-Da-d])[^）)]*[)）]",
             lambda m: f"（{m.group(1).upper()}）",
             value,
+        )
+        # Some historical workbook cells concatenate adjacent drug items with
+        # no delimiter (for example ``NXP800（C）Tuvusertib+Peposertib（C）``).
+        # An evidence-grade close marker is an unambiguous item boundary in
+        # these display-only columns. Restore the missing line break once at
+        # ingestion so Part 2, Part 3, summaries, and consistency QA all see
+        # the same item list.
+        return re.sub(
+            r"([（(]\s*[A-Da-d]\s*[)）])(?=[^\s、，,；;\r\n])",
+            r"\1\n",
+            normalized,
         )
 
     def _load_targeted_drug_db(self) -> None:
