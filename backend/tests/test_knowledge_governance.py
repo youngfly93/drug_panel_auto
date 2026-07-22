@@ -54,15 +54,32 @@ def test_production_knowledge_release_gate_is_self_contained_and_passes(tmp_path
         assert panel["clinical_release_readiness"]["status"] == "BLOCKED"
         secondary = panel["clinical_release_readiness"]["secondary_review"]
         assert secondary["status"] == "completed"
-        assert secondary["pending_runtime_rows"] == 0
-        assert secondary["receipt"]["status"] == "PASS"
-        assert coverage["review_governance"][
-            "secondary_review_complete_percent"
-        ] == 100.0
-        assert panel["clinical_release_readiness"]["blocking_reasons"] == [
-            "insufficient_uat_reports",
-            "uat_pass_rate_below_threshold_or_unknown",
-        ]
+        # The prior report-group receipt remains immutable and therefore must
+        # fail once this candidate changes its reviewed artifacts. CRC301 has
+        # no new scoped rows; CRC358 has 14 Part-2 rules plus 9 research-only
+        # Part-3 rows pending a new secondary review.
+        assert secondary["receipt"]["status"] == "FAIL"
+        if panel["panel_id"] == "crc_301_msi":
+            assert secondary["pending_runtime_rows"] == 0
+            assert coverage["review_governance"][
+                "secondary_review_complete_percent"
+            ] == 100.0
+            assert panel["clinical_release_readiness"]["blocking_reasons"] == [
+                "secondary_review_receipt_invalid",
+                "insufficient_uat_reports",
+                "uat_pass_rate_below_threshold_or_unknown",
+            ]
+        else:
+            assert secondary["pending_runtime_rows"] == 23
+            assert coverage["review_governance"][
+                "secondary_review_complete_percent"
+            ] == 99.11
+            assert panel["clinical_release_readiness"]["blocking_reasons"] == [
+                "secondary_review_receipt_invalid",
+                "pending_report_group_secondary_review",
+                "insufficient_uat_reports",
+                "uat_pass_rate_below_threshold_or_unknown",
+            ]
     contract_inventory = {
         panel["panel_id"]: panel["drug_analysis_contracts"]
         for panel in result["panels"]
@@ -77,10 +94,10 @@ def test_production_knowledge_release_gate_is_self_contained_and_passes(tmp_path
     }
     assert contract_inventory["crc_358_msi"] == {
         "status": "PASS",
-        "rules_checked": 17,
-        "selector_cases_checked": 18,
-        "expected_item_count": 106,
-        "rendered_item_count": 106,
+        "rules_checked": 31,
+        "selector_cases_checked": 32,
+        "expected_item_count": 108,
+        "rendered_item_count": 108,
         "issues": [],
     }
     assert {row["panel_id"] for row in result["non_blocking_panel_readiness"]} == {

@@ -78,22 +78,10 @@ targeted_drug_rules:
   # class under reviewed_variant_overrides.
   overrides: {}
   applicability_rules:
-    - genes:
-        - EGFR
-        - ERBB2
-        - KRAS
-        - NRAS
-        - BRAF
-        - NTRK1
-        - NTRK2
-        - NTRK3
-        - TP53
-        - TSC1
-        - ATM
-      sources:
+    - sources:
         - internal
       reject_when_db_position_missing: true
-      note: "P0药物规则护栏：内部库只有基因、无位点/事件的泛化行不进入2.1靶向用药提示；已审核reviewed override仍优先生效。"
+      note: "P0全局药物规则护栏：任何内部库中只有基因、无位点/事件的泛化行都不进入2.1靶向用药提示；精确位点、明确事件及已审核reviewed override仍优先生效。"
   reviewed_variant_overrides:
     - gene: SETD2
       panels: [crc_301_msi, crc_358_msi]
@@ -565,6 +553,388 @@ targeted_drug_rules:
           - https://pubmed.ncbi.nlm.nih.gov/26243863/
           - https://clinicaltrials.gov/study/NCT01953926
           - https://clinicaltrials.gov/study/NCT05372614
+
+    # CRC358 10-case UAT found that the historical internal workbook contained
+    # gene/class-only rows with no c./p. selector.  The global guard above now
+    # blocks that unsafe fallback.  The rows below are the conservative AI
+    # delegated first-review disposition: no unproven benefit is shown in Part
+    # 2; only bounded research signals are retained where a traceable source
+    # exists.  They require report-group secondary review before promotion.
+    - gene: APC
+      panels: [crc_358_msi]
+      applicability: loss_of_function
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "REC-4881（NCT06005974；研究性试验线索）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_gene_class_benefit_reclassified_as_research_only
+      evidence_level: phase_ii_trial_eligibility_without_posted_efficacy_results
+      evidence_as_of: "2026-07-22"
+      cancer_scope: apc_lof_solid_tumor_trial_not_crc_efficacy
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: clinical_trial
+          id: NCT06005974
+          url: https://clinicaltrials.gov/study/NCT06005974
+    - gene: ARID1A
+      panels: [crc_358_msi]
+      applicability: loss_of_function
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "奥拉帕利（前临床/跨癌种研究线索）"
+        - "ATR抑制剂联合方案（研究性）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_broad_parp_list_reclassified_as_research_only
+      evidence_level: preclinical_signal_and_cross_cancer_trial_eligibility
+      evidence_as_of: "2026-07-22"
+      cancer_scope: arid1a_lof_cross_cancer_research_not_crc_efficacy
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:26069190
+          url: https://pubmed.ncbi.nlm.nih.gov/26069190/
+        - type: clinical_trial
+          id: NCT02286687
+          url: https://clinicaltrials.gov/study/NCT02286687
+    - gene: ATR
+      panels: [crc_358_msi]
+      applicability: loss_of_function
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "PARP/ATR通路方案（DDR篮式研究线索）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_broad_ddr_list_reclassified_as_research_only
+      evidence_level: cross_cancer_trial_eligibility_not_variant_specific_efficacy
+      evidence_as_of: "2026-07-22"
+      cancer_scope: atr_lof_cross_cancer_research_not_crc_efficacy
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: clinical_trial
+          id: NCT02286687
+          url: https://clinicaltrials.gov/study/NCT02286687
+    - gene: BRCA1
+      panels: [crc_358_msi]
+      applicability: loss_of_function
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "奥拉帕利（CRC/跨癌种研究线索；非标准治疗结论）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_parp_benefit_reclassified_as_research_only
+      evidence_level: crc_phase_ii_negative_with_limited_cross_cancer_signal
+      evidence_as_of: "2026-07-22"
+      cancer_scope: brca1_lof_research_not_established_crc_benefit
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:26786262
+          url: https://pubmed.ncbi.nlm.nih.gov/26786262/
+        - type: pubmed
+          id: PMID:37852034
+          url: https://pubmed.ncbi.nlm.nih.gov/37852034/
+    - gene: BRCA2
+      panels: [crc_358_msi]
+      applicability: loss_of_function
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "奥拉帕利（CRC/跨癌种研究线索；非标准治疗结论）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_parp_benefit_reclassified_as_research_only
+      evidence_level: crc_phase_ii_negative_with_limited_cross_cancer_signal
+      evidence_as_of: "2026-07-22"
+      cancer_scope: brca2_lof_research_not_established_crc_benefit
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:26786262
+          url: https://pubmed.ncbi.nlm.nih.gov/26786262/
+        - type: pubmed
+          id: PMID:37852034
+          url: https://pubmed.ncbi.nlm.nih.gov/37852034/
+    - gene: FBXW7
+      panels: [crc_358_msi]
+      applicability: loss_of_function
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "mTOR抑制剂（前临床线索）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_benefit_and_resistance_lists_reclassified_as_preclinical
+      evidence_level: colorectal_cell_line_and_model_preclinical_signal_only
+      evidence_as_of: "2026-07-22"
+      cancer_scope: fbxw7_lof_preclinical_not_crc_clinical_efficacy_or_resistance
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:23558291
+          url: https://pubmed.ncbi.nlm.nih.gov/23558291/
+        - type: pubmed
+          id: PMID:18787170
+          url: https://pubmed.ncbi.nlm.nih.gov/18787170/
+    - gene: NF1
+      panels: [crc_358_msi]
+      applicability: loss_of_function
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "曲美替尼（NCI-MATCH研究；主要终点未达）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_broad_mapk_list_reclassified_as_research_only
+      evidence_level: cross_cancer_phase_ii_primary_endpoint_not_met
+      evidence_as_of: "2026-07-22"
+      cancer_scope: nf1_lof_cross_cancer_research_not_crc_benefit
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:37053535
+          url: https://pubmed.ncbi.nlm.nih.gov/37053535/
+    - gene: SMARCA4
+      panels: [crc_358_msi]
+      applicability: loss_of_function
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      research_drugs:
+        - "PRT3789（早期临床研究）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_broad_synthetic_lethal_list_reclassified_as_research_only
+      evidence_level: early_phase_cross_cancer_signal_not_crc_specific
+      evidence_as_of: "2026-07-22"
+      cancer_scope: smarca4_lof_early_cross_cancer_research_not_crc_benefit
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:40991405
+          url: https://pubmed.ncbi.nlm.nih.gov/40991405/
+        - type: clinical_trial
+          id: NCT05639751
+          url: https://clinicaltrials.gov/study/NCT05639751
+    - gene: MLH1
+      panels: [crc_358_msi]
+      c_hgvs: c.676C>T
+      p_hgvs: p.R226*
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_reject_unspecific_parp_benefit_handle_mmr_as_biomarker
+      evidence_level: crc_olaparib_phase_ii_no_objective_response
+      evidence_as_of: "2026-07-22"
+      cancer_scope: exact_variant_no_crc_parp_benefit_msi_mmr_reviewed_separately
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:26786262
+          url: https://pubmed.ncbi.nlm.nih.gov/26786262/
+    - gene: MSH6
+      panels: [crc_358_msi]
+      c_hgvs: c.1636G>T
+      p_hgvs: p.E546*
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_reject_unspecific_parp_benefit_handle_mmr_as_biomarker
+      evidence_level: crc_olaparib_phase_ii_no_objective_response
+      evidence_as_of: "2026-07-22"
+      cancer_scope: exact_variant_no_crc_parp_benefit_msi_mmr_reviewed_separately
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:26786262
+          url: https://pubmed.ncbi.nlm.nih.gov/26786262/
+    - gene: PIK3CA
+      panels: [crc_358_msi]
+      c_hgvs: c.1633G>A
+      p_hgvs: p.E545K
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_reject_broad_pi3k_list_and_exon9_anti_egfr_caution
+      evidence_level: crc_meta_analysis_exon9_not_predictive_of_anti_egfr_resistance
+      evidence_as_of: "2026-07-22"
+      cancer_scope: pik3ca_e545k_no_reviewed_crc_drug_conclusion
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:24701207
+          url: https://pubmed.ncbi.nlm.nih.gov/24701207/
+    - gene: PMS2
+      panels: [crc_358_msi]
+      c_hgvs: c.1273del
+      p_hgvs: p.S425Lfs*23
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_reject_unspecific_parp_benefit_handle_mmr_as_biomarker
+      evidence_level: crc_olaparib_phase_ii_no_objective_response
+      evidence_as_of: "2026-07-22"
+      cancer_scope: exact_variant_no_crc_parp_benefit_msi_mmr_reviewed_separately
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:26786262
+          url: https://pubmed.ncbi.nlm.nih.gov/26786262/
+    - gene: PTEN
+      panels: [crc_358_msi]
+      c_hgvs: c.400A>T
+      p_hgvs: p.M134L
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs: ["--"]
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_defer_exact_missense_drug_claim_fail_closed
+      evidence_level: exact_variant_function_and_crc_drug_response_not_established
+      evidence_as_of: "2026-07-22"
+      cancer_scope: exact_pten_m134l_no_drug_conclusion_pending_secondary_review
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: clinical_trial
+          id: NCT00419159
+          url: https://clinicaltrials.gov/study/NCT00419159
+    - gene: KRAS
+      panels: [crc_358_msi]
+      c_hgvs: c.35G>T
+      p_hgvs: p.G12V
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs: ["--"]
+      caution_drugs:
+        - "西妥昔单抗（A）"
+        - "帕尼单抗（A）"
+      research_drugs:
+        - "RMC-6236（RAS-MULTI(ON)早期临床研究）"
+        - "Avutometinib+Defactinib（G12V NSCLC跨癌种研究）"
+        - "BI 1701963+曲美替尼（KRAS实体瘤研究）"
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_first_review_keep_crc_anti_egfr_caution_reclassify_benefit_as_research
+      evidence_level: established_crc_anti_egfr_negative_biomarker_plus_early_cross_cancer_trials
+      evidence_as_of: "2026-07-22"
+      cancer_scope: kras_g12v_crc_anti_egfr_caution_research_not_established_benefit
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: pubmed
+          id: PMID:20100961
+          url: https://pubmed.ncbi.nlm.nih.gov/20100961/
+        - type: clinical_trial
+          id: NCT05379985
+          url: https://clinicaltrials.gov/study/NCT05379985
+        - type: clinical_trial
+          id: NCT04620330
+          url: https://clinicaltrials.gov/study/NCT04620330
+        - type: clinical_trial
+          id: NCT04835714
+          url: https://clinicaltrials.gov/study/NCT04835714
 
 approved_drug_rows:
   - drug:

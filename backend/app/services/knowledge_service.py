@@ -1277,14 +1277,21 @@ def _drug_candidate_disposition(
     }
     allow_internal = bool((targeted_context or {}).get("allow_internal_rows", False))
     generic_internal_reject: set[str] = set()
+    reject_all_positionless_internal = False
     for rule in (targeted_context or {}).get("applicability_rules") or []:
         if not isinstance(rule, dict) or not rule.get("reject_when_db_position_missing"):
             continue
         sources = {str(value).strip().upper() for value in rule.get("sources") or []}
         if "INTERNAL" in sources:
-            generic_internal_reject.update(
-                str(value).strip().upper() for value in rule.get("genes") or []
-            )
+            scoped_genes = {
+                str(value).strip().upper()
+                for value in rule.get("genes") or []
+                if str(value).strip()
+            }
+            if scoped_genes:
+                generic_internal_reject.update(scoped_genes)
+            else:
+                reject_all_positionless_internal = True
 
     cgi_rank_map = {
         "fda guidelines": 5,
@@ -1336,7 +1343,9 @@ def _drug_candidate_disposition(
         elif source == "INTERNAL":
             if not allow_internal:
                 status = "filtered_source"
-            elif gene in generic_internal_reject and not (c_hgvs or p_hgvs):
+            elif (
+                reject_all_positionless_internal or gene in generic_internal_reject
+            ) and not (c_hgvs or p_hgvs):
                 status = "filtered_internal_generic"
         elif source in {"CGI", "CIVIC"}:
             if require_position and not (c_hgvs or p_hgvs):

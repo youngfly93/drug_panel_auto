@@ -6848,6 +6848,7 @@ def test_blank_heading_cleanup_removes_legacy_break_before_targeted_results(
 def test_exact_section_headings_use_idempotent_page_break_before(tmp_path):
     docx_path = tmp_path / "forced_heading_breaks.docx"
     headings = (
+        "2.2 其它潜在获益上市药物提示*",
         "2.3 NCCN 推荐临床常规靶向药物相关基因检测结果（不限于本癌种）",
         "结肠癌NCCN指南（2022 V1）和直肠癌NCCN指南（2022 V1）",
         "3. 阅读说明",

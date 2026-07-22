@@ -425,9 +425,28 @@ def _declared_genes(package: Any) -> set[str]:
     }
 
 
-def _validate_drug_rules(package: Any) -> dict[str, Any]:
+def _row_applies_to_panel(row: Mapping[str, Any], panel_id: str) -> bool:
+    """Apply the same explicit panel scope used by the runtime rule loader."""
+    raw = (
+        row.get("panels")
+        or row.get("panel_ids")
+        or row.get("panel_id")
+        or row.get("panel")
+    )
+    if not raw:
+        return True
+    values = raw if isinstance(raw, (list, tuple, set)) else [raw]
+    return panel_id in {str(value).strip() for value in values if str(value).strip()}
+
+
+def _validate_drug_rules(
+    package: Any,
+    *,
+    effective_panel_id: Optional[str] = None,
+) -> dict[str, Any]:
     path = package.resolve_rule_file("drugs")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    scoped_panel_id = str(effective_panel_id or package.panel_id)
     governance = raw.get("governance") or {}
     issues: list[dict[str, Any]] = []
     if str(governance.get("schema_version") or "") != "1.0":
@@ -456,12 +475,12 @@ def _validate_drug_rules(package: Any) -> dict[str, Any]:
     rows.extend(
         dict(row)
         for row in policy.get("reviewed_variant_overrides") or []
-        if isinstance(row, Mapping)
+        if isinstance(row, Mapping) and _row_applies_to_panel(row, scoped_panel_id)
     )
     targeted = validate_knowledge_rows(
         raw,
         rows,
-        panel_id=package.panel_id,
+        panel_id=scoped_panel_id,
         kind="targeted_drug",
     )
     # A source-only inheritance declaration legitimately has no local targeted
@@ -586,7 +605,10 @@ def _panel_report(
             drug_rules["source_panel_id"]
         )
         targeted_status_counts = (
-            _validate_drug_rules(source_package)
+            _validate_drug_rules(
+                source_package,
+                effective_panel_id=panel_id,
+            )
             .get("targeted_rules", {})
             .get("status_counts", {})
         )

@@ -2471,12 +2471,12 @@ def test_targeted_drug_ingestion_restores_missing_grade_delimiters():
     assert mapper._normalize_drug_evidence_label("A+B（C）") == "A+B（C）"
 
 
-def test_crc358_historical_multidrug_cells_have_one_item_per_line():
+def test_crc358_historical_gene_class_drug_rows_are_fail_closed():
     package = load_panel_package("crc_358_msi", project_root=ROOT)
     rules = load_targeted_drug_rule_context(package)
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
 
-    arid1a, _, arid1a_score = mapper._lookup_targeted_drugs_for_variant(
+    arid1a, arid1a_caution, arid1a_score = mapper._lookup_targeted_drugs_for_variant(
         "ARID1A",
         c_point="c.5965C>T",
         p_point="p.R1989*",
@@ -2484,7 +2484,7 @@ def test_crc358_historical_multidrug_cells_have_one_item_per_line():
         cancer_type="结直肠癌",
         targeted_drug_rules=rules,
     )
-    fbxw7, _, fbxw7_score = mapper._lookup_targeted_drugs_for_variant(
+    fbxw7, fbxw7_caution, fbxw7_score = mapper._lookup_targeted_drugs_for_variant(
         "FBXW7",
         c_point="c.979G>T",
         p_point="p.E327*",
@@ -2493,10 +2493,185 @@ def test_crc358_historical_multidrug_cells_have_one_item_per_line():
         targeted_drug_rules=rules,
     )
 
-    assert arid1a_score > 0
-    assert "NXP800（C）\nTuvusertib+Peposertib（C）" in arid1a
-    assert fbxw7_score > 0
-    assert "替西罗莫司（C）\nTuvusertib+Peposertib（C）" in fbxw7
+    assert arid1a_score == 100.0
+    assert (arid1a, arid1a_caution) == ("--", "--")
+    assert fbxw7_score == 100.0
+    assert (fbxw7, fbxw7_caution) == ("--", "--")
+
+
+def test_positionless_internal_drug_rows_are_rejected_for_every_gene():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    rules = load_targeted_drug_rule_context(package)
+    assert rules is not None
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+
+    assert mapper._targeted_drug_db_row_applicable(
+        gene="KMT2D",
+        source_db="internal",
+        db_c="",
+        db_p="",
+        db_variant_type="",
+        targeted_drug_rules=rules,
+    ) is False
+    assert mapper._targeted_drug_db_row_applicable(
+        gene="KMT2D",
+        source_db="internal",
+        db_c="",
+        db_p="p.M1V",
+        db_variant_type="",
+        targeted_drug_rules=rules,
+    ) is True
+    assert mapper._targeted_drug_db_row_applicable(
+        gene="KMT2D",
+        source_db="CIVIC",
+        db_c="",
+        db_p="",
+        db_variant_type="",
+        targeted_drug_rules=rules,
+    ) is True
+
+
+def test_crc358_uat_first_review_closes_all_positionless_candidate_rows():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    rules = load_targeted_drug_rule_context(package)
+    assert rules is not None
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+
+    candidates = [
+        ("APC", "c.22C>T", "p.Q8*"),
+        ("APC", "c.2626C>T", "p.R876*"),
+        ("APC", "c.3340C>T", "p.R1114*"),
+        ("APC", "c.3944C>G", "p.S1315*"),
+        ("APC", "c.3982C>T", "p.Q1328*"),
+        ("ARID1A", "c.3634C>T", "p.Q1212*"),
+        ("ARID1A", "c.5965C>T", "p.R1989*"),
+        ("ATR", "c.6729del", "p.F2243Lfs*8"),
+        ("BRCA1", "c.4357+1G>A", "--"),
+        ("BRCA2", "c.7008-1G>A", "--"),
+        ("BRCA2", "c.8403del", "p.P2802Lfs*19"),
+        ("FBXW7", "c.1957del", "p.T653Rfs*8"),
+        ("FBXW7", "c.40C>T", "p.R14*"),
+        ("FBXW7", "c.979G>T", "p.E327*"),
+        ("MLH1", "c.676C>T", "p.R226*"),
+        ("MSH6", "c.1636G>T", "p.E546*"),
+        ("NF1", "c.3721C>T", "p.R1241*"),
+        ("NF1", "c.6007-1G>T", "--"),
+        ("PIK3CA", "c.1633G>A", "p.E545K"),
+        ("PMS2", "c.1273del", "p.S425Lfs*23"),
+        ("PTEN", "c.400A>T", "p.M134L"),
+        ("SMARCA4", "c.1189C>T", "p.R397*"),
+    ]
+    for gene, c_hgvs, p_hgvs in candidates:
+        benefit, caution, score = mapper._lookup_targeted_drugs_for_variant(
+            gene,
+            c_point=c_hgvs,
+            p_point=p_hgvs,
+            variant_level="Ⅱ类",
+            cancer_type="结直肠癌",
+            targeted_drug_rules=rules,
+        )
+        assert (benefit, caution, score) == ("--", "--", 100.0), (
+            gene,
+            c_hgvs,
+            p_hgvs,
+            benefit,
+            caution,
+            score,
+        )
+
+    benefit, caution, score = mapper._lookup_targeted_drugs_for_variant(
+        "KRAS",
+        c_point="c.35G>T",
+        p_point="p.G12V",
+        variant_level="Ⅱ类",
+        cancer_type="结直肠癌",
+        targeted_drug_rules=rules,
+    )
+    assert benefit == "--"
+    assert caution == "西妥昔单抗（A）\n帕尼单抗（A）"
+    assert "依维莫司" not in caution
+    assert score == 100.0
+
+
+def test_crc358_uat_rules_are_provisional_and_panel_scoped():
+    crc358 = load_targeted_drug_rule_context(
+        load_panel_package("crc_358_msi", project_root=ROOT)
+    )
+    crc301 = load_targeted_drug_rule_context(
+        load_panel_package("crc_301_msi", project_root=ROOT)
+    )
+    assert crc358 is not None and crc301 is not None
+
+    new_rows = [
+        row
+        for row in crc358["reviewed_variant_overrides"]
+        if row.get("secondary_review_status")
+        == "pending_report_group_secondary_review"
+    ]
+    assert len(new_rows) == 14
+    assert all(row["review_status"] == "provisional_runtime" for row in new_rows)
+    assert all(row["runtime_eligible"] is True for row in new_rows)
+    assert all(row.get("source_refs") for row in new_rows)
+    assert not any(
+        row.get("secondary_review_status")
+        == "pending_report_group_secondary_review"
+        for row in crc301["reviewed_variant_overrides"]
+    )
+    assert crc301["applicability_rules"] == crc358["applicability_rules"]
+
+
+def test_crc358_uat_research_sections_do_not_recreate_part2_benefit():
+    rules = load_targeted_drug_rule_context(
+        load_panel_package("crc_358_msi", project_root=ROOT)
+    )
+    assert rules is not None
+    provider = _crc358_provider()
+
+    def rule_for(gene: str, p_hgvs: str = ""):
+        return next(
+            row
+            for row in rules["reviewed_variant_overrides"]
+            if row.get("gene") == gene
+            and row.get("secondary_review_status")
+            == "pending_report_group_secondary_review"
+            and (not p_hgvs or row.get("p_hgvs") == p_hgvs)
+        )
+
+    variants = []
+    for gene, c_hgvs, p_hgvs in (
+        ("APC", "c.22C>T", "p.Q8*"),
+        ("BRCA2", "c.8403del", "p.P2802Lfs*19"),
+        ("NF1", "c.3721C>T", "p.R1241*"),
+        ("KRAS", "c.35G>T", "p.G12V"),
+    ):
+        rule = rule_for(gene, p_hgvs if gene == "KRAS" else "")
+        variants.append(
+            {
+                "gene": gene,
+                "cHGVS": c_hgvs,
+                "pHGVS": p_hgvs,
+                "benefit_drugs": "--",
+                "caution_drugs": (
+                    "\n".join(rule.get("caution_drugs") or [])
+                    if gene == "KRAS"
+                    else "--"
+                ),
+                "research_drugs": "\n".join(rule.get("research_drugs") or []),
+            }
+        )
+
+    sections = provider.build_drug_analysis_sections(variants)
+    assert not any(row["drug_type"] == "benefit" for row in sections)
+    assert {
+        row["gene"]
+        for row in sections
+        if row.get("drug_type") == "research"
+    } == {"APC", "BRCA2", "NF1", "KRAS"}
+    kras_sections = [row for row in sections if row["gene"] == "KRAS"]
+    assert {row["drug_type"] for row in kras_sections} == {"caution", "research"}
+    assert "依维莫司" not in "\n".join(
+        row.get("drug_name", "") for row in kras_sections
+    )
 
 
 def test_feedback_drug_rows_match_part3_without_overlapping_blocks():
@@ -2596,7 +2771,7 @@ def test_all_configured_crc_drug_rules_have_governed_consistent_part3_contracts(
 
     expected = {
         "crc_301_msi": (9, 10),
-        "crc_358_msi": (17, 18),
+        "crc_358_msi": (31, 32),
     }
     for panel_id, (rules, selector_cases) in expected.items():
         package = load_panel_package(panel_id, project_root=ROOT)
@@ -2981,9 +3156,9 @@ def test_approved_drug_table_bolds_complete_brand_brackets_and_qa_enforces_it(
 
 def test_targeted_results_heading_is_configured_for_idempotent_new_page():
     settings = yaml.safe_load((ROOT / "config/settings.yaml").read_text(encoding="utf-8"))
-    assert (
-        "2. 靶向药物相关检测结果" in settings["report_content"]["force_page_break_before_headings"]
-    )
+    configured = settings["report_content"]["force_page_break_before_headings"]
+    assert "2. 靶向药物相关检测结果" in configured
+    assert "2.2 其它潜在获益上市药物提示*" in configured
 
 
 def test_immune_brand_note_uses_compact_reviewed_style():

@@ -57,7 +57,7 @@ def test_crc_panel_summaries_declare_overlay_origin_and_sharing():
         "overlay_available": True,
         "overlay_origin_panel_id": "crc_358_msi",
         "shared_overlay": False,
-        "review_status": "approved_for_runtime",
+        "review_status": "provisional_runtime",
         "warning": None,
     }
 
@@ -117,18 +117,18 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
         "unique_genes": 375,
         "gene_level_rows": 806,
         "variant_level_rows": 117,
-        # Includes two governed KRAS/everolimus correction rows plus the
-        # superseded historical row retained for audit traceability, plus the
-        # exact Part-2/Part-3 drug contracts introduced by this repair.
-        "drug_rows": 81,
-        "drug_unique_genes": 18,
-        "targeted_drug_rule_rows": 17,
-        "targeted_drug_rule_unique_genes": 15,
+        # Includes the nine research-only UAT correction rows. Their
+        # provisional status is intentionally visible in the Web catalog.
+        "drug_rows": 90,
+        "drug_unique_genes": 24,
+        "targeted_drug_rule_rows": 31,
+        "targeted_drug_rule_unique_genes": 26,
         "targeted_drug_applicability_rule_rows": 1,
         "extra_reference_rows": 12,
         "review_status_counts": {
             "legacy_runtime": 336,
             "approved_for_runtime": 667,
+            "provisional_runtime": 9,
             "superseded": 1,
         },
     }
@@ -171,18 +171,30 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
     disposition = contract["drug_candidate_disposition"]
     assert disposition["pending_medical_review_rows"] == 0
     assert disposition["database_candidate_genes"] in {115, 116}
+    assert disposition["runtime_eligible_database_genes"] == 4
+    assert disposition["database_only_filtered_genes"] == (
+        111 if panel_id == "crc_301_msi" else 112
+    )
     assert contract["gene_explanation_complete"] is True
     assert contract["gene_explanation_missing_count"] == 0
     assert contract["explicit_panel_rule_genes"] == (
-        15 if panel_id == "crc_358_msi" else 9
+        26 if panel_id == "crc_358_msi" else 9
     )
     assert contract["explicitly_approved_drug_genes"] == (
         11 if panel_id == "crc_358_msi" else 7
     )
-    assert contract["panel_rule_status_counts"] == {
-        "legacy_runtime": 6 if panel_id == "crc_358_msi" else 2,
-        "approved_for_runtime": 11 if panel_id == "crc_358_msi" else 7,
-    }
+    assert contract["panel_rule_status_counts"] == (
+        {
+            "legacy_runtime": 6,
+            "approved_for_runtime": 11,
+            "provisional_runtime": 14,
+        }
+        if panel_id == "crc_358_msi"
+        else {
+            "legacy_runtime": 2,
+            "approved_for_runtime": 7,
+        }
+    )
     runtime_quality = contract["runtime_content_quality"]
     assert runtime_quality["complete_percent"] == 100.0
     assert runtime_quality["missing_intro_genes"] == []
@@ -288,11 +300,12 @@ def test_drug_candidate_disposition_is_complete_and_not_a_migration_backlog():
     disposition = contract["drug_candidate_disposition"]
 
     assert disposition["database_candidate_genes"] == 116
-    assert disposition["runtime_eligible_database_genes"] == 25
-    assert disposition["database_only_filtered_genes"] == 91
+    assert disposition["runtime_eligible_database_genes"] == 4
+    assert disposition["database_only_filtered_genes"] == 112
     assert disposition["pending_medical_review_rows"] == 0
     assert disposition["historical_review"]["approved_rows"] == 95
     assert disposition["historical_review"]["rejected_rows"] == 6
+    assert disposition["filter_reason_row_counts"]["filtered_internal_generic"] == 54
     assert disposition["filter_reason_row_counts"]["filtered_missing_position"] > 0
 
 
@@ -313,28 +326,30 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     drugs = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="drug", page=1, page_size=1
     )
-    assert drugs["total"] == 162
+    assert drugs["total"] == 171
     assert drugs["facets"] == {
-        "layers": {"base": 81, "reviewed_overlay": 81},
+        "layers": {"base": 81, "reviewed_overlay": 90},
         "review_statuses": {
             "legacy_runtime": 114,
             "approved_for_runtime": 47,
+            "provisional_runtime": 9,
             "superseded": 1,
         },
-        "match_scopes": {"gene": 49, "variant": 105, "event": 8},
+        "match_scopes": {"gene": 49, "variant": 106, "event": 16},
     }
 
     targeted = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="targeted_drug", page=1, page_size=1
     )
-    assert targeted["total"] == 828
+    assert targeted["total"] == 842
     assert targeted["facets"] == {
-        "layers": {"base": 811, "reviewed_overlay": 17},
+        "layers": {"base": 811, "reviewed_overlay": 31},
         "review_statuses": {
             "legacy_runtime": 817,
             "approved_for_runtime": 11,
+            "provisional_runtime": 14,
         },
-        "match_scopes": {"event": 614, "variant": 155, "gene": 59},
+        "match_scopes": {"event": 622, "variant": 161, "gene": 59},
     }
 
     variant_rows = service.get_catalog_entries(

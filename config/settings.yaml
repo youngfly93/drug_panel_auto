@@ -463,6 +463,7 @@ report_content:
   # 额外制造空白页，也能经受 Word/LibreOffice 的目录刷新。
   force_page_break_before_headings:
     - "2. 靶向药物相关检测结果"
+    - "2.2 其它潜在获益上市药物提示*"
     - "2.3 NCCN 推荐临床常规靶向药物相关基因检测结果（不限于本癌种）"
     - "结肠癌NCCN指南（2022 V1）和直肠癌NCCN指南（2022 V1）"
     - "3. 阅读说明"

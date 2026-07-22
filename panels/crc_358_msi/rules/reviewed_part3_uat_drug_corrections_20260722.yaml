@@ -1,0 +1,235 @@
+schema_version: 1
+replace_variant_drug_sections: true
+source:
+  panel: crc_358_msi
+  purpose: >-
+    Conservative first-review disposition of drug-rule gaps found by the
+    CRC358 ten-case UAT. Historical gene/class-only benefit rows are not
+    promoted; traceable experimental signals are rendered only in the
+    research subsection.
+  source_type: governed_uat_medical_correction_overlay
+  source_id: crc358_uat_drug_corrections_20260722
+  created_at: "2026-07-22"
+  privacy: No patient name, sample ID, report date, or case-specific branch key is stored.
+governance:
+  schema_version: "1.0"
+  policy_id: crc358_uat_drug_corrections_first_review_v1
+  defaults:
+    gene:
+      review_status: needs_review
+      runtime_eligible: false
+      review_basis: uat_drug_overlay_has_no_gene_content
+      evidence_level: not_assessed
+      evidence_as_of: "2026-07-22"
+      cancer_scope: crc358
+      secondary_review_status: pending_report_group_secondary_review
+    drug:
+      review_status: provisional_runtime
+      runtime_eligible: true
+      review_basis: ai_delegated_report_group_first_review_research_only
+      evidence_level: bounded_primary_source_or_trial_registry_signal
+      evidence_as_of: "2026-07-22"
+      cancer_scope: colorectal_report_with_explicit_cross_cancer_limits
+      secondary_review_status: pending_report_group_secondary_review
+      review_metadata:
+        reviewer: codex
+        reviewer_type: ai_delegated_report_group_first_review
+        reviewed_at: "2026-07-22"
+        risk_level: high
+        secondary_review_status: pending_report_group_secondary_review
+      source_refs:
+        - type: internal_review
+          id: crc358_ten_case_uat_first_review_20260722
+
+gene_sections: []
+
+drug_sections:
+  - gene: APC
+    panels: [crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: APC功能缺失型变异临床试验/研究性方案
+    drug_name: REC-4881
+    relation: >-
+      APC截短变异可提示Wnt通路调控异常；试验入组条件不等于REC-4881对任一APC变异或结直肠癌已有疗效结论。
+    clinical: >-
+      NCT06005974为纳入APC/AXIN1变异实体瘤的Ⅱ期研究，尚无可用来建立结直肠癌位点级获益规则的公布结果；因此仅作研究性线索展示。
+    evidence_level: phase_ii_trial_eligibility_without_posted_efficacy_results
+    cancer_scope: apc_lof_solid_tumor_trial_not_crc_efficacy
+    source_refs:
+      - type: clinical_trial
+        id: NCT06005974
+        url: https://clinicaltrials.gov/study/NCT06005974
+
+  - gene: ARID1A
+    panels: [crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: ARID1A功能缺失型变异临床试验/研究性方案
+    drug_name: 奥拉帕利（Olaparib）、ATR抑制剂联合方案
+    relation: >-
+      ARID1A缺失在细胞和动物模型中与DNA损伤修复缺陷及PARP抑制敏感性相关[26069190]；该前临床机制不能扩展为所有PARP/ATR方案的结直肠癌获益结论。
+    clinical: >-
+      NCT02286687等跨癌种研究使用DNA修复通路异常作为入组条件；本条仅保留试验线索，不进入第二部分获益表。
+    evidence_level: preclinical_signal_and_cross_cancer_trial_eligibility
+    cancer_scope: arid1a_lof_cross_cancer_research_not_crc_efficacy
+    source_refs:
+      - type: pubmed
+        id: PMID:26069190
+        url: https://pubmed.ncbi.nlm.nih.gov/26069190/
+      - type: clinical_trial
+        id: NCT02286687
+        url: https://clinicaltrials.gov/study/NCT02286687
+
+  - gene: ATR
+    panels: [crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: ATR功能缺失型变异临床试验/研究性方案
+    drug_name: PARP/ATR通路研究方案
+    relation: >-
+      ATR截短变异可作为DNA损伤应答异常线索，但不同ATR变异的功能影响和药物敏感性不能直接等同。
+    clinical: >-
+      NCT02286687代表跨癌种DDR篮式研究；该登记不提供本次具体ATR位点在结直肠癌中的逐药疗效结论。
+    evidence_level: cross_cancer_trial_eligibility_not_variant_specific_efficacy
+    cancer_scope: atr_lof_cross_cancer_research_not_crc_efficacy
+    source_refs:
+      - type: clinical_trial
+        id: NCT02286687
+        url: https://clinicaltrials.gov/study/NCT02286687
+
+  - gene: BRCA1
+    panels: [crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: BRCA1功能缺失型变异临床试验/研究性方案
+    drug_name: 奥拉帕利（Olaparib）
+    relation: >-
+      BRCA1功能缺失可提示同源重组修复异常，但该通路背景不能自动转化为结直肠癌PARP抑制剂获益规则。
+    clinical: >-
+      一项结直肠癌奥拉帕利Ⅱ期研究未观察到完全或部分缓解[26786262]；跨癌种小样本信号[37852034]仅支持研究探索，不建立标准治疗结论。
+    evidence_level: crc_phase_ii_negative_with_limited_cross_cancer_signal
+    cancer_scope: brca1_lof_research_not_established_crc_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:26786262
+        url: https://pubmed.ncbi.nlm.nih.gov/26786262/
+      - type: pubmed
+        id: PMID:37852034
+        url: https://pubmed.ncbi.nlm.nih.gov/37852034/
+
+  - gene: BRCA2
+    panels: [crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: BRCA2功能缺失型变异临床试验/研究性方案
+    drug_name: 奥拉帕利（Olaparib）
+    relation: >-
+      BRCA2功能缺失可提示同源重组修复异常，但该通路背景不能自动转化为结直肠癌PARP抑制剂获益规则。
+    clinical: >-
+      一项结直肠癌奥拉帕利Ⅱ期研究未观察到完全或部分缓解[26786262]；跨癌种小样本信号[37852034]仅支持研究探索，不建立标准治疗结论。
+    evidence_level: crc_phase_ii_negative_with_limited_cross_cancer_signal
+    cancer_scope: brca2_lof_research_not_established_crc_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:26786262
+        url: https://pubmed.ncbi.nlm.nih.gov/26786262/
+      - type: pubmed
+        id: PMID:37852034
+        url: https://pubmed.ncbi.nlm.nih.gov/37852034/
+
+  - gene: FBXW7
+    panels: [crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: FBXW7功能缺失型变异前临床研究线索
+    drug_name: mTOR抑制剂
+    relation: >-
+      FBXW7缺失在结直肠癌细胞和其他模型中与mTOR通路抑制敏感性相关[23558291，18787170]；该证据属于前临床，不支持将历史多药列表或抗EGFR/多靶点药物谨慎方向逐项落到任意FBXW7截短变异。
+    clinical: >-
+      当前仅保留前临床研究背景；不进入第二部分获益或慎用表，也不构成结直肠癌临床用药建议。
+    evidence_level: colorectal_cell_line_and_model_preclinical_signal_only
+    cancer_scope: fbxw7_lof_preclinical_not_crc_clinical_efficacy_or_resistance
+    source_refs:
+      - type: pubmed
+        id: PMID:23558291
+        url: https://pubmed.ncbi.nlm.nih.gov/23558291/
+      - type: pubmed
+        id: PMID:18787170
+        url: https://pubmed.ncbi.nlm.nih.gov/18787170/
+
+  - gene: NF1
+    panels: [crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: NF1功能缺失型变异临床试验/研究性方案
+    drug_name: 曲美替尼（Trametinib）
+    relation: >-
+      NF1功能缺失可活化RAS/MAPK通路，但通路机制不能把多种MEK/mTOR候选药等同为结直肠癌获益。
+    clinical: >-
+      NCI-MATCH NF1队列的曲美替尼研究客观缓解率为4.3%，未达主要终点[37053535]；因此仅作带阴性临床边界的研究说明。
+    evidence_level: cross_cancer_phase_ii_primary_endpoint_not_met
+    cancer_scope: nf1_lof_cross_cancer_research_not_crc_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:37053535
+        url: https://pubmed.ncbi.nlm.nih.gov/37053535/
+
+  - gene: SMARCA4
+    panels: [crc_358_msi]
+    type: research
+    applicability: loss_of_function
+    header: SMARCA4功能缺失型变异临床试验/研究性方案
+    drug_name: PRT3789
+    relation: >-
+      SMARCA4功能缺失可造成对SMARCA2的合成致死依赖；该机制及早期信号不能扩展为历史多药列表的逐项获益结论。
+    clinical: >-
+      PRT3789目前仍属早期临床研究，已报道的初步信号和NCT05639751登记不构成SMARCA4截短变异结直肠癌的标准疗效证据[40991405]。
+    evidence_level: early_phase_cross_cancer_signal_not_crc_specific
+    cancer_scope: smarca4_lof_early_cross_cancer_research_not_crc_benefit
+    source_refs:
+      - type: pubmed
+        id: PMID:40991405
+        url: https://pubmed.ncbi.nlm.nih.gov/40991405/
+      - type: clinical_trial
+        id: NCT05639751
+        url: https://clinicaltrials.gov/study/NCT05639751
+
+  - gene: KRAS
+    panels: [crc_358_msi]
+    c_hgvs: c.35G>T
+    p_hgvs: p.G12V
+    type: research
+    header: KRAS：c.35G>T，p.G12V突变临床试验/研究性方案
+    drug_name: RMC-6236、Avutometinib+Defactinib、BI 1701963+曲美替尼
+    relation: >-
+      p.G12V为KRAS激活变异，其结直肠癌抗EGFR谨慎方向与候选研究方案必须分开表达；研究登记不等于位点级获益。
+    clinical: >-
+      NCT05379985纳入含结直肠癌在内的RAS变异实体瘤评估RMC-6236；NCT04620330的Avutometinib+Defactinib为KRAS G12V非小细胞肺癌研究；NCT04835714评估KRAS变异实体瘤中的BI 1701963方案。三者均仅作研究线索，不进入获益表。
+    evidence_level: early_phase_and_cross_cancer_trial_eligibility
+    cancer_scope: kras_g12v_research_not_established_crc_benefit
+    source_refs:
+      - type: clinical_trial
+        id: NCT05379985
+        url: https://clinicaltrials.gov/study/NCT05379985
+      - type: clinical_trial
+        id: NCT04620330
+        url: https://clinicaltrials.gov/study/NCT04620330
+      - type: clinical_trial
+        id: NCT04835714
+        url: https://clinicaltrials.gov/study/NCT04835714
+
+extra_references:
+  - "PMID: 26069190 ARID1A deficiency impairs the DNA damage checkpoint and sensitizes tumors to PARP inhibitors."
+  - "PMID: 26786262 Phase II study of olaparib after standard systemic therapies for disseminated colorectal cancer."
+  - "PMID: 37852034 A tumor-agnostic phase II study of olaparib in patients with homologous recombination gene mutations."
+  - "PMID: 23558291 FBXW7 loss and mTOR inhibitor sensitivity in colorectal cancer models."
+  - "PMID: 18787170 FBXW7 loss confers sensitivity to mTOR inhibition in cancer cells."
+  - "PMID: 37053535 Trametinib in patients with NF1 or GNA11/Q alterations in NCI-MATCH."
+  - "PMID: 40991405 Selective SMARCA2 degradation in SMARCA4-mutant cancers."
+  - "NCT06005974 Phase 2 study of REC-4881 in unresectable cancers with AXIN1 or APC mutation."
+  - "NCT02286687 Talazoparib in advanced solid tumors with DNA repair pathway alterations."
+  - "NCT05639751 PRT3789 in patients with advanced solid tumors harboring SMARCA4 mutations."
+  - "NCT05379985 RMC-6236 in advanced solid tumors harboring specific RAS mutations."
+  - "NCT04620330 Avutometinib with or without defactinib in KRAS/BRAF-mutant non-small cell lung cancer."
+  - "NCT04835714 BI 1701963-based therapy in advanced KRAS-mutant cancers."

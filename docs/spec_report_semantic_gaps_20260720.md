@@ -81,6 +81,17 @@
 - 动态模式只由 CRC358 Panel 显式启用；CRC301 与其他 Panel 保持原有固定表行为。
 - 规则来源锚点：报告组 `7.20-测试问题.docx`，SHA256 `d3ac4eb52993b75fce8d4ca60e67c644ef972c5e4287438930560a40d8133ff4`。
 
+### RSG-10 十例 UAT 新发现药物泛化行收口
+
+- CRC358 十例 UAT 新发现 25 行待复核记录：22 个唯一变异的旧候选缺少精确契约，2 行 APC 同时存在 Part3 遗漏，1 行 KRAS G12V 的 Part2/Part3 慎用集合不一致。
+- 根因是历史内部药物表存在“只有基因＋变异等级、没有 c./p. 位点或明确事件”的泛化行，而原护栏仅列举部分高风险基因。
+- 运行时必须对所有来自 `internal` 且同时缺失 c./p. 选择器的行 fail-closed；明确位点、明确事件与 reviewed override 仍优先。该护栏由 CRC301 显式继承，但新增 CRC358 医学条目不得跨 Panel 泄漏。
+- Codex 代理报告组人工一审结论为：20 行修改后作研究线索或保留明确慎用方向，4 行拒绝并从 Part2 抑制，1 行暂缓并 fail-closed。不得把试验入组、通路机制、前临床信号或跨癌种小样本自动升格为结直肠癌获益。
+- MMR 基因 MLH1/MSH6/PMS2 的历史 PARP 获益行不进入 Part2，MSI/MMR 继续作为独立生物标志物审核；PIK3CA E545K 不得继承无位点的 PI3K/mTOR 多药列表或外显子不分层的抗 EGFR 慎用结论；PTEN M134L 在精确功能和 CRC 药物证据不足时保持暂缓。
+- KRAS G12V 仅保留已有 CRC 依据的西妥昔单抗/帕尼单抗（A）慎用，移除依维莫司慎用；RMC-6236 等只能出现在研究性小节。
+- 25 行发现晚于现有报告组二审凭据；所有新条目必须标记 `pending_report_group_secondary_review`，旧 receipt 的哈希失效是正常阻断，不得被自动更新或绕过。
+- 候选必须重跑同一规则身份的 CRC358 10 例语义 UAT；CRC301 至少 10 份真实脱敏 Excel 缺失时，必须明确保持生产阻断，不得用合成件、CRC358 或其他 Panel 冒充病例 UAT。
+
 ## 3. 放行规则
 
 - 工程 P0/P1 清零后才能形成发布候选。
@@ -118,5 +129,7 @@
 3. 以包含本文及对应规则、实现和测试的提交作为唯一冻结身份；Claude/Codex 仍须针对该同一 commit 分别审计并通过 `audit_reconcile.py`。
 4. 在干净提交上重跑正式 `release_check.sh`；本地工具链已修复，但 GitHub required check 必须绑定同一候选 commit，不能用手工 Ruff 或旧 commit 的 CI 结果替代。
 5. 双审与总闸通过后，才可进入 iyun129 Linux 渲染、发布切换和生产活实例验收；Linux 版报告必须重新确认七药差集、中文字体、目录页码、空白/稀疏页和 G12C 文本。
+6. RSG-10 的 25 行是现有二审 receipt 之后的新发现；必须由报告组对一审表二审并生成绑定新规则哈希的 receipt。在新 receipt 之前，医学发布状态保持 `BLOCKED`。
+7. CRC301 未提供至少 10 份真实脱敏 Excel 前，不得计为 CRC301 UAT 已启动或以其他输入替代；因此也不得切换 iyun129 生产版本。
 
 共享审计工具直接扫描项目目录时会读取 KINGSTON 自动生成的 `audit/._*.md` AppleDouble 文件并触发 UTF-8 解码失败；未删除这些用户文件。现有两份 `audit/report-semantic-gaps.*.md` 锁定的是前序 `d50ff90`，不能代表本知识增量；须由 Codex/Claude 针对本次冻结提交分别重审，并用 `/tmp` 合法 Markdown 索引运行 `audit_reconcile.py`。

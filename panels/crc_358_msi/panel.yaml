@@ -152,6 +152,9 @@ reviewed_part3_overlay_additions:
   # 2026-07-22 医学更正：区分临床获益/耐药结论与
   # 临床试验或研究性方案，并修正已识别的来源外推和简介事实问题。
   - "rules/reviewed_part3_medical_corrections_20260722.yaml"
+  # CRC358 十例 UAT 新发现的基因/类别泛化药物行：
+  # 不再进入获益表，仅在有可追溯来源时保留研究性说明。
+  - "rules/reviewed_part3_uat_drug_corrections_20260722.yaml"
 
 input_contract:
   required_tables:
