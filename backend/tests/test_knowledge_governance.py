@@ -56,8 +56,8 @@ def test_production_knowledge_release_gate_is_self_contained_and_passes(tmp_path
         assert secondary["status"] == "completed"
         # The prior report-group receipt remains immutable and therefore must
         # fail once this candidate changes its reviewed artifacts. CRC301 has
-        # no new scoped rows; CRC358 has 14 Part-2 rules plus 9 research-only
-        # Part-3 rows pending a new secondary review.
+        # no new scoped rows; CRC358 keeps 14 Part-2 selectors plus 9 Part-3
+        # research rows visible to governance while blocking all 23 at runtime.
         assert secondary["receipt"]["status"] == "FAIL"
         if panel["panel_id"] == "crc_301_msi":
             assert secondary["pending_runtime_rows"] == 0
@@ -94,10 +94,10 @@ def test_production_knowledge_release_gate_is_self_contained_and_passes(tmp_path
     }
     assert contract_inventory["crc_358_msi"] == {
         "status": "PASS",
-        "rules_checked": 31,
-        "selector_cases_checked": 32,
-        "expected_item_count": 108,
-        "rendered_item_count": 108,
+        "rules_checked": 17,
+        "selector_cases_checked": 18,
+        "expected_item_count": 106,
+        "rendered_item_count": 106,
         "issues": [],
     }
     assert {row["panel_id"] for row in result["non_blocking_panel_readiness"]} == {

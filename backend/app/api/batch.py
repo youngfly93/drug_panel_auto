@@ -22,6 +22,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
+from reportgen.panels.release_scope import PanelReleaseDisabledError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -115,6 +116,16 @@ def _infer_project_type_from_name(
     if inferred.get("detected"):
         return inferred.get("project_type"), project_name or inferred.get("project_name")
     return project_type, project_name
+
+
+def _raise_if_project_type_disabled(
+    bridge: ReportGenBridge,
+    project_type: Optional[str],
+) -> None:
+    try:
+        bridge.ensure_project_type_enabled(project_type)
+    except PanelReleaseDisabledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def _enrich_clinical_payload(
@@ -372,6 +383,7 @@ def _prepare_item_clinical_payload(
         detected_project_type,
         detected_project_name or shared_clinical_info.get("project_name"),
     )
+    _raise_if_project_type_disabled(bridge, detected_project_type)
 
     clinical_payload = bridge.get_mapped_clinical_fields(excel_data)
     clinical_payload.update(
@@ -928,6 +940,7 @@ async def batch_generate(
     template_contract: str = "warn",
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
+    bridge: ReportGenBridge = Depends(get_bridge),
     current_user: User = Depends(require_user),
 ):
     """
@@ -936,6 +949,7 @@ async def batch_generate(
     Provide either upload_ids (list of previously uploaded files)
     or input_dir (directory path containing Excel files).
     """
+    _raise_if_project_type_disabled(bridge, project_type)
     task_id = str(uuid.uuid4())
     output_dir = ensure_report_dir(task_id)
 
@@ -1009,6 +1023,7 @@ def batch_generate_from_files(
     current_user: User = Depends(require_user),
 ):
     """Persist a production batch and return before preflight/enrichment."""
+    _raise_if_project_type_disabled(bridge, project_type)
     accept_started = time.perf_counter()
     reference_gate_mode = _validated_reference_gate_mode(
         reference_gate_mode,

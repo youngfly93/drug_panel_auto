@@ -57,7 +57,7 @@ def test_crc_panel_summaries_declare_overlay_origin_and_sharing():
         "overlay_available": True,
         "overlay_origin_panel_id": "crc_358_msi",
         "shared_overlay": False,
-        "review_status": "provisional_runtime",
+        "review_status": "needs_review",
         "warning": None,
     }
 
@@ -117,18 +117,20 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
         "unique_genes": 375,
         "gene_level_rows": 806,
         "variant_level_rows": 117,
-        # Includes the nine research-only UAT correction rows. Their
-        # provisional status is intentionally visible in the Web catalog.
+        # Includes nine held UAT correction rows. They remain visible to
+        # governance while being blocked from runtime report content.
         "drug_rows": 90,
         "drug_unique_genes": 24,
         "targeted_drug_rule_rows": 31,
+        "targeted_drug_runtime_rule_rows": 17,
+        "targeted_drug_blocked_rule_rows": 14,
         "targeted_drug_rule_unique_genes": 26,
         "targeted_drug_applicability_rule_rows": 1,
         "extra_reference_rows": 12,
         "review_status_counts": {
             "legacy_runtime": 336,
             "approved_for_runtime": 667,
-            "provisional_runtime": 9,
+            "needs_review": 9,
             "superseded": 1,
         },
     }
@@ -141,6 +143,8 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
             drug_rows=49,
             drug_unique_genes=11,
             targeted_drug_rule_rows=9,
+            targeted_drug_runtime_rule_rows=9,
+            targeted_drug_blocked_rule_rows=0,
             targeted_drug_rule_unique_genes=9,
             review_status_counts={
                 "legacy_runtime": 308,
@@ -178,6 +182,9 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
     assert contract["gene_explanation_complete"] is True
     assert contract["gene_explanation_missing_count"] == 0
     assert contract["explicit_panel_rule_genes"] == (
+        15 if panel_id == "crc_358_msi" else 9
+    )
+    assert contract["declared_panel_rule_genes"] == (
         26 if panel_id == "crc_358_msi" else 9
     )
     assert contract["explicitly_approved_drug_genes"] == (
@@ -187,7 +194,7 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
         {
             "legacy_runtime": 6,
             "approved_for_runtime": 11,
-            "provisional_runtime": 14,
+            "needs_review": 14,
         }
         if panel_id == "crc_358_msi"
         else {
@@ -332,7 +339,7 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
         "review_statuses": {
             "legacy_runtime": 114,
             "approved_for_runtime": 47,
-            "provisional_runtime": 9,
+            "needs_review": 9,
             "superseded": 1,
         },
         "match_scopes": {"gene": 49, "variant": 106, "event": 16},
@@ -347,7 +354,7 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
         "review_statuses": {
             "legacy_runtime": 817,
             "approved_for_runtime": 11,
-            "provisional_runtime": 14,
+            "needs_review": 14,
         },
         "match_scopes": {"event": 622, "variant": 161, "gene": 59},
     }

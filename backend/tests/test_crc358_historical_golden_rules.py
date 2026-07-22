@@ -53,7 +53,10 @@ def test_crc358_exact_summary_rules_match_historical_contract_and_stay_panel_sco
         # three-drug benefit display is now research-only because the sources
         # do not establish variant-specific CRC efficacy.
         ("FLT3", "c.2537G>A", "p.G846D", 0, 0, True),
-        ("ATR", "c.1291delA", "p.R431Gfs*8", 8, 0, False),
+        # The newly proposed ATR display remains secondary-review pending in
+        # this limited release. Its exact selector therefore suppresses both
+        # the proposed row and lower-priority legacy fallbacks.
+        ("ATR", "c.1291delA", "p.R431Gfs*8", 0, 0, False),
         ("KRAS", "c.34G>T", "p.G12C", 38, 3, False),
     ]
     for gene, c_hgvs, p_hgvs, benefit_count, caution_count, shared in cases:

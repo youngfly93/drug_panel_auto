@@ -30,6 +30,9 @@ UPLOAD_ALERTS_SCRIPT="${UPLOAD_ALERTS_SCRIPT:-0}"
 UPLOAD_CLOUDFLARED_SCRIPTS="${UPLOAD_CLOUDFLARED_SCRIPTS:-0}"
 SYNC_SIGNATURE_ASSETS="${SYNC_SIGNATURE_ASSETS:-0}"
 SIGNATURE_ASSET_DIR="${SIGNATURE_ASSET_DIR:-storage/signatures}"
+RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-}"
+REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
+VITE_DISABLED_PROJECT_TYPES="${VITE_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 
 if [ ! -f "frontend/package.json" ] || \
         [ ! -f "scripts/iyun62_start_reportgen.sh" ] || \
@@ -104,8 +107,12 @@ python -m py_compile \
     "$tmp_dir/backend/app/services/task_recovery.py" \
     "$tmp_dir/reportgen/core/report_summary.py" \
     "$tmp_dir/reportgen/core/report_generator.py" \
+    "$tmp_dir/reportgen/panels/release_scope.py" \
     "$tmp_dir/backend/app/services/reportgen_bridge.py"
-(cd "$tmp_dir/frontend" && npm install --no-audit --no-fund && npm run build)
+(cd "$tmp_dir/frontend" && \
+    VITE_DISABLED_PROJECT_TYPES="$VITE_DISABLED_PROJECT_TYPES" \
+    npm install --no-audit --no-fund && \
+    VITE_DISABLED_PROJECT_TYPES="$VITE_DISABLED_PROJECT_TYPES" npm run build)
 rm -rf "$tmp_dir/backend/static"
 mkdir -p "$tmp_dir/backend/static"
 cp -R "$tmp_dir/frontend/dist/." "$tmp_dir/backend/static/"
@@ -123,6 +130,7 @@ python -m py_compile \
     backend/app/services/task_recovery.py \
     reportgen/core/report_summary.py \
     reportgen/core/report_generator.py \
+    reportgen/panels/release_scope.py \
     backend/app/services/reportgen_bridge.py
 
 echo "== Prepare remote release $short_ref =="
@@ -173,6 +181,8 @@ runtime_config="$tmp_dir/deployment.env.runtime"
     printf 'RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1\n'
     printf 'RG_WEB_DOCS_ENABLED=%q\n' "${RG_WEB_DOCS_ENABLED:-0}"
     printf 'RG_WEB_CORS_ORIGINS=%q\n' "${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
+    printf 'RG_WEB_DISABLED_PROJECT_TYPES=%q\n' "$RG_WEB_DISABLED_PROJECT_TYPES"
+    printf 'REPORTGEN_DISABLED_PROJECT_TYPES=%q\n' "$REPORTGEN_DISABLED_PROJECT_TYPES"
     printf 'REPORTGEN_REQUIRE_RENDER_STACK=1\n'
     printf 'REPORTGEN_LIBREOFFICE_PROFILE_MODE=isolated\n'
     printf 'REPORTGEN_LO_LOCK_FILE=%q\n' "$RUNTIME_DIR/run/libreoffice-listener.lock"

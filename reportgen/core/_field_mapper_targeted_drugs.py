@@ -234,6 +234,16 @@ class TargetedDrugMixin:
             return []
         return [dict(row) for row in rows if isinstance(row, dict)]
 
+    @staticmethod
+    def _get_blocked_reviewed_variant_overrides(
+        targeted_drug_rules: Optional[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Return governed selectors that must block lower-priority fallbacks."""
+        if not targeted_drug_rules or not targeted_drug_rules.get("enabled"):
+            return []
+        rows = targeted_drug_rules.get("blocked_reviewed_variant_overrides", [])
+        return [dict(row) for row in rows if isinstance(row, dict)]
+
     def _get_targeted_drug_applicability_rules(
         self,
         targeted_drug_rules: Optional[dict[str, Any]] = None,
@@ -301,7 +311,8 @@ class TargetedDrugMixin:
             if targeted_drug_rules is None
             else self._get_reviewed_variant_overrides(targeted_drug_rules)
         )
-        for override in overrides:
+
+        def matches(override: dict[str, Any]) -> bool:
             genes = {
                 item.upper()
                 for item in self._as_text_list(
@@ -309,7 +320,7 @@ class TargetedDrugMixin:
                 )
             }
             if genes and gene_norm not in genes:
-                continue
+                return False
             level_values = self._as_text_list(
                 override.get("variant_level")
                 or override.get("variant_levels")
@@ -319,7 +330,7 @@ class TargetedDrugMixin:
             if level_values and not self._variant_level_matches(
                 level_norm, level_values
             ):
-                continue
+                return False
             if not self._reviewed_variant_override_applicable(
                 override.get("applicability")
                 or override.get("applies_to")
@@ -327,7 +338,7 @@ class TargetedDrugMixin:
                 c_norm,
                 p_norm,
             ):
-                continue
+                return False
             c_values = set(
                 self._as_text_list(override.get("c_hgvs") or override.get("cHGVS"))
             )
@@ -335,8 +346,24 @@ class TargetedDrugMixin:
                 self._as_text_list(override.get("p_hgvs") or override.get("pHGVS"))
             )
             if c_values and c_norm not in c_values:
-                continue
+                return False
             if p_values and p_norm not in p_values:
+                return False
+            return True
+
+        # A selector held for secondary review must suppress both the pending
+        # row and every lower-priority database/CtDrug fallback. Returning an
+        # explicit empty decision makes this a fail-closed safety rule rather
+        # than silently reactivating the older claim that the pending row was
+        # created to correct.
+        blocked = self._get_blocked_reviewed_variant_overrides(
+            targeted_drug_rules
+        )
+        if any(matches(override) for override in blocked):
+            return "--", "--"
+
+        for override in overrides:
+            if not matches(override):
                 continue
             benefit = "\n".join(self._as_text_list(override.get("benefit_drugs")))
             caution = "\n".join(self._as_text_list(override.get("caution_drugs")))

@@ -44,6 +44,7 @@ from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
 from reportgen.panels.validation import validate_panel_package_path
+from reportgen.panels.release_scope import ensure_project_type_enabled
 from reportgen.rules import PanelRuleEngine
 from reportgen.rules.evaluators import apply_report_text_rules, collect_report_texts
 from reportgen.utils.file_utils import (
@@ -391,6 +392,7 @@ class ReportGenerator:
         state: _GenerationState,
     ) -> None:
         state.canonical_project_type = normalize_project_type(state.project_type)
+        ensure_project_type_enabled(state.canonical_project_type)
         state.project_name = self._normalize_project_name(
             state.project_name,
             state.canonical_project_type,

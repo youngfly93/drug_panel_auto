@@ -5,8 +5,8 @@ Provides a clean API for the web layer to call ReportGenerator,
 ExcelReader, ProjectDetector, and FieldMapper without knowing internals.
 """
 
-import json
 import copy
+import json
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -21,19 +21,22 @@ _upstream = Path(str(settings.upstream_root))
 if str(_upstream) not in sys.path:
     sys.path.insert(0, str(_upstream))
 
-from reportgen.core.excel_reader import ExcelReader  # noqa: E402
-from reportgen.core.field_mapper import FieldMapper  # noqa: E402
 from reportgen.core.data_cleaner import DataCleaner  # noqa: E402
 from reportgen.core.enhancer_registry import (  # noqa: E402
     get_enhancer,
     get_panel_registry,
     normalize_project_type,
 )
+from reportgen.core.excel_reader import ExcelReader  # noqa: E402
+from reportgen.core.field_mapper import FieldMapper  # noqa: E402
 from reportgen.core.project_detector import ProjectDetector  # noqa: E402
 from reportgen.core.report_generator import ReportGenerator  # noqa: E402
 from reportgen.core.report_summary import build_report_summary  # noqa: E402
 from reportgen.core.validation import validate_excel_data_common  # noqa: E402
 from reportgen.models.excel_data import ExcelDataSource  # noqa: E402
+from reportgen.panels.release_scope import (  # noqa: E402
+    ensure_project_type_enabled as ensure_release_project_type_enabled,
+)
 
 DERIVED_REPORT_FIELDS = {
     "TMB",
@@ -114,6 +117,19 @@ class ReportGenBridge:
     def read_excel(self, excel_path: str) -> ExcelDataSource:
         """Read an Excel file and return structured data."""
         return self.excel_reader.read(excel_path)
+
+    def ensure_project_type_enabled(self, project_type: Optional[str]) -> str:
+        """Validate the environment-scoped production panel release boundary."""
+        if not project_type:
+            return ""
+        try:
+            canonical = normalize_project_type(project_type)
+        except Exception:
+            canonical = str(project_type).strip().lower()
+        return ensure_release_project_type_enabled(
+            canonical,
+            disabled=settings.disabled_project_types,
+        )
 
     def get_sheet_names(self, excel_data: ExcelDataSource) -> list[str]:
         """Extract sheet names from parsed Excel data."""
@@ -208,6 +224,7 @@ class ReportGenBridge:
 
         if canonical_project_type and not project_name:
             project_name = self._project_name_for_type(canonical_project_type)
+        self.ensure_project_type_enabled(canonical_project_type)
 
         report_data = self.field_mapper.map(
             working,
@@ -513,6 +530,8 @@ class ReportGenBridge:
             if inferred.get("detected"):
                 project_type = inferred.get("project_type")
                 project_name = project_name or inferred.get("project_name")
+
+        self.ensure_project_type_enabled(project_type)
 
         template_path = self._resolve_template_path(template_name, project_type)
 

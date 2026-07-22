@@ -25,6 +25,8 @@ PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v
 TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
 RG_WEB_DOCS_ENABLED="${RG_WEB_DOCS_ENABLED:-0}"
 RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
+RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi}"
+REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 
 status_remote() {
     ssh "$SSH_HOST" bash -s -- \
@@ -80,6 +82,8 @@ install_runtime_tools() {
         printf 'MANAGE_TUNNEL=0\n'
         printf 'RG_WEB_DOCS_ENABLED=%q\n' "$RG_WEB_DOCS_ENABLED"
         printf 'RG_WEB_CORS_ORIGINS=%q\n' "$RG_WEB_CORS_ORIGINS"
+        printf 'RG_WEB_DISABLED_PROJECT_TYPES=%q\n' "$RG_WEB_DISABLED_PROJECT_TYPES"
+        printf 'REPORTGEN_DISABLED_PROJECT_TYPES=%q\n' "$REPORTGEN_DISABLED_PROJECT_TYPES"
     } > "$runtime_config"
 
     rsync -az scripts/iyun62_start_reportgen.sh "$SSH_HOST:$RUNTIME_DIR/start_reportgen.sh.next"

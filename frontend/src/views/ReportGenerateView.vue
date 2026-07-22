@@ -27,10 +27,12 @@
         </el-upload>
         <div class="batch-options">
           <el-select v-model="batchProjectType" placeholder="项目类型（可自动识别）" clearable>
-            <el-option label="结直肠癌301基因+MSI" value="crc_301_msi" />
-            <el-option label="结直肠癌358基因+MSI" value="crc_358_msi" />
-            <el-option label="MLF基因检测" value="mlf_result" />
-            <el-option label="肺癌甲基化" value="lung_methylation" />
+            <el-option
+              v-for="option in generationProjectOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
           </el-select>
           <el-select
             v-if="batchTemplateOptions.length"
@@ -339,10 +341,12 @@
               style="width: 250px"
               clearable
             >
-              <el-option label="结直肠癌301基因+MSI" value="crc_301_msi" />
-              <el-option label="结直肠癌358基因+MSI" value="crc_358_msi" />
-              <el-option label="MLF基因检测" value="mlf_result" />
-              <el-option label="肺癌甲基化" value="lung_methylation" />
+              <el-option
+                v-for="option in generationProjectOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
             </el-select>
             <el-select
               v-if="templateOptions.length"
@@ -544,6 +548,18 @@ const batchReferenceGateRequired = ref(false)
 const canUseGoldenMode = computed(
   () => authStore.user?.role === 'admin' || authStore.user?.role === 'reviewer',
 )
+const disabledProjectTypes = new Set(
+  String(import.meta.env.VITE_DISABLED_PROJECT_TYPES || '')
+    .split(/[,;\s]+/)
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+)
+const generationProjectOptions = [
+  { label: '结直肠癌301基因+MSI', value: 'crc_301_msi' },
+  { label: '结直肠癌358基因+MSI', value: 'crc_358_msi' },
+  { label: 'MLF基因检测', value: 'mlf_result' },
+  { label: '肺癌甲基化', value: 'lung_methylation' },
+].filter((option) => !disabledProjectTypes.has(option.value))
 let batchPollTimer: number | null = null
 let singlePollTimer: number | null = null
 
@@ -873,7 +889,12 @@ function normalizeSummaryRow(row: Record<string, any>) {
 watch(
   () => excelStore.upload?.detected_project_type,
   (type) => {
-    if (type) projectType.value = type
+    if (type && !disabledProjectTypes.has(type.toLowerCase())) {
+      projectType.value = type
+    } else if (type) {
+      projectType.value = null
+      ElMessage.warning('当前生产版本暂未开放该项目类型，请完成病例级 UAT 后再使用。')
+    }
   },
 )
 

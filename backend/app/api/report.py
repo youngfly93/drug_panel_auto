@@ -23,6 +23,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import FileResponse
+from reportgen.panels.release_scope import PanelReleaseDisabledError
 from reportgen.utils.docx_render import render_docx_to_pngs
 from reportgen.utils.file_utils import safe_filename
 from reportgen.utils.logger import get_logger
@@ -989,6 +990,16 @@ def _infer_project_type_from_name(
     return project_type, project_name
 
 
+def _raise_if_project_type_disabled(
+    bridge: ReportGenBridge,
+    project_type: Optional[str],
+) -> None:
+    try:
+        bridge.ensure_project_type_enabled(project_type)
+    except PanelReleaseDisabledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 def _enrich_clinical_payload(
     clinical_info: Optional[dict],
     project_type: Optional[str],
@@ -1220,6 +1231,7 @@ def generate_report(
         req.project_type or upload.detected_project_type,
         effective_project_name,
     )
+    _raise_if_project_type_disabled(bridge, effective_project_type)
     clinical_payload = _enrich_clinical_payload(
         req.clinical_info,
         effective_project_type,
@@ -1398,6 +1410,7 @@ def generate_report_from_file(
         detected_project_type,
         detected_project_name or clinical_payload.get("project_name"),
     )
+    _raise_if_project_type_disabled(bridge, detected_project_type)
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
@@ -1577,6 +1590,7 @@ def generate_report_from_file_async(
         detected_project_type,
         detected_project_name or clinical_payload.get("project_name"),
     )
+    _raise_if_project_type_disabled(bridge, detected_project_type)
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,

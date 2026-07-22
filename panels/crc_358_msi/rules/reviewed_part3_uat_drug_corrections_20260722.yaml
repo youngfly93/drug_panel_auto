@@ -24,9 +24,9 @@ governance:
       cancer_scope: crc358
       secondary_review_status: pending_report_group_secondary_review
     drug:
-      review_status: provisional_runtime
-      runtime_eligible: true
-      review_basis: ai_delegated_report_group_first_review_research_only
+      review_status: needs_review
+      runtime_eligible: false
+      review_basis: ai_delegated_report_group_first_review_held_fail_closed
       evidence_level: bounded_primary_source_or_trial_registry_signal
       evidence_as_of: "2026-07-22"
       cancer_scope: colorectal_report_with_explicit_cross_cancer_limits

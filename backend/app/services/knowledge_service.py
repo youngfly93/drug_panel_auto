@@ -1095,6 +1095,12 @@ def _targeted_drug_rule_entries(
     ):
         if isinstance(rule, dict):
             _append(rule, source_key="variant_override", position=position)
+    for position, rule in enumerate(
+        context.get("blocked_reviewed_variant_overrides") or [],
+        start=1,
+    ):
+        if isinstance(rule, dict):
+            _append(rule, source_key="blocked_variant_override", position=position)
     return rows
 
 
@@ -1505,6 +1511,12 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
         for row in targeted_rule_entries
         if str(row.get("gene") or "").strip()
     }
+    runtime_panel_rule_genes = {
+        str(row.get("gene") or "").strip().upper()
+        for row in targeted_rule_entries
+        if str(row.get("gene") or "").strip()
+        and (row.get("review") or {}).get("runtime_eligible") is True
+    }
     approved_panel_rule_genes = {
         str(row.get("gene") or "").strip().upper()
         for row in targeted_rule_entries
@@ -1517,7 +1529,7 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
     )
     runtime_drug_genes = (
         runtime_overlay_drug_genes
-        | panel_rule_genes
+        | runtime_panel_rule_genes
         | base_drug_narrative_genes
     )
     candidate_disposition = _drug_candidate_disposition(
@@ -1579,6 +1591,14 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
             "drug_rows": len(drug_rows),
             "drug_unique_genes": len(overlay_drug_genes),
             "targeted_drug_rule_rows": len(targeted_rule_entries),
+            "targeted_drug_runtime_rule_rows": sum(
+                (row.get("review") or {}).get("runtime_eligible") is True
+                for row in targeted_rule_entries
+            ),
+            "targeted_drug_blocked_rule_rows": sum(
+                (row.get("review") or {}).get("runtime_eligible") is not True
+                for row in targeted_rule_entries
+            ),
             "targeted_drug_rule_unique_genes": len(
                 {row["gene"] for row in targeted_rule_entries}
             ),
@@ -1615,7 +1635,10 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
             "explicitly_approved_drug_genes": len(
                 denominator & approved_panel_rule_genes
             ),
-            "explicit_panel_rule_genes": len(denominator & panel_rule_genes),
+            "explicit_panel_rule_genes": len(
+                denominator & runtime_panel_rule_genes
+            ),
+            "declared_panel_rule_genes": len(denominator & panel_rule_genes),
             "panel_rule_status_counts": dict(panel_rule_status_counts),
             "runtime_content_quality": runtime_content_quality,
             "clinical_release_readiness": clinical_release_readiness,

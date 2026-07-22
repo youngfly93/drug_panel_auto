@@ -2588,12 +2588,11 @@ def test_crc358_uat_first_review_closes_all_positionless_candidate_rows():
         targeted_drug_rules=rules,
     )
     assert benefit == "--"
-    assert caution == "西妥昔单抗（A）\n帕尼单抗（A）"
-    assert "依维莫司" not in caution
+    assert caution == "--"
     assert score == 100.0
 
 
-def test_crc358_uat_rules_are_provisional_and_panel_scoped():
+def test_crc358_uat_rules_are_fail_closed_and_panel_scoped():
     crc358 = load_targeted_drug_rule_context(
         load_panel_package("crc_358_msi", project_root=ROOT)
     )
@@ -2604,38 +2603,28 @@ def test_crc358_uat_rules_are_provisional_and_panel_scoped():
 
     new_rows = [
         row
-        for row in crc358["reviewed_variant_overrides"]
+        for row in crc358["blocked_reviewed_variant_overrides"]
         if row.get("secondary_review_status")
         == "pending_report_group_secondary_review"
     ]
     assert len(new_rows) == 14
-    assert all(row["review_status"] == "provisional_runtime" for row in new_rows)
-    assert all(row["runtime_eligible"] is True for row in new_rows)
+    assert all(row["review_status"] == "needs_review" for row in new_rows)
+    assert all(row["runtime_eligible"] is False for row in new_rows)
     assert all(row.get("source_refs") for row in new_rows)
     assert not any(
         row.get("secondary_review_status")
         == "pending_report_group_secondary_review"
-        for row in crc301["reviewed_variant_overrides"]
+        for row in crc301["blocked_reviewed_variant_overrides"]
     )
     assert crc301["applicability_rules"] == crc358["applicability_rules"]
 
 
-def test_crc358_uat_research_sections_do_not_recreate_part2_benefit():
+def test_crc358_uat_pending_research_sections_are_not_runtime_visible():
     rules = load_targeted_drug_rule_context(
         load_panel_package("crc_358_msi", project_root=ROOT)
     )
     assert rules is not None
     provider = _crc358_provider()
-
-    def rule_for(gene: str, p_hgvs: str = ""):
-        return next(
-            row
-            for row in rules["reviewed_variant_overrides"]
-            if row.get("gene") == gene
-            and row.get("secondary_review_status")
-            == "pending_report_group_secondary_review"
-            and (not p_hgvs or row.get("p_hgvs") == p_hgvs)
-        )
 
     variants = []
     for gene, c_hgvs, p_hgvs in (
@@ -2644,33 +2633,22 @@ def test_crc358_uat_research_sections_do_not_recreate_part2_benefit():
         ("NF1", "c.3721C>T", "p.R1241*"),
         ("KRAS", "c.35G>T", "p.G12V"),
     ):
-        rule = rule_for(gene, p_hgvs if gene == "KRAS" else "")
         variants.append(
             {
                 "gene": gene,
                 "cHGVS": c_hgvs,
                 "pHGVS": p_hgvs,
                 "benefit_drugs": "--",
-                "caution_drugs": (
-                    "\n".join(rule.get("caution_drugs") or [])
-                    if gene == "KRAS"
-                    else "--"
-                ),
-                "research_drugs": "\n".join(rule.get("research_drugs") or []),
+                "caution_drugs": "--",
+                "research_drugs": "--",
             }
         )
 
     sections = provider.build_drug_analysis_sections(variants)
     assert not any(row["drug_type"] == "benefit" for row in sections)
-    assert {
-        row["gene"]
+    assert not any(
+        row["gene"] in {"APC", "BRCA2", "NF1", "KRAS"}
         for row in sections
-        if row.get("drug_type") == "research"
-    } == {"APC", "BRCA2", "NF1", "KRAS"}
-    kras_sections = [row for row in sections if row["gene"] == "KRAS"]
-    assert {row["drug_type"] for row in kras_sections} == {"caution", "research"}
-    assert "依维莫司" not in "\n".join(
-        row.get("drug_name", "") for row in kras_sections
     )
 
 
@@ -2771,7 +2749,9 @@ def test_all_configured_crc_drug_rules_have_governed_consistent_part3_contracts(
 
     expected = {
         "crc_301_msi": (9, 10),
-        "crc_358_msi": (31, 32),
+        # Fourteen newly proposed selectors remain governance-visible but are
+        # not profiled as runtime contracts until secondary review completes.
+        "crc_358_msi": (17, 18),
     }
     for panel_id, (rules, selector_cases) in expected.items():
         package = load_panel_package(panel_id, project_root=ROOT)

@@ -150,6 +150,39 @@ cached PAGEREF directory construction and can produce an empty TOC even when
 HTTP health is green. The runtime start script checks them before stopping the
 known-good process and refuses the switch when any is truthy.
 
+### CRC358-only limited release
+
+When CRC358 is released before CRC301 has completed its own case-level UAT,
+the production release must set all three scope guards to `crc_301_msi`:
+
+```text
+REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi
+RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi
+VITE_DISABLED_PROJECT_TYPES=crc_301_msi
+```
+
+The first guard blocks direct/core generation, the second blocks Web API and
+batch entry points, and the third removes CRC301 from the production generation
+selector. The iyun129 deployment wrapper supplies these values by default for
+the limited release. The backend guards are authoritative: a hidden frontend
+option alone is not a release boundary.
+
+Any CRC358 knowledge row whose secondary review is still pending must remain
+visible in governance counts but set `runtime_eligible: false`. Exact pending
+variant selectors must fail closed before legacy database or external-drug
+fallback lookup; they must not silently regain a drug recommendation through a
+lower-priority source. Verify both the positive path (reviewed CRC358 rules still
+render) and the negative path (pending selector returns no recommendation).
+
+Before and after switching production, verify that `deployment.env` contains
+the two backend guards. A single request or a batch request that explicitly
+selects CRC301 must be rejected before task creation. A batch submitted for
+automatic project detection may create its lightweight task first; the worker
+must reject a detected CRC301 item before report mapping or generation. Also
+verify that a synthetic CRC358 report still completes with QA `PASS`. This
+scoped engineering release does not convert remaining pending rows or a
+blocked panel-level UAT state into medical approval.
+
 `current_release` is a status pointer, not a deployment command. Do not edit it
 manually. Use the deployment or release-switch scripts below so the process,
 pointer, `REVISION`, and health state change together.

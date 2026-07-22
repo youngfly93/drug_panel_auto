@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     report_filename_org_code: str = "mljy"
     report_filename_revision_label: str = "修改版"
 
+    # --- Release scope ---
+    # Comma-separated canonical project types unavailable in this production
+    # release. The reportgen core has an independent matching guard so direct
+    # CLI/worker paths cannot bypass the Web API restriction.
+    disabled_project_types: str = ""
+
     model_config = {"env_prefix": "RG_WEB_", "env_file": ".env", "extra": "ignore"}
 
     def model_post_init(self, __context) -> None:

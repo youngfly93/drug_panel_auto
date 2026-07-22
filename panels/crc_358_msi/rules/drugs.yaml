@@ -568,8 +568,8 @@ targeted_drug_rules:
       caution_drugs: ["--"]
       research_drugs:
         - "REC-4881（NCT06005974；研究性试验线索）"
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_gene_class_benefit_reclassified_as_research_only
       evidence_level: phase_ii_trial_eligibility_without_posted_efficacy_results
       evidence_as_of: "2026-07-22"
@@ -594,8 +594,8 @@ targeted_drug_rules:
       research_drugs:
         - "奥拉帕利（前临床/跨癌种研究线索）"
         - "ATR抑制剂联合方案（研究性）"
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_broad_parp_list_reclassified_as_research_only
       evidence_level: preclinical_signal_and_cross_cancer_trial_eligibility
       evidence_as_of: "2026-07-22"
@@ -622,8 +622,8 @@ targeted_drug_rules:
       caution_drugs: ["--"]
       research_drugs:
         - "PARP/ATR通路方案（DDR篮式研究线索）"
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_broad_ddr_list_reclassified_as_research_only
       evidence_level: cross_cancer_trial_eligibility_not_variant_specific_efficacy
       evidence_as_of: "2026-07-22"
@@ -647,8 +647,8 @@ targeted_drug_rules:
       caution_drugs: ["--"]
       research_drugs:
         - "奥拉帕利（CRC/跨癌种研究线索；非标准治疗结论）"
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_parp_benefit_reclassified_as_research_only
       evidence_level: crc_phase_ii_negative_with_limited_cross_cancer_signal
       evidence_as_of: "2026-07-22"
@@ -675,8 +675,8 @@ targeted_drug_rules:
       caution_drugs: ["--"]
       research_drugs:
         - "奥拉帕利（CRC/跨癌种研究线索；非标准治疗结论）"
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_parp_benefit_reclassified_as_research_only
       evidence_level: crc_phase_ii_negative_with_limited_cross_cancer_signal
       evidence_as_of: "2026-07-22"
@@ -703,8 +703,8 @@ targeted_drug_rules:
       caution_drugs: ["--"]
       research_drugs:
         - "mTOR抑制剂（前临床线索）"
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_benefit_and_resistance_lists_reclassified_as_preclinical
       evidence_level: colorectal_cell_line_and_model_preclinical_signal_only
       evidence_as_of: "2026-07-22"
@@ -731,8 +731,8 @@ targeted_drug_rules:
       caution_drugs: ["--"]
       research_drugs:
         - "曲美替尼（NCI-MATCH研究；主要终点未达）"
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_broad_mapk_list_reclassified_as_research_only
       evidence_level: cross_cancer_phase_ii_primary_endpoint_not_met
       evidence_as_of: "2026-07-22"
@@ -756,8 +756,8 @@ targeted_drug_rules:
       caution_drugs: ["--"]
       research_drugs:
         - "PRT3789（早期临床研究）"
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_broad_synthetic_lethal_list_reclassified_as_research_only
       evidence_level: early_phase_cross_cancer_signal_not_crc_specific
       evidence_as_of: "2026-07-22"
@@ -783,8 +783,8 @@ targeted_drug_rules:
       variant_level: ["Ⅱ类", "II类", "2类"]
       benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_reject_unspecific_parp_benefit_handle_mmr_as_biomarker
       evidence_level: crc_olaparib_phase_ii_no_objective_response
       evidence_as_of: "2026-07-22"
@@ -807,8 +807,8 @@ targeted_drug_rules:
       variant_level: ["Ⅱ类", "II类", "2类"]
       benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_reject_unspecific_parp_benefit_handle_mmr_as_biomarker
       evidence_level: crc_olaparib_phase_ii_no_objective_response
       evidence_as_of: "2026-07-22"
@@ -831,8 +831,8 @@ targeted_drug_rules:
       variant_level: ["Ⅱ类", "II类", "2类"]
       benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_reject_broad_pi3k_list_and_exon9_anti_egfr_caution
       evidence_level: crc_meta_analysis_exon9_not_predictive_of_anti_egfr_resistance
       evidence_as_of: "2026-07-22"
@@ -855,8 +855,8 @@ targeted_drug_rules:
       variant_level: ["Ⅱ类", "II类", "2类"]
       benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_reject_unspecific_parp_benefit_handle_mmr_as_biomarker
       evidence_level: crc_olaparib_phase_ii_no_objective_response
       evidence_as_of: "2026-07-22"
@@ -879,8 +879,8 @@ targeted_drug_rules:
       variant_level: ["Ⅱ类", "II类", "2类"]
       benefit_drugs: ["--"]
       caution_drugs: ["--"]
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_defer_exact_missense_drug_claim_fail_closed
       evidence_level: exact_variant_function_and_crc_drug_response_not_established
       evidence_as_of: "2026-07-22"
@@ -909,8 +909,8 @@ targeted_drug_rules:
         - "RMC-6236（RAS-MULTI(ON)早期临床研究）"
         - "Avutometinib+Defactinib（G12V NSCLC跨癌种研究）"
         - "BI 1701963+曲美替尼（KRAS实体瘤研究）"
-      review_status: provisional_runtime
-      runtime_eligible: true
+      review_status: needs_review
+      runtime_eligible: false
       review_basis: ai_delegated_first_review_keep_crc_anti_egfr_caution_reclassify_benefit_as_research
       evidence_level: established_crc_anti_egfr_negative_biomarker_plus_early_cross_cancer_trials
       evidence_as_of: "2026-07-22"

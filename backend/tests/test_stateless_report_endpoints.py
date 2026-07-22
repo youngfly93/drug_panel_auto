@@ -11,7 +11,7 @@ from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from sqlalchemy import create_engine
@@ -95,6 +95,14 @@ class FakeBridge:
 
     def read_excel(self, excel_path):
         return SimpleNamespace(path=excel_path)
+
+    def ensure_project_type_enabled(self, project_type):
+        from reportgen.panels.release_scope import ensure_project_type_enabled
+
+        return ensure_project_type_enabled(
+            project_type,
+            disabled=settings.disabled_project_types,
+        )
 
     def get_sheet_names(self, _excel_data):
         return ["Meta", "Variations"]
@@ -602,6 +610,69 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     )
     assert data["output_file_base64"].startswith("UEsD")
     assert data["qa_status"] == "PASS"
+
+
+def test_crc301_limited_release_blocks_single_and_batch_before_queue(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "disabled_project_types", "crc_301_msi")
+    with _client(tmp_path, monkeypatch) as client:
+        single = client.post(
+            "/api/v1/reports/generate-file-async",
+            files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={"clinical_info": "{}", "project_type": "crc_301_msi"},
+        )
+        batch = client.post(
+            "/api/v1/reports/batch-files",
+            files=[
+                (
+                    "files",
+                    ("case.xlsx", b"placeholder", "application/vnd.ms-excel"),
+                )
+            ],
+            data={"project_type": "crc_301_msi"},
+        )
+
+    assert single.status_code == 409
+    assert batch.status_code == 409
+    assert "未开放生产生成" in single.json()["detail"]
+    assert "未开放生产生成" in batch.json()["detail"]
+    db = report_api.SessionLocal()
+    try:
+        assert db.query(Task).count() == 0
+    finally:
+        db.close()
+
+
+def test_crc301_auto_detected_batch_item_stops_before_mapping(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "disabled_project_types", "crc_301_msi")
+    bridge = FakeBridge()
+    bridge.detect_result = {
+        "project_type": "crc_301_msi",
+        "project_name": "结直肠癌301基因+MSI",
+        "confidence": 0.99,
+        "detected": True,
+    }
+
+    def mapping_must_not_run(_excel_data):
+        raise AssertionError("disabled auto-detected panel reached report mapping")
+
+    bridge.get_mapped_clinical_fields = mapping_must_not_run
+    try:
+        batch_api._prepare_item_clinical_payload(
+            stored_path=str(tmp_path / "stored.xlsx"),
+            original_filename="case.xlsx",
+            bridge=bridge,
+            shared_clinical_info={},
+            project_type=None,
+            project_name=None,
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "未开放生产生成" in str(exc.detail)
+    else:
+        raise AssertionError("auto-detected CRC301 batch item was not rejected")
 
 
 def test_generate_file_fills_missing_report_date(tmp_path, monkeypatch):

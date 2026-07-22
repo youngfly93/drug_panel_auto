@@ -68,6 +68,20 @@ def _governed_rows(
     ]
 
 
+def _blocked_governed_rows(
+    raw: Mapping[str, Any], rows: list[dict[str, Any]], *, panel_id: str
+) -> list[dict[str, Any]]:
+    """Keep governed non-runtime selectors as explicit fail-closed guards."""
+    rows = _rows_for_panel(rows, panel_id)
+    if not isinstance(raw.get("governance"), Mapping):
+        return []
+    return [
+        row
+        for row in rows
+        if not effective_governance(raw, row, "targeted_drug")["runtime_eligible"]
+    ]
+
+
 def _governed_gene_overrides(
     raw: Mapping[str, Any], value: Any
 ) -> dict[str, dict[str, Any]]:
@@ -99,6 +113,7 @@ def _disabled_context(panel_id: str, *, reason: str) -> dict[str, Any]:
         "reason": reason,
         "overrides": {},
         "reviewed_variant_overrides": [],
+        "blocked_reviewed_variant_overrides": [],
         "applicability_rules": [],
     }
 
@@ -166,6 +181,10 @@ def load_targeted_drug_rule_context(
             "reviewed_variant_overrides": _rows_for_panel(
                 list(inherited.get("reviewed_variant_overrides") or []), panel_id
             ),
+            "blocked_reviewed_variant_overrides": _rows_for_panel(
+                list(inherited.get("blocked_reviewed_variant_overrides") or []),
+                panel_id,
+            ),
         }
 
     return {
@@ -204,6 +223,11 @@ def load_targeted_drug_rule_context(
             policy.get("overrides") or policy.get("gene_overrides")
         ),
         "reviewed_variant_overrides": _governed_rows(
+            raw,
+            _dict_rows(policy.get("reviewed_variant_overrides")),
+            panel_id=panel_id,
+        ),
+        "blocked_reviewed_variant_overrides": _blocked_governed_rows(
             raw,
             _dict_rows(policy.get("reviewed_variant_overrides")),
             panel_id=panel_id,

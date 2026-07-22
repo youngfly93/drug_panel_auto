@@ -56,6 +56,9 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert 'backup_archive="${backup_output##*$' in wrapper
     assert "test -f '$backup_archive.manifest.json'" in wrapper
     assert "RG_WEB_CORS_ORIGINS" in wrapper
+    assert "RG_WEB_DISABLED_PROJECT_TYPES" in wrapper
+    assert "REPORTGEN_DISABLED_PROJECT_TYPES" in wrapper
+    assert "VITE_DISABLED_PROJECT_TYPES" in wrapper
     assert "REQUIRE_ORIGIN_MAIN_REACHABILITY:-1" in wrapper
     assert 'git fetch --prune "$ORIGIN_REMOTE" main' in wrapper
     assert 'git merge-base --is-ancestor "$resolved_ref" "$ORIGIN_MAIN_REF"' in wrapper
@@ -186,6 +189,9 @@ def test_runtime_control_is_configured_and_failure_safe() -> None:
         "stop_existing\nif start_release"
     )
     assert "RG_WEB_RUNTIME_INSTANCE_LOCK_ENABLED=1" in deploy
+    assert "RG_WEB_DISABLED_PROJECT_TYPES" in deploy
+    assert "REPORTGEN_DISABLED_PROJECT_TYPES" in deploy
+    assert "VITE_DISABLED_PROJECT_TYPES" in deploy
     assert "backend/app/api/health.py" in deploy
     assert "TUNNEL_METRICS_URL" in deploy
     assert "check_signature_registry.py" in deploy
