@@ -25,7 +25,7 @@ iyun129 隔离 UAT 目录中使用；公开凭据仅包含脱敏别名、哈希�
 | report-semantic-gaps-08 | P1 | 已有至少 10 份真实 CRC301 输入，并完成 CRC301 病例级 UAT。 | 36 份生产备份快照均为 `crc301_seen=false`、CRC301 upload/task 最大值 0；当前上传目录 109 个 Excel 去重为 28 份，28/28 均识别为 CRC358、CRC301=0、解析错误=0；本地候选扫描也只有合成 CRC301 fixture。 | REFUTED |
 | report-semantic-gaps-09 | P3 | 报告组二审回执与知识发布门禁已结构化落库，并会对内容漂移失败关闭。 | 精确 SHA 重放 `knowledge_release_gate_b7fa69a.json`：工程 `PASS`、issues=0；回执 bundle 预期/实算均为 `739da79c…2917`，受审工件逐项 hash 匹配；两个 Panel 临床状态仍因 UAT 为 `BLOCKED`。凭据 SHA256=`2403b6e5…e4`。 | CONFIRMED |
 | report-semantic-gaps-10 | P2 | 同 SHA GitHub required check 单独即可证明可发布。 | GitHub run `29890515118` 的工程检查不覆盖报告组病例 UAT、精确 SHA 全量 Word 人工视觉复核和部署后现网验收；即使全部成功也不能替代 04–08、11–12。 | REFUTED |
-| report-semantic-gaps-11 | P2 | `b7fa69a` 已在 iyun129 完成全量 Word 渲染和人工视觉复核。 | 本 SHA 只完成隔离 Linux 语义扫描；此前两份完整 Linux Word 属父提交 `f032ff3`。当前 iyun129 为 72 核且观测负载持续约 72–81、47 个 `vina` 任务并行，未在高负载窗口追加全量渲染；不存在本 SHA 的人工视觉 UAT receipt。 | REFUTED |
+| report-semantic-gaps-11 | P2 | `b7fa69a` 已在 iyun129 完成全量 Word 渲染和人工视觉复核。 | 本 SHA 已用生产同款配置成功生成 1 份 96 页 Linux Word：视觉、目录页码、空白页、药物一致性、结构域、MSI/TMB 与字段溯源均 PASS；总 QA 仅因历史契约覆盖为 WARN。但回执明确 `SAMPLE_RENDER_ONLY`、`human_visual_review_complete=false`，不是 10 例全量或报告组人工视觉 UAT。 | REFUTED |
 | report-semantic-gaps-12 | P1 | 生产已部署到本 SHA，并完成部署后活实例验收。 | `scripts/iyun129_release.sh status` 实测生产仍为 `be9b25a0a07f43b01b4c88cedcb51b705baa7381`，进程 cwd 指向同一 release，health=HTTP 200；`b7fa69a` 仅位于 `/reportgen-web-uat/b7fa69a` 隔离目录。 | REFUTED |
 | report-semantic-gaps-13 | P1 | 当前候选已经可以 promotion/生产切换。 | 04–08、11–12 均未关闭，且精确知识门禁明确 `clinical_release_readiness=BLOCKED`；不得部署。 | REFUTED |
 
@@ -36,7 +36,7 @@ iyun129 隔离 UAT 目录中使用；公开凭据仅包含脱敏别名、哈希�
 | report-semantic-gaps-M01 | 候选、Linux 扫描和审计必须锁同一 Git 身份 | `b7fa69a…8101` 的 Git blob 与 iyun129 隔离目录两份变更文件 hash 一致；语义凭据也记录同一完整 SHA | FAITHFUL | 隔离目录 `REVISION`；mapper/test 两组本地与远端 SHA256 |
 | report-semantic-gaps-M02 | 真实病例 UAT 不得泄露 PII | 原始 Excel 仅留在受限远端目录；运行时注入 `UAT358-NN` 和脱敏姓名；公开 JSON 只含 hash、selector 和聚合状态 | FAITHFUL | `public_crc358_semantic_scan_b7fa69a.json:privacy` |
 | report-semantic-gaps-M03 | 缺 CRC301 输入必须独立核实，不得用合成件冒充 | 已检查本地候选、36 份备份数据库及当前全部上传 Excel；三条来源均无真实 CRC301 | HONEST_BOUNDARY | `public_backup_panel_history.json`；当前上传目录去重扫描结果 |
-| report-semantic-gaps-M04 | 生产结论必须基于 iyun129 同款 Linux 与部署后现网 | 已完成隔离 Linux 语义复测；因真实 UAT 阻断且共享服务器高负载，没有执行全量渲染或生产切换，未用 macOS/父 SHA 证据冒充 | HONEST_BOUNDARY | `public_crc358_semantic_scan_b7fa69a.json`；负载与 production status 实测 |
+| report-semantic-gaps-M04 | 生产结论必须基于 iyun129 同款 Linux 与部署后现网 | 已完成隔离 Linux 语义复测及 1 份 96 页生产模式样本渲染；仍缺 10 例全量人工视觉 UAT和部署后现网证据，未用样本结果冒充生产验收 | HONEST_BOUNDARY | `public_crc358_semantic_scan_b7fa69a.json`；`public_crc358_single_render_prodmode_b7fa69a.json`；production status 实测 |
 
 ## 精确凭据
 
@@ -48,13 +48,15 @@ iyun129 隔离 UAT 目录中使用；公开凭据仅包含脱敏别名、哈希�
 - 备份 Panel 历史凭据 SHA256：`65c9ce37927163196a5d57f27fa3d0ef2f804877cee3c3799674ab7c094799fa`。
 - 真实 CRC358 输入清单凭据 SHA256：`32422b4472b330bc74951d95b4e453e5d63bcca041c400ae42a90bea8aad712d`。
 - 精确知识门禁凭据 SHA256：`2403b6e57fff446ec240a6d125bb7671397e070025943b5cb9612b02cdf287e4`。
+- 精确 Linux 单例渲染凭据 SHA256：`ab32d20ed2af474432001ad47026068c205ffd099b04d6fbf254694757d6ab9e`；
+  96 页、visual PASS、整体 WARN、人工视觉 PENDING。
 - 生产只读状态：`be9b25a…7381`，不是候选 SHA。
 
 ## 分层裁决
 
 - 工程候选：**PASS**。冻结、PII 边界、药物黏连根修和知识回执有效。
 - 医学/UAT：**BLOCKED**。CRC358 为 2/10，仍有 3 条真实漏项与 22 个未契约 selector；CRC301 无真实输入。
-- Promotion：**NOT READY**。同 SHA 双审可以完成，但不能覆盖病例 UAT 和精确 Linux Word 视觉复核。
+- Promotion：**NOT READY**。同 SHA 双审和单例 Linux 渲染已完成，但不能覆盖 10 例病例 UAT 与报告组人工视觉复核。
 - 生产：**NOT DEPLOYED**。生产仍为 `be9b25a`，因此不存在本 SHA 的部署后验收。
 
 本审计不把“报告组知识二审完成”扩大解释为“新发现的 22 个历史候选规则已二审”，也不把
