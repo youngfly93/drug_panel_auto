@@ -33,6 +33,7 @@ from reportgen.rules.approved_drugs import (
     select_approved_drug_rows,
 )
 from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
+from reportgen.rules.targeted_drugs import select_reviewed_variant_rule
 from reportgen.utils.hgvs_utils import (
     infer_variant_type_cn,
     normalize_c_hgvs_display_text,
@@ -371,6 +372,9 @@ class PanelConfig:
         default_factory=lambda: [dict(x) for x in _DEFAULT_PANEL_DISPLAY_GENES]
     )
     reviewed_variant_overrides: List[Dict[str, Any]] = field(default_factory=list)
+    blocked_reviewed_variant_overrides: List[Dict[str, Any]] = field(
+        default_factory=list
+    )
     approved_drug_rows: List[Dict[str, str]] = field(default_factory=list)
     # Panel-owned policy for the 2.2 approved-drug table. Legacy panels keep a
     # fixed table; CRC358 may subtract drugs already visible in final Part 2.1.
@@ -793,12 +797,24 @@ def load_panel_config(
     approved_drug_rows = _normalize_approved_drug_rows(drugs_rule)
     targeted_drug_rules = load_targeted_drug_rule_context(panel_package)
     reviewed_variant_overrides = as_dict_list("reviewed_variant_overrides")
+    blocked_reviewed_variant_overrides: List[Dict[str, Any]] = []
     if targeted_drug_rules is not None:
         reviewed_variant_overrides = (
             [
                 dict(row)
                 for row in targeted_drug_rules.get(
                     "reviewed_variant_overrides", []
+                )
+                if isinstance(row, dict)
+            ]
+            if targeted_drug_rules.get("enabled")
+            else []
+        )
+        blocked_reviewed_variant_overrides = (
+            [
+                dict(row)
+                for row in targeted_drug_rules.get(
+                    "blocked_reviewed_variant_overrides", []
                 )
                 if isinstance(row, dict)
             ]
@@ -845,6 +861,7 @@ def load_panel_config(
         immune_hyperprogression_rows=immune_hyperprogression_rows
         or [dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS],
         reviewed_variant_overrides=reviewed_variant_overrides,
+        blocked_reviewed_variant_overrides=blocked_reviewed_variant_overrides,
         drug_display_max_items=(
             None
             if bool(drug_rules_config.get("show_all_in_part2", False))
@@ -1279,6 +1296,12 @@ def _variant_override_matches(
     c_norm = _norm_text(c_hgvs)
     p_norm = _norm_text(p_hgvs)
     locus_norm = _norm_text(locus)
+    if locus_norm and not c_norm:
+        match = re.search(r"c\.[^,，\s]+", locus_norm, flags=re.IGNORECASE)
+        c_norm = match.group(0) if match else ""
+    if locus_norm and not p_norm:
+        match = re.search(r"p\.[^,，\s]+", locus_norm, flags=re.IGNORECASE)
+        p_norm = match.group(0) if match else ""
 
     if c_values and c_norm not in c_values and not any(c in locus_norm for c in c_values):
         return False
@@ -1307,12 +1330,37 @@ def _find_reviewed_variant_override(
     locus: str = "",
     gene_class: str = "",
 ) -> Optional[Dict[str, Any]]:
-    for override in panel_config.reviewed_variant_overrides:
-        if _variant_override_matches(
-            override, gene, c_hgvs, p_hgvs, locus, gene_class=gene_class
-        ):
-            return override
-    return None
+    selected, blocked = _select_reviewed_variant_override(
+        panel_config,
+        gene,
+        c_hgvs,
+        p_hgvs,
+        locus,
+        gene_class=gene_class,
+    )
+    return None if blocked else selected
+
+
+def _select_reviewed_variant_override(
+    panel_config: PanelConfig,
+    gene: str,
+    c_hgvs: str = "",
+    p_hgvs: str = "",
+    locus: str = "",
+    gene_class: str = "",
+) -> Tuple[Optional[Dict[str, Any]], bool]:
+    return select_reviewed_variant_rule(
+        panel_config.reviewed_variant_overrides,
+        panel_config.blocked_reviewed_variant_overrides,
+        matches=lambda override: _variant_override_matches(
+            override,
+            gene,
+            c_hgvs,
+            p_hgvs,
+            locus,
+            gene_class=gene_class,
+        ),
+    )
 
 
 def _drugs_from_override(override: Optional[Dict[str, Any]]) -> Tuple[str, str]:
@@ -2635,11 +2683,11 @@ def _build_targeted_drug_brand_summary_result(
     return "、".join(f"{drug}[{brand_map[drug]}]" for drug in drugs) + "。", []
 
 
-def _override_has_detected_variant(
+def _detected_variant_for_override(
     override: Dict[str, Any],
     report_data: ReportData,
-) -> bool:
-    """Return True only when this sample contains the reviewed variant.
+) -> Optional[Dict[str, Any]]:
+    """Return the detected row matched by a reviewed variant selector.
 
     Reviewed overrides can add/replace drug text, but they must never create a
     variant that was not actually detected in the current Excel result.
@@ -2660,8 +2708,15 @@ def _override_has_detected_variant(
             if _variant_override_matches(
                 override, gene, c_hgvs, p_hgvs, locus, gene_class=gene_class
             ):
-                return True
-    return False
+                return row
+    return None
+
+
+def _override_has_detected_variant(
+    override: Dict[str, Any],
+    report_data: ReportData,
+) -> bool:
+    return _detected_variant_for_override(override, report_data) is not None
 
 
 def _patch_reviewed_variant_override_rows(
@@ -2670,7 +2725,8 @@ def _patch_reviewed_variant_override_rows(
 ) -> None:
     """Apply reviewed YAML variant overrides to rendered 2.1 and summary tables."""
     overrides = panel_config.reviewed_variant_overrides
-    if not overrides:
+    blocked_overrides = panel_config.blocked_reviewed_variant_overrides
+    if not overrides and not blocked_overrides:
         return
 
     rows = report_data.get_table("variants_2_1") or []
@@ -2684,10 +2740,16 @@ def _patch_reviewed_variant_override_rows(
             or row.get("level")
             or row.get("classification")
         )
-        override = _find_reviewed_variant_override(
+        override, blocked = _select_reviewed_variant_override(
             panel_config, gene, locus=locus, gene_class=gene_class
         )
         if not override:
+            continue
+        if blocked:
+            row["benefit_drugs"] = "--"
+            row["caution_drugs"] = "--"
+            row["research_drugs"] = "--"
+            changed = True
             continue
         benefit, caution = _drugs_from_override(override)
         research = _research_drugs_from_override(override)
@@ -2704,7 +2766,38 @@ def _patch_reviewed_variant_override_rows(
         benefit, caution = _drugs_from_override(override)
         if not (benefit or caution):
             continue
-        if not _override_has_detected_variant(override, report_data):
+        detected = _detected_variant_for_override(override, report_data)
+        if detected is None:
+            continue
+        detected_gene = _norm_text(
+            detected.get("gene") or detected.get("Gene")
+        )
+        detected_c = _norm_text(
+            detected.get("cHGVS") or detected.get("c_hgvs")
+        )
+        detected_p = _norm_text(
+            detected.get("pHGVS") or detected.get("p_hgvs")
+        )
+        detected_locus = _norm_text(
+            detected.get("locus") or detected.get("variant_site")
+        )
+        detected_class = _norm_text(
+            detected.get("gene_class")
+            or detected.get("variant_level")
+            or detected.get("level")
+            or detected.get("classification")
+        )
+        selected, blocked = _select_reviewed_variant_override(
+            panel_config,
+            detected_gene,
+            detected_c,
+            detected_p,
+            detected_locus,
+            gene_class=detected_class,
+        )
+        # Do not let a lower-specificity active row re-open a selector that is
+        # held by a more-specific pending rule.
+        if blocked or selected != override:
             continue
         genes = sorted(_override_gene_values(override))
         if not genes:
@@ -2733,6 +2826,7 @@ def _patch_reviewed_variant_override_rows(
                     or row.get("variant_level")
                     or row.get("level")
                     or row.get("classification")
+                    or detected_class
                 ),
             ):
                 continue
@@ -2748,6 +2842,7 @@ def _patch_reviewed_variant_override_rows(
             {
                 "gene": gene,
                 "variant_site": variant_site,
+                "gene_class": detected_class,
                 "benefit_drugs": benefit or "--",
                 "caution_drugs": caution or "--",
             }

@@ -64,7 +64,7 @@ def test_pending_crc358_selectors_remain_visible_but_not_runtime_eligible():
         if row.get("secondary_review_status")
         == "pending_report_group_secondary_review"
     ]
-    assert len(pending) == 14
+    assert len(pending) == 13
     assert not any(
         row.get("secondary_review_status")
         == "pending_report_group_secondary_review"

@@ -15,6 +15,7 @@ import pandas as pd
 
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
+from reportgen.rules.targeted_drugs import select_reviewed_variant_rule
 from reportgen.utils.hgvs_utils import format_variant_site
 
 
@@ -351,22 +352,22 @@ class TargetedDrugMixin:
                 return False
             return True
 
-        # A selector held for secondary review must suppress both the pending
-        # row and every lower-priority database/CtDrug fallback. Returning an
-        # explicit empty decision makes this a fail-closed safety rule rather
-        # than silently reactivating the older claim that the pending row was
-        # created to correct.
         blocked = self._get_blocked_reviewed_variant_overrides(
             targeted_drug_rules
         )
-        if any(matches(override) for override in blocked):
+        selected, selected_is_blocked = select_reviewed_variant_rule(
+            overrides,
+            blocked,
+            matches=matches,
+        )
+        # A pending selector suppresses lower-priority fallbacks, but it must
+        # not shadow a more-specific approved exact-variant rule. Equal
+        # specificity remains fail-closed.
+        if selected_is_blocked:
             return "--", "--"
-
-        for override in overrides:
-            if not matches(override):
-                continue
-            benefit = "\n".join(self._as_text_list(override.get("benefit_drugs")))
-            caution = "\n".join(self._as_text_list(override.get("caution_drugs")))
+        if selected is not None:
+            benefit = "\n".join(self._as_text_list(selected.get("benefit_drugs")))
+            caution = "\n".join(self._as_text_list(selected.get("caution_drugs")))
             if benefit or caution:
                 return benefit or "--", caution or "--"
         return None

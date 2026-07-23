@@ -29,6 +29,9 @@ from reportgen.core.historical_golden_contract import (  # noqa: E402
     validate_historical_golden_docx,
 )
 from reportgen.core.report_diff import ReportDiffOptions, compare_reports  # noqa: E402
+from reportgen.knowledge.release_gate import (  # noqa: E402
+    validate_secondary_review_receipt,
+)
 
 
 def _sha256_files(paths: Iterable[Path]) -> str:
@@ -91,12 +94,88 @@ def _normalized_report_diff_sha256(diff_result: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _reference_deviation_receipt(
+    contract: dict[str, Any],
+    contract_path: Path | None,
+) -> dict[str, Any]:
+    """Bind a historical deviation to the current approved content bundle."""
+    policy = contract.get("approved_reference_deviation") or {}
+    if not policy:
+        return {
+            "status": "NOT_REQUIRED",
+            "receipt_id": "",
+            "contract_artifact_bound": False,
+            "issues": [],
+        }
+
+    panel_id = str(contract.get("panel_id") or "").strip()
+    expected_receipt_id = str(policy.get("approval_receipt_id") or "").strip()
+    if not panel_id or not expected_receipt_id or contract_path is None:
+        return {
+            "status": "FAIL",
+            "receipt_id": "",
+            "contract_artifact_bound": False,
+            "issues": [
+                {
+                    "code": "REFERENCE_DEVIATION_RECEIPT_METADATA_MISSING",
+                    "message": "panel_id, approval_receipt_id and contract_path are required",
+                }
+            ],
+        }
+
+    receipt = validate_secondary_review_receipt(ROOT, panel_id)
+    issues = list(receipt.get("issues") or [])
+    actual_receipt_id = str(receipt.get("receipt_id") or "").strip()
+    if actual_receipt_id != expected_receipt_id:
+        issues.append(
+            {
+                "code": "REFERENCE_DEVIATION_RECEIPT_ID_MISMATCH",
+                "message": (
+                    f"expected={expected_receipt_id} actual={actual_receipt_id}"
+                ),
+            }
+        )
+
+    resolved_contract = contract_path.resolve()
+    contract_labels = {str(resolved_contract)}
+    try:
+        contract_labels.add(resolved_contract.relative_to(ROOT).as_posix())
+    except ValueError:
+        pass
+    contract_artifact_bound = any(
+        str(artifact.get("path") or "") in contract_labels
+        and artifact.get("sha256_matches") is True
+        for artifact in receipt.get("artifacts") or []
+    )
+    if not contract_artifact_bound:
+        issues.append(
+            {
+                "code": "REFERENCE_DEVIATION_CONTRACT_NOT_BOUND",
+                "message": str(contract_path),
+            }
+        )
+
+    return {
+        **receipt,
+        "status": "PASS"
+        if receipt.get("status") == "PASS"
+        and actual_receipt_id == expected_receipt_id
+        and contract_artifact_bound
+        else "FAIL",
+        "contract_artifact_bound": contract_artifact_bound,
+        "issues": issues,
+    }
+
+
 def _approved_reference_deviation(
     contract: dict[str, Any],
     diff_result: dict[str, Any],
+    *,
+    contract_path: Path | None = None,
 ) -> dict[str, Any]:
     """Validate an exact, committed deviation from a historical reference."""
     policy = contract.get("approved_reference_deviation") or {}
+    receipt = _reference_deviation_receipt(contract, contract_path)
     actual_sha = _normalized_report_diff_sha256(diff_result)
     expected_sha = (
         str(policy.get("normalized_report_diff_sha256") or "").strip().lower()
@@ -110,6 +189,7 @@ def _approved_reference_deviation(
         and bool(supersedes)
         and re.fullmatch(r"[0-9a-f]{64}", expected_sha) is not None
         and actual_sha == expected_sha
+        and receipt.get("status") == "PASS"
     )
     return {
         "approved": approved,
@@ -118,6 +198,7 @@ def _approved_reference_deviation(
         "supersedes": supersedes,
         "expected_normalized_report_diff_sha256": expected_sha,
         "actual_normalized_report_diff_sha256": actual_sha,
+        "approval_receipt": receipt,
     }
 
 
@@ -253,8 +334,19 @@ def validate_contract_registry() -> dict[str, Any]:
                 errors.append(f"{alias}: invalid approved normalized report diff SHA256")
             if deviation.get("approval_status") != "report_group_approved":
                 errors.append(f"{alias}: approved reference deviation lacks report-group approval")
+            if not str(deviation.get("approval_receipt_id") or "").strip():
+                errors.append(f"{alias}: approved reference deviation lacks approval receipt")
             if not str(deviation.get("supersedes") or "").strip():
                 errors.append(f"{alias}: approved reference deviation lacks supersedes")
+            receipt = _reference_deviation_receipt(contract, path)
+            if receipt.get("status") != "PASS":
+                codes = ",".join(
+                    str(issue.get("code") or "UNKNOWN")
+                    for issue in receipt.get("issues") or []
+                )
+                errors.append(
+                    f"{alias}: approved reference deviation receipt invalid ({codes})"
+                )
         brand_order = list(
             (expectations.get("targeted_drug_brand_summary") or {}).get(
                 "ordered_pairs"
@@ -394,7 +486,11 @@ def run_manifest_gate(manifest_path: Path, output_root: Path) -> dict[str, Any]:
                 style_metric_policy="warn",
             )
         )
-        approved_deviation = _approved_reference_deviation(contract, diff_result)
+        approved_deviation = _approved_reference_deviation(
+            contract,
+            diff_result,
+            contract_path=contract_path,
+        )
         effective_diff_status = str(diff_result.get("status") or "")
         if approved_deviation["approved"]:
             effective_diff_status = "PASS_WITH_APPROVED_DEVIATION"

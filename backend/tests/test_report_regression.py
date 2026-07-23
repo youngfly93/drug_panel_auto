@@ -478,7 +478,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
     rule = engine.get("drugs")
     rows = rule["approved_drug_rows"]
 
-    assert rule["version"] == "0.7.0"
+    assert rule["version"] == "0.7.1"
     assert rule["status"] == "active"
     assert len(rows) == 7
     assert "瑞戈非尼" in rows[0]["drug"]
@@ -494,7 +494,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
         "transition_status": "report_group_approved_supersession",
         "approved_at": "2026-07-22",
         "approval_receipt_id": (
-            "report_group_crc_knowledge_secondary_review_20260722"
+            "report_group_crc358_regression_restore_20260723"
         ),
         "source_ref": {
             "type": "report_group_feedback",
@@ -503,7 +503,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
     }
     assert rows[0]["secondary_review_status"] == "report_group_approved"
     assert rows[0]["secondary_review_receipt_id"] == (
-        "report_group_crc_knowledge_secondary_review_20260722"
+        "report_group_crc358_regression_restore_20260723"
     )
     assert "crc_approved_drugs" not in engine.get("panel_rules")
 

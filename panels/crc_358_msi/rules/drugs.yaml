@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 rule_id: "drugs"
-version: "0.7.0"
-updated: "2026-07-22"
+version: "0.7.1"
+updated: "2026-07-23"
 status: "active"
 description: "CRC drug-display rule declarations used by the generator."
 
@@ -45,7 +45,7 @@ drug_rules:
     prior_contract_id: crc358_reviewed_historical_table_contract
     transition_status: report_group_approved_supersession
     approved_at: "2026-07-22"
-    approval_receipt_id: report_group_crc_knowledge_secondary_review_20260722
+    approval_receipt_id: report_group_crc358_regression_restore_20260723
     source_ref:
       type: report_group_feedback
       id: feedback_20260720_crc_approved_drug_dynamic_display
@@ -667,6 +667,54 @@ targeted_drug_rules:
         - type: pubmed
           id: PMID:37852034
           url: https://pubmed.ncbi.nlm.nih.gov/37852034/
+    - gene: BRCA1
+      panels: [crc_358_msi]
+      c_hgvs: c.505C>T
+      p_hgvs: p.Q169*
+      variant_site: "c.505C>T,\np.Q169*"
+      applicability: loss_of_function
+      variant_level: ["Ⅱ类", "II类", "2类"]
+      benefit_drugs:
+        - "奥拉帕利（C）"
+        - "芦卡帕利（C）"
+        - "尼拉帕利（C）"
+        - "他拉唑帕利（C）"
+        - "氟唑帕利（C）"
+        - "帕米帕利（C）"
+        - "阿维鲁单抗+他拉唑帕利（C）"
+        - "LY2606368（C）"
+        - "盐酸可泮利塞+奥拉帕利+度伐利尤单抗（C）"
+        - "奥拉帕利+帕博利珠单抗（C）"
+        - "SRA737（C）"
+        - "他拉唑帕利+阿替利珠单抗（C）"
+        - "芦卡帕利+阿替利珠单抗（C）"
+        - "帕米帕利+替雷利珠单抗（C）"
+      caution_drugs: ["--"]
+      review_status: approved_for_runtime
+      runtime_eligible: true
+      review_basis: historical_report_group_final_exact_variant_regression_restore
+      evidence_level: historical_report_group_final_level_c_migration
+      evidence_as_of: "2026-07-20"
+      cancer_scope: crc358_historical_report_exact_variant_contract
+      secondary_review_status: report_group_approved
+      review_metadata:
+        reviewer: report_group
+        reviewer_type: historical_final_report
+        reviewed_at: "2026-07-20"
+        restored_at: "2026-07-23"
+        restoration_basis: report_group_production_regression_feedback
+        risk_level: high
+        secondary_review_status: report_group_approved
+      source_refs:
+        - type: historical_report_contract
+          id: crc358_reviewed_case_a
+          sha256: a2dc7e1fee96ae6b5e2c49a864c18853516edf85edeea8c796c65b9ad6c33931
+        - type: pubmed
+          id: PMID:26786262
+          url: https://pubmed.ncbi.nlm.nih.gov/26786262/
+        - type: pubmed
+          id: PMID:37852034
+          url: https://pubmed.ncbi.nlm.nih.gov/37852034/
     - gene: BRCA2
       panels: [crc_358_msi]
       applicability: loss_of_function
@@ -850,25 +898,34 @@ targeted_drug_rules:
           url: https://pubmed.ncbi.nlm.nih.gov/24701207/
     - gene: PMS2
       panels: [crc_358_msi]
-      c_hgvs: c.1273del
+      # Match the raw Excel HGVS. Display normalization removes the deleted
+      # base later, so the Word-facing site remains c.1273del.
+      c_hgvs: c.1273delT
       p_hgvs: p.S425Lfs*23
+      variant_site: "c.1273del,\np.S425Lfs*23"
       variant_level: ["Ⅱ类", "II类", "2类"]
-      benefit_drugs: ["--"]
+      benefit_drugs:
+        - "奥拉帕利（C）"
       caution_drugs: ["--"]
-      review_status: needs_review
-      runtime_eligible: false
-      review_basis: ai_delegated_first_review_reject_unspecific_parp_benefit_handle_mmr_as_biomarker
-      evidence_level: crc_olaparib_phase_ii_no_objective_response
-      evidence_as_of: "2026-07-22"
-      cancer_scope: exact_variant_no_crc_parp_benefit_msi_mmr_reviewed_separately
-      secondary_review_status: pending_report_group_secondary_review
+      review_status: approved_for_runtime
+      runtime_eligible: true
+      review_basis: historical_report_group_final_exact_variant_regression_restore
+      evidence_level: historical_report_group_final_level_c_migration
+      evidence_as_of: "2026-07-20"
+      cancer_scope: crc358_historical_report_exact_variant_contract
+      secondary_review_status: report_group_approved
       review_metadata:
-        reviewer: codex
-        reviewer_type: ai_delegated_report_group_first_review
-        reviewed_at: "2026-07-22"
+        reviewer: report_group
+        reviewer_type: historical_final_report
+        reviewed_at: "2026-07-20"
+        restored_at: "2026-07-23"
+        restoration_basis: report_group_production_regression_feedback
         risk_level: high
-        secondary_review_status: pending_report_group_secondary_review
+        secondary_review_status: report_group_approved
       source_refs:
+        - type: historical_report_contract
+          id: crc358_reviewed_case_a
+          sha256: a2dc7e1fee96ae6b5e2c49a864c18853516edf85edeea8c796c65b9ad6c33931
         - type: pubmed
           id: PMID:26786262
           url: https://pubmed.ncbi.nlm.nih.gov/26786262/
@@ -946,7 +1003,7 @@ approved_drug_rows:
     runtime_eligible: true
     review_basis: historical_guideline_table_plus_report_group_rule_stated_20260720
     secondary_review_status: report_group_approved
-    secondary_review_receipt_id: report_group_crc_knowledge_secondary_review_20260722
+    secondary_review_receipt_id: report_group_crc358_regression_restore_20260723
     source_refs:
       - type: guideline_summary
         id: legacy_crc_approved_drug_table

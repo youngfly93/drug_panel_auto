@@ -44,8 +44,8 @@ def test_targeted_drug_rule_context_matrix():
     assert crc358["summary_display_scope"] == "drug_matched_variants"
     assert crc358["summary_display_variant_levels"] == ["Ⅰ类", "Ⅱ类"]
     assert crc358["source_panel_id"] == "crc_358_msi"
-    assert len(crc358["reviewed_variant_overrides"]) == 17
-    assert len(crc358["blocked_reviewed_variant_overrides"]) == 14
+    assert len(crc358["reviewed_variant_overrides"]) == 19
+    assert len(crc358["blocked_reviewed_variant_overrides"]) == 13
     assert len(crc358["applicability_rules"]) == 1
     assert "genes" not in crc358["applicability_rules"][0]
     assert crc358["applicability_rules"][0]["sources"] == ["internal"]

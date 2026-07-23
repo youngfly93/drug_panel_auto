@@ -226,6 +226,24 @@ def _secondary_review_receipt(
     }
 
 
+def validate_secondary_review_receipt(
+    project_root: Path,
+    panel_id: str,
+) -> dict[str, Any]:
+    """Validate one panel's report-group receipt against current file bytes.
+
+    This public boundary is shared by the knowledge gate and historical-golden
+    gate so a committed ``report_group_approved`` label cannot outlive the
+    exact content bundle that the report group reviewed.
+    """
+    root = project_root.resolve()
+    return _secondary_review_receipt(
+        root,
+        _clinical_release_registry(root),
+        panel_id,
+    )
+
+
 def _clinical_readiness(
     registry: Mapping[str, Any],
     panel_id: str,

@@ -2557,7 +2557,6 @@ def test_crc358_uat_first_review_closes_all_positionless_candidate_rows():
         ("NF1", "c.3721C>T", "p.R1241*"),
         ("NF1", "c.6007-1G>T", "--"),
         ("PIK3CA", "c.1633G>A", "p.E545K"),
-        ("PMS2", "c.1273del", "p.S425Lfs*23"),
         ("PTEN", "c.400A>T", "p.M134L"),
         ("SMARCA4", "c.1189C>T", "p.R397*"),
     ]
@@ -2607,7 +2606,9 @@ def test_crc358_uat_rules_are_fail_closed_and_panel_scoped():
         if row.get("secondary_review_status")
         == "pending_report_group_secondary_review"
     ]
-    assert len(new_rows) == 14
+    # The exact historical PMS2 event is restored. The broad BRCA1 LoF guard
+    # remains pending and is outranked only by the approved exact p.Q169* rule.
+    assert len(new_rows) == 13
     assert all(row["review_status"] == "needs_review" for row in new_rows)
     assert all(row["runtime_eligible"] is False for row in new_rows)
     assert all(row.get("source_refs") for row in new_rows)
@@ -2749,9 +2750,9 @@ def test_all_configured_crc_drug_rules_have_governed_consistent_part3_contracts(
 
     expected = {
         "crc_301_msi": (9, 10),
-        # Fourteen newly proposed selectors remain governance-visible but are
-        # not profiled as runtime contracts until secondary review completes.
-        "crc_358_msi": (17, 18),
+        # Pending selectors remain governance-visible but are not profiled as
+        # runtime contracts; two exact historical rows are restored.
+        "crc_358_msi": (19, 20),
     }
     for panel_id, (rules, selector_cases) in expected.items():
         package = load_panel_package(panel_id, project_root=ROOT)

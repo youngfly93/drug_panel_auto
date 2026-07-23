@@ -35,9 +35,9 @@ def test_crc358_historical_contract_is_deidentified_and_structured() -> None:
     contract = load_historical_golden_contract(CONTRACT)
     assert contract["case_alias"] == "crc358_reviewed_case_a"
     assert contract["privacy"]["contains_phi"] is False
-    assert contract["expectations"]["targeted_summary"]["row_count"] == 5
+    assert contract["expectations"]["targeted_summary"]["row_count"] == 7
     assert contract["expectations"]["variant_counts"] == {
-        "targeted_drug_related": 4,
+        "targeted_drug_related": 6,
         "targeted_or_immune_related": 7,
     }
     assert contract["medical_uat"]["status"] == "blocked"
@@ -45,9 +45,9 @@ def test_crc358_historical_contract_is_deidentified_and_structured() -> None:
     assert contract["medical_uat"]["blockers"][0]["id"] == (
         "HISTORICAL_CASE_UAT_NOT_RECORDED"
     )
-    assert len(contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"]) == 34
+    assert len(contract["expectations"]["targeted_drug_brand_summary"]["ordered_pairs"]) == 38
     assert contract["expectations"]["part3"]["gene_section_count"] == 11
-    assert contract["expectations"]["part3"]["drug_section_count"] == 15
+    assert contract["expectations"]["part3"]["drug_section_count"] == 17
     assert contract["expectations"]["part3"]["group_by_gene"] is True
     assert contract["expectations"]["part3"]["gene_order_by_max_vaf_descending"] is True
     assert contract["expectations"]["part3"]["within_gene_vaf_descending"] is True
@@ -67,7 +67,40 @@ def test_targeted_brand_config_order_matches_historical_contract() -> None:
     assert all(drug in config["brands"] for drug in expected_drugs)
 
 
-def test_approved_reference_deviation_requires_exact_full_report_fingerprint() -> None:
+def _bind_deviation_receipt(
+    contract: dict,
+    contract_path: Path,
+    monkeypatch,
+    *,
+    receipt_id: str = "receipt-1",
+) -> None:
+    contract["panel_id"] = "crc_358_msi"
+    contract["approved_reference_deviation"]["approval_receipt_id"] = receipt_id
+    contract_path.write_text(
+        yaml.safe_dump(contract, allow_unicode=True),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        release_gate,
+        "validate_secondary_review_receipt",
+        lambda _root, _panel_id: {
+            "status": "PASS",
+            "receipt_id": receipt_id,
+            "issues": [],
+            "artifacts": [
+                {
+                    "path": str(contract_path.resolve()),
+                    "sha256_matches": True,
+                }
+            ],
+        },
+    )
+
+
+def test_approved_reference_deviation_requires_exact_full_report_fingerprint(
+    tmp_path,
+    monkeypatch,
+) -> None:
     diff = {
         "schema_version": "1.0",
         "status": "FAIL",
@@ -91,13 +124,26 @@ def test_approved_reference_deviation_requires_exact_full_report_fingerprint() -
             "supersedes": "historical_exact_output",
         }
     }
+    contract_path = tmp_path / "contract.yaml"
+    _bind_deviation_receipt(contract, contract_path, monkeypatch)
 
-    assert _approved_reference_deviation(contract, diff)["approved"] is True
+    assert _approved_reference_deviation(
+        contract,
+        diff,
+        contract_path=contract_path,
+    )["approved"] is True
     diff["sections"]["part3"]["samples"].append("unexpected change")
-    assert _approved_reference_deviation(contract, diff)["approved"] is False
+    assert _approved_reference_deviation(
+        contract,
+        diff,
+        contract_path=contract_path,
+    )["approved"] is False
 
 
-def test_approved_reference_deviation_blocks_diff_schema_change() -> None:
+def test_approved_reference_deviation_blocks_diff_schema_change(
+    tmp_path,
+    monkeypatch,
+) -> None:
     diff = {
         "schema_version": "1.0",
         "status": "FAIL",
@@ -115,15 +161,27 @@ def test_approved_reference_deviation_blocks_diff_schema_change() -> None:
             "supersedes": "historical_exact_output",
         }
     }
+    contract_path = tmp_path / "contract.yaml"
+    _bind_deviation_receipt(contract, contract_path, monkeypatch)
 
-    assert _approved_reference_deviation(contract, diff)["approved"] is True
+    assert _approved_reference_deviation(
+        contract,
+        diff,
+        contract_path=contract_path,
+    )["approved"] is True
     diff["schema_version"] = "2.0"
-    assert _approved_reference_deviation(contract, diff)["approved"] is False
+    assert _approved_reference_deviation(
+        contract,
+        diff,
+        contract_path=contract_path,
+    )["approved"] is False
 
 
 @pytest.mark.parametrize("section", ["documents", "styles", "qa"])
 def test_approved_reference_deviation_blocks_nonsemantic_section_change(
     section: str,
+    tmp_path,
+    monkeypatch,
 ) -> None:
     diff = {
         "schema_version": "1.0",
@@ -149,10 +207,44 @@ def test_approved_reference_deviation_blocks_nonsemantic_section_change(
             "supersedes": "historical_exact_output",
         }
     }
+    contract_path = tmp_path / "contract.yaml"
+    _bind_deviation_receipt(contract, contract_path, monkeypatch)
 
-    assert _approved_reference_deviation(contract, diff)["approved"] is True
+    assert _approved_reference_deviation(
+        contract,
+        diff,
+        contract_path=contract_path,
+    )["approved"] is True
     diff["sections"][section]["unexpected"] = "not reviewed"
-    assert _approved_reference_deviation(contract, diff)["approved"] is False
+    assert _approved_reference_deviation(
+        contract,
+        diff,
+        contract_path=contract_path,
+    )["approved"] is False
+
+
+def test_approved_reference_deviation_fails_closed_without_bound_receipt(
+    tmp_path,
+) -> None:
+    diff = {"status": "FAIL", "sections": {"part3": {"status": "FAIL"}}}
+    contract = {
+        "panel_id": "crc_358_msi",
+        "approved_reference_deviation": {
+            "policy": "exact_normalized_report_diff_v1",
+            "normalized_report_diff_sha256": (
+                release_gate._normalized_report_diff_sha256(diff)
+            ),
+            "approval_status": "report_group_approved",
+            "supersedes": "historical_exact_output",
+        },
+    }
+    result = _approved_reference_deviation(
+        contract,
+        diff,
+        contract_path=tmp_path / "contract.yaml",
+    )
+    assert result["approved"] is False
+    assert result["approval_receipt"]["status"] == "FAIL"
 
 
 def test_historical_contract_loader_rejects_phi_contract(tmp_path) -> None:
@@ -635,6 +727,7 @@ def test_manifest_gate_binds_candidate_and_qa_to_current_revision(tmp_path, monk
         ),
         "approval_status": "report_group_approved",
         "supersedes": "historical_exact_output",
+        "approval_receipt_id": "receipt-1",
     }
     contract.write_text(
         yaml.safe_dump(contract_payload, allow_unicode=True),
@@ -644,6 +737,21 @@ def test_manifest_gate_binds_candidate_and_qa_to_current_revision(tmp_path, monk
         release_gate,
         "compare_reports",
         lambda _options: approved_diff,
+    )
+    monkeypatch.setattr(
+        release_gate,
+        "validate_secondary_review_receipt",
+        lambda _root, _panel_id: {
+            "status": "PASS",
+            "receipt_id": "receipt-1",
+            "issues": [],
+            "artifacts": [
+                {
+                    "path": str(contract.resolve()),
+                    "sha256_matches": True,
+                }
+            ],
+        },
     )
     approved = release_gate.run_manifest_gate(manifest, tmp_path / "out-approved")
     assert approved["status"] == "PASS"
