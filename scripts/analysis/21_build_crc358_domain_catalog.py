@@ -460,6 +460,7 @@ def build_catalog(
     cache_dir: Path,
     *,
     panel_id: str = "crc_358_msi",
+    candidate_only: bool = False,
 ) -> dict[str, Any]:
     loader = PanelPackageLoader(project_root=project_root)
     package = loader.load(panel_id)
@@ -497,6 +498,10 @@ def build_catalog(
     resolved, unresolved, ambiguous = _resolve_results(
         protein_requested, all_results
     )
+    ambiguity_by_gene = {
+        str(row["gene"]): dict(row)
+        for row in ambiguous
+    }
     fallback_accessions = sorted(
         {
             str(row.get("primaryAccession") or "")
@@ -556,36 +561,73 @@ def build_catalog(
                 if item.get("entry_id")
             }
         )
-        rows.append(
-            {
-                "gene": gene,
-                "fixed_domain_text": _domain_text(gene, length, features),
-                "annotation_status": "official_feature_annotated",
-                "uniprot_accession": accession,
-                "interpro_entries": interpro_ids,
-                "source_refs": [
-                    {
-                        "type": "uniprot",
-                        "id": accession,
-                        "url": f"https://www.uniprot.org/uniprotkb/{accession}/entry",
-                    },
-                    *(
-                        [
-                            {
-                                "type": "interpro",
-                                "id": accession,
-                                "url": INTERPRO_PROTEIN_URL.format(
-                                    accession=accession
-                                )
-                                + "?page_size=200",
-                            }
-                        ]
-                        if any(item["source"] == "interpro" for item in features)
-                        else []
-                    ),
+        row = {
+            "gene": gene,
+            "fixed_domain_text": _domain_text(gene, length, features),
+            "annotation_status": "official_feature_annotated",
+            "uniprot_accession": accession,
+            "interpro_entries": interpro_ids,
+            "source_refs": [
+                {
+                    "type": "uniprot",
+                    "id": accession,
+                    "url": f"https://www.uniprot.org/uniprotkb/{accession}/entry",
+                },
+                *(
+                    [
+                        {
+                            "type": "interpro",
+                            "id": accession,
+                            "url": INTERPRO_PROTEIN_URL.format(
+                                accession=accession
+                            )
+                            + "?page_size=200",
+                        }
+                    ]
+                    if any(item["source"] == "interpro" for item in features)
+                    else []
+                ),
+            ],
+        }
+        ambiguity = ambiguity_by_gene.get(gene)
+        if ambiguity:
+            candidate_rows = [
+                item
+                for item in all_results
+                if str(item.get("primaryAccession") or "")
+                in set(ambiguity["candidates"])
+            ]
+            exact_primary_candidates = sorted(
+                str(item.get("primaryAccession") or "")
+                for item in candidate_rows
+                if _primary_gene_name(item) == gene
+            )
+            row["accession_selection"] = {
+                "status": "pending_secondary_mapping_review",
+                "selected": accession,
+                "alternatives": [
+                    value
+                    for value in ambiguity["candidates"]
+                    if value != accession
                 ],
+                "selection_basis": (
+                    "explicit_accession_override"
+                    if ACCESSION_OVERRIDES.get(gene) == accession
+                    else (
+                        "exact_primary_gene_name_preferred_over_synonym_collision"
+                        if len(exact_primary_candidates) == 1
+                        else (
+                            "deterministic_accession_order_pending_"
+                            "transcript_product_review"
+                        )
+                    )
+                ),
+                "exact_primary_gene_accessions": exact_primary_candidates,
+                "requires_transcript_product_review": (
+                    len(exact_primary_candidates) > 1
+                ),
             }
-        )
+        rows.append(row)
 
     consumer_gene_sets = _catalog_consumer_gene_sets(
         project_root, loader, output, package
@@ -611,6 +653,11 @@ def build_catalog(
                 "uniprot_release_date", ""
             ),
             "scope": "pan_cancer_protein_structure_only",
+            "activation_mode": (
+                "candidate_only_pending_secondary_review"
+                if candidate_only
+                else "provisional_runtime"
+            ),
             "consumer_panels": sorted(consumer_gene_sets),
             "privacy": "No patient or sample identifiers are stored.",
         },
@@ -619,8 +666,12 @@ def build_catalog(
             "policy_id": f"{panel_id}_fixed_domain_catalog_first_review",
             "defaults": {
                 "gene": {
-                    "review_status": "provisional_runtime",
-                    "runtime_eligible": True,
+                    "review_status": (
+                        "needs_review"
+                        if candidate_only
+                        else "provisional_runtime"
+                    ),
+                    "runtime_eligible": not candidate_only,
                     "review_basis": "codex_first_review_official_protein_annotation",
                     "reviewer": "codex",
                     "reviewer_type": "ai_assisted_evidence_review",
@@ -663,6 +714,7 @@ def build_catalog(
         "unresolved_genes": unresolved,
         "featureless_genes": featureless,
         "ambiguous_gene_mappings": ambiguous,
+        "candidate_only": candidate_only,
         "output": str(output.relative_to(project_root)),
     }
     receipt_path = cache_dir / "build_receipt.json"
@@ -695,6 +747,14 @@ def main() -> int:
             "to the existing output catalog."
         ),
     )
+    parser.add_argument(
+        "--candidate-only",
+        action="store_true",
+        help=(
+            "Emit fully sourced review candidates with runtime_eligible=false "
+            "until an attributed secondary review is recorded."
+        ),
+    )
     args = parser.parse_args()
     root = args.project_root.resolve()
     output_arg = args.output or Path(
@@ -717,6 +777,7 @@ def main() -> int:
             output,
             cache_dir,
             panel_id=str(args.panel_id),
+            candidate_only=bool(args.candidate_only),
         )
     print(json.dumps(receipt, ensure_ascii=False, indent=2))
     if args.rescope_existing:

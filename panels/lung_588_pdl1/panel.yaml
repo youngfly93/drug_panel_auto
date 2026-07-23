@@ -46,6 +46,9 @@ part3_knowledge:
     检测结果请以第二部分为准，
     最终临床意义须由专业医师结合病理类型、疾病分期及现行诊疗规范综合判断。
 
+reviewed_part3_overlay_additions:
+  - "rules/reviewed_part3_domain_candidates.yaml"
+
 enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
 
 default_template: "lung_588_pdl1_golden_template_v0"

@@ -47,6 +47,9 @@ WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 PANEL_DIR = ROOT / "panels" / "lung_588_pdl1"
 PRE_UAT_RECORD = PANEL_DIR / "uat" / "lung588_machine_pre_uat_20260723.yaml"
+DOMAIN_CANDIDATES = (
+    PANEL_DIR / "rules" / "reviewed_part3_domain_candidates.yaml"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -860,6 +863,54 @@ def test_lung588_knowledge_redaction_contract_rejects_replacement_text(
         load_panel_knowledge_redactions(fake_package)
 
 
+def test_lung588_domain_catalog_is_complete_candidate_only_and_sourced():
+    catalog = yaml.safe_load(DOMAIN_CANDIDATES.read_text(encoding="utf-8"))
+    defaults = catalog["governance"]["defaults"]["gene"]
+    rows = catalog["gene_sections"]
+
+    assert catalog["source"]["panel"] == "lung_588_pdl1"
+    assert catalog["source"]["activation_mode"] == (
+        "candidate_only_pending_secondary_review"
+    )
+    assert defaults["review_status"] == "needs_review"
+    assert defaults["runtime_eligible"] is False
+    assert defaults["secondary_review_status"] == (
+        "pending_report_group_review"
+    )
+    assert len(rows) == 551
+    assert len({row["gene"] for row in rows}) == 551
+    assert all(
+        row["panels"] == ["lung_588_pdl1"]
+        and row["fixed_domain_text"]
+        and row["source_refs"]
+        and row.get("runtime_eligible") is not True
+        for row in rows
+    )
+    ambiguous = [row for row in rows if row.get("accession_selection")]
+    assert len(ambiguous) == 15
+    assert {
+        row["gene"]
+        for row in ambiguous
+        if row["accession_selection"][
+            "requires_transcript_product_review"
+        ]
+    } == {"CDKN2A", "CUX1", "GNAS", "RBM10"}
+    assert catalog["drug_sections"] == []
+
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    genes = yaml.safe_load(
+        package.resolve_rule_file("knowledge_coverage").read_text(
+            encoding="utf-8"
+        )
+    )["reportable_genes"]
+    profile = profile_panel_runtime_content(ROOT, package, genes)
+    assert profile["fixed_domain_covered_genes"] == 37
+    assert len(profile["missing_fixed_domain_genes"]) == 551
+    assert set(profile["missing_fixed_domain_genes"]) == {
+        row["gene"] for row in rows
+    }
+
+
 def test_lung588_medical_knowledge_queue_is_complete_and_deidentified(tmp_path):
     completed = subprocess.run(
         [
@@ -901,6 +952,29 @@ def test_lung588_medical_knowledge_queue_is_complete_and_deidentified(tmp_path):
     assert inventory["summary"]["specific_mutation_narrative_count"] == 32
     assert inventory["summary"]["generic_mutation_narrative_count"] == 309
     assert inventory["summary"]["fixed_domain_count"] == 37
+    assert inventory["summary"]["fixed_domain_candidate_count"] == 551
+    assert (
+        inventory["summary"][
+            "fixed_domain_candidate_runtime_eligible_count"
+        ]
+        == 0
+    )
+    assert (
+        inventory["summary"][
+            "fixed_domain_candidate_ambiguous_mapping_count"
+        ]
+        == 15
+    )
+    assert (
+        inventory["summary"][
+            "fixed_domain_candidate_transcript_product_review_count"
+        ]
+        == 4
+    )
+    assert (
+        inventory["summary"]["fixed_domain_runtime_or_candidate_count"]
+        == 588
+    )
     assert inventory["summary"]["depth_strata"] == {
         "missing_narrative_and_domain": 247,
         "narrative_present_domain_missing": 304,
@@ -930,6 +1004,15 @@ def test_lung588_medical_knowledge_queue_is_complete_and_deidentified(tmp_path):
     stk11 = next(row for row in inventory["rows"] if row["gene"] == "STK11")
     assert stk11["priority"] == "P4"
     assert stk11["citation_source_mismatches"] == []
+    assert stk11["fixed_domain_candidate_available"] is False
+    gnas = next(row for row in inventory["rows"] if row["gene"] == "GNAS")
+    assert gnas["fixed_domain_candidate_available"] is True
+    assert (
+        gnas["fixed_domain_candidate"]["accession_selection"][
+            "requires_transcript_product_review"
+        ]
+        is True
+    )
     emitted = "\n".join(
         path.read_text(encoding="utf-8-sig")
         for path in tmp_path.iterdir()

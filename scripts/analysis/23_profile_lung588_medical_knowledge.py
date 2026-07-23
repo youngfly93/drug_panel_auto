@@ -34,6 +34,7 @@ from reportgen.knowledge.quality import (  # noqa: E402
     is_generic_mutation_analysis,
     load_panel_citation_source_reviews,
 )
+from reportgen.knowledge.governance import effective_governance  # noqa: E402
 from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
 
 
@@ -151,6 +152,60 @@ def _candidate_events(package: Any) -> dict[str, list[dict[str, str]]]:
     return events
 
 
+def _fixed_domain_candidates(package: Any) -> dict[str, dict[str, Any]]:
+    """Load sourced, non-runtime domain candidates for secondary review."""
+
+    candidates: dict[str, dict[str, Any]] = {}
+    additions = (package.raw or {}).get(
+        "reviewed_part3_overlay_additions"
+    ) or []
+    if isinstance(additions, str):
+        additions = [additions]
+    for declared_path in additions:
+        path = package._resolve_path(declared_path)
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if (
+            (raw.get("source") or {}).get("activation_mode")
+            != "candidate_only_pending_secondary_review"
+        ):
+            continue
+        for row in raw.get("gene_sections") or []:
+            if not isinstance(row, dict):
+                continue
+            gene = _clean(row.get("gene")).upper()
+            fixed_domain_text = _clean(row.get("fixed_domain_text"))
+            if not gene or not fixed_domain_text:
+                continue
+            if gene in candidates:
+                raise ValueError(
+                    f"duplicate lung588 domain candidate: {gene}"
+                )
+            governance = effective_governance(raw, row, "gene")
+            selection = row.get("accession_selection") or {}
+            candidates[gene] = {
+                "fixed_domain_text": fixed_domain_text,
+                "fixed_domain_text_sha256": _text_sha256(
+                    fixed_domain_text
+                ),
+                "uniprot_accession": _clean(
+                    row.get("uniprot_accession")
+                ),
+                "interpro_entries": [
+                    _clean(value)
+                    for value in row.get("interpro_entries") or []
+                    if _clean(value)
+                ],
+                "source_refs": governance["source_refs"],
+                "review_status": governance["status"],
+                "runtime_eligible": governance["runtime_eligible"],
+                "secondary_review_status": governance[
+                    "secondary_review_status"
+                ],
+                "accession_selection": selection,
+            }
+    return candidates
+
+
 def _priority(
     gene: str,
     *,
@@ -182,6 +237,7 @@ def _action(
     missing_analysis: bool,
     generic_analysis: bool,
     missing_domain: bool,
+    has_domain_candidate: bool,
     has_candidate: bool,
     citation_source_mismatch: bool,
 ) -> str:
@@ -193,7 +249,10 @@ def _action(
     if generic_analysis:
         actions.append("用可追溯肺癌/基因功能证据替换通用套话")
     if missing_domain:
-        actions.append("从官方蛋白资源补固定结构域并校验转录本")
+        if has_domain_candidate:
+            actions.append("复核官方蛋白结构域候选、accession及转录本/产物边界")
+        else:
+            actions.append("从官方蛋白资源补固定结构域并校验转录本")
     if has_candidate:
         actions.append("按精确位点、适应证上下文、药物和当前标签逐条二审")
     return "；".join(actions) or "抽样复核现有文案与来源"
@@ -204,6 +263,24 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
     genes = _reportable_genes(package)
     observed_events = _observed_events(package)
     candidate_events = _candidate_events(package)
+    domain_candidates = _fixed_domain_candidates(package)
+    unexpected_domain_candidates = set(domain_candidates) - set(genes)
+    if unexpected_domain_candidates:
+        raise ValueError(
+            "lung588 domain candidates fall outside the denominator: "
+            + ", ".join(sorted(unexpected_domain_candidates))
+        )
+    runtime_domain_candidates = sorted(
+        gene
+        for gene, row in domain_candidates.items()
+        if row["runtime_eligible"]
+    )
+    if runtime_domain_candidates:
+        raise ValueError(
+            "lung588 domain candidates must remain non-runtime pending "
+            "secondary review: "
+            + ", ".join(runtime_domain_candidates)
+        )
     observed_genes = set(observed_events)
     candidate_genes = set(candidate_events)
     provider = build_panel_gene_provider(root, package)
@@ -233,6 +310,8 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
         missing_analysis = not analysis
         missing_mutation_narrative = not mutation_narrative
         missing_domain = not fixed_domain
+        domain_candidate = domain_candidates.get(gene) or {}
+        has_domain_candidate = bool(domain_candidate)
         generic_analysis = bool(
             mutation_narrative
             and is_generic_mutation_analysis(gene, mutation_narrative)
@@ -284,7 +363,11 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
         else:
             review_tracks.append("specific_mutation_narrative")
         if missing_domain:
-            review_tracks.append("missing_fixed_domain")
+            review_tracks.append(
+                "fixed_domain_candidate_pending_secondary_review"
+                if has_domain_candidate
+                else "missing_fixed_domain"
+            )
         else:
             review_tracks.append("fixed_domain_present")
         if source_mismatches:
@@ -319,6 +402,8 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
                 ),
                 "generic_mutation_narrative": generic_analysis,
                 "fixed_domain_present": not missing_domain,
+                "fixed_domain_candidate_available": has_domain_candidate,
+                "fixed_domain_candidate": domain_candidate,
                 "review_tracks": review_tracks,
                 "source_status": source_status,
                 "runtime_text_sha256": {
@@ -343,6 +428,7 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
                     missing_analysis=missing_mutation_narrative,
                     generic_analysis=generic_analysis,
                     missing_domain=missing_domain,
+                    has_domain_candidate=has_domain_candidate,
                     has_candidate=gene in candidate_genes,
                     citation_source_mismatch=bool(source_mismatches),
                 ),
@@ -400,6 +486,42 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
                 row["generic_mutation_narrative"] for row in rows
             ),
             "fixed_domain_count": sum(row["fixed_domain_present"] for row in rows),
+            "fixed_domain_candidate_count": sum(
+                row["fixed_domain_candidate_available"] for row in rows
+            ),
+            "fixed_domain_candidate_runtime_eligible_count": sum(
+                bool(
+                    row["fixed_domain_candidate"]
+                    and row["fixed_domain_candidate"]["runtime_eligible"]
+                )
+                for row in rows
+            ),
+            "fixed_domain_candidate_ambiguous_mapping_count": sum(
+                bool(
+                    row["fixed_domain_candidate"]
+                    and row["fixed_domain_candidate"].get(
+                        "accession_selection"
+                    )
+                )
+                for row in rows
+            ),
+            "fixed_domain_candidate_transcript_product_review_count": sum(
+                bool(
+                    row["fixed_domain_candidate"]
+                    and (
+                        row["fixed_domain_candidate"].get(
+                            "accession_selection"
+                        )
+                        or {}
+                    ).get("requires_transcript_product_review")
+                )
+                for row in rows
+            ),
+            "fixed_domain_runtime_or_candidate_count": sum(
+                row["fixed_domain_present"]
+                or row["fixed_domain_candidate_available"]
+                for row in rows
+            ),
             "depth_strata": {
                 "missing_narrative_and_domain": sum(
                     not row["mutation_narrative_present"]
@@ -489,6 +611,12 @@ def build_review_batches(
             for batch_row, row in enumerate(chunk, start=1):
                 sequence += 1
                 runtime_content = row["runtime_content"]
+                domain_candidate = row["fixed_domain_candidate"]
+                accession_selection = (
+                    domain_candidate.get("accession_selection") or {}
+                    if domain_candidate
+                    else {}
+                )
                 assignments.append(
                     {
                         "review_sequence": sequence,
@@ -514,6 +642,29 @@ def build_review_batches(
                         "fixed_domain_present": row[
                             "fixed_domain_present"
                         ],
+                        "fixed_domain_candidate_available": row[
+                            "fixed_domain_candidate_available"
+                        ],
+                        "candidate_fixed_domain_text": (
+                            domain_candidate.get("fixed_domain_text", "")
+                        ),
+                        "candidate_uniprot_accession": (
+                            domain_candidate.get("uniprot_accession", "")
+                        ),
+                        "candidate_source_refs": (
+                            domain_candidate.get("source_refs", [])
+                        ),
+                        "candidate_review_status": (
+                            domain_candidate.get("review_status", "")
+                        ),
+                        "candidate_secondary_review_status": (
+                            domain_candidate.get(
+                                "secondary_review_status", ""
+                            )
+                        ),
+                        "candidate_accession_selection": (
+                            accession_selection
+                        ),
                         "source_status": row["source_status"],
                         "runtime_intro": runtime_content["intro"],
                         "runtime_mutation_narrative": runtime_content[
@@ -604,6 +755,8 @@ def write_outputs(
         "specific_mutation_narrative",
         "generic_mutation_narrative",
         "fixed_domain_present",
+        "fixed_domain_candidate_available",
+        "fixed_domain_candidate",
         "review_tracks",
         "source_status",
         "runtime_text_sha256",
@@ -646,6 +799,13 @@ def write_outputs(
         "mutation_narrative_present",
         "generic_mutation_narrative",
         "fixed_domain_present",
+        "fixed_domain_candidate_available",
+        "candidate_fixed_domain_text",
+        "candidate_uniprot_accession",
+        "candidate_source_refs",
+        "candidate_review_status",
+        "candidate_secondary_review_status",
+        "candidate_accession_selection",
         "source_status",
         "runtime_intro",
         "runtime_mutation_narrative",
