@@ -718,6 +718,46 @@ def test_real_input_validator_handles_empty_release_revision(tmp_path, monkeypat
     assert validate_lung588_real_inputs._source_revision() == ""
 
 
+def test_real_input_validator_separates_ngs_pre_uat_from_formal_uat():
+    rows = [
+        {
+            "auto_detection": {
+                "detected": False,
+                "project_type": None,
+            },
+            "targeted_drug_count": 0,
+            "biomarker_contract_status": "PASS",
+            "pdl1_product_contract_status": "FAIL",
+            "pdl1_input_provenance": "synthetic_visual_qa_only",
+            "context_contract": {"status": "PASS"},
+        }
+        for _ in range(3)
+    ]
+
+    readiness = validate_lung588_real_inputs._build_uat_readiness(rows)
+
+    assert readiness["scope"] == "machine_pre_uat_only"
+    assert readiness["required_formal_uat_case_count"] == 10
+    assert readiness["observed_real_input_count"] == 3
+    assert readiness["additional_real_case_count_required"] == 7
+    assert readiness["ngs_structure_pass_count"] == 3
+    assert readiness["ngs_structure_status"] == "PASS"
+    assert readiness["pdl1_product_pass_count"] == 0
+    assert readiness["pdl1_product_status"] == "BLOCKED"
+    assert readiness["verified_case_pdl1_source_count"] == 0
+    assert readiness["report_group_reviewed_case_count"] == 0
+    assert readiness["formal_uat_status"] == "BLOCKED"
+    assert readiness["formal_uat_requirement_met"] is False
+    assert {
+        blocker["code"] for blocker in readiness["blockers"]
+    } == {
+        "INSUFFICIENT_REAL_CASES",
+        "PDL1_PRODUCT_CONTRACT_BLOCKED",
+        "PDL1_CASE_SOURCE_NOT_VERIFIED",
+        "REPORT_GROUP_UAT_INCOMPLETE",
+    }
+
+
 def test_lung588_machine_pre_uat_is_traceable_and_does_not_overclaim():
     record = yaml.safe_load(PRE_UAT_RECORD.read_text(encoding="utf-8"))
 

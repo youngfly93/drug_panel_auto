@@ -48,6 +48,7 @@ KNOWN_INPUTS = {
     },
 }
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+REQUIRED_FORMAL_UAT_CASE_COUNT = 10
 
 
 def _sha256(path: Path) -> str:
@@ -320,6 +321,94 @@ def _render_case(
     }
 
 
+def _build_uat_readiness(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Separate machine NGS checks from clinical PD-L1 and formal UAT."""
+
+    ngs_structure_pass_count = sum(
+        not row["auto_detection"]["detected"]
+        and row["targeted_drug_count"] == 0
+        and row["biomarker_contract_status"] == "PASS"
+        and row["context_contract"]["status"] in {"PASS", "NOT_APPLICABLE"}
+        for row in rows
+    )
+    pdl1_product_pass_count = sum(
+        row["pdl1_product_contract_status"] == "PASS" for row in rows
+    )
+    verified_case_pdl1_source_count = sum(
+        row["pdl1_input_provenance"] == "case_specific_verified_ihc_source"
+        for row in rows
+    )
+    report_group_reviewed_case_count = 0
+    blockers = []
+    additional_case_count = max(
+        REQUIRED_FORMAL_UAT_CASE_COUNT - len(rows),
+        0,
+    )
+    if additional_case_count:
+        blockers.append(
+            {
+                "code": "INSUFFICIENT_REAL_CASES",
+                "message": (
+                    f"{additional_case_count} additional real, de-identified "
+                    "lung588 cases are required"
+                ),
+            }
+        )
+    if pdl1_product_pass_count != len(rows):
+        blockers.append(
+            {
+                "code": "PDL1_PRODUCT_CONTRACT_BLOCKED",
+                "message": (
+                    f"{len(rows) - pdl1_product_pass_count} observed cases "
+                    "do not pass an enabled PD-L1 product contract"
+                ),
+            }
+        )
+    if verified_case_pdl1_source_count != len(rows):
+        blockers.append(
+            {
+                "code": "PDL1_CASE_SOURCE_NOT_VERIFIED",
+                "message": (
+                    f"{len(rows) - verified_case_pdl1_source_count} observed "
+                    "cases use synthetic machine-QA values rather than a "
+                    "verified case-specific IHC source"
+                ),
+            }
+        )
+    if report_group_reviewed_case_count < REQUIRED_FORMAL_UAT_CASE_COUNT:
+        blockers.append(
+            {
+                "code": "REPORT_GROUP_UAT_INCOMPLETE",
+                "message": (
+                    "0/10 cases have a recorded report-group UAT decision"
+                ),
+            }
+        )
+    return {
+        "scope": "machine_pre_uat_only",
+        "required_formal_uat_case_count": REQUIRED_FORMAL_UAT_CASE_COUNT,
+        "observed_real_input_count": len(rows),
+        "additional_real_case_count_required": additional_case_count,
+        "ngs_structure_pass_count": ngs_structure_pass_count,
+        "ngs_structure_status": (
+            "PASS" if ngs_structure_pass_count == len(rows) else "FAIL"
+        ),
+        "pdl1_product_pass_count": pdl1_product_pass_count,
+        "pdl1_product_status": (
+            "PASS" if pdl1_product_pass_count == len(rows) else "BLOCKED"
+        ),
+        "verified_case_pdl1_source_count": (
+            verified_case_pdl1_source_count
+        ),
+        "report_group_reviewed_case_count": (
+            report_group_reviewed_case_count
+        ),
+        "formal_uat_status": "BLOCKED",
+        "formal_uat_requirement_met": False,
+        "blockers": blockers,
+    }
+
+
 def validate_inputs(
     input_dir: Path,
     *,
@@ -423,6 +512,7 @@ def validate_inputs(
         "status": "FAIL" if failures else "PASS",
         "source_commit": _source_revision(),
         "case_count": len(rows),
+        "uat_readiness": _build_uat_readiness(rows),
         "cases": rows,
         "failures": failures,
     }
@@ -475,6 +565,7 @@ def main() -> int:
                     row["alias"]: row["pdl1_product_contract_status"]
                     for row in payload["cases"]
                 },
+                "uat_readiness": payload["uat_readiness"],
                 "render_statuses": {
                     row["alias"]: row["report_generation"]["status"]
                     for row in payload["cases"]
