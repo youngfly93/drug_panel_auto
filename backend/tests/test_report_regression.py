@@ -1899,6 +1899,52 @@ def test_reviewed_variant_override_replaces_existing_targeted_tip():
     assert "帕尼单抗（A）" in tip_row["caution_drugs"]
 
 
+@pytest.mark.parametrize(
+    ("transcript", "expected_benefit"),
+    [
+        ("NM_004985.5", "转录本限定药物（A）"),
+        ("NM_004985.4", "old"),
+        ("", "old"),
+    ],
+)
+def test_transcript_bound_override_only_patches_exact_runtime_event(
+    transcript,
+    expected_benefit,
+):
+    report_data = ReportData()
+    report_data.set_table(
+        "variants_2_1",
+        [
+            {
+                "gene": "KRAS",
+                "transcript": transcript,
+                "locus": "c.34G>A,\np.G12S",
+                "gene_class": "Ⅱ类",
+                "benefit_drugs": "old",
+                "caution_drugs": "old",
+            }
+        ],
+    )
+    panel_config = PanelConfig(
+        reviewed_variant_overrides=[
+            {
+                "gene": "KRAS",
+                "transcript": "NM_004985.5",
+                "c_hgvs": "c.34G>A",
+                "p_hgvs": "p.G12S",
+                "variant_level": ["Ⅱ类"],
+                "benefit_drugs": ["转录本限定药物（A）"],
+                "caution_drugs": ["--"],
+            }
+        ]
+    )
+
+    _patch_reviewed_variant_override_rows(report_data, panel_config)
+
+    row = report_data.get_table("variants_2_1")[0]
+    assert row["benefit_drugs"] == expected_benefit
+
+
 def test_long_drug_lists_are_compacted_for_word_tables_but_kept_full_in_summary():
     long_list = "\n".join(f"药物{i}（C）" for i in range(1, 8))
     report_data = ReportData(

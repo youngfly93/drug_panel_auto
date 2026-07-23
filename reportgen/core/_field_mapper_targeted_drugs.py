@@ -15,7 +15,10 @@ import pandas as pd
 
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
-from reportgen.rules.targeted_drugs import select_reviewed_variant_rule
+from reportgen.rules.targeted_drugs import (
+    reviewed_variant_transcript_matches,
+    select_reviewed_variant_rule,
+)
 from reportgen.utils.hgvs_utils import format_variant_site
 
 
@@ -300,6 +303,7 @@ class TargetedDrugMixin:
         c_point: str,
         p_point: str,
         variant_level: str = "",
+        transcript: str = "",
         *,
         targeted_drug_rules: Optional[dict[str, Any]] = None,
     ) -> Optional[tuple[str, str]]:
@@ -321,6 +325,8 @@ class TargetedDrugMixin:
                 )
             }
             if genes and gene_norm not in genes:
+                return False
+            if not reviewed_variant_transcript_matches(override, transcript):
                 return False
             level_values = self._as_text_list(
                 override.get("variant_level")
@@ -671,6 +677,7 @@ class TargetedDrugMixin:
         c_point: str,
         p_point: str,
         variant_level: str = "",
+        transcript: str = "",
         cancer_type: str = "",
         targeted_drug_rules: Optional[dict[str, Any]] = None,
     ) -> tuple[str, str, float]:
@@ -692,6 +699,7 @@ class TargetedDrugMixin:
             c_norm,
             p_norm,
             variant_level=variant_level,
+            transcript=transcript,
             targeted_drug_rules=targeted_drug_rules,
         )
         if reviewed_override:
@@ -1020,6 +1028,7 @@ class TargetedDrugMixin:
                     "c": c,
                     "p": p,
                     "level": level,
+                    "transcript": self._norm_text(r.get("Transcript")),
                     "site": site,
                     "af": self._norm_text(r.get("Freq(%)") or r.get("AF")),
                 }
@@ -1134,6 +1143,7 @@ class TargetedDrugMixin:
                         c_point=s["c"],
                         p_point=s["p"],
                         variant_level=s["level"],
+                        transcript=s["transcript"],
                         cancer_type=report_cancer_type,
                         targeted_drug_rules=targeted_drug_rules,
                     )
@@ -1160,6 +1170,7 @@ class TargetedDrugMixin:
                     {
                         "gene": gene,
                         "variant_site": s["site"],
+                        "transcript": s["transcript"],
                         "gene_class": s["level"],
                         "benefit_drugs": b,
                         "caution_drugs": c,

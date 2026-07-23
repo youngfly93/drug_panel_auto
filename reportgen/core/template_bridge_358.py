@@ -15,6 +15,7 @@ Key responsibilities:
 Python 3.9 compatible.
 """
 
+import inspect
 import logging
 import re
 from dataclasses import dataclass, field
@@ -32,8 +33,11 @@ from reportgen.rules.approved_drugs import (
     normalize_display_mode,
     select_approved_drug_rows,
 )
-from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
-from reportgen.rules.targeted_drugs import select_reviewed_variant_rule
+from reportgen.rules.targeted_drugs import (
+    load_targeted_drug_rule_context,
+    reviewed_variant_transcript_matches,
+    select_reviewed_variant_rule,
+)
 from reportgen.utils.hgvs_utils import (
     infer_variant_type_cn,
     normalize_c_hgvs_display_text,
@@ -1364,6 +1368,7 @@ def _variant_override_matches(
     p_hgvs: str = "",
     locus: str = "",
     gene_class: str = "",
+    transcript: str = "",
 ) -> bool:
     """Match a variant row against a reviewed YAML override rule."""
     gene_norm = _norm_text(gene).upper()
@@ -1372,6 +1377,8 @@ def _variant_override_matches(
 
     override_genes = _override_gene_values(override)
     if override_genes and gene_norm not in override_genes:
+        return False
+    if not reviewed_variant_transcript_matches(override, transcript):
         return False
 
     level_values = _as_text_list(
@@ -1421,6 +1428,7 @@ def _find_reviewed_variant_override(
     p_hgvs: str = "",
     locus: str = "",
     gene_class: str = "",
+    transcript: str = "",
 ) -> Optional[Dict[str, Any]]:
     selected, blocked = _select_reviewed_variant_override(
         panel_config,
@@ -1429,6 +1437,7 @@ def _find_reviewed_variant_override(
         p_hgvs,
         locus,
         gene_class=gene_class,
+        transcript=transcript,
     )
     return None if blocked else selected
 
@@ -1440,6 +1449,7 @@ def _select_reviewed_variant_override(
     p_hgvs: str = "",
     locus: str = "",
     gene_class: str = "",
+    transcript: str = "",
 ) -> Tuple[Optional[Dict[str, Any]], bool]:
     return select_reviewed_variant_rule(
         panel_config.reviewed_variant_overrides,
@@ -1451,6 +1461,7 @@ def _select_reviewed_variant_override(
             p_hgvs,
             locus,
             gene_class=gene_class,
+            transcript=transcript,
         ),
     )
 
@@ -1528,12 +1539,56 @@ def _compact_drug_display_tables(
             report_data.set_table(table_name, rows)
 
 
+def _invoke_variant_drug_lookup(
+    callback: Callable[..., Tuple[str, str]],
+    gene: str,
+    c_hgvs: str,
+    p_hgvs: str,
+    gene_class: str,
+    transcript: str,
+) -> Tuple[str, str]:
+    """Call new transcript-aware or legacy four-argument lookup callbacks."""
+
+    try:
+        parameters = inspect.signature(callback).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    transcript_parameter = parameters.get("transcript")
+    if transcript_parameter is not None:
+        if transcript_parameter.kind is inspect.Parameter.POSITIONAL_ONLY:
+            return callback(gene, c_hgvs, p_hgvs, gene_class, transcript)
+        return callback(
+            gene,
+            c_hgvs,
+            p_hgvs,
+            gene_class,
+            transcript=transcript,
+        )
+    if any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    ):
+        return callback(
+            gene,
+            c_hgvs,
+            p_hgvs,
+            gene_class,
+            transcript=transcript,
+        )
+    if any(
+        parameter.kind is inspect.Parameter.VAR_POSITIONAL
+        for parameter in parameters.values()
+    ):
+        return callback(gene, c_hgvs, p_hgvs, gene_class, transcript)
+    return callback(gene, c_hgvs, p_hgvs, gene_class)
+
+
 def build_variants_for_template(
     excel_data: ExcelDataSource,
     filter_column: str = "ExistInsmall358",
     filter_class_i_ii_only: bool = True,
     important_genes_only: bool = True,
-    drug_lookup: Optional[Callable[[str, str, str, str], Tuple[str, str]]] = None,
+    drug_lookup: Optional[Callable[..., Tuple[str, str]]] = None,
     panel_config: Optional[PanelConfig] = None,
 ) -> List[Dict[str, str]]:
     """
@@ -1601,12 +1656,19 @@ def build_variants_for_template(
         p_hgvs = _norm_text(row.get("pHGVS_S") or row.get("pHGVS_A"))
         if not p_hgvs or p_hgvs == "*":
             p_hgvs = "--"
-        reviewed_override = _find_reviewed_variant_override(
-            panel_config,
-            gene,
-            c_hgvs,
-            "" if p_hgvs in {"--", "*"} else p_hgvs,
-            gene_class=gene_class,
+        transcript = _norm_text(row.get("Transcript"))
+        reviewed_override, reviewed_override_blocked = (
+            _select_reviewed_variant_override(
+                panel_config,
+                gene,
+                c_hgvs,
+                "" if p_hgvs in {"--", "*"} else p_hgvs,
+                gene_class=gene_class,
+                transcript=transcript,
+            )
+        )
+        active_reviewed_override = (
+            None if reviewed_override_blocked else reviewed_override
         )
 
         # Get clinical significance. Missing CLNSIG is not evidence of pathogenicity;
@@ -1616,20 +1678,31 @@ def build_variants_for_template(
             clinical_significance = clnsig
         else:
             clinical_significance = "临床意义未明"
-        if reviewed_override:
+        if active_reviewed_override:
             clinical_significance = (
-                _norm_text(reviewed_override.get("clinical_significance"))
+                _norm_text(
+                    active_reviewed_override.get("clinical_significance")
+                )
                 or clinical_significance
             )
 
         # Get drug associations (批注#5：来自自建数据库/既往报告口径)
         benefit_drugs = "--"
         caution_drugs = "--"
-        if drug_lookup is not None and gene_class in {"Ⅰ类", "Ⅱ类"}:
+        if (
+            drug_lookup is not None
+            and gene_class in {"Ⅰ类", "Ⅱ类"}
+            and not reviewed_override_blocked
+        ):
             try:
                 p_for_lookup = "" if p_hgvs in {"--", "*"} else p_hgvs
-                benefit_drugs, caution_drugs = drug_lookup(
-                    gene, c_hgvs, p_for_lookup, gene_class
+                benefit_drugs, caution_drugs = _invoke_variant_drug_lookup(
+                    drug_lookup,
+                    gene,
+                    c_hgvs,
+                    p_for_lookup,
+                    gene_class,
+                    transcript,
                 )
             except Exception:
                 benefit_drugs, caution_drugs = "--", "--"
@@ -1637,15 +1710,23 @@ def build_variants_for_template(
             drug = _norm_text(row.get("Drug"))
             benefit_drugs = drug if drug and drug not in ("*", "-") else "--"
             caution_drugs = "--"
-        override_benefit, override_caution = _drugs_from_override(reviewed_override)
-        research_drugs = _research_drugs_from_override(reviewed_override)
-        if override_benefit or override_caution:
+        override_benefit, override_caution = _drugs_from_override(
+            active_reviewed_override
+        )
+        research_drugs = _research_drugs_from_override(
+            active_reviewed_override
+        )
+        if reviewed_override_blocked:
+            benefit_drugs = "--"
+            caution_drugs = "--"
+            research_drugs = "--"
+        elif override_benefit or override_caution:
             benefit_drugs = override_benefit or "--"
             caution_drugs = override_caution or "--"
 
         variant = {
             "gene": gene,
-            "transcript": _norm_text(row.get("Transcript")),
+            "transcript": transcript,
             "chromosome": _extract_chromosome(row.get("Chr")),
             "exon": _extract_exon(row.get("ExIn_ID")),
             "cHGVS": c_hgvs,
@@ -1673,7 +1754,7 @@ def build_variants_for_template(
 def build_all_variants_for_template(
     excel_data: ExcelDataSource,
     filter_column: str = "ExistInsmall358",
-    drug_lookup: Optional[Callable[[str, str, str, str], Tuple[str, str]]] = None,
+    drug_lookup: Optional[Callable[..., Tuple[str, str]]] = None,
     panel_config: Optional[PanelConfig] = None,
 ) -> List[Dict[str, str]]:
     """
@@ -1749,7 +1830,7 @@ def build_immune_variants(
     excel_data: ExcelDataSource,
     filter_column: str = "ExistInsmall358",
     filter_class_i_ii_only: bool = True,
-    drug_lookup: Optional[Callable[[str, str, str, str], Tuple[str, str]]] = None,
+    drug_lookup: Optional[Callable[..., Tuple[str, str]]] = None,
     panel_config: Optional[PanelConfig] = None,
 ) -> Dict[str, List[Dict[str, str]]]:
     """
@@ -2803,8 +2884,17 @@ def _detected_variant_for_override(
                 or row.get("level")
                 or row.get("classification")
             )
+            transcript = _norm_text(
+                row.get("transcript") or row.get("Transcript")
+            )
             if _variant_override_matches(
-                override, gene, c_hgvs, p_hgvs, locus, gene_class=gene_class
+                override,
+                gene,
+                c_hgvs,
+                p_hgvs,
+                locus,
+                gene_class=gene_class,
+                transcript=transcript,
             ):
                 return row
     return None
@@ -2838,8 +2928,15 @@ def _patch_reviewed_variant_override_rows(
             or row.get("level")
             or row.get("classification")
         )
+        transcript = _norm_text(
+            row.get("transcript") or row.get("Transcript")
+        )
         override, blocked = _select_reviewed_variant_override(
-            panel_config, gene, locus=locus, gene_class=gene_class
+            panel_config,
+            gene,
+            locus=locus,
+            gene_class=gene_class,
+            transcript=transcript,
         )
         if not override:
             continue
@@ -2885,6 +2982,9 @@ def _patch_reviewed_variant_override_rows(
             or detected.get("level")
             or detected.get("classification")
         )
+        detected_transcript = _norm_text(
+            detected.get("transcript") or detected.get("Transcript")
+        )
         selected, blocked = _select_reviewed_variant_override(
             panel_config,
             detected_gene,
@@ -2892,6 +2992,7 @@ def _patch_reviewed_variant_override_rows(
             detected_p,
             detected_locus,
             gene_class=detected_class,
+            transcript=detected_transcript,
         )
         # Do not let a lower-specificity active row re-open a selector that is
         # held by a more-specific pending rule.
@@ -2926,9 +3027,13 @@ def _patch_reviewed_variant_override_rows(
                     or row.get("classification")
                     or detected_class
                 ),
+                transcript=_norm_text(
+                    row.get("transcript") or row.get("Transcript")
+                ),
             ):
                 continue
             row["variant_site"] = variant_site
+            row["transcript"] = detected_transcript
             row["benefit_drugs"] = benefit or "--"
             row["caution_drugs"] = caution or "--"
             has_tip = True
@@ -2940,6 +3045,7 @@ def _patch_reviewed_variant_override_rows(
             {
                 "gene": gene,
                 "variant_site": variant_site,
+                "transcript": detected_transcript,
                 "gene_class": detected_class,
                 "benefit_drugs": benefit or "--",
                 "caution_drugs": caution or "--",
@@ -2996,7 +3102,7 @@ def enhance_report_data(
     _sync_globals_from_config(pc)
 
     # Optional: leverage FieldMapper's knowledge base (targeted_drug_db) for drug tips
-    drug_lookup: Optional[Callable[[str, str, str, str], Tuple[str, str]]] = None
+    drug_lookup: Optional[Callable[..., Tuple[str, str]]] = None
     targeted_drug_rules = load_targeted_drug_rule_context(
         panel_package,
         clinical_context=report_data.context,
@@ -3013,7 +3119,11 @@ def enhance_report_data(
         if callable(lookup_fn):
 
             def _drug_lookup(
-                gene: str, c_hgvs: str, p_hgvs: str, gene_class: str
+                gene: str,
+                c_hgvs: str,
+                p_hgvs: str,
+                gene_class: str,
+                transcript: str,
             ) -> Tuple[str, str]:
                 try:
                     lookup_kwargs = {
@@ -3022,6 +3132,17 @@ def enhance_report_data(
                         "variant_level": gene_class,
                         "cancer_type": report_cancer_type,
                     }
+                    try:
+                        lookup_parameters = inspect.signature(
+                            lookup_fn
+                        ).parameters
+                    except (TypeError, ValueError):
+                        lookup_parameters = {}
+                    if "transcript" in lookup_parameters or any(
+                        parameter.kind is inspect.Parameter.VAR_KEYWORD
+                        for parameter in lookup_parameters.values()
+                    ):
+                        lookup_kwargs["transcript"] = transcript
                     if targeted_drug_rules is not None:
                         lookup_kwargs["targeted_drug_rules"] = targeted_drug_rules
                     benefit, caution, _ = lookup_fn(gene, **lookup_kwargs)

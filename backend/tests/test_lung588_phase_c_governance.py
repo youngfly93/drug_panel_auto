@@ -19,12 +19,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from reportgen.core.field_mapper import FieldMapper
+from reportgen.core.template_bridge_358 import _variant_override_matches
 from reportgen.knowledge.quality import profile_panel_runtime_content
 from reportgen.knowledge.release_gate import run_knowledge_release_gate
 from reportgen.panels.loader import load_panel_package
 from reportgen.rules.targeted_drugs import (
     evaluate_required_clinical_context,
     load_targeted_drug_rule_context,
+    reviewed_variant_selector_specificity,
 )
 from scripts.repair_docx_relationships import repair_docx
 from scripts import validate_lung588_real_inputs
@@ -393,6 +395,78 @@ def test_runtime_loader_moves_context_ineligible_exact_rule_to_blocked_set(tmp_p
         "p.V600E",
         targeted_drug_rules=blocked,
     ) == ("--", "--")
+
+
+def test_reviewed_variant_transcript_selector_is_exact_and_fail_closed():
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    generic = {
+        "gene": "BRAF",
+        "c_hgvs": "c.1799T>A",
+        "p_hgvs": "p.V600E",
+        "benefit_drugs": ["通用合成药物（A）"],
+    }
+    transcript_bound = {
+        **generic,
+        "transcript": "NM_004333.6",
+        "benefit_drugs": ["转录本限定合成药物（A）"],
+    }
+    rules = {
+        "enabled": True,
+        "reviewed_variant_overrides": [generic],
+        "blocked_reviewed_variant_overrides": [transcript_bound],
+    }
+
+    # A transcript-bound pending selector outranks the otherwise identical
+    # generic selector and keeps the reviewed event closed.
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        transcript="NM_004333.6",
+        targeted_drug_rules=rules,
+    ) == ("--", "--")
+    # Missing or version-mismatched transcript must not match that selector;
+    # the older rule without a transcript declaration remains compatible.
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        targeted_drug_rules=rules,
+    ) == ("通用合成药物（A）", "--")
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        transcript="NM_004333.5",
+        targeted_drug_rules=rules,
+    ) == ("通用合成药物（A）", "--")
+
+    assert _variant_override_matches(
+        transcript_bound,
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        transcript="NM_004333.6",
+    )
+    assert not _variant_override_matches(
+        transcript_bound,
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+    )
+    assert not _variant_override_matches(
+        transcript_bound,
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        transcript="NM_004333.5",
+    )
+    assert reviewed_variant_selector_specificity(
+        transcript_bound
+    ) > reviewed_variant_selector_specificity(generic)
+    assert reviewed_variant_selector_specificity(
+        {"gene": "BRAF", "transcript": "NM_004333.6"}
+    ) < reviewed_variant_selector_specificity(generic)
 
 
 def test_docx_relationship_repair_preserves_source_and_removes_orphan(tmp_path):

@@ -1088,6 +1088,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
             if not c or not c.startswith("c."):
                 continue
             p = self._norm_text(r.get("pHGVS_S") or r.get("pHGVS_A"))
+            transcript = self._norm_text(r.get("Transcript"))
             locus = format_variant_site(c, p) or ""
 
             # Ⅲ类：终版报告不展示药物提示
@@ -1097,6 +1098,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                     c_point=c,
                     p_point=p,
                     variant_level=level,
+                    transcript=transcript,
                     cancer_type=report_cancer_type,
                     targeted_drug_rules=targeted_drug_rules,
                 )
@@ -1105,7 +1107,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
 
             row = {
                 "gene": gene,
-                "transcript": self._norm_text(r.get("Transcript")),
+                "transcript": transcript,
                 "chr": chr_num(r.get("Chr")),
                 "exon": exon_num(r.get("ExIn_ID"), c),
                 "locus": locus or "",

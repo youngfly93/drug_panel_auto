@@ -158,10 +158,48 @@ def _dict_rows(value: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in value if isinstance(row, Mapping)]
 
 
+def reviewed_variant_transcripts(row: Mapping[str, Any]) -> set[str]:
+    """Return exact, version-preserving transcript selectors for one rule."""
+
+    value = row.get("transcript") or row.get("transcripts")
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, (list, tuple, set)):
+        values = value
+    else:
+        return set()
+    return {
+        str(item).strip().upper()
+        for item in values
+        if str(item).strip()
+    }
+
+
+def reviewed_variant_transcript_matches(
+    row: Mapping[str, Any],
+    transcript: Any,
+) -> bool:
+    """Fail closed when a rule declares a transcript and input does not match.
+
+    Rules that predate transcript selectors keep their historical behaviour.
+    When a selector is declared, its accession *and version* are part of the
+    reviewed event identity; a missing or version-mismatched runtime value must
+    not be inferred from the gene or HGVS fields.
+    """
+
+    allowed = reviewed_variant_transcripts(row)
+    if not allowed:
+        return True
+    candidate = str(transcript or "").strip().upper()
+    return bool(candidate) and candidate in allowed
+
+
 def reviewed_variant_selector_specificity(row: Mapping[str, Any]) -> int:
     """Return a stable specificity score for a reviewed variant selector.
 
-    Exact c./p. selectors must outrank a broader gene/class or LoF guard.
+    Exact c./p. selectors must outrank a broader gene/class or LoF guard.  A
+    transcript-bound selector outranks an otherwise identical c./p. selector,
+    but never outranks a selector with an additional exact HGVS component.
     Otherwise a newly added pending gene-level guard can silently suppress an
     older, report-group-reviewed exact variant.  The score is deliberately
     structural: it does not depend on runtime/review status.
@@ -203,9 +241,11 @@ def reviewed_variant_selector_specificity(row: Mapping[str, Any]) -> int:
         "level",
         "levels",
     )
+    has_transcript = has_value("transcript", "transcripts")
     has_gene = has_value("gene", "genes")
     return (
         exact_count * 100
+        + int(has_transcript) * 20
         + int(has_bounded_applicability) * 10
         + int(has_level) * 2
         + int(has_gene)
