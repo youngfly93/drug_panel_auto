@@ -717,6 +717,20 @@ def _panel_report(
                 "findings": citation_integrity["source_mismatches"],
             }
         )
+    redaction_integrity = runtime_content.get(
+        "knowledge_redactions"
+    ) or {}
+    if redaction_integrity.get("unmatched"):
+        issues.append(
+            {
+                "code": "RUNTIME_KNOWLEDGE_REDACTION_UNMATCHED",
+                "message": (
+                    f"{len(redaction_integrity['unmatched'])} exact "
+                    "knowledge safety retractions did not match runtime text"
+                ),
+                "redactions": redaction_integrity["unmatched"],
+            }
+        )
     if status_counts.get("not_recorded", 0):
         issues.append(
             {

@@ -15,7 +15,10 @@ citation_source_reviews:
     identifier: "PMID:25980754"
     status: "source_mismatch_confirmed"
     claim_contains: "KRAS/STK11共突变可能预测免疫治疗的不良反应"
-    disposition: "block_until_claim_replaced_and_secondarily_reviewed"
+    disposition: "exact_runtime_claim_retracted_replacement_review_pending"
+    runtime_claim_retracted: true
+    runtime_retraction_ids:
+      - "lung588_stk11_remove_unsupported_pmid_25980754_claim"
     runtime_eligible: false
     secondary_review_status: "pending_report_group_review"
     finding: >

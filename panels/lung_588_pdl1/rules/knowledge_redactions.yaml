@@ -1,0 +1,79 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+rule_id: "knowledge_redactions"
+version: "0.1.0"
+updated: "2026-07-23"
+status: "draft"
+description: >
+  Exact, panel-scoped safety retractions applied after base knowledge and
+  reviewed overlays are composed. Retractions may remove a confirmed
+  unsupported or cross-cancer statement; they may never add replacement
+  medical content.
+
+governance:
+  policy_id: "lung588_exact_knowledge_retraction_v1"
+  reviewer: "codex"
+  reviewer_type: "ai_assisted_source_scope_review"
+  primary_review_status: "completed_non_authoritative_safety_retraction"
+  secondary_review_status: "replacement_wording_pending_report_group_review"
+  exact_literal_only: true
+  additions_allowed: false
+  replacement_text_allowed: false
+  source_refs:
+    - source_id: "PMID:25980754"
+      url: "https://pubmed.ncbi.nlm.nih.gov/25980754/"
+      supports: >
+        Germline multigene testing findings in people evaluated for suspected
+        Lynch syndrome.
+      does_not_support: >
+        PD-1/PD-L1 treatment response or resistance in KRAS/STK11-mutant lung
+        cancer.
+    - source_id: "PMID:29773717"
+      url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC6030433/"
+      supports: >
+        Association of STK11/LKB1 alterations with primary resistance to
+        PD-1-axis blockade in defined KRAS-mutant lung adenocarcinoma cohorts.
+      does_not_support: >
+        A gene-only prediction for every STK11 variant, every lung histology,
+        every disease stage, or every immunotherapy regimen.
+
+redactions:
+  - redaction_id: "lung588_stk11_remove_germline_crc_context"
+    gene: "STK11"
+    fields: ["mutation_analysis"]
+    action: "remove_exact_literal"
+    target_text: "STK11的胚系突变导致Peutz-Jeghers综合征，该综合征与包括结直肠癌在内的胃肠道肿瘤风险增加相关。"
+    reason: "cross_cancer_and_germline_context_not_suitable_for_somatic_lung_report"
+    runtime_eligible: true
+    adds_medical_claim: false
+    replacement_status: "pending_report_group_review"
+
+  - redaction_id: "lung588_stk11_remove_crc_frequency_claim"
+    gene: "STK11"
+    fields: ["mutation_analysis"]
+    action: "remove_exact_literal"
+    target_text: "STK11突变在结直肠癌中相对罕见但具有重要临床意义。"
+    reason: "colorectal_specific_statement_in_lung_panel"
+    runtime_eligible: true
+    adds_medical_claim: false
+    replacement_status: "pending_report_group_review"
+
+  - redaction_id: "lung588_stk11_remove_gene_only_ici_prediction"
+    gene: "STK11"
+    fields: ["mutation_analysis"]
+    action: "remove_exact_literal"
+    target_text: "STK11功能缺失与免疫逃逸相关，可能预示对免疫检查点抑制剂的耐药。"
+    reason: "gene_only_claim_exceeds_exact_event_and_clinical_scope"
+    runtime_eligible: true
+    adds_medical_claim: false
+    replacement_status: "pending_report_group_review"
+
+  - redaction_id: "lung588_stk11_remove_unsupported_pmid_25980754_claim"
+    gene: "STK11"
+    fields: ["mutation_analysis"]
+    action: "remove_exact_literal"
+    target_text: "KRAS/STK11共突变可能预测免疫治疗的不良反应[PMID:25980754]。"
+    reason: "confirmed_source_mismatch"
+    runtime_eligible: true
+    adds_medical_claim: false
+    replacement_status: "pending_report_group_review"

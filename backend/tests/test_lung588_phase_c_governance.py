@@ -9,7 +9,9 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
 import yaml
 from docx import Document
 from lxml import etree
@@ -20,8 +22,14 @@ if str(ROOT) not in sys.path:
 
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.template_bridge_358 import _variant_override_matches
-from reportgen.knowledge.quality import profile_panel_runtime_content
+from reportgen.knowledge.quality import (
+    build_panel_gene_provider,
+    profile_panel_runtime_content,
+)
 from reportgen.knowledge.release_gate import run_knowledge_release_gate
+from reportgen.knowledge.redactions import (
+    load_panel_knowledge_redactions,
+)
 from reportgen.panels.loader import load_panel_package
 from reportgen.rules.targeted_drugs import (
     evaluate_required_clinical_context,
@@ -758,7 +766,7 @@ def test_lung588_case_a_contract_is_registered_and_deidentified():
     assert "patient_name" not in emitted
 
 
-def test_lung588_semantic_citation_mismatch_remains_release_blocking():
+def test_lung588_stk11_unsafe_claims_are_exactly_retracted():
     package = load_panel_package("lung_588_pdl1", project_root=ROOT)
     genes = yaml.safe_load(
         package.resolve_rule_file("knowledge_coverage").read_text(
@@ -769,22 +777,27 @@ def test_lung588_semantic_citation_mismatch_remains_release_blocking():
 
     integrity = profile["citation_integrity"]
     assert integrity["unresolved_pmids"] == []
-    assert integrity["source_mismatches"] == [
-        {
-            "review_id": "lung588_stk11_pmid_25980754_mismatch",
-            "gene": "STK11",
-            "identifier": "PMID:25980754",
-            "status": "source_mismatch_confirmed",
-            "claim_contains": "KRAS/STK11共突变可能预测免疫治疗的不良反应",
-            "disposition": (
-                "block_until_claim_replaced_and_secondarily_reviewed"
-            ),
-            "secondary_review_status": "pending_report_group_review",
-            "suggested_replacement_identifier": "PMID:29773717",
-            "present_in_runtime_text": True,
-            "claim_fragment_present": True,
-        }
-    ]
+    assert integrity["source_mismatches"] == []
+
+    redactions = profile["knowledge_redactions"]
+    assert len(redactions["rows"]) == 4
+    assert redactions["unmatched"] == []
+    assert all(row["hit_count"] == 1 for row in redactions["rows"])
+
+    provider = build_panel_gene_provider(ROOT, package)
+    section = provider.build_gene_knowledge_section(
+        gene="STK11",
+        c_hgvs="c.999999A>G",
+        p_hgvs="p.X999999Y",
+        frequency=10,
+        mutation_type="Missense",
+        has_drug=False,
+    )
+    analysis = section["mutation_analysis"]
+    assert "PMID:25980754" not in analysis
+    assert "结直肠癌" not in analysis
+    assert "可能预示对免疫检查点抑制剂的耐药" not in analysis
+    assert "作为肿瘤抑制基因发挥功能" in analysis
 
     gate = run_knowledge_release_gate(
         ROOT,
@@ -793,7 +806,38 @@ def test_lung588_semantic_citation_mismatch_remains_release_blocking():
     assert gate["status"] == "FAIL"
     codes = {issue["code"] for issue in gate["panels"][0]["issues"]}
     assert "UNRESOLVED_RUNTIME_PMID" not in codes
-    assert "RUNTIME_CITATION_SOURCE_MISMATCH" in codes
+    assert "RUNTIME_CITATION_SOURCE_MISMATCH" not in codes
+    assert "RUNTIME_KNOWLEDGE_REDACTION_UNMATCHED" not in codes
+
+
+def test_lung588_knowledge_redaction_contract_rejects_replacement_text(
+    tmp_path,
+):
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    redactions = load_panel_knowledge_redactions(package)
+
+    assert len(redactions) == 4
+    assert all(row["adds_medical_claim"] is False for row in redactions)
+    assert all(row["action"] == "remove_exact_literal" for row in redactions)
+
+    raw = yaml.safe_load(
+        package.resolve_rule_file("knowledge_redactions").read_text(
+            encoding="utf-8"
+        )
+    )
+    raw["governance"]["replacement_text_allowed"] = True
+    invalid = tmp_path / "knowledge_redactions.yaml"
+    invalid.write_text(
+        yaml.safe_dump(raw, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    fake_package = SimpleNamespace(
+        panel_id="lung_588_pdl1",
+        resolve_rule_file=lambda _name: invalid,
+    )
+
+    with pytest.raises(ValueError, match="replacement-free"):
+        load_panel_knowledge_redactions(fake_package)
 
 
 def test_lung588_medical_knowledge_queue_is_complete_and_deidentified(tmp_path):
@@ -827,12 +871,10 @@ def test_lung588_medical_knowledge_queue_is_complete_and_deidentified(tmp_path):
     )
     assert inventory["denominator"]["total_genes"] == 588
     assert sum(inventory["summary"]["priority_counts"].values()) == 588
-    assert inventory["summary"]["citation_source_mismatch_count"] == 1
+    assert inventory["summary"]["citation_source_mismatch_count"] == 0
     stk11 = next(row for row in inventory["rows"] if row["gene"] == "STK11")
-    assert stk11["priority"] == "P0"
-    assert stk11["citation_source_mismatches"][0]["identifier"] == (
-        "PMID:25980754"
-    )
+    assert stk11["priority"] == "P4"
+    assert stk11["citation_source_mismatches"] == []
     emitted = "\n".join(
         path.read_text(encoding="utf-8-sig")
         for path in tmp_path.iterdir()
@@ -964,6 +1006,10 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
     )
     assert mismatch["identifier"] == "PMID:25980754"
     assert mismatch["suggested_replacement_identifier"] == "PMID:29773717"
+    assert mismatch["runtime_claim_retracted"] is True
+    assert mismatch["runtime_retraction_ids"] == [
+        "lung588_stk11_remove_unsupported_pmid_25980754_claim"
+    ]
 
     emitted = "\n".join(
         path.read_text(encoding="utf-8-sig")

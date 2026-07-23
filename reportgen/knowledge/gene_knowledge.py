@@ -49,6 +49,17 @@ class GeneKnowledgeProvider:
         self._gene_aliases_by_canonical: Dict[str, tuple[str, ...]] = {}
         self._configure_gene_symbol_aliases(raw_gene_aliases)
 
+        # Panel-scoped safety retractions are exact-literal removals applied
+        # after base and reviewed knowledge are composed. They cannot add or
+        # replace medical wording.
+        self._knowledge_redactions_by_gene: Dict[
+            str, List[Dict[str, Any]]
+        ] = {}
+        self._knowledge_redaction_hits: Dict[str, int] = {}
+        self._configure_knowledge_redactions(
+            self.config.get("knowledge_redactions") or []
+        )
+
         # 数据缓存
         self._gene_analysis_df: Optional[pd.DataFrame] = None
         self._drug_analysis_df: Optional[pd.DataFrame] = None
@@ -464,6 +475,100 @@ class GeneKnowledgeProvider:
             if self._norm_text(value)
         }
         return panel_id.casefold() in allowed
+
+    def _configure_knowledge_redactions(self, raw: Any) -> None:
+        """Index prevalidated, removal-only redactions by normalized gene."""
+
+        if raw in (None, ""):
+            return
+        if not isinstance(raw, list):
+            raise ValueError("knowledge_redactions must be a list")
+        seen: set[str] = set()
+        for row in raw:
+            if not isinstance(row, Mapping):
+                raise ValueError(
+                    "knowledge_redactions entries must be mappings"
+                )
+            redaction_id = self._norm_text(row.get("redaction_id"))
+            gene = self._hgvs_key(row.get("gene"))
+            target_text = self._norm_text(row.get("target_text"))
+            fields = row.get("fields") or []
+            if isinstance(fields, str):
+                fields = [fields]
+            normalized_fields = {
+                self._norm_text(field)
+                for field in fields
+                if self._norm_text(field)
+            }
+            if (
+                not redaction_id
+                or redaction_id in seen
+                or not gene
+                or not target_text
+                or row.get("action") != "remove_exact_literal"
+                or row.get("adds_medical_claim") is not False
+                or not normalized_fields
+                or not normalized_fields
+                <= {"intro", "mutation_analysis", "fixed_domain_text"}
+            ):
+                raise ValueError(
+                    "invalid removal-only knowledge redaction: "
+                    f"{redaction_id or '<missing>'}"
+                )
+            seen.add(redaction_id)
+            normalized = {
+                "redaction_id": redaction_id,
+                "gene": gene,
+                "fields": sorted(normalized_fields),
+                "target_text": target_text,
+                "reason": self._norm_text(row.get("reason")),
+            }
+            self._knowledge_redactions_by_gene.setdefault(
+                gene, []
+            ).append(normalized)
+            self._knowledge_redaction_hits[redaction_id] = 0
+
+    def _apply_knowledge_redactions(
+        self,
+        *,
+        gene: Any,
+        field: str,
+        text: Any,
+    ) -> str:
+        """Remove only exact literals declared for this gene and field."""
+
+        value = self._norm_text(text)
+        if not value:
+            return ""
+        gene_key = self._hgvs_key(gene)
+        for row in self._knowledge_redactions_by_gene.get(gene_key, []):
+            if field not in row["fields"]:
+                continue
+            target = row["target_text"]
+            count = value.count(target)
+            if not count:
+                continue
+            value = value.replace(target, "")
+            self._knowledge_redaction_hits[row["redaction_id"]] += count
+        value = re.sub(r"[ \t]+\n", "\n", value)
+        value = re.sub(r"\n{3,}", "\n\n", value)
+        return value.strip()
+
+    def knowledge_redaction_report(self) -> List[Dict[str, Any]]:
+        """Return deterministic match counts for release-gate auditing."""
+
+        rows: List[Dict[str, Any]] = []
+        for gene in sorted(self._knowledge_redactions_by_gene):
+            for row in self._knowledge_redactions_by_gene[gene]:
+                rows.append(
+                    {
+                        **row,
+                        "hit_count": self._knowledge_redaction_hits.get(
+                            row["redaction_id"], 0
+                        ),
+                    }
+                )
+        return sorted(rows, key=lambda row: row["redaction_id"])
 
     @staticmethod
     def _reviewed_row_runtime_enabled(
@@ -1511,6 +1616,21 @@ class GeneKnowledgeProvider:
         )
         mutation_analysis = self._compose_fixed_domain_analysis(
             fixed_domain_text, mutation_analysis
+        )
+        intro = self._apply_knowledge_redactions(
+            gene=gene,
+            field="intro",
+            text=intro,
+        )
+        fixed_domain_text = self._apply_knowledge_redactions(
+            gene=gene,
+            field="fixed_domain_text",
+            text=fixed_domain_text,
+        )
+        mutation_analysis = self._apply_knowledge_redactions(
+            gene=gene,
+            field="mutation_analysis",
+            text=mutation_analysis,
         )
 
         return {

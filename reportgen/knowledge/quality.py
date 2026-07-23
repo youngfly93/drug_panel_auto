@@ -17,6 +17,9 @@ from typing import Any, Iterable, Mapping
 import yaml
 
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
+from reportgen.knowledge.redactions import (
+    load_panel_knowledge_redactions,
+)
 from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 
 
@@ -69,6 +72,7 @@ def build_panel_gene_provider(project_root: str | Path, package: Any) -> GeneKno
             ),
             "gene_knowledge_db": gene_config,
             "gene_transcript_db": knowledge.get("gene_transcript_db") or {},
+            "knowledge_redactions": load_panel_knowledge_redactions(package),
         }
     )
     provider.load(str(root))
@@ -112,6 +116,14 @@ def load_panel_citation_source_reviews(package: Any) -> list[dict[str, Any]]:
                 "suggested_replacement_identifier": str(
                     row.get("suggested_replacement_identifier") or ""
                 ).strip(),
+                "runtime_claim_retracted": (
+                    row.get("runtime_claim_retracted") is True
+                ),
+                "runtime_retraction_ids": [
+                    str(value).strip()
+                    for value in row.get("runtime_retraction_ids") or []
+                    if str(value).strip()
+                ],
             }
         )
     return findings
@@ -225,6 +237,7 @@ def profile_panel_runtime_content(
                 ),
             }
         )
+    redaction_report = provider.knowledge_redaction_report()
     total = len(normalized_genes)
     return {
         "representative_variant": {
@@ -260,6 +273,14 @@ def profile_panel_runtime_content(
             "cited_trials": len(identifiers["trial"]),
             "unresolved_trials": unresolved_trials,
             "source_mismatches": source_mismatches,
+        },
+        "knowledge_redactions": {
+            "rows": redaction_report,
+            "unmatched": [
+                row
+                for row in redaction_report
+                if not row.get("hit_count")
+            ],
         },
     }
 

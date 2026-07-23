@@ -6,5 +6,10 @@
 
 from .gene_knowledge import GeneKnowledgeProvider
 from .mutation_description import MutationDescriptionGenerator
+from .redactions import load_panel_knowledge_redactions
 
-__all__ = ["GeneKnowledgeProvider", "MutationDescriptionGenerator"]
+__all__ = [
+    "GeneKnowledgeProvider",
+    "MutationDescriptionGenerator",
+    "load_panel_knowledge_redactions",
+]

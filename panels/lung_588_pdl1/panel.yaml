@@ -85,6 +85,7 @@ rules:
   medical_candidates: "rules/medical_candidates.yaml"
   candidate_evidence_review: "rules/candidate_evidence_review.yaml"
   knowledge_coverage: "rules/knowledge_coverage.yaml"
+  knowledge_redactions: "rules/knowledge_redactions.yaml"
   style: "rules/style.yaml"
   filtering: "config/filtering.yaml"
   drug_brands: "config/drug_brands.yaml"

@@ -507,6 +507,12 @@ def _citation_units(
                 "suggested_replacement_identifier": finding[
                     "suggested_replacement_identifier"
                 ],
+                "runtime_claim_retracted": finding[
+                    "runtime_claim_retracted"
+                ],
+                "runtime_retraction_ids": finding[
+                    "runtime_retraction_ids"
+                ],
                 "patient_visible_part2_result_allowed": False,
                 "patient_visible_part3_interpretation_allowed": False,
                 "patient_visible_drug_conclusion_allowed": False,

@@ -885,7 +885,10 @@ class ReportGenerator:
                     )
                 )
                 if kb_enabled:
-                    from reportgen.knowledge import GeneKnowledgeProvider  # lazy import
+                    from reportgen.knowledge import (  # lazy import
+                        GeneKnowledgeProvider,
+                        load_panel_knowledge_redactions,
+                    )
 
                     kb_cfg = self.config_loader.get_setting("knowledge_bases", {}) or {}
                     # Panel-scope the reviewed Part-3 overlay: each panel uses its
@@ -909,6 +912,11 @@ class ReportGenerator:
                         ),
                         "gene_knowledge_db": gene_kb_cfg,
                         "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
+                        "knowledge_redactions": (
+                            load_panel_knowledge_redactions(
+                                state.panel_package
+                            )
+                        ),
                     }
                     gene_knowledge_provider = GeneKnowledgeProvider(provider_cfg)
                 stage.metrics["part3_knowledge_enabled"] = bool(
