@@ -20,5 +20,6 @@ targeted_drug_rules:
   allow_internal_rows: false
   require_cancer_profile_match: true
   approved_drug_rows_enabled: false
+  clinical_context_rule: "clinical_context"
 
 approved_drug_rows: []

@@ -180,7 +180,10 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         # Resolve targeted-drug rules once per request. The context is passed
         # down explicitly so a shared FieldMapper cannot leak one panel's rules
         # into another concurrent request.
-        targeted_drug_rules = load_targeted_drug_rule_context(panel_package)
+        targeted_drug_rules = load_targeted_drug_rule_context(
+            panel_package,
+            clinical_context=report_data.context,
+        )
 
         # 映射表格数据
         self._map_tables(

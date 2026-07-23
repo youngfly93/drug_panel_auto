@@ -18,7 +18,12 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from reportgen.core.field_mapper import FieldMapper
 from reportgen.panels.loader import load_panel_package
+from reportgen.rules.targeted_drugs import (
+    evaluate_required_clinical_context,
+    load_targeted_drug_rule_context,
+)
 from scripts.repair_docx_relationships import repair_docx
 from scripts import validate_lung588_real_inputs
 
@@ -149,10 +154,14 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     assert governance["runtime_policy"]["report_text_allowed"] is False
     context_contract = governance["promotion_context_contract"]
     assert context_contract["status"] == "exposed_optional_in_engineering_draft"
-    assert context_contract["runtime_enforcement"] == "not_implemented"
+    assert context_contract["contract_rule"] == "clinical_context"
+    assert context_contract["runtime_enforcement"] == "implemented_fail_closed"
     assert context_contract["promotion_blocked"] is True
     assert context_contract["missing_or_uncertain_policy"] == "keep_candidate_hidden"
-    assert set(context_contract["fields"]) == {
+    runtime_context = yaml.safe_load(
+        package.resolve_rule_file("clinical_context").read_text(encoding="utf-8")
+    )["clinical_context_contract"]
+    assert set(runtime_context["fields"]) == {
         "lung_histology",
         "disease_extent",
         "prior_systemic_therapy",
@@ -185,6 +194,7 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     assert all(rule["source_refs"] for rule in rules)
     for rule in rules:
         required_context = set(rule["required_context_fields"])
+        assert set(rule["context_requirements"]) == required_context
         assert {
             "lung_histology",
             "disease_extent",
@@ -208,13 +218,171 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     assert runtime["targeted_drug_rules"]["enabled"] is False
     assert runtime["targeted_drug_rules"]["base_db_enabled"] is False
     assert runtime["targeted_drug_rules"]["allowed_source_dbs"] == []
+    assert runtime["targeted_drug_rules"]["clinical_context_rule"] == "clinical_context"
     assert runtime["approved_drug_rows"] == []
     assert candidates["non_target_domains"]["immune_gene_associations"]["enabled"] is False
     assert candidates["non_target_domains"]["chemotherapy_pharmacogenomics"]["enabled"] is False
 
     if runtime["targeted_drug_rules"]["enabled"]:
-        assert context_contract["runtime_enforcement"] == "implemented"
+        assert context_contract["runtime_enforcement"] == "implemented_fail_closed"
         assert context_contract["promotion_blocked"] is False
+
+
+def test_lung588_candidate_context_evaluator_rejects_missing_uncertain_and_out_of_scope():
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    candidates = yaml.safe_load(
+        package.resolve_rule_file("medical_candidates").read_text(encoding="utf-8")
+    )
+    contract = yaml.safe_load(
+        package.resolve_rule_file("clinical_context").read_text(encoding="utf-8")
+    )["clinical_context_contract"]
+    rules = {rule["candidate_id"]: rule for rule in candidates["candidate_rules"]}
+    braf = rules["lung588_braf_v600e_dabrafenib_trametinib"]
+    erbb2 = rules["lung588_erbb2_g660d_trastuzumab_deruxtecan"]
+
+    braf_context = {
+        "lung_histology": "非小细胞肺癌",
+        "disease_extent": "转移性",
+        "companion_diagnostic_status": "已确认符合",
+    }
+    assert evaluate_required_clinical_context(
+        braf,
+        clinical_context=braf_context,
+        contract=contract,
+    ).eligible
+
+    missing = dict(braf_context)
+    missing.pop("companion_diagnostic_status")
+    assert evaluate_required_clinical_context(
+        braf,
+        clinical_context=missing,
+        contract=contract,
+    ).reasons == ("CONTEXT_VALUE_MISSING:companion_diagnostic_status",)
+
+    uncertain = {**braf_context, "lung_histology": "未明确"}
+    assert evaluate_required_clinical_context(
+        braf,
+        clinical_context=uncertain,
+        contract=contract,
+    ).reasons == ("CONTEXT_VALUE_UNCERTAIN:lung_histology",)
+
+    wrong_stage = {**braf_context, "disease_extent": "可切除早期"}
+    assert evaluate_required_clinical_context(
+        braf,
+        clinical_context=wrong_stage,
+        contract=contract,
+    ).reasons == ("CONTEXT_OUT_OF_SCOPE:disease_extent",)
+
+    erbb2_context = {
+        **braf_context,
+        "disease_extent": "不可切除局部晚期",
+        "prior_systemic_therapy": "已接受",
+    }
+    assert evaluate_required_clinical_context(
+        erbb2,
+        clinical_context=erbb2_context,
+        contract=contract,
+    ).eligible
+    not_previously_treated = {
+        **erbb2_context,
+        "prior_systemic_therapy": "未接受",
+    }
+    assert evaluate_required_clinical_context(
+        erbb2,
+        clinical_context=not_previously_treated,
+        contract=contract,
+    ).reasons == ("CONTEXT_OUT_OF_SCOPE:prior_systemic_therapy",)
+
+
+def test_runtime_loader_moves_context_ineligible_exact_rule_to_blocked_set(tmp_path):
+    panel_root = tmp_path / "panels" / "synthetic_lung"
+    rules_root = panel_root / "rules"
+    rules_root.mkdir(parents=True)
+    (rules_root / "clinical_context.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "1.0",
+                "panel_id": "synthetic_lung",
+                "rule_id": "clinical_context",
+                "clinical_context_contract": {
+                    "fields": {
+                        "lung_histology": {
+                            "allowed_values": ["非小细胞肺癌", "未明确"],
+                            "uncertain_values": ["未明确"],
+                        }
+                    }
+                },
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+    (rules_root / "drugs.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "1.0",
+                "panel_id": "synthetic_lung",
+                "rule_id": "drugs",
+                "targeted_drug_rules": {
+                    "enabled": True,
+                    "clinical_context_rule": "clinical_context",
+                    "reviewed_variant_overrides": [
+                        {
+                            "gene": "BRAF",
+                            "c_hgvs": "c.1799T>A",
+                            "p_hgvs": "p.V600E",
+                            "required_context_fields": ["lung_histology"],
+                            "context_requirements": {"lung_histology": ["非小细胞肺癌"]},
+                            "benefit_drugs": ["受控合成药物（A）"],
+                        }
+                    ],
+                },
+            },
+            allow_unicode=True,
+        ),
+        encoding="utf-8",
+    )
+
+    class SyntheticPackage:
+        panel_id = "synthetic_lung"
+        root_dir = panel_root
+
+        @staticmethod
+        def resolve_rule_file(name: str) -> Path:
+            return rules_root / f"{name}.yaml"
+
+    active = load_targeted_drug_rule_context(
+        SyntheticPackage(),
+        clinical_context={"lung_histology": "非小细胞肺癌"},
+    )
+    assert active is not None
+    assert active["clinical_context_enforced"] is True
+    assert len(active["reviewed_variant_overrides"]) == 1
+    assert active["blocked_reviewed_variant_overrides"] == []
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        targeted_drug_rules=active,
+    ) == ("受控合成药物（A）", "--")
+
+    blocked = load_targeted_drug_rule_context(
+        SyntheticPackage(),
+        clinical_context={"lung_histology": "未明确"},
+    )
+    assert blocked is not None
+    assert blocked["reviewed_variant_overrides"] == []
+    assert len(blocked["blocked_reviewed_variant_overrides"]) == 1
+    assert blocked["blocked_reviewed_variant_overrides"][0]["_clinical_context_block_reasons"] == [
+        "CONTEXT_VALUE_UNCERTAIN:lung_histology"
+    ]
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        targeted_drug_rules=blocked,
+    ) == ("--", "--")
 
 
 def test_docx_relationship_repair_preserves_source_and_removes_orphan(tmp_path):

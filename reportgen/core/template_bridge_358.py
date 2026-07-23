@@ -713,6 +713,7 @@ def load_panel_config(
     panel_id: Optional[str] = None,
     config_path: Optional[str] = None,
     panel_package: Any = None,
+    clinical_context: Optional[Dict[str, Any]] = None,
 ) -> PanelConfig:
     """Load a PanelConfig instance from the panel package or legacy config.
 
@@ -801,7 +802,10 @@ def load_panel_config(
         else {}
     )
     approved_drug_rows = _normalize_approved_drug_rows(drugs_rule)
-    targeted_drug_rules = load_targeted_drug_rule_context(panel_package)
+    targeted_drug_rules = load_targeted_drug_rule_context(
+        panel_package,
+        clinical_context=clinical_context,
+    )
     reviewed_variant_overrides = as_dict_list("reviewed_variant_overrides")
     blocked_reviewed_variant_overrides: List[Dict[str, Any]] = []
     if targeted_drug_rules is not None:
@@ -2986,13 +2990,17 @@ def enhance_report_data(
         panel_id=panel_id,
         config_path=panel_config_path,
         panel_package=panel_package,
+        clinical_context=report_data.context,
     )
     # Also sync globals for backward compatibility
     _sync_globals_from_config(pc)
 
     # Optional: leverage FieldMapper's knowledge base (targeted_drug_db) for drug tips
     drug_lookup: Optional[Callable[[str, str, str, str], Tuple[str, str]]] = None
-    targeted_drug_rules = load_targeted_drug_rule_context(panel_package)
+    targeted_drug_rules = load_targeted_drug_rule_context(
+        panel_package,
+        clinical_context=report_data.context,
+    )
     report_cancer_type = _norm_text(report_data.get_field("cancer_type"))
     if field_mapper is not None:
         try:

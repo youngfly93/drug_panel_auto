@@ -80,6 +80,7 @@ rules:
   biomarkers: "rules/biomarkers.yaml"
   guideline_tables: "rules/guideline_tables.yaml"
   drugs: "rules/drugs.yaml"
+  clinical_context: "rules/clinical_context.yaml"
   medical_candidates: "rules/medical_candidates.yaml"
   knowledge_coverage: "rules/knowledge_coverage.yaml"
   style: "rules/style.yaml"

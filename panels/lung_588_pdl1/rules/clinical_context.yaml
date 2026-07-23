@@ -1,0 +1,34 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+rule_id: "clinical_context"
+version: "0.1.0"
+updated: "2026-07-23"
+status: "draft"
+description: >
+  Controlled patient context used only to reject out-of-scope lung588
+  treatment rules. Values are supplied by the case form and are never inferred
+  from free-text diagnosis.
+
+clinical_context_contract:
+  missing_or_uncertain_policy: "keep_rule_hidden"
+  fields:
+    lung_histology:
+      allowed_values:
+        - "非小细胞肺癌"
+        - "小细胞肺癌"
+        - "其他"
+        - "未明确"
+      uncertain_values: ["其他", "未明确"]
+    disease_extent:
+      allowed_values:
+        - "可切除早期"
+        - "不可切除局部晚期"
+        - "转移性"
+        - "未明确"
+      uncertain_values: ["未明确"]
+    prior_systemic_therapy:
+      allowed_values: ["已接受", "未接受", "未明确"]
+      uncertain_values: ["未明确"]
+    companion_diagnostic_status:
+      allowed_values: ["已确认符合", "待确认", "不符合"]
+      uncertain_values: ["待确认"]
