@@ -1,0 +1,331 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+rule_id: "candidate_evidence_review"
+version: "0.1.0"
+updated: "2026-07-23"
+status: "draft"
+description: >
+  Primary-source scope review for the four non-runtime lung588 targeted-drug
+  candidates. This file records what each source does and does not support; it
+  is not a runtime rule source and cannot authorize patient-report text.
+
+governance:
+  review_id: "lung588_candidate_evidence_scope_review_20260723"
+  evidence_as_of: "2026-07-23"
+  reviewer: "codex"
+  reviewer_type: "ai_assisted_primary_source_scope_review"
+  primary_review_status: "completed_non_authoritative_scope_review"
+  secondary_review_status: "pending_report_group_review"
+  runtime_rule_source: false
+  runtime_eligible: false
+  report_text_allowed: false
+  promotion_blocked: true
+  review_dimensions:
+    - "source_identity"
+    - "lung_cancer_scope"
+    - "disease_extent_and_prior_therapy_scope"
+    - "exact_event_and_transcript_boundary"
+    - "assay_or_companion_diagnostic_scope"
+    - "direct_exact_drug_event_clinical_outcome"
+    - "patient_report_display_boundary"
+  interpretation_boundary: >
+    A regulatory biomarker class, functional activation study, assay
+    reportability statement, or historical report row is not by itself an
+    exact-event treatment outcome. Promotion requires report-group secondary
+    review, a current label check, positive and negative rule tests, and
+    case-level UAT.
+
+reviews:
+  - candidate_id: "lung588_braf_v600e_dabrafenib_trametinib"
+    gene: "BRAF"
+    selector:
+      event_type: "snv"
+      transcript: "NM_004333.6"
+      c_hgvs: "c.1799T>A"
+      p_hgvs: "p.V600E"
+    therapy:
+      generic_name_zh: "达拉非尼+曲美替尼"
+      generic_name_en: "dabrafenib + trametinib"
+    source_claim_reviews:
+      - source_id: "Tafinlar-Mekinist-label-2024"
+        source_type: "regulatory_label"
+        authority: "FDA"
+        url: "https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/202806s031%2C217514s004lbl.pdf"
+        verification_status: "verified_primary_source"
+        supports: >
+          Combination treatment for metastatic non-small cell lung cancer with
+          BRAF V600E detected by an FDA-approved test.
+        does_not_support: >
+          Other BRAF events, other cancer types, or either component as
+          monotherapy under this candidate.
+      - source_id: "PMID:28919011"
+        source_type: "phase_2_clinical_study"
+        authority: "PubMed"
+        url: "https://pubmed.ncbi.nlm.nih.gov/28919011/"
+        verification_status: "verified_primary_clinical_source"
+        supports: >
+          Direct combination-treatment outcomes in metastatic BRAF
+          V600E-positive non-small cell lung cancer.
+        does_not_support: >
+          BRAF D594G, a gene-only BRAF rule, or transcript-independent
+          normalization.
+    scope_assessment:
+      lung_cancer_scope: "direct_metastatic_nsclc"
+      disease_extent_scope: "metastatic_only"
+      event_scope: "direct_braf_v600e_at_protein_level"
+      transcript_scope: >
+        Candidate identity is locked to NM_004333.6 plus c.1799T>A and
+        p.V600E; the treatment sources name BRAF V600E rather than an NM
+        accession, so runtime normalization must retain the transcript-bound
+        selector.
+      assay_scope: "FDA_approved_test_required"
+      direct_exact_drug_event_clinical_outcome: "identified"
+      patient_report_display: "prohibited_pending_secondary_review"
+    primary_review:
+      status: "completed_non_authoritative_scope_review"
+      decision: "eligible_to_remain_candidate_pending_secondary_review"
+      reviewed_at: "2026-07-23"
+      reviewer: "codex"
+      reviewer_type: "ai_assisted_primary_source_scope_review"
+    secondary_review:
+      status: "pending_report_group_review"
+      decision: ""
+      reviewer: ""
+      reviewed_at: ""
+    unresolved_requirements:
+      - "report_group_event_level_secondary_review"
+      - "current_label_version_recheck_at_promotion"
+      - "positive_and_negative_rule_tests"
+      - "case_level_uat"
+    runtime_eligible: false
+    report_text_allowed: false
+
+  - candidate_id: "lung588_braf_v600e_encorafenib_binimetinib"
+    gene: "BRAF"
+    selector:
+      event_type: "snv"
+      transcript: "NM_004333.6"
+      c_hgvs: "c.1799T>A"
+      p_hgvs: "p.V600E"
+    therapy:
+      generic_name_zh: "康奈非尼+贝美替尼"
+      generic_name_en: "encorafenib + binimetinib"
+    source_claim_reviews:
+      - source_id: "FDA-2023-encorafenib-binimetinib-NSCLC"
+        source_type: "regulatory_approval"
+        authority: "FDA"
+        url: "https://www.fda.gov/drugs/resources-information-approved-drugs/fda-approves-encorafenib-binimetinib-metastatic-non-small-cell-lung-cancer-braf-v600e-mutation"
+        verification_status: "verified_primary_regulatory_source"
+        supports: >
+          Combination treatment for metastatic non-small cell lung cancer with
+          BRAF V600E detected by an FDA-approved test, including the
+          approval-supporting PHAROS clinical results.
+        does_not_support: >
+          BRAF D594G, other non-V600 events, other cancer types, or
+          transcript-independent normalization.
+      - source_id: "FDA-companion-diagnostic-list"
+        source_type: "companion_diagnostic_registry"
+        authority: "FDA"
+        url: "https://www.fda.gov/medical-devices/in-vitro-diagnostics/list-cleared-or-approved-companion-diagnostic-devices-in-vitro-and-imaging-tools"
+        verification_status: "verified_regulatory_registry"
+        supports: "An FDA-approved test requirement for the labeled biomarker."
+        does_not_support: "A treatment outcome for a different BRAF event."
+    scope_assessment:
+      lung_cancer_scope: "direct_metastatic_nsclc"
+      disease_extent_scope: "metastatic_only"
+      event_scope: "direct_braf_v600e_at_protein_level"
+      transcript_scope: >
+        Candidate identity is locked to NM_004333.6 plus c.1799T>A and
+        p.V600E; the regulatory source names BRAF V600E rather than an NM
+        accession, so runtime normalization must retain the transcript-bound
+        selector.
+      assay_scope: "FDA_approved_test_required"
+      direct_exact_drug_event_clinical_outcome: "identified"
+      patient_report_display: "prohibited_pending_secondary_review"
+    primary_review:
+      status: "completed_non_authoritative_scope_review"
+      decision: "eligible_to_remain_candidate_pending_secondary_review"
+      reviewed_at: "2026-07-23"
+      reviewer: "codex"
+      reviewer_type: "ai_assisted_primary_source_scope_review"
+    secondary_review:
+      status: "pending_report_group_review"
+      decision: ""
+      reviewer: ""
+      reviewed_at: ""
+    unresolved_requirements:
+      - "report_group_event_level_secondary_review"
+      - "current_label_version_recheck_at_promotion"
+      - "positive_and_negative_rule_tests"
+      - "case_level_uat"
+    runtime_eligible: false
+    report_text_allowed: false
+
+  - candidate_id: "lung588_erbb2_g660d_trastuzumab_deruxtecan"
+    gene: "ERBB2"
+    selector:
+      event_type: "snv"
+      transcript: "NM_004448.4"
+      c_hgvs: "c.1979G>A"
+      p_hgvs: "p.G660D"
+      protein_domain: "transmembrane_domain"
+    therapy:
+      generic_name_zh: "德曲妥珠单抗"
+      generic_name_en: "trastuzumab deruxtecan"
+    source_claim_reviews:
+      - source_id: "PMID:30449325"
+        source_type: "functional_study"
+        authority: "PubMed"
+        url: "https://pubmed.ncbi.nlm.nih.gov/30449325/"
+        verification_status: "verified_primary_functional_source"
+        supports: >
+          ERBB2 G660D as an activating transmembrane-domain mutation with
+          experimentally characterized signaling biology.
+        does_not_support: >
+          A direct G660D-specific trastuzumab deruxtecan clinical outcome.
+      - source_id: "Enhertu-label-2026"
+        source_type: "regulatory_label"
+        authority: "FDA"
+        url: "https://www.accessdata.fda.gov/drugsatfda_docs/label/2026/761139s041s043lbl.pdf"
+        verification_status: "verified_primary_regulatory_source"
+        supports: >
+          Treatment of unresectable or metastatic non-small cell lung cancer
+          with activating ERBB2 mutations after prior systemic therapy, under
+          the label's testing requirements.
+        does_not_support: >
+          A separately reported G660D efficacy subgroup or use outside the
+          labeled disease and prior-treatment context.
+      - source_id: "P200010S008"
+        source_type: "companion_diagnostic_decision"
+        authority: "FDA"
+        url: "https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfpma/pma.cfm?id=P200010S008"
+        verification_status: "verified_primary_regulatory_source"
+        supports: >
+          Companion-diagnostic use for activating ERBB2 single-nucleotide
+          variants and exon 20 insertions in the labeled NSCLC context.
+        does_not_support: "A G660D-specific treatment response estimate."
+      - source_id: "P200010S008-technical-label"
+        source_type: "companion_diagnostic_technical_label"
+        authority: "FDA"
+        url: "https://www.accessdata.fda.gov/cdrh_docs/pdf20/P200010S008C.pdf"
+        verification_status: "verified_primary_regulatory_source"
+        supports: >
+          G660D under NM_004448 as a reportable ERBB2 alteration within the
+          assay documentation.
+        does_not_support: >
+          A direct G660D-specific trastuzumab deruxtecan clinical outcome.
+    scope_assessment:
+      lung_cancer_scope: "regulatory_activating_erbb2_mutant_nsclc"
+      disease_extent_scope: "unresectable_or_metastatic_after_prior_systemic_therapy"
+      event_scope: "exact_g660d_functional_and_assay_support"
+      transcript_scope: >
+        Candidate identity is locked to NM_004448.4 plus c.1979G>A and
+        p.G660D; assay documentation reports NM_004448, while exact accession
+        version normalization remains a runtime selector boundary.
+      assay_scope: "exact_g660d_reportable_in_companion_diagnostic_documentation"
+      direct_exact_drug_event_clinical_outcome: "not_identified"
+      evidence_chain: >
+        Exact-event functional activation plus exact-event assay
+        reportability plus a biomarker-class regulatory indication; this is
+        not the same as a direct G660D treatment-outcome subgroup.
+      patient_report_display: "prohibited_pending_secondary_review"
+    primary_review:
+      status: "completed_non_authoritative_scope_review"
+      decision: "eligible_to_remain_candidate_with_indirect_exact_event_chain_pending_secondary_review"
+      reviewed_at: "2026-07-23"
+      reviewer: "codex"
+      reviewer_type: "ai_assisted_primary_source_scope_review"
+    secondary_review:
+      status: "pending_report_group_review"
+      decision: ""
+      reviewer: ""
+      reviewed_at: ""
+    unresolved_requirements:
+      - "report_group_event_level_secondary_review"
+      - "confirm_current_label_and_assay_eligibility_at_promotion"
+      - "acknowledge_no_direct_g660d_drug_outcome_subgroup_identified"
+      - "positive_and_negative_rule_tests"
+      - "case_level_uat"
+    runtime_eligible: false
+    report_text_allowed: false
+
+  - candidate_id: "lung588_erbb2_g660d_trastuzumab_rezetecan"
+    gene: "ERBB2"
+    selector:
+      event_type: "snv"
+      transcript: "NM_004448.4"
+      c_hgvs: "c.1979G>A"
+      p_hgvs: "p.G660D"
+      protein_domain: "transmembrane_domain"
+    therapy:
+      generic_name_zh: "瑞康曲妥珠单抗"
+      generic_name_en: "trastuzumab rezetecan"
+    source_claim_reviews:
+      - source_id: "PMID:30449325"
+        source_type: "functional_study"
+        authority: "PubMed"
+        url: "https://pubmed.ncbi.nlm.nih.gov/30449325/"
+        verification_status: "verified_primary_functional_source"
+        supports: >
+          ERBB2 G660D as an activating transmembrane-domain mutation.
+        does_not_support: >
+          A direct G660D-specific trastuzumab rezetecan clinical outcome.
+      - source_id: "trastuzumab-rezetecan-approval-2025"
+        source_type: "government_regulatory_news"
+        authority: "NMPA-data-service"
+        url: "https://pharm.ncmi.cn/xwzx/202506/t20250604_427984.html"
+        verification_status: "verified_official_regulatory_announcement"
+        supports: >
+          China approval reporting for activating ERBB2-mutant unresectable
+          locally advanced or metastatic NSCLC after prior systemic therapy.
+        does_not_support: >
+          A complete prescribing-information variant whitelist or a
+          G660D-specific treatment outcome.
+      - source_id: "PMID:40020696"
+        source_type: "phase_2_clinical_study"
+        authority: "PubMed"
+        url: "https://pubmed.ncbi.nlm.nih.gov/40020696/"
+        verification_status: "verified_primary_clinical_source"
+        supports: >
+          Clinical activity in previously treated advanced NSCLC with
+          activating HER2 mutations.
+        does_not_support: >
+          A separately reported G660D efficacy subgroup in the accessible
+          primary publication record.
+    scope_assessment:
+      lung_cancer_scope: "activating_erbb2_mutant_advanced_nsclc"
+      disease_extent_scope: >
+        unresectable_locally_advanced_or_metastatic_after_prior_systemic_therapy
+      event_scope: "exact_g660d_functional_support_only"
+      transcript_scope: >
+        Candidate identity is locked to NM_004448.4 plus c.1979G>A and
+        p.G660D; no treatment source reviewed here establishes a
+        transcript-version-specific clinical outcome.
+      assay_scope: "official_full_label_and_exact_variant_eligibility_not_captured"
+      direct_exact_drug_event_clinical_outcome: "not_identified"
+      evidence_chain: >
+        Exact-event functional activation plus biomarker-class regulatory and
+        clinical evidence; the full official China prescribing information and
+        an exact G660D treatment-outcome subgroup were not identified in this
+        review.
+      patient_report_display: "prohibited_held_for_additional_evidence"
+    primary_review:
+      status: "completed_non_authoritative_scope_review"
+      decision: "hold_pending_official_china_label_and_secondary_review"
+      reviewed_at: "2026-07-23"
+      reviewer: "codex"
+      reviewer_type: "ai_assisted_primary_source_scope_review"
+    secondary_review:
+      status: "pending_report_group_review"
+      decision: ""
+      reviewer: ""
+      reviewed_at: ""
+    unresolved_requirements:
+      - "obtain_and_review_current_official_china_prescribing_information"
+      - "confirm_exact_g660d_label_or_assay_eligibility"
+      - "report_group_event_level_secondary_review"
+      - "acknowledge_no_direct_g660d_drug_outcome_subgroup_identified"
+      - "positive_and_negative_rule_tests"
+      - "case_level_uat"
+    runtime_eligible: false
+    report_text_allowed: false

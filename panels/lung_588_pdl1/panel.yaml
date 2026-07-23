@@ -82,6 +82,7 @@ rules:
   drugs: "rules/drugs.yaml"
   clinical_context: "rules/clinical_context.yaml"
   medical_candidates: "rules/medical_candidates.yaml"
+  candidate_evidence_review: "rules/candidate_evidence_review.yaml"
   knowledge_coverage: "rules/knowledge_coverage.yaml"
   style: "rules/style.yaml"
   filtering: "config/filtering.yaml"

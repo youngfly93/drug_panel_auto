@@ -240,6 +240,117 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
         assert context_contract["promotion_blocked"] is False
 
 
+def test_lung588_candidate_evidence_review_matches_exact_nonruntime_queue():
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    candidates = yaml.safe_load(
+        package.resolve_rule_file("medical_candidates").read_text(
+            encoding="utf-8"
+        )
+    )
+    contract = yaml.safe_load(
+        package.resolve_rule_file("candidate_evidence_review").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    governance = contract["governance"]
+    assert contract["status"] == "draft"
+    assert governance["primary_review_status"] == (
+        "completed_non_authoritative_scope_review"
+    )
+    assert governance["secondary_review_status"] == (
+        "pending_report_group_review"
+    )
+    assert governance["runtime_rule_source"] is False
+    assert governance["runtime_eligible"] is False
+    assert governance["report_text_allowed"] is False
+    assert governance["promotion_blocked"] is True
+
+    candidate_by_id = {
+        row["candidate_id"]: row for row in candidates["candidate_rules"]
+    }
+    review_by_id = {
+        row["candidate_id"]: row for row in contract["reviews"]
+    }
+    assert len(review_by_id) == 4
+    assert set(review_by_id) == set(candidate_by_id)
+    for candidate_id, review in review_by_id.items():
+        candidate = candidate_by_id[candidate_id]
+        assert review["gene"] == candidate["gene"]
+        assert review["selector"] == candidate["selector"]
+        assert review["therapy"] == {
+            key: candidate["therapy"][key]
+            for key in ("generic_name_zh", "generic_name_en")
+        }
+        assert review["source_claim_reviews"]
+        assert all(
+            source["supports"] and source["does_not_support"]
+            for source in review["source_claim_reviews"]
+        )
+        assert review["primary_review"]["status"] == (
+            "completed_non_authoritative_scope_review"
+        )
+        assert review["secondary_review"]["status"] == (
+            "pending_report_group_review"
+        )
+        assert review["runtime_eligible"] is False
+        assert review["report_text_allowed"] is False
+        assert review["scope_assessment"]["patient_report_display"].startswith(
+            "prohibited_"
+        )
+
+    for candidate_id in (
+        "lung588_braf_v600e_dabrafenib_trametinib",
+        "lung588_braf_v600e_encorafenib_binimetinib",
+    ):
+        review = review_by_id[candidate_id]
+        assert (
+            review["scope_assessment"][
+                "direct_exact_drug_event_clinical_outcome"
+            ]
+            == "identified"
+        )
+        assert review["primary_review"]["decision"] == (
+            "eligible_to_remain_candidate_pending_secondary_review"
+        )
+
+    deruxtecan = review_by_id[
+        "lung588_erbb2_g660d_trastuzumab_deruxtecan"
+    ]
+    assert deruxtecan["scope_assessment"]["event_scope"] == (
+        "exact_g660d_functional_and_assay_support"
+    )
+    assert deruxtecan["scope_assessment"]["assay_scope"] == (
+        "exact_g660d_reportable_in_companion_diagnostic_documentation"
+    )
+    assert (
+        deruxtecan["scope_assessment"][
+            "direct_exact_drug_event_clinical_outcome"
+        ]
+        == "not_identified"
+    )
+    assert deruxtecan["primary_review"]["decision"] == (
+        "eligible_to_remain_candidate_with_indirect_exact_event_chain_"
+        "pending_secondary_review"
+    )
+
+    rezetecan = review_by_id[
+        "lung588_erbb2_g660d_trastuzumab_rezetecan"
+    ]
+    assert (
+        rezetecan["scope_assessment"][
+            "direct_exact_drug_event_clinical_outcome"
+        ]
+        == "not_identified"
+    )
+    assert rezetecan["scope_assessment"]["assay_scope"] == (
+        "official_full_label_and_exact_variant_eligibility_not_captured"
+    )
+    assert rezetecan["primary_review"]["decision"] == (
+        "hold_pending_official_china_label_and_secondary_review"
+    )
+
+
 def test_lung588_candidate_context_evaluator_rejects_missing_uncertain_and_out_of_scope():
     package = load_panel_package("lung_588_pdl1", project_root=ROOT)
     candidates = yaml.safe_load(
@@ -787,6 +898,33 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
         unit["secondary_review"]["status"]
         == "pending_report_group_review"
         for unit in packet["units"]
+    )
+    candidates = [
+        unit
+        for unit in packet["units"]
+        if unit["unit_type"] == "targeted_drug_candidate"
+    ]
+    assert len(candidates) == 4
+    assert all(unit["source_scope_review"] for unit in candidates)
+    assert all(
+        unit["source_scope_review"]["candidate_id"]
+        == unit["review_unit_id"]
+        for unit in candidates
+    )
+    assert {
+        unit["primary_review"]["decision"] for unit in candidates
+    } == {
+        "eligible_to_remain_candidate_pending_secondary_review",
+        (
+            "eligible_to_remain_candidate_with_indirect_exact_event_chain_"
+            "pending_secondary_review"
+        ),
+        "hold_pending_official_china_label_and_secondary_review",
+    }
+    assert all(
+        unit["source_scope_review"]["runtime_eligible"] is False
+        and unit["source_scope_review"]["report_text_allowed"] is False
+        for unit in candidates
     )
 
     variants = [

@@ -1,5 +1,5 @@
 # 步骤: 24_build_lung588_p0_event_review
-# 上游: lung588 context_contracts/medical_candidates/knowledge_coverage + panel-scoped runtime knowledge provider
+# 上游: lung588 context_contracts/medical_candidates/candidate_evidence_review/knowledge_coverage + panel-scoped runtime knowledge provider
 # 输出: .work/lung588_p0_event_review/p0_event_review.json + p0_event_review.tsv
 # 种子: 无（精确事件去重、固定优先级和字典序）
 """Build the de-identified first-review packet for lung588 P0 events."""
@@ -146,6 +146,36 @@ def _medical_rules(package: Any) -> dict[str, Any]:
     )
 
 
+def _candidate_evidence_review_contract(package: Any) -> dict[str, Any]:
+    return (
+        yaml.safe_load(
+            package.resolve_rule_file("candidate_evidence_review").read_text(
+                encoding="utf-8"
+            )
+        )
+        or {}
+    )
+
+
+def _candidate_evidence_reviews(
+    contract: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    reviews: dict[str, dict[str, Any]] = {}
+    for row in contract.get("reviews") or []:
+        if not isinstance(row, dict):
+            continue
+        candidate_id = _clean(row.get("candidate_id"))
+        if not candidate_id:
+            continue
+        if candidate_id in reviews:
+            raise ValueError(
+                "Duplicate candidate evidence review: "
+                f"{candidate_id}"
+            )
+        reviews[candidate_id] = row
+    return reviews
+
+
 def _selector_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
     selector = row.get("selector") or {}
     return (
@@ -154,6 +184,89 @@ def _selector_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
         _clean(selector.get("c_hgvs")),
         _clean(selector.get("p_hgvs")),
     )
+
+
+def _validate_candidate_evidence_contract(
+    contract: dict[str, Any],
+    candidate_rules: list[dict[str, Any]],
+    reviews_by_id: dict[str, dict[str, Any]],
+) -> None:
+    governance = contract.get("governance") or {}
+    required_governance = {
+        "secondary_review_status": "pending_report_group_review",
+        "runtime_rule_source": False,
+        "runtime_eligible": False,
+        "report_text_allowed": False,
+        "promotion_blocked": True,
+    }
+    for field, expected in required_governance.items():
+        if governance.get(field) != expected:
+            raise ValueError(
+                "Candidate evidence governance is not fail-closed: "
+                f"{field}={governance.get(field)!r}"
+            )
+
+    candidate_ids = [_clean(row.get("candidate_id")) for row in candidate_rules]
+    if not all(candidate_ids) or len(candidate_ids) != len(set(candidate_ids)):
+        raise ValueError("Medical candidate IDs must be present and unique")
+    if set(candidate_ids) != set(reviews_by_id):
+        raise ValueError(
+            "Candidate evidence review IDs do not match the medical candidate "
+            f"queue: candidates={sorted(candidate_ids)!r}, "
+            f"reviews={sorted(reviews_by_id)!r}"
+        )
+
+    for candidate in candidate_rules:
+        candidate_id = _clean(candidate.get("candidate_id"))
+        review = reviews_by_id[candidate_id]
+        if _selector_key(review) != _selector_key(candidate):
+            raise ValueError(
+                "Candidate evidence selector mismatch: "
+                f"{candidate_id}"
+            )
+        candidate_therapy = candidate.get("therapy") or {}
+        review_therapy = review.get("therapy") or {}
+        for field in ("generic_name_zh", "generic_name_en"):
+            if _clean(review_therapy.get(field)) != _clean(
+                candidate_therapy.get(field)
+            ):
+                raise ValueError(
+                    "Candidate evidence therapy mismatch: "
+                    f"{candidate_id}:{field}"
+                )
+        if (
+            review.get("runtime_eligible") is not False
+            or review.get("report_text_allowed") is not False
+            or (
+                (review.get("secondary_review") or {}).get("status")
+                != "pending_report_group_review"
+            )
+        ):
+            raise ValueError(
+                "Candidate evidence review is not fail-closed: "
+                f"{candidate_id}"
+            )
+        source_reviews = review.get("source_claim_reviews") or []
+        if not source_reviews or any(
+            not isinstance(source, dict)
+            or not _clean(source.get("supports"))
+            or not _clean(source.get("does_not_support"))
+            for source in source_reviews
+        ):
+            raise ValueError(
+                "Candidate evidence review lacks claim boundaries: "
+                f"{candidate_id}"
+            )
+        direct_outcome = _clean(
+            (review.get("scope_assessment") or {}).get(
+                "direct_exact_drug_event_clinical_outcome"
+            )
+        )
+        if direct_outcome not in {"identified", "not_identified"}:
+            raise ValueError(
+                "Candidate evidence review lacks direct-outcome disposition: "
+                f"{candidate_id}"
+            )
 
 
 def _reference_rows(identifiers: dict[str, set[str]]) -> list[dict[str, str]]:
@@ -314,16 +427,20 @@ def _variant_units(
 
 def _candidate_units(
     candidate_rules: list[dict[str, Any]],
+    evidence_reviews_by_id: dict[str, dict[str, Any]],
     *,
     reviewed_at: str,
 ) -> list[dict[str, Any]]:
     units: list[dict[str, Any]] = []
     for row in candidate_rules:
+        candidate_id = _clean(row.get("candidate_id"))
         selector = row.get("selector") or {}
         therapy = row.get("therapy") or {}
+        source_scope_review = evidence_reviews_by_id.get(candidate_id) or {}
+        scoped_primary_review = source_scope_review.get("primary_review") or {}
         units.append(
             {
-                "review_unit_id": _clean(row.get("candidate_id")),
+                "review_unit_id": candidate_id,
                 "unit_type": "targeted_drug_candidate",
                 "priority": "P0",
                 "gene": _clean(row.get("gene")).upper(),
@@ -341,6 +458,7 @@ def _candidate_units(
                 "evidence_class": _clean(row.get("evidence_class")),
                 "evidence_summary": _clean(row.get("evidence_summary")),
                 "source_refs": row.get("source_refs") or [],
+                "source_scope_review": source_scope_review,
                 "patient_visible_part2_result_allowed": False,
                 "patient_visible_part3_interpretation_allowed": False,
                 "patient_visible_drug_conclusion_allowed": False,
@@ -348,7 +466,8 @@ def _candidate_units(
                 "primary_review": {
                     "status": "completed_ai_assisted_triage",
                     "decision": (
-                        "retain_nonruntime_candidate_pending_report_group_review"
+                        _clean(scoped_primary_review.get("decision"))
+                        or "source_scope_review_missing"
                     ),
                     "reviewer": "codex",
                     "reviewer_type": "ai_assisted_first_review",
@@ -418,11 +537,18 @@ def _citation_units(
 def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
     package = PanelPackageLoader(project_root=root).load(PANEL_ID)
     medical = _medical_rules(package)
+    evidence_contract = _candidate_evidence_review_contract(package)
+    evidence_reviews_by_id = _candidate_evidence_reviews(evidence_contract)
     candidate_rules = [
         row
         for row in medical.get("candidate_rules") or []
         if isinstance(row, dict)
     ]
+    _validate_candidate_evidence_contract(
+        evidence_contract,
+        candidate_rules,
+        evidence_reviews_by_id,
+    )
     candidates_by_event: dict[
         tuple[str, str, str, str], list[dict[str, Any]]
     ] = defaultdict(list)
@@ -442,7 +568,11 @@ def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
         reviewed_at=reviewed_at,
     )
     units.extend(
-        _candidate_units(candidate_rules, reviewed_at=reviewed_at)
+        _candidate_units(
+            candidate_rules,
+            evidence_reviews_by_id,
+            reviewed_at=reviewed_at,
+        )
     )
     units.extend(_citation_units(package, reviewed_at=reviewed_at))
     order = {
@@ -540,6 +670,7 @@ def write_outputs(
         "current_content_status",
         "current_source_refs",
         "source_refs",
+        "source_scope_review",
         "identifier",
         "suggested_replacement_identifier",
         "primary_review",
