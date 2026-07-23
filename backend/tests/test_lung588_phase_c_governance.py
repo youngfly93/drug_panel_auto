@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import subprocess
@@ -794,10 +795,21 @@ def test_lung588_stk11_unsafe_claims_are_exactly_retracted():
         has_drug=False,
     )
     analysis = section["mutation_analysis"]
+    narrative = section["mutation_narrative"]
     assert "PMID:25980754" not in analysis
     assert "结直肠癌" not in analysis
     assert "可能预示对免疫检查点抑制剂的耐药" not in analysis
     assert "作为肿瘤抑制基因发挥功能" in analysis
+    assert narrative
+    assert section["fixed_domain_text"] not in narrative
+    assert provider._mutation_narrative_from_composed(
+        "固定结构域。",
+        "固定结构域。",
+    ) == ""
+    assert provider._mutation_narrative_from_composed(
+        "固定结构域。",
+        "固定结构域。\n独立变异叙述。",
+    ) == "独立变异叙述。"
 
     gate = run_knowledge_release_gate(
         ROOT,
@@ -808,6 +820,14 @@ def test_lung588_stk11_unsafe_claims_are_exactly_retracted():
     assert "UNRESOLVED_RUNTIME_PMID" not in codes
     assert "RUNTIME_CITATION_SOURCE_MISMATCH" not in codes
     assert "RUNTIME_KNOWLEDGE_REDACTION_UNMATCHED" not in codes
+    analysis_gap = next(
+        issue
+        for issue in gate["panels"][0]["issues"]
+        if issue["code"] == "RUNTIME_MUTATION_ANALYSIS_GAP"
+    )
+    assert analysis_gap["requires_separate_mutation_narrative"] is True
+    assert "non-domain mutation narrative" in analysis_gap["message"]
+    assert len(analysis_gap["genes"]) == 247
 
 
 def test_lung588_knowledge_redaction_contract_rejects_replacement_text(
@@ -872,6 +892,41 @@ def test_lung588_medical_knowledge_queue_is_complete_and_deidentified(tmp_path):
     assert inventory["denominator"]["total_genes"] == 588
     assert sum(inventory["summary"]["priority_counts"].values()) == 588
     assert inventory["summary"]["citation_source_mismatch_count"] == 0
+    assert inventory["summary"]["complete_mutation_analysis_count"] == 341
+    assert inventory["summary"]["complete_mutation_narrative_count"] == 341
+    assert (
+        inventory["summary"]["composed_analysis_without_narrative_count"]
+        == 0
+    )
+    assert inventory["summary"]["specific_mutation_narrative_count"] == 32
+    assert inventory["summary"]["generic_mutation_narrative_count"] == 309
+    assert inventory["summary"]["fixed_domain_count"] == 37
+    assert inventory["summary"]["depth_strata"] == {
+        "missing_narrative_and_domain": 247,
+        "narrative_present_domain_missing": 304,
+        "domain_present_narrative_missing": 0,
+        "narrative_and_domain_present": 37,
+    }
+    manifest = json.loads(
+        (tmp_path / "knowledge_review_batch_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["total_rows"] == 588
+    assert manifest["batch_size"] == 25
+    assert manifest["batch_count"] == 25
+    assert all(
+        batch["secondary_review_completed_count"] == 0
+        and batch["patient_visible_allowed_count"] == 0
+        for batch in manifest["batches"]
+    )
+    with (tmp_path / "knowledge_review_batches.tsv").open(
+        encoding="utf-8-sig",
+        newline="",
+    ) as handle:
+        batch_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert len(batch_rows) == 588
+    assert len(list((tmp_path / "review_batches").glob("*.tsv"))) == 25
     stk11 = next(row for row in inventory["rows"] if row["gene"] == "STK11")
     assert stk11["priority"] == "P4"
     assert stk11["citation_source_mismatches"] == []

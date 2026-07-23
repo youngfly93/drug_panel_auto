@@ -8,6 +8,8 @@ source: "two de-identified historical lung588 final reports"
 contract:
   ordered_gene_list_sha256: "f9e6be05c954a4d3df97f031d453fe1f58ea0689290b11de3c173f4a0edf08f1"
   gene_explanation: "基础解释、肺癌特异解释、来源和医学二审分别计数；非空文本不等于医学完成。"
+  require_separate_mutation_narrative: true
+  mutation_narrative: "固定蛋白/结构域内容与变异级叙述分别计数；结构域文字不得单独满足变异解析门禁。"
   drug_knowledge: "候选证据不得直接进入患者报告；必须按癌种、事件、方向、证据和审核状态逐条放行。"
 citation_source_reviews:
   - review_id: "lung588_stk11_pmid_25980754_mismatch"

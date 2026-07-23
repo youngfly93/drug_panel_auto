@@ -559,6 +559,17 @@ def _panel_report(
 ) -> dict[str, Any]:
     package = PanelPackageLoader(project_root=project_root).load(panel_id)
     declared = _declared_genes(package)
+    coverage_contract = (
+        yaml.safe_load(
+            package.resolve_rule_file("knowledge_coverage").read_text(
+                encoding="utf-8"
+            )
+        )
+        or {}
+    ).get("contract") or {}
+    require_separate_mutation_narrative = (
+        coverage_contract.get("require_separate_mutation_narrative") is True
+    )
     paths = _overlay_paths(package)
     overlay_reports: list[dict[str, Any]] = []
     runtime_overlay_genes: set[str] = set()
@@ -650,15 +661,28 @@ def _panel_report(
                 "genes": runtime_content["missing_intro_genes"],
             }
         )
-    if runtime_content["missing_analysis_genes"]:
+    mutation_analysis_gaps = (
+        runtime_content["missing_mutation_narrative_genes"]
+        if require_separate_mutation_narrative
+        else runtime_content["missing_analysis_genes"]
+    )
+    if mutation_analysis_gaps:
+        gap_scope = (
+            "non-domain mutation narrative"
+            if require_separate_mutation_narrative
+            else "mutation analysis"
+        )
         issues.append(
             {
                 "code": "RUNTIME_MUTATION_ANALYSIS_GAP",
                 "message": (
-                    f"{len(runtime_content['missing_analysis_genes'])} declared genes "
-                    "render an empty mutation analysis for a previously unseen variant"
+                    f"{len(mutation_analysis_gaps)} declared genes render an "
+                    f"empty {gap_scope} for a previously unseen variant"
                 ),
-                "genes": runtime_content["missing_analysis_genes"],
+                "genes": mutation_analysis_gaps,
+                "requires_separate_mutation_narrative": (
+                    require_separate_mutation_narrative
+                ),
             }
         )
     if runtime_content["missing_fixed_domain_genes"]:

@@ -950,6 +950,31 @@ class GeneKnowledgeProvider:
         cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
         return f"{fixed}\n{cleaned}" if cleaned else fixed
 
+    @staticmethod
+    def _mutation_narrative_from_composed(
+        fixed_domain_text: str, mutation_analysis: str
+    ) -> str:
+        """Return the non-domain narrative from the final rendered analysis.
+
+        ``mutation_analysis`` remains the backward-compatible, patient-visible
+        field and therefore includes the fixed protein/domain statement.  Quality
+        gates need a separate value so a domain-only paragraph cannot be mistaken
+        for a variant interpretation.  Remove only the canonical prefix produced
+        by :meth:`_compose_fixed_domain_analysis`; never regex-strip similar prose
+        from the middle of a reviewed narrative.
+        """
+
+        fixed = str(fixed_domain_text or "").strip()
+        composed = str(mutation_analysis or "").strip()
+        if not fixed or not composed:
+            return composed
+        if composed == fixed:
+            return ""
+        prefix = f"{fixed}\n"
+        if composed.startswith(prefix):
+            return composed[len(prefix) :].strip()
+        return composed
+
     def _protein_position(self, p_hgvs: str) -> Optional[int]:
         match = re.search(r"p\.[A-Za-z*]{1,3}(\d+)", str(p_hgvs or ""))
         if not match:
@@ -1632,6 +1657,10 @@ class GeneKnowledgeProvider:
             field="mutation_analysis",
             text=mutation_analysis,
         )
+        mutation_narrative = self._mutation_narrative_from_composed(
+            fixed_domain_text,
+            mutation_analysis,
+        )
 
         return {
             "gene": gene,
@@ -1640,6 +1669,7 @@ class GeneKnowledgeProvider:
             "intro": intro,
             "mutation_desc": mutation_desc,
             "mutation_analysis": mutation_analysis,
+            "mutation_narrative": mutation_narrative,
             "fixed_domain_text": fixed_domain_text,
             "has_drug": has_drug,
         }

@@ -171,9 +171,12 @@ def profile_panel_runtime_content(
     provider = build_panel_gene_provider(project_root, package)
     missing_intro: list[str] = []
     missing_analysis: list[str] = []
+    missing_mutation_narrative: list[str] = []
     missing_fixed_domain: list[str] = []
     duplicate_fixed_domain: list[str] = []
     generic_analysis: list[str] = []
+    generic_mutation_narrative: list[str] = []
+    composed_analysis_without_narrative: list[str] = []
     texts: list[str] = []
     identifiers_by_gene: dict[str, dict[str, set[str]]] = {}
     runtime_text_by_gene: dict[str, str] = {}
@@ -188,6 +191,9 @@ def profile_panel_runtime_content(
         )
         intro = str(section.get("intro") or "").strip()
         analysis = str(section.get("mutation_analysis") or "").strip()
+        mutation_narrative = str(
+            section.get("mutation_narrative") or ""
+        ).strip()
         fixed_domain = str(section.get("fixed_domain_text") or "").strip()
         texts.extend((intro, analysis))
         identifiers_by_gene[gene] = extract_reference_identifiers(
@@ -200,6 +206,12 @@ def profile_panel_runtime_content(
             missing_analysis.append(gene)
         elif is_generic_mutation_analysis(gene, analysis):
             generic_analysis.append(gene)
+        if not mutation_narrative:
+            missing_mutation_narrative.append(gene)
+            if analysis:
+                composed_analysis_without_narrative.append(gene)
+        elif is_generic_mutation_analysis(gene, mutation_narrative):
+            generic_mutation_narrative.append(gene)
         if not fixed_domain:
             missing_fixed_domain.append(gene)
         elif len(re.findall(r"编码的蛋白全长", fixed_domain)) > 1:
@@ -207,6 +219,10 @@ def profile_panel_runtime_content(
 
     complete = len(normalized_genes) - len(set(missing_intro) | set(missing_analysis))
     specific = complete - len(generic_analysis)
+    narrative_complete = len(normalized_genes) - len(
+        set(missing_intro) | set(missing_mutation_narrative)
+    )
+    narrative_specific = narrative_complete - len(generic_mutation_narrative)
     identifiers = extract_reference_identifiers(texts)
     lookup = provider.build_reference_lookup()
     unresolved_pmids = sorted(identifiers["pmid"] - set(lookup.get("pmid") or {}))
@@ -250,6 +266,26 @@ def profile_panel_runtime_content(
         "complete_percent": round(100.0 * complete / total, 2) if total else 100.0,
         "missing_intro_genes": missing_intro,
         "missing_analysis_genes": missing_analysis,
+        "mutation_narrative_complete_genes": narrative_complete,
+        "mutation_narrative_complete_percent": (
+            round(100.0 * narrative_complete / total, 2)
+            if total
+            else 100.0
+        ),
+        "missing_mutation_narrative_genes": missing_mutation_narrative,
+        "composed_analysis_without_narrative_genes": (
+            composed_analysis_without_narrative
+        ),
+        "generic_mutation_narrative_genes": generic_mutation_narrative,
+        "generic_mutation_narrative_count": len(
+            generic_mutation_narrative
+        ),
+        "specific_mutation_narrative_genes": narrative_specific,
+        "specific_mutation_narrative_percent": (
+            round(100.0 * narrative_specific / total, 2)
+            if total
+            else 100.0
+        ),
         "fixed_domain_covered_genes": total - len(missing_fixed_domain),
         "fixed_domain_coverage_percent": (
             round(100.0 * (total - len(missing_fixed_domain)) / total, 2)

@@ -1,6 +1,6 @@
 # 步骤: 23_profile_lung588_medical_knowledge
 # 上游: lung588 knowledge_coverage/context_contracts/medical_candidates + panel-scoped runtime knowledge provider
-# 输出: .work/lung588_medical_knowledge/knowledge_depth_inventory.json + knowledge_review_queue.tsv
+# 输出: .work/lung588_medical_knowledge/knowledge_depth_inventory.json + 二审总表/分批TSV与manifest
 # 种子: 无（固定哨兵变异、确定性优先级与字典序）
 """Build a de-identified, row-level lung588 medical-knowledge review queue."""
 
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import re
 import subprocess
@@ -37,10 +38,15 @@ from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
 
 
 PANEL_ID = "lung_588_pdl1"
+PRIORITY_ORDER = ("P0", "P1", "P2", "P3", "P4")
 
 
 def _clean(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _text_sha256(value: Any) -> str:
+    return hashlib.sha256(_clean(value).encode("utf-8")).hexdigest()
 
 
 def _git_head(root: Path) -> str:
@@ -221,12 +227,15 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
         )
         intro = _clean(section.get("intro"))
         analysis = _clean(section.get("mutation_analysis"))
+        mutation_narrative = _clean(section.get("mutation_narrative"))
         fixed_domain = _clean(section.get("fixed_domain_text"))
         missing_intro = not intro
         missing_analysis = not analysis
+        missing_mutation_narrative = not mutation_narrative
         missing_domain = not fixed_domain
         generic_analysis = bool(
-            analysis and is_generic_mutation_analysis(gene, analysis)
+            mutation_narrative
+            and is_generic_mutation_analysis(gene, mutation_narrative)
         )
         identifiers = extract_reference_identifiers(
             (intro, analysis, fixed_domain)
@@ -258,11 +267,34 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
             gene,
             observed=observed_genes,
             candidates=candidate_genes,
-            missing_analysis=missing_analysis,
+            missing_analysis=missing_mutation_narrative,
             generic_analysis=generic_analysis,
             missing_domain=missing_domain,
             citation_source_mismatch=bool(source_mismatches),
         )
+        review_tracks: list[str] = []
+        if gene in observed_genes:
+            review_tracks.append("observed_case_event")
+        if gene in candidate_genes:
+            review_tracks.append("exact_drug_candidate")
+        if missing_mutation_narrative:
+            review_tracks.append("missing_mutation_narrative")
+        elif generic_analysis:
+            review_tracks.append("generic_mutation_narrative")
+        else:
+            review_tracks.append("specific_mutation_narrative")
+        if missing_domain:
+            review_tracks.append("missing_fixed_domain")
+        else:
+            review_tracks.append("fixed_domain_present")
+        if source_mismatches:
+            source_status = "confirmed_runtime_source_mismatch"
+        elif unresolved_pmids or unresolved_trials:
+            source_status = "unresolved_runtime_reference_identifier"
+        elif identifiers["pmid"] or identifiers["trial"]:
+            source_status = "structured_runtime_reference_identifier_present"
+        else:
+            source_status = "no_runtime_reference_identifier"
         rows.append(
             {
                 "index": index,
@@ -273,17 +305,42 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
                 "candidate_drug_rule_count": len(candidate_events.get(gene, [])),
                 "intro_present": not missing_intro,
                 "mutation_analysis_present": not missing_analysis,
-                "specific_mutation_analysis": bool(
-                    analysis and not generic_analysis
+                "mutation_narrative_present": (
+                    not missing_mutation_narrative
                 ),
+                "composed_analysis_without_narrative": bool(
+                    analysis and missing_mutation_narrative
+                ),
+                "specific_mutation_analysis": bool(
+                    mutation_narrative and not generic_analysis
+                ),
+                "specific_mutation_narrative": bool(
+                    mutation_narrative and not generic_analysis
+                ),
+                "generic_mutation_narrative": generic_analysis,
                 "fixed_domain_present": not missing_domain,
+                "review_tracks": review_tracks,
+                "source_status": source_status,
+                "runtime_text_sha256": {
+                    "intro": _text_sha256(intro),
+                    "mutation_analysis": _text_sha256(analysis),
+                    "mutation_narrative": _text_sha256(
+                        mutation_narrative
+                    ),
+                    "fixed_domain_text": _text_sha256(fixed_domain),
+                },
+                "runtime_content": {
+                    "intro": intro,
+                    "mutation_narrative": mutation_narrative,
+                    "fixed_domain_text": fixed_domain,
+                },
                 "cited_pmid_count": len(identifiers["pmid"]),
                 "cited_trial_count": len(identifiers["trial"]),
                 "unresolved_pmids": unresolved_pmids,
                 "unresolved_trials": unresolved_trials,
                 "citation_source_mismatches": source_mismatches,
                 "recommended_action": _action(
-                    missing_analysis=missing_analysis,
+                    missing_analysis=missing_mutation_narrative,
                     generic_analysis=generic_analysis,
                     missing_domain=missing_domain,
                     has_candidate=gene in candidate_genes,
@@ -327,10 +384,44 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
             "complete_mutation_analysis_count": sum(
                 row["mutation_analysis_present"] for row in rows
             ),
+            "complete_mutation_narrative_count": sum(
+                row["mutation_narrative_present"] for row in rows
+            ),
+            "composed_analysis_without_narrative_count": sum(
+                row["composed_analysis_without_narrative"] for row in rows
+            ),
             "specific_mutation_analysis_count": sum(
                 row["specific_mutation_analysis"] for row in rows
             ),
+            "specific_mutation_narrative_count": sum(
+                row["specific_mutation_narrative"] for row in rows
+            ),
+            "generic_mutation_narrative_count": sum(
+                row["generic_mutation_narrative"] for row in rows
+            ),
             "fixed_domain_count": sum(row["fixed_domain_present"] for row in rows),
+            "depth_strata": {
+                "missing_narrative_and_domain": sum(
+                    not row["mutation_narrative_present"]
+                    and not row["fixed_domain_present"]
+                    for row in rows
+                ),
+                "narrative_present_domain_missing": sum(
+                    row["mutation_narrative_present"]
+                    and not row["fixed_domain_present"]
+                    for row in rows
+                ),
+                "domain_present_narrative_missing": sum(
+                    row["fixed_domain_present"]
+                    and not row["mutation_narrative_present"]
+                    for row in rows
+                ),
+                "narrative_and_domain_present": sum(
+                    row["mutation_narrative_present"]
+                    and row["fixed_domain_present"]
+                    for row in rows
+                ),
+            },
             "observed_case_gene_count": len(observed_genes),
             "candidate_rule_gene_count": len(candidate_genes),
             "priority_counts": dict(sorted(priority_counts.items())),
@@ -347,7 +438,7 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
         },
         "priority_contract": {
             "P0": "observed de-identified case event or exact drug candidate",
-            "P1": "missing mutation analysis",
+            "P1": "missing non-domain mutation narrative",
             "P2": "generic mutation-analysis fallback",
             "P3": "missing fixed protein/domain content",
             "P4": "structurally complete baseline pending sampled medical review",
@@ -356,7 +447,143 @@ def build_inventory(root: Path, as_of: str) -> dict[str, Any]:
     }
 
 
-def write_outputs(payload: dict[str, Any], json_path: Path, tsv_path: Path) -> None:
+def build_review_batches(
+    payload: dict[str, Any],
+    *,
+    batch_size: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Partition the full denominator into deterministic review-sized batches."""
+
+    if batch_size < 1:
+        raise ValueError("batch_size must be positive")
+    assignments: list[dict[str, Any]] = []
+    batches: list[dict[str, Any]] = []
+    sequence = 0
+    for priority in PRIORITY_ORDER:
+        priority_rows = [
+            row for row in payload["rows"] if row["priority"] == priority
+        ]
+        for offset in range(0, len(priority_rows), batch_size):
+            chunk = priority_rows[offset : offset + batch_size]
+            batch_number = offset // batch_size + 1
+            batch_id = f"LUNG588-{priority}-{batch_number:02d}"
+            track_counts: Counter[str] = Counter(
+                track
+                for row in chunk
+                for track in row["review_tracks"]
+            )
+            source_counts = Counter(row["source_status"] for row in chunk)
+            batches.append(
+                {
+                    "batch_id": batch_id,
+                    "priority": priority,
+                    "row_count": len(chunk),
+                    "first_panel_index": chunk[0]["index"],
+                    "last_panel_index": chunk[-1]["index"],
+                    "review_track_counts": dict(sorted(track_counts.items())),
+                    "source_status_counts": dict(sorted(source_counts.items())),
+                    "secondary_review_completed_count": 0,
+                    "patient_visible_allowed_count": 0,
+                }
+            )
+            for batch_row, row in enumerate(chunk, start=1):
+                sequence += 1
+                runtime_content = row["runtime_content"]
+                assignments.append(
+                    {
+                        "review_sequence": sequence,
+                        "batch_id": batch_id,
+                        "batch_row": batch_row,
+                        "panel_index": row["index"],
+                        "gene": row["gene"],
+                        "priority": row["priority"],
+                        "priority_reason": row["priority_reason"],
+                        "review_tracks": row["review_tracks"],
+                        "observed_case_event_count": row[
+                            "observed_case_event_count"
+                        ],
+                        "candidate_drug_rule_count": row[
+                            "candidate_drug_rule_count"
+                        ],
+                        "mutation_narrative_present": row[
+                            "mutation_narrative_present"
+                        ],
+                        "generic_mutation_narrative": row[
+                            "generic_mutation_narrative"
+                        ],
+                        "fixed_domain_present": row[
+                            "fixed_domain_present"
+                        ],
+                        "source_status": row["source_status"],
+                        "runtime_intro": runtime_content["intro"],
+                        "runtime_mutation_narrative": runtime_content[
+                            "mutation_narrative"
+                        ],
+                        "runtime_fixed_domain_text": runtime_content[
+                            "fixed_domain_text"
+                        ],
+                        "runtime_text_sha256": row["runtime_text_sha256"],
+                        "recommended_action": row["recommended_action"],
+                        "medical_review_status": (
+                            "pending_report_group_review"
+                        ),
+                        "secondary_review_decision": "",
+                        "secondary_reviewer": "",
+                        "secondary_reviewed_at": "",
+                        "patient_visible_allowed": False,
+                    }
+                )
+
+    return (
+        {
+            "schema_version": "1.0",
+            "panel_id": payload["panel_id"],
+            "git_head": payload["git_head"],
+            "as_of": payload["as_of"],
+            "purpose": "deterministic_lung588_knowledge_secondary_review_batches",
+            "privacy": payload["privacy"],
+            "batch_size": batch_size,
+            "total_rows": len(assignments),
+            "batch_count": len(batches),
+            "priority_order": list(PRIORITY_ORDER),
+            "medical_release_boundary": (
+                "Every row remains patient-ineligible until an attributed "
+                "secondary-review decision is recorded."
+            ),
+            "batches": batches,
+        },
+        assignments,
+    )
+
+
+def _write_tsv(
+    rows: list[dict[str, Any]],
+    path: Path,
+    fields: list[str],
+) -> None:
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    key: (
+                        json.dumps(row[key], ensure_ascii=False, sort_keys=True)
+                        if isinstance(row[key], (list, dict))
+                        else row[key]
+                    )
+                    for key in fields
+                }
+            )
+
+
+def write_outputs(
+    payload: dict[str, Any],
+    json_path: Path,
+    tsv_path: Path,
+    *,
+    batch_size: int,
+) -> dict[str, Path]:
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -371,8 +598,16 @@ def write_outputs(payload: dict[str, Any], json_path: Path, tsv_path: Path) -> N
         "candidate_drug_rule_count",
         "intro_present",
         "mutation_analysis_present",
+        "mutation_narrative_present",
+        "composed_analysis_without_narrative",
         "specific_mutation_analysis",
+        "specific_mutation_narrative",
+        "generic_mutation_narrative",
         "fixed_domain_present",
+        "review_tracks",
+        "source_status",
+        "runtime_text_sha256",
+        "runtime_content",
         "cited_pmid_count",
         "cited_trial_count",
         "unresolved_pmids",
@@ -386,20 +621,65 @@ def write_outputs(payload: dict[str, Any], json_path: Path, tsv_path: Path) -> N
         "observed_events",
         "candidate_events",
     ]
-    with tsv_path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
-        writer.writeheader()
-        for row in payload["rows"]:
-            writer.writerow(
-                {
-                    key: (
-                        json.dumps(row[key], ensure_ascii=False, sort_keys=True)
-                        if isinstance(row[key], (list, dict))
-                        else row[key]
-                    )
-                    for key in fields
-                }
-            )
+    _write_tsv(payload["rows"], tsv_path, fields)
+
+    batch_manifest, assignments = build_review_batches(
+        payload,
+        batch_size=batch_size,
+    )
+    manifest_path = json_path.parent / "knowledge_review_batch_manifest.json"
+    manifest_path.write_text(
+        json.dumps(batch_manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    batch_fields = [
+        "review_sequence",
+        "batch_id",
+        "batch_row",
+        "panel_index",
+        "gene",
+        "priority",
+        "priority_reason",
+        "review_tracks",
+        "observed_case_event_count",
+        "candidate_drug_rule_count",
+        "mutation_narrative_present",
+        "generic_mutation_narrative",
+        "fixed_domain_present",
+        "source_status",
+        "runtime_intro",
+        "runtime_mutation_narrative",
+        "runtime_fixed_domain_text",
+        "runtime_text_sha256",
+        "recommended_action",
+        "medical_review_status",
+        "secondary_review_decision",
+        "secondary_reviewer",
+        "secondary_reviewed_at",
+        "patient_visible_allowed",
+    ]
+    batch_tsv_path = json_path.parent / "knowledge_review_batches.tsv"
+    _write_tsv(assignments, batch_tsv_path, batch_fields)
+    batch_dir = json_path.parent / "review_batches"
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    for batch in batch_manifest["batches"]:
+        batch_rows = [
+            row
+            for row in assignments
+            if row["batch_id"] == batch["batch_id"]
+        ]
+        _write_tsv(
+            batch_rows,
+            batch_dir / f"{batch['batch_id']}.tsv",
+            batch_fields,
+        )
+    return {
+        "inventory_json": json_path,
+        "review_queue_tsv": tsv_path,
+        "batch_manifest_json": manifest_path,
+        "review_batches_tsv": batch_tsv_path,
+        "review_batch_dir": batch_dir,
+    }
 
 
 def main() -> int:
@@ -411,6 +691,7 @@ def main() -> int:
         type=Path,
         default=Path(".work/lung588_medical_knowledge"),
     )
+    parser.add_argument("--batch-size", type=int, default=25)
     args = parser.parse_args()
     root = args.project_root.resolve()
     output_dir = (
@@ -421,7 +702,12 @@ def main() -> int:
     payload = build_inventory(root, args.as_of)
     json_path = output_dir / "knowledge_depth_inventory.json"
     tsv_path = output_dir / "knowledge_review_queue.tsv"
-    write_outputs(payload, json_path, tsv_path)
+    outputs = write_outputs(
+        payload,
+        json_path,
+        tsv_path,
+        batch_size=args.batch_size,
+    )
     summary = payload["summary"]
     print(
         f"panel={PANEL_ID} genes={payload['denominator']['total_genes']} "
@@ -431,6 +717,9 @@ def main() -> int:
     )
     print(f"json={json_path}")
     print(f"tsv={tsv_path}")
+    print(f"batch_manifest={outputs['batch_manifest_json']}")
+    print(f"batch_tsv={outputs['review_batches_tsv']}")
+    print(f"batch_dir={outputs['review_batch_dir']}")
     return 0
 
 
