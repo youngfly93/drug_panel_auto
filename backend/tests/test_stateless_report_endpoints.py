@@ -23,6 +23,8 @@ for import_path in (str(ROOT), str(BACKEND)):
     if import_path not in sys.path:
         sys.path.insert(0, import_path)
 
+from reportgen.models.excel_data import ExcelDataSource  # noqa: E402
+
 from app.api import batch as batch_api  # noqa: E402
 from app.api import excel as excel_api  # noqa: E402
 from app.api import report as report_api  # noqa: E402
@@ -1519,6 +1521,30 @@ def test_bridge_infers_crc358_from_project_name_text():
 
     assert result["detected"] is True
     assert result["project_type"] == "crc_358_msi"
+
+
+def test_bridge_unknown_sample_does_not_inherit_global_project_info(tmp_path):
+    """项目识别不得使用 patient_info.yaml 的全局 project_info 兜底。"""
+
+    bridge = ReportGenBridge(
+        config_dir=str(ROOT / "config"),
+        template_dir=str(ROOT / "templates"),
+    )
+    excel_path = tmp_path / "CASE-UNKNOWN.xlsx"
+    excel_path.write_bytes(b"placeholder")
+    excel_data = ExcelDataSource(
+        file_path=str(excel_path),
+        single_values={"TMB": 7.5},
+        table_data={"Variations": []},
+        sheet_names=["Variations"],
+        metadata={"sample_id_from_filename": "CASE-UNKNOWN"},
+    )
+
+    result = bridge.detect_project_type(excel_data.file_path, excel_data=excel_data)
+
+    assert result["detected"] is False
+    assert result["project_type"] is None
+    assert result["project_name"] is None
 
 
 def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):

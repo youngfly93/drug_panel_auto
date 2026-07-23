@@ -484,14 +484,12 @@ class ReportGenBridge:
                 if value:
                     candidates.append(value)
 
-        try:
-            mapped_fields = self.get_mapped_clinical_fields(excel_data)
-            for key in ("project_name", "项目名称", "检测项目"):
-                value = mapped_fields.get(key)
-                if value:
-                    candidates.append(value)
-        except Exception:
-            pass
+        # Do not run the general FieldMapper here. FieldMapper intentionally
+        # merges global ``patient_info.yaml:project_info`` for report
+        # generation compatibility; using that value for detection makes every
+        # unmatched sample look like the globally configured project. Trusted
+        # Excel synonyms and sample-specific patient registry values are
+        # already handled by ProjectDetector._extract_detection_text().
 
         for candidate in candidates:
             inferred = self.infer_project_type_from_text(str(candidate))
