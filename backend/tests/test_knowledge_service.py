@@ -121,9 +121,9 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
         # governance while being blocked from runtime report content.
         "drug_rows": 90,
         "drug_unique_genes": 24,
-        "targeted_drug_rule_rows": 31,
-        "targeted_drug_runtime_rule_rows": 17,
-        "targeted_drug_blocked_rule_rows": 14,
+        "targeted_drug_rule_rows": 32,
+        "targeted_drug_runtime_rule_rows": 19,
+        "targeted_drug_blocked_rule_rows": 13,
         "targeted_drug_rule_unique_genes": 26,
         "targeted_drug_applicability_rule_rows": 1,
         "extra_reference_rows": 12,
@@ -182,19 +182,19 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
     assert contract["gene_explanation_complete"] is True
     assert contract["gene_explanation_missing_count"] == 0
     assert contract["explicit_panel_rule_genes"] == (
-        15 if panel_id == "crc_358_msi" else 9
+        17 if panel_id == "crc_358_msi" else 9
     )
     assert contract["declared_panel_rule_genes"] == (
         26 if panel_id == "crc_358_msi" else 9
     )
     assert contract["explicitly_approved_drug_genes"] == (
-        11 if panel_id == "crc_358_msi" else 7
+        13 if panel_id == "crc_358_msi" else 7
     )
     assert contract["panel_rule_status_counts"] == (
         {
             "legacy_runtime": 6,
-            "approved_for_runtime": 11,
-            "needs_review": 14,
+            "approved_for_runtime": 13,
+            "needs_review": 13,
         }
         if panel_id == "crc_358_msi"
         else {
@@ -348,15 +348,15 @@ def test_catalog_entry_counts_and_match_scopes_are_explicit():
     targeted = service.get_catalog_entries(
         panel_id="crc_358_msi", kind="targeted_drug", page=1, page_size=1
     )
-    assert targeted["total"] == 842
+    assert targeted["total"] == 843
     assert targeted["facets"] == {
-        "layers": {"base": 811, "reviewed_overlay": 31},
+        "layers": {"base": 811, "reviewed_overlay": 32},
         "review_statuses": {
             "legacy_runtime": 817,
-            "approved_for_runtime": 11,
-            "needs_review": 14,
+            "approved_for_runtime": 13,
+            "needs_review": 13,
         },
-        "match_scopes": {"event": 622, "variant": 161, "gene": 59},
+        "match_scopes": {"event": 622, "variant": 162, "gene": 59},
     }
 
     variant_rows = service.get_catalog_entries(
@@ -846,8 +846,9 @@ def test_review_status_filters_distinguish_approved_and_legacy_runtime():
         page=1,
         page_size=100,
     )
-    assert approved_targeted_rules["total"] == 11
+    assert approved_targeted_rules["total"] == 13
     assert {row["gene"] for row in approved_targeted_rules["rows"]} == {
+        "BRCA1",
         "EGFR",
         "ERBB2",
         "ATM",
@@ -855,6 +856,7 @@ def test_review_status_filters_distinguish_approved_and_legacy_runtime():
         "FANCD2",
         "FLT3",
         "PALB2",
+        "PMS2",
         "RAD50",
         "RAD51D",
         "SETD2",

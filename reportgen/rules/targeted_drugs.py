@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from reportgen.panels.loader import PanelPackageLoader
 from reportgen.knowledge.governance import effective_governance
@@ -18,6 +18,91 @@ def _dict_rows(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [dict(row) for row in value if isinstance(row, Mapping)]
+
+
+def reviewed_variant_selector_specificity(row: Mapping[str, Any]) -> int:
+    """Return a stable specificity score for a reviewed variant selector.
+
+    Exact c./p. selectors must outrank a broader gene/class or LoF guard.
+    Otherwise a newly added pending gene-level guard can silently suppress an
+    older, report-group-reviewed exact variant.  The score is deliberately
+    structural: it does not depend on runtime/review status.
+    """
+
+    def has_value(*keys: str) -> bool:
+        for key in keys:
+            value = row.get(key)
+            if isinstance(value, str) and value.strip():
+                return True
+            if isinstance(value, (list, tuple, set)) and any(
+                str(item).strip() for item in value
+            ):
+                return True
+        return False
+
+    exact_count = int(has_value("c_hgvs", "cHGVS")) + int(
+        has_value("p_hgvs", "pHGVS")
+    )
+    if exact_count == 0 and has_value("variant_site", "locus"):
+        # A structured locus is more specific than a gene/class rule, even
+        # when its c./p. components have not yet been split by the caller.
+        exact_count = 1
+    applicability = str(
+        row.get("applicability")
+        or row.get("applies_to")
+        or row.get("variant_applicability")
+        or ""
+    ).strip().upper()
+    has_bounded_applicability = applicability not in {
+        "",
+        "ANY",
+        "ALL",
+        "ANYVARIANT",
+    }
+    has_level = has_value(
+        "variant_level",
+        "variant_levels",
+        "level",
+        "levels",
+    )
+    has_gene = has_value("gene", "genes")
+    return (
+        exact_count * 100
+        + int(has_bounded_applicability) * 10
+        + int(has_level) * 2
+        + int(has_gene)
+    )
+
+
+def select_reviewed_variant_rule(
+    active_rows: list[dict[str, Any]],
+    blocked_rows: list[dict[str, Any]],
+    *,
+    matches: Callable[[dict[str, Any]], bool],
+) -> tuple[Optional[dict[str, Any]], bool]:
+    """Select one matching reviewed rule with deterministic fail-closed ties.
+
+    More-specific selectors win regardless of status.  When selectors are
+    equally specific, a blocked row wins so an ambiguous duplicate cannot
+    reopen a drug conclusion.  Within the same status/specificity, YAML order
+    remains stable for backward compatibility.
+    """
+
+    best: Optional[dict[str, Any]] = None
+    best_blocked = False
+    best_score = -1
+    for blocked, rows in ((False, active_rows), (True, blocked_rows)):
+        for row in rows:
+            if not matches(row):
+                continue
+            score = reviewed_variant_selector_specificity(row)
+            if score > best_score or (
+                score == best_score and blocked and not best_blocked
+            ):
+                best = row
+                best_blocked = blocked
+                best_score = score
+    return best, best_blocked
 
 
 def _gene_overrides(value: Any) -> dict[str, dict[str, Any]]:

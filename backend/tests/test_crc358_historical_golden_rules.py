@@ -7,8 +7,13 @@ import yaml
 from docx import Document
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.report_generator import ReportGenerator
+from reportgen.core.template_bridge_358 import (
+    _patch_reviewed_variant_override_rows,
+    load_panel_config,
+)
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
+from reportgen.models.report_data import ReportData
 from reportgen.panels.loader import load_panel_package
 from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 
@@ -53,10 +58,13 @@ def test_crc358_exact_summary_rules_match_historical_contract_and_stay_panel_sco
         # three-drug benefit display is now research-only because the sources
         # do not establish variant-specific CRC efficacy.
         ("FLT3", "c.2537G>A", "p.G846D", 0, 0, True),
-        # The newly proposed ATR display remains secondary-review pending in
-        # this limited release. Its exact selector therefore suppresses both
-        # the proposed row and lower-priority legacy fallbacks.
-        ("ATR", "c.1291delA", "p.R431Gfs*8", 0, 0, False),
+        # The report-group-reviewed exact ATR event outranks the later broad
+        # pending LoF guard. Other ATR LoF events remain fail-closed.
+        ("ATR", "c.1291delA", "p.R431Gfs*8", 8, 0, False),
+        ("BRCA1", "c.505C>T", "p.Q169*", 14, 0, False),
+        # Match the raw Excel HGVS; display normalization later renders
+        # c.1273del without changing the rule identity.
+        ("PMS2", "c.1273delT", "p.S425Lfs*23", 1, 0, False),
         ("KRAS", "c.34G>T", "p.G12C", 38, 3, False),
     ]
     for gene, c_hgvs, p_hgvs, benefit_count, caution_count, shared in cases:
@@ -97,6 +105,56 @@ def test_crc358_exact_summary_rules_match_historical_contract_and_stay_panel_sco
     assert kras[0].splitlines()[-1] == "PD0325901（D）"
 
 
+def test_exact_override_beats_broad_pending_guard_and_tip_patch_is_idempotent():
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    panel_config = load_panel_config(
+        base_path=str(ROOT),
+        panel_id="crc_358_msi",
+        panel_package=package,
+    )
+    report_data = ReportData()
+    detected = {
+        "gene": "BRCA1",
+        "cHGVS": "c.505C>T",
+        "pHGVS": "p.Q169*",
+        "gene_class": "Ⅱ类",
+    }
+    report_data.set_table("variants", [dict(detected)])
+    report_data.set_table("summary_variants", [dict(detected)])
+    report_data.set_table(
+        "variants_2_1",
+        [
+            {
+                "gene": "BRCA1",
+                "locus": "c.505C>T,\np.Q169*",
+                "gene_class": "Ⅱ类",
+                "benefit_drugs": "--",
+                "caution_drugs": "--",
+            }
+        ],
+    )
+    report_data.set_table(
+        "targeted_drug_tips",
+        [
+            {
+                "gene": "BRCA1",
+                "variant_site": "c.505C>T,\np.Q169*",
+                "gene_class": "Ⅱ类",
+                "benefit_drugs": "--",
+                "caution_drugs": "--",
+            }
+        ],
+    )
+
+    _patch_reviewed_variant_override_rows(report_data, panel_config)
+    _patch_reviewed_variant_override_rows(report_data, panel_config)
+
+    tips = report_data.get_table("targeted_drug_tips")
+    assert len(tips) == 1
+    assert tips[0]["gene"] == "BRCA1"
+    assert len(tips[0]["benefit_drugs"].splitlines()) == 14
+
+
 def test_exact_part3_overlay_replaces_dynamic_candidates_without_gene_level_leakage():
     provider = _provider()
     variants = [
@@ -129,13 +187,34 @@ def test_exact_part3_overlay_replaces_dynamic_candidates_without_gene_level_leak
             "benefit_drugs": "奥拉帕利（C）\n芦卡帕利（D）",
             "caution_drugs": "--",
         },
+        {
+            "gene": "BRCA1",
+            "cHGVS": "c.505C>T",
+            "pHGVS": "p.Q169*",
+            "benefit_drugs": "奥拉帕利（C）\n芦卡帕利（C）",
+            "caution_drugs": "--",
+        },
+        {
+            "gene": "PMS2",
+            "cHGVS": "c.1273delT",
+            "pHGVS": "p.S425Lfs*23",
+            "benefit_drugs": "奥拉帕利（C）",
+            "caution_drugs": "--",
+        },
     ]
     rows = provider.build_drug_analysis_sections(variants)
     counts = {
         gene: sum(1 for row in rows if row["gene"] == gene)
-        for gene in ("KRAS", "TP53", "FLT3", "ATR")
+        for gene in ("KRAS", "TP53", "FLT3", "ATR", "BRCA1", "PMS2")
     }
-    assert counts == {"KRAS": 8, "TP53": 3, "FLT3": 1, "ATR": 1}
+    assert counts == {
+        "KRAS": 8,
+        "TP53": 3,
+        "FLT3": 1,
+        "ATR": 1,
+        "BRCA1": 1,
+        "PMS2": 1,
+    }
     assert any(row["drug_name"] == "安卓健（Antroquinonol）" for row in rows)
     assert any(
         row["gene"] == "FLT3"
