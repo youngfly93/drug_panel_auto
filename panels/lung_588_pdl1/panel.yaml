@@ -48,6 +48,7 @@ part3_knowledge:
 
 reviewed_part3_overlay_additions:
   - "rules/reviewed_part3_domain_candidates.yaml"
+  - "rules/reviewed_part3_p0_event_narrative_candidates.yaml"
 
 enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
 

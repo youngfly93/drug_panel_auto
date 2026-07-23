@@ -25,6 +25,7 @@ from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.template_bridge_358 import _variant_override_matches
 from reportgen.knowledge.quality import (
     build_panel_gene_provider,
+    is_generic_mutation_analysis,
     profile_panel_runtime_content,
 )
 from reportgen.knowledge.release_gate import run_knowledge_release_gate
@@ -49,6 +50,11 @@ PANEL_DIR = ROOT / "panels" / "lung_588_pdl1"
 PRE_UAT_RECORD = PANEL_DIR / "uat" / "lung588_machine_pre_uat_20260723.yaml"
 DOMAIN_CANDIDATES = (
     PANEL_DIR / "rules" / "reviewed_part3_domain_candidates.yaml"
+)
+EVENT_NARRATIVE_CANDIDATES = (
+    PANEL_DIR
+    / "rules"
+    / "reviewed_part3_p0_event_narrative_candidates.yaml"
 )
 
 
@@ -1063,6 +1069,18 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
     assert packet["summary"]["secondary_review_completed_count"] == 0
     assert packet["summary"]["patient_visible_part3_allowed_count"] == 0
     assert packet["summary"]["patient_visible_drug_allowed_count"] == 0
+    assert packet["summary"]["event_narrative_candidate_count"] == 10
+    assert packet["summary"]["event_narrative_candidate_gene_count"] == 9
+    assert (
+        packet["summary"][
+            "event_narrative_candidate_runtime_eligible_count"
+        ]
+        == 0
+    )
+    assert (
+        packet["scope"]["event_narrative_candidates_are_runtime_content"]
+        is False
+    )
     assert packet["scope"]["case_aliases"] == [
         "CASE-LUNG-A",
         "CASE-LUNG-B",
@@ -1112,6 +1130,25 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
         for unit in packet["units"]
         if unit["unit_type"] == "variant_narrative"
     ]
+    narrative_candidates = [
+        unit["candidate_narrative_review"]
+        for unit in variants
+        if unit["candidate_narrative_review"]
+    ]
+    assert len(narrative_candidates) == 10
+    assert all(
+        candidate["review_status"] == "needs_review"
+        and candidate["runtime_eligible"] is False
+        and candidate["report_text_allowed"] is False
+        and candidate["patient_visible"] is False
+        and candidate["secondary_review_status"]
+        == "pending_report_group_review"
+        and candidate["runtime_selector_contract"][
+            "current_overlay_matches_transcript"
+        ]
+        is False
+        for candidate in narrative_candidates
+    )
     atm = next(
         unit
         for unit in variants
@@ -1156,3 +1193,134 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
     )
     assert "LZ258" not in emitted
     assert "patient_name" not in emitted
+
+
+def test_lung588_p0_event_narrative_candidates_are_exact_sourced_and_hidden():
+    contract = yaml.safe_load(
+        EVENT_NARRATIVE_CANDIDATES.read_text(encoding="utf-8")
+    )
+    source = contract["source"]
+    governance = contract["governance"]
+    defaults = governance["defaults"]["gene"]
+    rows = contract["gene_sections"]
+
+    assert source["panel"] == "lung_588_pdl1"
+    assert source["activation_mode"] == (
+        "candidate_only_pending_secondary_review"
+    )
+    assert defaults["review_status"] == "needs_review"
+    assert defaults["runtime_eligible"] is False
+    assert defaults["report_text_allowed"] is False
+    assert defaults["patient_visible"] is False
+    assert defaults["secondary_review_status"] == (
+        "pending_report_group_review"
+    )
+    assert governance["runtime_selector_contract"] == {
+        "current_overlay_matches_transcript": False,
+        "disposition": "promotion_blocked_until_transcript_is_enforced",
+        "reason": (
+            "The current reviewed-overlay runtime key uses gene, c_hgvs and "
+            "p_hgvs. Transcript is preserved below for review identity but "
+            "is not yet enforced by the runtime loader.\n"
+        ),
+    }
+    assert contract["drug_sections"] == []
+    assert len(rows) == 10
+    assert len({row["candidate_id"] for row in rows}) == 10
+    assert len({row["gene"] for row in rows}) == 9
+
+    expected_events = {
+        ("BRIP1", "NM_032043.3", "c.2142G>A", "p.W714*"),
+        ("ERBB2", "NM_004448.4", "c.1979G>A", "p.G660D"),
+        ("ESR1", "NM_000125.4", "c.1242G>T", "p.Q414H"),
+        ("FLT3", "NM_004119.3", "c.1159C>T", "p.R387*"),
+        ("GNAS", "NM_000516.7", "c.695G>T", "p.R232L"),
+        (
+            "IFNGR1",
+            "NM_000416.3",
+            "c.1132_1133del",
+            "p.S378Ffs*6",
+        ),
+        ("MSH3", "NM_002439.5", "c.2905C>T", "p.Q969*"),
+        ("TSC1", "NM_000368.5", "c.474del", "p.F158Lfs*9"),
+        ("TSC1", "NM_000368.5", "c.2074C>T", "p.R692*"),
+        ("TSC2", "NM_000548.5", "c.2647C>T", "p.Q883*"),
+    }
+    assert {
+        (
+            row["gene"],
+            row["transcript"],
+            row["c_hgvs"],
+            row["p_hgvs"],
+        )
+        for row in rows
+    } == expected_events
+
+    ncbi_gene_ids = {
+        "BRIP1": "GeneID:83990",
+        "ERBB2": "GeneID:2064",
+        "ESR1": "GeneID:2099",
+        "FLT3": "GeneID:2322",
+        "GNAS": "GeneID:2778",
+        "IFNGR1": "GeneID:3459",
+        "MSH3": "GeneID:4437",
+        "TSC1": "GeneID:7248",
+        "TSC2": "GeneID:7249",
+    }
+    for row in rows:
+        assert row["panels"] == ["lung_588_pdl1"]
+        assert row["review_status"] == "needs_review"
+        assert row["runtime_eligible"] is False
+        assert row["report_text_allowed"] is False
+        assert row["patient_visible"] is False
+        assert row["secondary_review_status"] == (
+            "pending_report_group_review"
+        )
+        assert row["intro"]
+        assert row["mutation_analysis"]
+        assert row["source_refs"] == [
+            {
+                "type": "ncbi_gene",
+                "authority": "NCBI",
+                "id": ncbi_gene_ids[row["gene"]],
+                "url": (
+                    "https://www.ncbi.nlm.nih.gov/gene/"
+                    f"{ncbi_gene_ids[row['gene']].split(':', 1)[1]}"
+                ),
+                "supports": "gene_identity_and_function_only",
+            }
+        ]
+        assert all(
+            row["evidence_boundaries"][field] is False
+            for field in (
+                "treatment_inference_allowed",
+                "immune_inference_allowed",
+                "prognostic_inference_allowed",
+                "hereditary_inference_allowed",
+            )
+        )
+
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    provider = build_panel_gene_provider(ROOT, package)
+    mutation_types = {
+        "frameshift": "Frameshift",
+        "stop_gained": "Nonsense",
+        "missense": "Missense",
+    }
+    for row in rows:
+        section = provider.build_gene_knowledge_section(
+            gene=row["gene"],
+            c_hgvs=row["c_hgvs"],
+            p_hgvs=row["p_hgvs"],
+            frequency=1.0,
+            mutation_type=mutation_types[row["variant_kind"]],
+            has_drug=False,
+        )
+        assert is_generic_mutation_analysis(
+            row["gene"],
+            section["mutation_narrative"],
+        )
+        assert (
+            section["mutation_narrative"]
+            != row["mutation_analysis"]
+        )

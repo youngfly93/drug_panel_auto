@@ -35,6 +35,9 @@ from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
 
 
 PANEL_ID = "lung_588_pdl1"
+EVENT_NARRATIVE_CANDIDATE_RELATIVE_PATH = (
+    "rules/reviewed_part3_p0_event_narrative_candidates.yaml"
+)
 
 
 def _clean(value: Any) -> str:
@@ -146,6 +149,13 @@ def _medical_rules(package: Any) -> dict[str, Any]:
     )
 
 
+def _event_narrative_candidate_contract(
+    package: Any,
+) -> dict[str, Any]:
+    path = package._resolve_path(EVENT_NARRATIVE_CANDIDATE_RELATIVE_PATH)
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
 def _candidate_evidence_review_contract(package: Any) -> dict[str, Any]:
     return (
         yaml.safe_load(
@@ -180,10 +190,115 @@ def _selector_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
     selector = row.get("selector") or {}
     return (
         _clean(row.get("gene") or selector.get("gene")).upper(),
-        _clean(selector.get("transcript")),
-        _clean(selector.get("c_hgvs")),
-        _clean(selector.get("p_hgvs")),
+        _clean(row.get("transcript") or selector.get("transcript")),
+        _clean(row.get("c_hgvs") or selector.get("c_hgvs")),
+        _clean(row.get("p_hgvs") or selector.get("p_hgvs")),
     )
+
+
+def _event_narrative_candidates(
+    contract: dict[str, Any],
+) -> dict[tuple[str, str, str, str], dict[str, Any]]:
+    source = contract.get("source") or {}
+    governance = contract.get("governance") or {}
+    defaults = (governance.get("defaults") or {}).get("gene") or {}
+    selector_contract = governance.get("runtime_selector_contract") or {}
+    required_defaults = {
+        "review_status": "needs_review",
+        "runtime_eligible": False,
+        "report_text_allowed": False,
+        "patient_visible": False,
+        "secondary_review_status": "pending_report_group_review",
+    }
+    if source.get("activation_mode") != (
+        "candidate_only_pending_secondary_review"
+    ):
+        raise ValueError(
+            "Event narrative candidate activation mode must remain fail-closed"
+        )
+    for field, expected in required_defaults.items():
+        if defaults.get(field) != expected:
+            raise ValueError(
+                "Event narrative candidate defaults are not fail-closed: "
+                f"{field}={defaults.get(field)!r}"
+            )
+    if (
+        selector_contract.get("current_overlay_matches_transcript") is not False
+        or selector_contract.get("disposition")
+        != "promotion_blocked_until_transcript_is_enforced"
+    ):
+        raise ValueError(
+            "Event narrative candidates must remain blocked while the runtime "
+            "overlay selector does not enforce transcript"
+        )
+    if contract.get("drug_sections"):
+        raise ValueError(
+            "Event narrative candidates must not contain drug sections"
+        )
+
+    candidates: dict[
+        tuple[str, str, str, str], dict[str, Any]
+    ] = {}
+    candidate_ids: set[str] = set()
+    for row in contract.get("gene_sections") or []:
+        if not isinstance(row, dict):
+            continue
+        key = _selector_key(row)
+        candidate_id = _clean(row.get("candidate_id"))
+        if not all(key) or not candidate_id:
+            raise ValueError(
+                "Event narrative candidate lacks exact event identity"
+            )
+        if key in candidates or candidate_id in candidate_ids:
+            raise ValueError(
+                "Duplicate event narrative candidate: "
+                f"{candidate_id}:{key!r}"
+            )
+        for field, expected in required_defaults.items():
+            if row.get(field) != expected:
+                raise ValueError(
+                    "Event narrative candidate row is not fail-closed: "
+                    f"{candidate_id}:{field}={row.get(field)!r}"
+                )
+        if (
+            not _clean(row.get("intro"))
+            or not _clean(row.get("mutation_analysis"))
+            or not row.get("source_refs")
+        ):
+            raise ValueError(
+                f"Event narrative candidate lacks content/source: {candidate_id}"
+            )
+        if any(
+            not isinstance(source_ref, dict)
+            or source_ref.get("type") != "ncbi_gene"
+            or source_ref.get("authority") != "NCBI"
+            or not _clean(source_ref.get("id")).startswith("GeneID:")
+            or not _clean(source_ref.get("url")).startswith(
+                "https://www.ncbi.nlm.nih.gov/gene/"
+            )
+            or source_ref.get("supports")
+            != "gene_identity_and_function_only"
+            for source_ref in row.get("source_refs") or []
+        ):
+            raise ValueError(
+                "Event narrative candidate must use bounded official NCBI "
+                f"gene sources: {candidate_id}"
+            )
+        boundaries = row.get("evidence_boundaries") or {}
+        for field in (
+            "treatment_inference_allowed",
+            "immune_inference_allowed",
+            "prognostic_inference_allowed",
+            "hereditary_inference_allowed",
+        ):
+            if boundaries.get(field) is not False:
+                raise ValueError(
+                    "Event narrative candidate has an unsafe inference "
+                    f"boundary: {candidate_id}:{field}"
+                )
+        candidates[key] = row
+        candidate_ids.add(candidate_id)
+    return candidates
 
 
 def _validate_candidate_evidence_contract(
@@ -307,6 +422,10 @@ def _variant_units(
         tuple[str, str, str, str], list[dict[str, Any]]
     ],
     non_promotions: set[tuple[str, str, str, str]],
+    narrative_candidates_by_event: dict[
+        tuple[str, str, str, str], dict[str, Any]
+    ],
+    runtime_selector_contract: dict[str, Any],
     *,
     reviewed_at: str,
 ) -> list[dict[str, Any]]:
@@ -344,6 +463,48 @@ def _variant_units(
             _clean(row.get("candidate_id"))
             for row in candidates_by_event.get(key, [])
         ]
+        narrative_candidate = narrative_candidates_by_event.get(key) or {}
+        candidate_narrative_review = (
+            {
+                "candidate_id": _clean(
+                    narrative_candidate.get("candidate_id")
+                ),
+                "transcript": _clean(
+                    narrative_candidate.get("transcript")
+                ),
+                "c_hgvs": _clean(narrative_candidate.get("c_hgvs")),
+                "p_hgvs": _clean(narrative_candidate.get("p_hgvs")),
+                "variant_kind": _clean(
+                    narrative_candidate.get("variant_kind")
+                ),
+                "proposed_intro": _clean(narrative_candidate.get("intro")),
+                "proposed_mutation_analysis": _clean(
+                    narrative_candidate.get("mutation_analysis")
+                ),
+                "source_refs": narrative_candidate.get("source_refs") or [],
+                "evidence_boundaries": (
+                    narrative_candidate.get("evidence_boundaries") or {}
+                ),
+                "review_status": _clean(
+                    narrative_candidate.get("review_status")
+                ),
+                "runtime_eligible": (
+                    narrative_candidate.get("runtime_eligible") is True
+                ),
+                "report_text_allowed": (
+                    narrative_candidate.get("report_text_allowed") is True
+                ),
+                "patient_visible": (
+                    narrative_candidate.get("patient_visible") is True
+                ),
+                "secondary_review_status": _clean(
+                    narrative_candidate.get("secondary_review_status")
+                ),
+                "runtime_selector_contract": runtime_selector_contract,
+            }
+            if narrative_candidate
+            else {}
+        )
         if key in non_promotions:
             decision = (
                 "retain_detected_variant_and_prohibit_broader_drug_rule_inheritance"
@@ -355,7 +516,11 @@ def _variant_units(
             )
             question = "逐条审核精确事件药物候选、适应证上下文和正式报告措辞"
         elif not analysis or is_generic_mutation_analysis(gene, analysis):
-            decision = "rewrite_event_interpretation_before_promotion"
+            decision = (
+                "review_candidate_event_interpretation_before_promotion"
+                if narrative_candidate
+                else "rewrite_event_interpretation_before_promotion"
+            )
             question = "补充肺癌边界明确、来源可追溯的事件/基因解释"
         else:
             decision = "source_scope_review_required_before_promotion"
@@ -402,6 +567,7 @@ def _variant_units(
                 "current_fixed_domain_text": fixed_domain,
                 "current_content_sha256": _content_hash(section),
                 "current_source_refs": _reference_rows(identifiers),
+                "candidate_narrative_review": candidate_narrative_review,
                 "patient_visible_part2_result_allowed": True,
                 "patient_visible_part3_interpretation_allowed": False,
                 "patient_visible_drug_conclusion_allowed": False,
@@ -543,6 +709,24 @@ def _citation_units(
 def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
     package = PanelPackageLoader(project_root=root).load(PANEL_ID)
     medical = _medical_rules(package)
+    narrative_contract = _event_narrative_candidate_contract(package)
+    narrative_candidates_by_event = _event_narrative_candidates(
+        narrative_contract
+    )
+    observed_event_keys = {
+        (
+            row["gene"],
+            row["transcript"],
+            row["c_hgvs"],
+            row["p_hgvs"],
+        )
+        for row in _observed_variants(package)
+    }
+    if set(narrative_candidates_by_event) - observed_event_keys:
+        raise ValueError(
+            "Event narrative candidate is not present in the de-identified "
+            "P0 context contracts"
+        )
     evidence_contract = _candidate_evidence_review_contract(package)
     evidence_reviews_by_id = _candidate_evidence_reviews(evidence_contract)
     candidate_rules = [
@@ -571,6 +755,13 @@ def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
         provider,
         candidates_by_event,
         non_promotions,
+        narrative_candidates_by_event,
+        (
+            (narrative_contract.get("governance") or {}).get(
+                "runtime_selector_contract"
+            )
+            or {}
+        ),
         reviewed_at=reviewed_at,
     )
     units.extend(
@@ -606,6 +797,11 @@ def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
             for observation in row.get("case_observations") or []
         }
     )
+    narrative_candidate_units = [
+        row
+        for row in units
+        if row.get("candidate_narrative_review")
+    ]
     return {
         "schema_version": "1.0",
         "packet_id": "lung588_p0_event_first_review_20260723",
@@ -621,6 +817,7 @@ def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
             "case_aliases": case_aliases,
             "historical_reports_are_current_medical_truth": False,
             "runtime_activation_in_scope": False,
+            "event_narrative_candidates_are_runtime_content": False,
         },
         "summary": {
             "review_unit_count": len(units),
@@ -634,6 +831,19 @@ def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
             "patient_visible_drug_allowed_count": sum(
                 row["patient_visible_drug_conclusion_allowed"]
                 for row in units
+            ),
+            "event_narrative_candidate_count": len(
+                narrative_candidate_units
+            ),
+            "event_narrative_candidate_gene_count": len(
+                {
+                    row["gene"]
+                    for row in narrative_candidate_units
+                }
+            ),
+            "event_narrative_candidate_runtime_eligible_count": sum(
+                row["candidate_narrative_review"]["runtime_eligible"]
+                for row in narrative_candidate_units
             ),
         },
         "promotion_requirements": [
@@ -675,6 +885,7 @@ def write_outputs(
         "explicit_non_promotion",
         "current_content_status",
         "current_source_refs",
+        "candidate_narrative_review",
         "source_refs",
         "source_scope_review",
         "identifier",

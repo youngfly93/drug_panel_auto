@@ -1,0 +1,392 @@
+schema_version: "1.0"
+source:
+  panel: "lung_588_pdl1"
+  purpose: >
+    First-review, exact-event narrative candidates for detected lung588 P0
+    events that still fall back to generic Part-3 prose.
+  source_type: "official_gene_identity_plus_hgvs_consequence_boundary"
+  curated_at: "2026-07-24"
+  evidence_as_of: "2026-07-24"
+  activation_mode: "candidate_only_pending_secondary_review"
+  consumer_panels:
+    - "lung_588_pdl1"
+  privacy: "Only de-identified CASE aliases and structured events are used."
+
+governance:
+  schema_version: "1.0"
+  policy_id: "lung588_p0_exact_event_narrative_first_review_v1"
+  purpose: >
+    Replace generic fallback prose with source-bounded candidate wording
+    without making the wording patient-visible or runtime-eligible.
+  defaults:
+    gene:
+      review_status: "needs_review"
+      runtime_eligible: false
+      report_text_allowed: false
+      patient_visible: false
+      review_basis: "codex_first_review_ncbi_gene_and_hgvs_consequence"
+      reviewer: "codex"
+      reviewer_type: "ai_assisted_evidence_review"
+      reviewed_at: "2026-07-24"
+      evidence_as_of: "2026-07-24"
+      evidence_level: "official_gene_function_plus_predicted_sequence_consequence"
+      cancer_scope: "lung_panel_detected_exact_event_candidate"
+      secondary_review_status: "pending_report_group_review"
+      risk_level: "content_requires_secondary_review"
+  runtime_selector_contract:
+    current_overlay_matches_transcript: false
+    disposition: "promotion_blocked_until_transcript_is_enforced"
+    reason: >
+      The current reviewed-overlay runtime key uses gene, c_hgvs and p_hgvs.
+      Transcript is preserved below for review identity but is not yet enforced
+      by the runtime loader.
+  promotion_requires:
+    - "report_group_event_level_secondary_review"
+    - "exact_transcript_c_hgvs_p_hgvs_identity_check"
+    - "runtime_selector_enforces_transcript"
+    - "direct_source_supports_every_patient_visible_claim"
+    - "positive_and_negative_rule_tests"
+    - "case_level_uat"
+
+gene_sections:
+  - candidate_id: "lung588_event_narrative_brip1_w714ter"
+    gene: "BRIP1"
+    transcript: "NM_032043.3"
+    c_hgvs: "c.2142G>A"
+    p_hgvs: "p.W714*"
+    variant_kind: "stop_gained"
+    intro: >
+      BRIP1编码BRCA1相互作用DNA解旋酶，属于RecQ DEAH解旋酶家族；
+      该蛋白可与BRCA1的BRCT重复区域相互作用，参与正常的DNA双链断裂修复。
+    mutation_analysis: >
+      在转录本NM_032043.3上，c.2142G>A对应p.W714*，按HGVS标注为终止获得事件，
+      预计在第714位引入提前终止密码子。是否发生无义介导的mRNA降解、是否造成蛋白功能缺失，
+      以及该事件在本例肺癌中的临床意义，仍需结合直接功能或临床证据与样本背景复核；
+      不得仅凭该事件推导靶向、免疫、预后或遗传风险结论。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:83990"
+        url: "https://www.ncbi.nlm.nih.gov/gene/83990"
+        supports: "gene_identity_and_function_only"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "not_reviewed_in_this_candidate"
+      direct_lung_clinical_evidence: "not_identified"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+  - candidate_id: "lung588_event_narrative_erbb2_g660d"
+    gene: "ERBB2"
+    transcript: "NM_004448.4"
+    c_hgvs: "c.1979G>A"
+    p_hgvs: "p.G660D"
+    variant_kind: "missense"
+    intro: >
+      ERBB2编码表皮生长因子受体家族的受体酪氨酸激酶。该蛋白本身没有配体结合域，
+      可与其他已结合配体的家族成员形成异二聚体，并增强MAPK、PI3K等下游信号通路。
+    mutation_analysis: >
+      在转录本NM_004448.4上，c.1979G>A对应p.G660D，为第660位甘氨酸替换为天冬氨酸的错义事件。
+      本候选文案不将G660D自动等同于HER2扩增、过表达或其他ERBB2变异；
+      精确位点功能、肺癌治疗适用性及伴随诊断条件须在独立药物候选审核中逐项确认，
+      不得由本段直接形成治疗、免疫或预后结论。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:2064"
+        url: "https://www.ncbi.nlm.nih.gov/gene/2064"
+        supports: "gene_identity_and_function_only"
+    linked_candidate_ids:
+      - "lung588_erbb2_g660d_trastuzumab_deruxtecan"
+      - "lung588_erbb2_g660d_trastuzumab_rezetecan"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "reviewed_in_separate_candidate_contract"
+      direct_lung_clinical_evidence: "requires_separate_candidate_review"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+  - candidate_id: "lung588_event_narrative_esr1_q414h"
+    gene: "ESR1"
+    transcript: "NM_000125.4"
+    c_hgvs: "c.1242G>T"
+    p_hgvs: "p.Q414H"
+    variant_kind: "missense"
+    intro: >
+      ESR1编码雌激素受体和配体激活型转录因子。其经典蛋白包含N端非配体依赖性转录激活区、
+      DNA结合区、铰链区以及C端配体依赖性转录激活区。
+    mutation_analysis: >
+      在转录本NM_000125.4上，c.1242G>T对应p.Q414H，为第414位谷氨酰胺替换为组氨酸的错义事件。
+      当前官方基因功能来源不能证明该精确位点的功能效应或肺癌临床意义，
+      也不得把其他癌种、其他ESR1位点或内分泌治疗证据外推至该事件；
+      不得由本段形成治疗、免疫、预后或遗传风险结论。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:2099"
+        url: "https://www.ncbi.nlm.nih.gov/gene/2099"
+        supports: "gene_identity_and_function_only"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "not_identified"
+      direct_lung_clinical_evidence: "not_identified"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+  - candidate_id: "lung588_event_narrative_flt3_r387ter"
+    gene: "FLT3"
+    transcript: "NM_004119.3"
+    c_hgvs: "c.1159C>T"
+    p_hgvs: "p.R387*"
+    variant_kind: "stop_gained"
+    intro: >
+      FLT3编码参与造血调控的III类受体酪氨酸激酶。配体与其胞外区结合后可诱导受体二聚化和自身磷酸化。
+    mutation_analysis: >
+      在转录本NM_004119.3上，c.1159C>T对应p.R387*，按HGVS标注为终止获得事件，
+      预计在第387位引入提前终止密码子。该事件不得等同于其他FLT3事件，
+      也不得借用其他事件或血液肿瘤中的证据推导本例肺癌的蛋白功能、治疗或预后结论；
+      是否发生无义介导降解及其实际功能后果仍需直接证据复核。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:2322"
+        url: "https://www.ncbi.nlm.nih.gov/gene/2322"
+        supports: "gene_identity_and_function_only"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "not_identified"
+      direct_lung_clinical_evidence: "not_identified"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+  - candidate_id: "lung588_event_narrative_gnas_r232l"
+    gene: "GNAS"
+    transcript: "NM_000516.7"
+    c_hgvs: "c.695G>T"
+    p_hgvs: "p.R232L"
+    variant_kind: "missense"
+    intro: >
+      GNAS是具有复杂印记表达模式的基因座，可由多个替代启动子和5'外显子产生母源、
+      父源或双等位表达的不同转录本，因此解释时必须保留转录本和事件身份。
+    mutation_analysis: >
+      在转录本NM_000516.7上，c.695G>T对应p.R232L，为第232位精氨酸替换为亮氨酸的错义事件。
+      当前官方基因功能来源不能证明该精确位点的功能效应；
+      在未核对转录本、等位来源、直接功能证据和肺癌临床证据前，
+      不得由该事件推导治疗、免疫、预后或遗传风险结论。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:2778"
+        url: "https://www.ncbi.nlm.nih.gov/gene/2778"
+        supports: "gene_identity_and_function_only"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "not_identified"
+      direct_lung_clinical_evidence: "not_identified"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+  - candidate_id: "lung588_event_narrative_ifngr1_s378fs"
+    gene: "IFNGR1"
+    transcript: "NM_000416.3"
+    c_hgvs: "c.1132_1133del"
+    p_hgvs: "p.S378Ffs*6"
+    variant_kind: "frameshift"
+    intro: >
+      IFNGR1编码干扰素γ受体的配体结合链；人干扰素γ受体由IFNGR1和IFNGR2组成异二聚体。
+    mutation_analysis: >
+      在转录本NM_000416.3上，c.1132_1133del对应p.S378Ffs*6，
+      按HGVS标注为自第378位起改变阅读框并在新的阅读框中提前终止的事件。
+      该序列后果本身不能证明受体功能缺失，也不能单独预测免疫检查点抑制剂敏感或耐药；
+      其功能及肺癌临床意义需直接证据复核，不得由本段形成治疗、预后或遗传风险结论。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:3459"
+        url: "https://www.ncbi.nlm.nih.gov/gene/3459"
+        supports: "gene_identity_and_function_only"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "not_identified"
+      direct_lung_clinical_evidence: "not_identified"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+  - candidate_id: "lung588_event_narrative_msh3_q969ter"
+    gene: "MSH3"
+    transcript: "NM_002439.5"
+    c_hgvs: "c.2905C>T"
+    p_hgvs: "p.Q969*"
+    variant_kind: "stop_gained"
+    intro: >
+      MSH3编码错配修复相关蛋白，可与MSH2形成MutSβ异二聚体并参与复制后DNA错配修复。
+    mutation_analysis: >
+      在转录本NM_002439.5上，c.2905C>T对应p.Q969*，按HGVS标注为终止获得事件，
+      预计在第969位引入提前终止密码子。是否发生无义介导降解及是否影响错配修复功能仍需直接证据；
+      单个肿瘤MSH3事件不能单独确立错配修复缺陷、MSI表型或遗传易感，
+      也不得由本段推导免疫治疗或预后结论。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:4437"
+        url: "https://www.ncbi.nlm.nih.gov/gene/4437"
+        supports: "gene_identity_and_function_only"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "not_identified"
+      direct_lung_clinical_evidence: "not_identified"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+  - candidate_id: "lung588_event_narrative_tsc1_f158fs"
+    gene: "TSC1"
+    transcript: "NM_000368.5"
+    c_hgvs: "c.474del"
+    p_hgvs: "p.F158Lfs*9"
+    variant_kind: "frameshift"
+    intro: >
+      TSC1编码抑制细胞生长的hamartin蛋白；hamartin可与TSC2编码的tuberin形成复合物，
+      该复合物负向调控mTORC1信号。
+    mutation_analysis: >
+      在转录本NM_000368.5上，c.474del对应p.F158Lfs*9，
+      按HGVS标注为自第158位起改变阅读框并在新的阅读框中提前终止的事件。
+      是否发生无义介导降解、是否造成TSC复合物功能缺失及其肺癌临床意义仍需直接证据；
+      不得仅凭该事件推导mTOR通路药物敏感性、免疫、预后或遗传风险结论。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:7248"
+        url: "https://www.ncbi.nlm.nih.gov/gene/7248"
+        supports: "gene_identity_and_function_only"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "not_identified"
+      direct_lung_clinical_evidence: "not_identified"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+  - candidate_id: "lung588_event_narrative_tsc1_r692ter"
+    gene: "TSC1"
+    transcript: "NM_000368.5"
+    c_hgvs: "c.2074C>T"
+    p_hgvs: "p.R692*"
+    variant_kind: "stop_gained"
+    intro: >
+      TSC1编码抑制细胞生长的hamartin蛋白；hamartin可与TSC2编码的tuberin形成复合物，
+      该复合物负向调控mTORC1信号。
+    mutation_analysis: >
+      在转录本NM_000368.5上，c.2074C>T对应p.R692*，按HGVS标注为终止获得事件，
+      预计在第692位引入提前终止密码子。是否发生无义介导降解、是否造成TSC复合物功能缺失
+      及其肺癌临床意义仍需直接证据；不得仅凭该事件推导mTOR通路药物敏感性、
+      免疫、预后或遗传风险结论。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:7248"
+        url: "https://www.ncbi.nlm.nih.gov/gene/7248"
+        supports: "gene_identity_and_function_only"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "not_identified"
+      direct_lung_clinical_evidence: "not_identified"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+  - candidate_id: "lung588_event_narrative_tsc2_q883ter"
+    gene: "TSC2"
+    transcript: "NM_000548.5"
+    c_hgvs: "c.2647C>T"
+    p_hgvs: "p.Q883*"
+    variant_kind: "stop_gained"
+    intro: >
+      TSC2编码抑制细胞生长的tuberin蛋白；tuberin可与TSC1编码的hamartin形成复合物，
+      该复合物负向调控mTORC1信号。
+    mutation_analysis: >
+      在转录本NM_000548.5上，c.2647C>T对应p.Q883*，按HGVS标注为终止获得事件，
+      预计在第883位引入提前终止密码子。是否发生无义介导降解、是否造成TSC复合物功能缺失
+      及其肺癌临床意义仍需直接证据；不得仅凭该事件推导mTOR通路药物敏感性、
+      免疫、预后或遗传风险结论。
+    source_refs:
+      - type: "ncbi_gene"
+        authority: "NCBI"
+        id: "GeneID:7249"
+        url: "https://www.ncbi.nlm.nih.gov/gene/7249"
+        supports: "gene_identity_and_function_only"
+    evidence_boundaries:
+      direct_exact_event_functional_evidence: "not_identified"
+      direct_lung_clinical_evidence: "not_identified"
+      treatment_inference_allowed: false
+      immune_inference_allowed: false
+      prognostic_inference_allowed: false
+      hereditary_inference_allowed: false
+    review_status: "needs_review"
+    runtime_eligible: false
+    report_text_allowed: false
+    patient_visible: false
+    secondary_review_status: "pending_report_group_review"
+    panels: ["lung_588_pdl1"]
+
+drug_sections: []
