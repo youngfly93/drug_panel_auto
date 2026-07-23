@@ -147,6 +147,17 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     assert governance["runtime_policy"]["enabled"] is False
     assert governance["runtime_policy"]["runtime_rule_source"] is False
     assert governance["runtime_policy"]["report_text_allowed"] is False
+    context_contract = governance["promotion_context_contract"]
+    assert context_contract["status"] == "exposed_optional_in_engineering_draft"
+    assert context_contract["runtime_enforcement"] == "not_implemented"
+    assert context_contract["promotion_blocked"] is True
+    assert context_contract["missing_or_uncertain_policy"] == "keep_candidate_hidden"
+    assert set(context_contract["fields"]) == {
+        "lung_histology",
+        "disease_extent",
+        "prior_systemic_therapy",
+        "companion_diagnostic_status",
+    }
     assert governance["historical_inventory"] == {
         "source": "two de-identified repaired historical lung588 final reports",
         "exact_targeted_event_count": 15,
@@ -172,6 +183,15 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     assert all(rule["review_status"] == "needs_review" for rule in rules)
     assert all(rule["secondary_review_status"] == "pending_report_group_review" for rule in rules)
     assert all(rule["source_refs"] for rule in rules)
+    for rule in rules:
+        required_context = set(rule["required_context_fields"])
+        assert {
+            "lung_histology",
+            "disease_extent",
+            "companion_diagnostic_status",
+        } <= required_context
+        if rule["gene"] == "ERBB2":
+            assert "prior_systemic_therapy" in required_context
 
     candidate_events = {
         (
@@ -191,6 +211,10 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     assert runtime["approved_drug_rows"] == []
     assert candidates["non_target_domains"]["immune_gene_associations"]["enabled"] is False
     assert candidates["non_target_domains"]["chemotherapy_pharmacogenomics"]["enabled"] is False
+
+    if runtime["targeted_drug_rules"]["enabled"]:
+        assert context_contract["runtime_enforcement"] == "implemented"
+        assert context_contract["promotion_blocked"] is False
 
 
 def test_docx_relationship_repair_preserves_source_and_removes_orphan(tmp_path):

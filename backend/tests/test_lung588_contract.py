@@ -43,15 +43,9 @@ from app.services.clinical_info_service import get_clinical_form_schema
 PANEL_DIR = ROOT / "panels" / "lung_588_pdl1"
 TEMPLATE = PANEL_DIR / "templates" / "lung_588_pdl1_golden_template_v0.docx"
 SOURCE_TEMPLATE = (
-    ROOT
-    / "panels"
-    / "lung_329_pdl1"
-    / "templates"
-    / "lung_329_pdl1_golden_template_v1.docx"
+    ROOT / "panels" / "lung_329_pdl1" / "templates" / "lung_329_pdl1_golden_template_v1.docx"
 )
-EXPECTED_GENE_SHA256 = (
-    "f9e6be05c954a4d3df97f031d453fe1f58ea0689290b11de3c173f4a0edf08f1"
-)
+EXPECTED_GENE_SHA256 = "f9e6be05c954a4d3df97f031d453fe1f58ea0689290b11de3c173f4a0edf08f1"
 
 
 def _gene_contract() -> list[str]:
@@ -64,12 +58,7 @@ def _gene_contract() -> list[str]:
 def _visible_template_text() -> str:
     document = Document(TEMPLATE)
     parts = [paragraph.text for paragraph in document.paragraphs]
-    parts.extend(
-        cell.text
-        for table in document.tables
-        for row in table.rows
-        for cell in row.cells
-    )
+    parts.extend(cell.text for table in document.tables for row in table.rows for cell in row.cells)
     return "\n".join(parts)
 
 
@@ -94,9 +83,7 @@ def test_lung588_package_is_independent_and_valid():
     assert package.default_template.status == "draft"
     assert package.raw["part3_knowledge"]["enabled"] is False
     assert "cross-cancer" in package.raw["part3_knowledge"]["reason"]
-    assert "肺癌专属知识当前未启用" in (
-        package.raw["part3_knowledge"]["disabled_notice"]
-    )
+    assert "肺癌专属知识当前未启用" in (package.raw["part3_knowledge"]["disabled_notice"])
     assert package.resolve_template_file() == TEMPLATE.resolve()
 
 
@@ -105,29 +92,18 @@ def test_lung588_gene_denominator_is_exact_and_ordered():
 
     assert len(genes) == 588
     assert len(set(genes)) == 588
-    assert (
-        hashlib.sha256("\n".join(genes).encode("utf-8")).hexdigest()
-        == EXPECTED_GENE_SHA256
-    )
+    assert hashlib.sha256("\n".join(genes).encode("utf-8")).hexdigest() == EXPECTED_GENE_SHA256
 
     document = Document(TEMPLATE)
     tables = [
-        table
-        for table in document.tables
-        if "Gene List for MLseq (n=588)" in table.cell(0, 0).text
+        table for table in document.tables if "Gene List for MLseq (n=588)" in table.cell(0, 0).text
     ]
     assert len(tables) == 1
     rendered = [
-        cell.text.strip()
-        for row in tables[0].rows[1:]
-        for cell in row.cells
-        if cell.text.strip()
+        cell.text.strip() for row in tables[0].rows[1:] for cell in row.cells if cell.text.strip()
     ]
     assert rendered == genes
-    assert all(
-        row.height_rule == WD_ROW_HEIGHT_RULE.EXACTLY
-        for row in tables[0].rows[1:]
-    )
+    assert all(row.height_rule == WD_ROW_HEIGHT_RULE.EXACTLY for row in tables[0].rows[1:])
     assert max(row.height.cm for row in tables[0].rows[1:]) <= 0.72
 
 
@@ -187,10 +163,7 @@ def test_lung588_template_is_hardened_and_byte_reproducible(tmp_path):
         for table in styled_document.tables
         if "Gene List for MLseq (n=588)" in table.cell(0, 0).text
     )
-    assert all(
-        row.height_rule == WD_ROW_HEIGHT_RULE.EXACTLY
-        for row in styled_table.rows
-    )
+    assert all(row.height_rule == WD_ROW_HEIGHT_RULE.EXACTLY for row in styled_table.rows)
     assert styled_table.rows[0].height.cm <= 0.89
     assert max(row.height.cm for row in styled_table.rows[1:]) <= 0.73
 
@@ -208,16 +181,13 @@ def test_lung588_template_does_not_reuse_scaffold_pdl1_image():
         end = next(
             paragraph
             for paragraph in document.paragraphs
-            if compact(paragraph.text)
-            == compact("3.3微卫星不稳定性（MSI）检测结果")
+            if compact(paragraph.text) == compact("3.3微卫星不稳定性（MSI）检测结果")
         )
         children = list(document.element.body.iterchildren())
         block = children[children.index(start._p) + 1 : children.index(end._p)]
         candidates = []
         for child in block:
-            text = "".join(
-                node.text or "" for node in child.iter(qn("w:t"))
-            ).strip()
+            text = "".join(node.text or "" for node in child.iter(qn("w:t"))).strip()
             if text or not any(True for _ in child.iter(qn("w:drawing"))):
                 continue
             candidates.extend(
@@ -226,9 +196,7 @@ def test_lung588_template_does_not_reuse_scaffold_pdl1_image():
                 if blip.get(qn("r:embed"))
             )
         assert len(candidates) == 1
-        return hashlib.sha256(
-            document.part.related_parts[candidates[0]].blob
-        ).hexdigest()
+        return hashlib.sha256(document.part.related_parts[candidates[0]].blob).hexdigest()
 
     source_image_hash = pdl1_image_hash(Document(SOURCE_TEMPLATE))
     generated = Document(TEMPLATE)
@@ -240,17 +208,14 @@ def test_lung588_template_does_not_reuse_scaffold_pdl1_image():
     end = next(
         paragraph
         for paragraph in generated.paragraphs
-        if compact(paragraph.text)
-        == compact("3.3微卫星不稳定性（MSI）检测结果")
+        if compact(paragraph.text) == compact("3.3微卫星不稳定性（MSI）检测结果")
     )
     children = list(generated.element.body.iterchildren())
     block = children[children.index(start._p) + 1 : children.index(end._p)]
     assert not [
         child
         for child in block
-        if not compact(
-            "".join(node.text or "" for node in child.iter(qn("w:t")))
-        )
+        if not compact("".join(node.text or "" for node in child.iter(qn("w:t"))))
         and any(True for _ in child.iter(qn("w:drawing")))
     ]
 
@@ -269,10 +234,7 @@ def test_part3_disabled_policy_renders_notice_without_shared_knowledge(tmp_path)
     document.add_paragraph("__PART3_MARKER__")
     document.save(output)
 
-    notice = (
-        "肺癌588第三部分尚未完成独立知识二审，"
-        "当前工程草案不输出患者级解释。"
-    )
+    notice = "肺癌588第三部分尚未完成独立知识二审，当前工程草案不输出患者级解释。"
     TemplateRenderer(log_level="ERROR")._render_part3_formatted(
         str(output),
         {
@@ -374,16 +336,8 @@ def test_lung588_explicit_classes_drive_variant_filter(tmp_path):
 def test_lung588_pdl1_form_is_project_scoped_and_required():
     lung = get_clinical_form_schema("lung_588_pdl1")
     crc = get_clinical_form_schema("crc_358_msi")
-    lung_fields = {
-        field.key: field
-        for group in lung.groups
-        for field in group.fields
-    }
-    crc_fields = {
-        field.key
-        for group in crc.groups
-        for field in group.fields
-    }
+    lung_fields = {field.key: field for group in lung.groups for field in group.fields}
+    crc_fields = {field.key for group in crc.groups for field in group.fields}
 
     assert {"pdl1_tps", "pdl1_cps", "pdl1_result"} <= set(lung_fields)
     assert all(lung_fields[key].required for key in ("pdl1_tps", "pdl1_cps", "pdl1_result"))
@@ -393,6 +347,36 @@ def test_lung588_pdl1_form_is_project_scoped_and_required():
         "阴性",
     ]
     assert not {"pdl1_tps", "pdl1_cps", "pdl1_result"} & crc_fields
+
+    treatment_context = {
+        "lung_histology": [
+            "非小细胞肺癌",
+            "小细胞肺癌",
+            "其他",
+            "未明确",
+        ],
+        "disease_extent": [
+            "可切除早期",
+            "不可切除局部晚期",
+            "转移性",
+            "未明确",
+        ],
+        "prior_systemic_therapy": ["已接受", "未接受", "未明确"],
+        "companion_diagnostic_status": [
+            "已确认符合",
+            "待确认",
+            "不符合",
+        ],
+    }
+    assert (
+        next(group.label for group in lung.groups if group.id == "treatment_context")
+        == "肺癌治疗适应证上下文"
+    )
+    for key, options in treatment_context.items():
+        assert lung_fields[key].required is False
+        assert lung_fields[key].ui.component == "select"
+        assert lung_fields[key].ui.options == options
+    assert not set(treatment_context) & crc_fields
 
 
 def test_lung588_batch_is_blocked_until_per_case_pdl1_exists():
@@ -410,8 +394,7 @@ def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification(
 
     missing = ReportData()
     assert {
-        failure["field"]
-        for failure in validate_panel_biomarker_contracts(missing, contracts)
+        failure["field"] for failure in validate_panel_biomarker_contracts(missing, contracts)
     } == {"tmb_value", "msi_status", "pdl1_tps", "pdl1_cps", "pdl1_result"}
 
     invalid = ReportData()
@@ -438,8 +421,7 @@ def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification(
     negative.set_field("pdl1_cps", float("nan"))
     nan_failures = validate_panel_biomarker_contracts(negative, contracts)
     assert ("pdl1_cps", "not_numeric") in {
-        (failure["field"], failure["reason"])
-        for failure in nan_failures
+        (failure["field"], failure["reason"]) for failure in nan_failures
     }
 
     valid = ReportData()

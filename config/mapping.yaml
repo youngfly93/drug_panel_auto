@@ -118,6 +118,36 @@ single_values:
     required: false
     default_value: "-"
     description: "报告基本信息区展示的临床诊断；不直接参与药物知识库过滤"
+
+  # 肺588靶向药物适应证上下文。工程草案仅采集和留痕，运行时药物规则仍关闭；
+  # 晋级时必须由精确事件规则逐字段校验，缺失/未明确一律不输出患者级药物结论。
+  lung_histology:
+    synonyms: ["肺癌病理类型", "Lung Histology"]
+    type: string
+    required: false
+    default_value: "未明确"
+    description: "肺癌病理类型（用于未来精确药物适应证校验）"
+
+  disease_extent:
+    synonyms: ["疾病范围", "Disease Extent"]
+    type: string
+    required: false
+    default_value: "未明确"
+    description: "可切除性及局部晚期/转移状态（用于未来适应证校验）"
+
+  prior_systemic_therapy:
+    synonyms: ["既往系统治疗", "Prior Systemic Therapy"]
+    type: string
+    required: false
+    default_value: "未明确"
+    description: "是否已接受系统治疗（用于未来治疗线次条件校验）"
+
+  companion_diagnostic_status:
+    synonyms: ["伴随诊断适配状态", "Companion Diagnostic Status"]
+    type: string
+    required: false
+    default_value: "待确认"
+    description: "具体变异是否符合当前药物标签或伴随诊断要求"
   
   panel_name:
     synonyms: ["Panel名称", "Panel", "基因组"]

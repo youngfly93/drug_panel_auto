@@ -49,6 +49,15 @@ FIELD_GROUPS = {
             "clinical_diagnosis",
         ],
     },
+    "treatment_context": {
+        "label": "肺癌治疗适应证上下文",
+        "fields": [
+            "lung_histology",
+            "disease_extent",
+            "prior_systemic_therapy",
+            "companion_diagnostic_status",
+        ],
+    },
     "identifiers": {
         "label": "标识信息",
         "fields": ["sample_id", "report_number", "pathology_id"],
@@ -182,14 +191,47 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
         "hide": ALWAYS_HIDE,
     },
     "lung_588_pdl1": {
-        "show": ["pdl1_tps", "pdl1_cps", "pdl1_result"],
+        "show": [
+            "pdl1_tps",
+            "pdl1_cps",
+            "pdl1_result",
+            "lung_histology",
+            "disease_extent",
+            "prior_systemic_therapy",
+            "companion_diagnostic_status",
+        ],
         "hide": ALWAYS_HIDE,
         "require": ["pdl1_tps", "pdl1_cps", "pdl1_result"],
     },
     "mlf_result": {"hide": ALWAYS_HIDE},
 }
 
-PROJECT_ONLY_FIELDS = {"pdl1_tps", "pdl1_cps", "pdl1_result", "methylation_result"}
+PROJECT_ONLY_FIELDS = {
+    "pdl1_tps",
+    "pdl1_cps",
+    "pdl1_result",
+    "methylation_result",
+    "lung_histology",
+    "disease_extent",
+    "prior_systemic_therapy",
+    "companion_diagnostic_status",
+}
+
+CONTROLLED_FIELD_OPTIONS = {
+    "lung_histology": ["非小细胞肺癌", "小细胞肺癌", "其他", "未明确"],
+    "disease_extent": [
+        "可切除早期",
+        "不可切除局部晚期",
+        "转移性",
+        "未明确",
+    ],
+    "prior_systemic_therapy": ["已接受", "未接受", "未明确"],
+    "companion_diagnostic_status": [
+        "已确认符合",
+        "待确认",
+        "不符合",
+    ],
+}
 
 # UI component mapping by field type
 TYPE_TO_COMPONENT = {
@@ -242,6 +284,13 @@ def _build_ui_hints(key: str, field_def: dict) -> FieldUiHints:
             placeholder="请选择PD-L1结果分层",
             span=12,
             options=["阳性（高表达）", "阳性（低表达）", "阴性"],
+        )
+    if key in CONTROLLED_FIELD_OPTIONS:
+        return FieldUiHints(
+            component="select",
+            placeholder=f"请选择{field_def.get('description', key)}",
+            span=12,
+            options=CONTROLLED_FIELD_OPTIONS[key],
         )
 
     ftype = field_def.get("type", "string")
@@ -301,10 +350,7 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
     # Apply project-type overrides
     overrides = PROJECT_FIELD_OVERRIDES.get(project_type, {}) if project_type else {}
     show_fields = set(overrides.get("show", []))
-    hide_fields = (
-        set(overrides.get("hide", []))
-        | (PROJECT_ONLY_FIELDS - show_fields)
-    )
+    hide_fields = set(overrides.get("hide", [])) | (PROJECT_ONLY_FIELDS - show_fields)
     require_fields = set(overrides.get("require", []))
     for key in require_fields:
         if key in all_fields:
@@ -325,7 +371,8 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
 
     # Computed fields group (readonly)
     computed_fields = [
-        f for k, f in all_fields.items()
+        f
+        for k, f in all_fields.items()
         if k not in assigned and f.computed and k not in hide_fields
     ]
     if computed_fields:
@@ -333,10 +380,7 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
         assigned.update(f.key for f in computed_fields)
 
     # Catch-all for unassigned non-computed fields
-    other_fields = [
-        f for k, f in all_fields.items()
-        if k not in assigned and k not in hide_fields
-    ]
+    other_fields = [f for k, f in all_fields.items() if k not in assigned and k not in hide_fields]
     if other_fields:
         groups.append(FieldGroup(id="other", label="其他", fields=other_fields))
 
@@ -344,6 +388,7 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
 
 
 # ---- patient_info.yaml CRUD ----
+
 
 def _patient_info_path() -> Path:
     # Patient data is runtime state and must not be written into an immutable
@@ -666,10 +711,7 @@ def _post_json_with_curl_fallback(
 
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        return None, [
-            f"{source} enrichment lookup failed within {total_budget:g}s: "
-            f"{urllib_error}"
-        ]
+        return None, [f"{source} enrichment lookup failed within {total_budget:g}s: {urllib_error}"]
 
     try:
         completed = subprocess.run(
@@ -698,8 +740,7 @@ def _post_json_with_curl_fallback(
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return None, [
-            f"{source} enrichment lookup failed: {urllib_error}; "
-            f"curl fallback failed: {exc}"
+            f"{source} enrichment lookup failed: {urllib_error}; curl fallback failed: {exc}"
         ]
 
     if completed.returncode != 0:
@@ -761,18 +802,20 @@ def enrich_patient_with_hard_timeout(
     except GenerationTimeoutError:
         return PatientEnrichment(
             sample_id=sample_id,
-            warnings=[
-                f"patient enrichment exceeded {hard_timeout:g}s and was skipped"
-            ],
+            warnings=[f"patient enrichment exceeded {hard_timeout:g}s and was skipped"],
         )
     except GenerationProcessError as exc:
         return PatientEnrichment(
             sample_id=sample_id,
             warnings=[f"patient enrichment failed and was skipped: {exc}"],
         )
-    return result if isinstance(result, PatientEnrichment) else PatientEnrichment(
-        sample_id=sample_id,
-        warnings=["patient enrichment returned an invalid result and was skipped"],
+    return (
+        result
+        if isinstance(result, PatientEnrichment)
+        else PatientEnrichment(
+            sample_id=sample_id,
+            warnings=["patient enrichment returned an invalid result and was skipped"],
+        )
     )
 
 

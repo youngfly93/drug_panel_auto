@@ -25,6 +25,36 @@ governance:
       - "current_label_or_guideline_version_check"
       - "positive_and_negative_rule_tests"
       - "case_level_uat"
+  promotion_context_contract:
+    status: "exposed_optional_in_engineering_draft"
+    runtime_enforcement: "not_implemented"
+    promotion_blocked: true
+    missing_or_uncertain_policy: "keep_candidate_hidden"
+    activation_requirement: >
+      Before any candidate becomes a runtime rule, the matching request must
+      provide every event-specific clinical context field below with a
+      label-compatible, non-uncertain value.
+    fields:
+      lung_histology:
+        allowed_values:
+          - "非小细胞肺癌"
+          - "小细胞肺癌"
+          - "其他"
+          - "未明确"
+        uncertain_values: ["其他", "未明确"]
+      disease_extent:
+        allowed_values:
+          - "可切除早期"
+          - "不可切除局部晚期"
+          - "转移性"
+          - "未明确"
+        uncertain_values: ["未明确"]
+      prior_systemic_therapy:
+        allowed_values: ["已接受", "未接受", "未明确"]
+        uncertain_values: ["未明确"]
+      companion_diagnostic_status:
+        allowed_values: ["已确认符合", "待确认", "不符合"]
+        uncertain_values: ["待确认"]
   historical_inventory:
     source: "two de-identified repaired historical lung588 final reports"
     exact_targeted_event_count: 15
@@ -65,6 +95,10 @@ candidate_rules:
       stage: "metastatic"
       biomarker: "BRAF_V600E"
       assay_requirement: "approved_or_clinically_validated_test"
+    required_context_fields:
+      - "lung_histology"
+      - "disease_extent"
+      - "companion_diagnostic_status"
     evidence_class: "regulatory_label_exact_variant_and_lung_cancer"
     evidence_summary: >
       FDA labeling and a lung-cancer phase II study support the combination in
@@ -99,6 +133,10 @@ candidate_rules:
       stage: "metastatic"
       biomarker: "BRAF_V600E"
       assay_requirement: "FDA_approved_test"
+    required_context_fields:
+      - "lung_histology"
+      - "disease_extent"
+      - "companion_diagnostic_status"
     evidence_class: "regulatory_approval_exact_variant_and_lung_cancer"
     evidence_summary: >
       FDA approval is restricted to metastatic NSCLC with BRAF V600E detected
@@ -138,6 +176,11 @@ candidate_rules:
       assay_requirement: >
         exact G660D activation and label-compatible test eligibility must be
         confirmed during secondary review
+    required_context_fields:
+      - "lung_histology"
+      - "disease_extent"
+      - "prior_systemic_therapy"
+      - "companion_diagnostic_status"
     evidence_class: "functional_activation_plus_regulatory_biomarker_label"
     evidence_summary: >
       G660D has published functional evidence as an activating HER2
@@ -182,6 +225,11 @@ candidate_rules:
       assay_requirement: >
         exact G660D eligibility under the current China label must be confirmed
         during secondary review
+    required_context_fields:
+      - "lung_histology"
+      - "disease_extent"
+      - "prior_systemic_therapy"
+      - "companion_diagnostic_status"
     evidence_class: "functional_activation_plus_china_regulatory_approval"
     evidence_summary: >
       G660D has functional activation evidence. China regulatory reporting and
