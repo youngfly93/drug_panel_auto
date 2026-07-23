@@ -56,6 +56,11 @@ EVENT_NARRATIVE_CANDIDATES = (
     / "rules"
     / "reviewed_part3_p0_event_narrative_candidates.yaml"
 )
+CROSS_CANCER_NARRATIVE_CANDIDATES = (
+    PANEL_DIR
+    / "rules"
+    / "reviewed_part3_p0_cross_cancer_narrative_candidates.yaml"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -1069,8 +1074,8 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
     assert packet["summary"]["secondary_review_completed_count"] == 0
     assert packet["summary"]["patient_visible_part3_allowed_count"] == 0
     assert packet["summary"]["patient_visible_drug_allowed_count"] == 0
-    assert packet["summary"]["event_narrative_candidate_count"] == 10
-    assert packet["summary"]["event_narrative_candidate_gene_count"] == 9
+    assert packet["summary"]["event_narrative_candidate_count"] == 23
+    assert packet["summary"]["event_narrative_candidate_gene_count"] == 19
     assert (
         packet["summary"][
             "event_narrative_candidate_runtime_eligible_count"
@@ -1135,7 +1140,11 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
         for unit in variants
         if unit["candidate_narrative_review"]
     ]
-    assert len(narrative_candidates) == 10
+    assert len(narrative_candidates) == 23
+    assert len(variants) == 23
+    assert all(
+        unit["candidate_narrative_review"] for unit in variants
+    )
     assert all(
         candidate["review_status"] == "needs_review"
         and candidate["runtime_eligible"] is False
@@ -1324,3 +1333,160 @@ def test_lung588_p0_event_narrative_candidates_are_exact_sourced_and_hidden():
             section["mutation_narrative"]
             != row["mutation_analysis"]
         )
+
+
+def test_lung588_cross_cancer_narrative_candidates_are_exact_and_hidden():
+    contract = yaml.safe_load(
+        CROSS_CANCER_NARRATIVE_CANDIDATES.read_text(encoding="utf-8")
+    )
+    source = contract["source"]
+    governance = contract["governance"]
+    defaults = governance["defaults"]["gene"]
+    rows = contract["gene_sections"]
+
+    assert source["panel"] == "lung_588_pdl1"
+    assert source["activation_mode"] == (
+        "candidate_only_pending_secondary_review"
+    )
+    assert defaults["review_status"] == "needs_review"
+    assert defaults["runtime_eligible"] is False
+    assert defaults["report_text_allowed"] is False
+    assert defaults["patient_visible"] is False
+    assert defaults["secondary_review_status"] == (
+        "pending_report_group_review"
+    )
+    assert governance["runtime_selector_contract"] == {
+        "current_overlay_matches_transcript": False,
+        "disposition": "promotion_blocked_until_transcript_is_enforced",
+        "reason": (
+            "The current reviewed-overlay runtime key uses gene, c_hgvs and "
+            "p_hgvs. Transcript is preserved below for review identity but "
+            "is not yet enforced by the runtime loader.\n"
+        ),
+    }
+    assert contract["drug_sections"] == []
+    assert len(rows) == 13
+    assert len({row["candidate_id"] for row in rows}) == 13
+    assert len({row["gene"] for row in rows}) == 10
+
+    expected_events = {
+        ("APC", "NM_000038.6", "c.1269G>A", "p.W423*"),
+        ("ATM", "NM_000051.4", "c.1236-2A>T", ""),
+        ("BRAF", "NM_004333.6", "c.1781A>G", "p.D594G"),
+        ("BRAF", "NM_004333.6", "c.1799T>A", "p.V600E"),
+        ("BRCA2", "NM_000059.4", "c.7007G>A", "p.R2336H"),
+        ("MLH1", "NM_000249.4", "c.790+1G>A", ""),
+        ("PIK3CA", "NM_006218.4", "c.3197C>T", "p.A1066V"),
+        ("PMS2", "NM_000535.7", "c.59G>A", "p.R20Q"),
+        ("PTEN", "NM_000314.8", "c.802-2A>T", ""),
+        (
+            "SMAD4",
+            "NM_005359.6",
+            "c.1389_1396del",
+            "p.A464Rfs*27",
+        ),
+        ("TP53", "NM_000546.6", "c.578A>T", "p.H193L"),
+        ("TP53", "NM_000546.6", "c.707A>G", "p.Y236C"),
+        ("TP53", "NM_000546.6", "c.734G>A", "p.G245D"),
+    }
+    assert {
+        (
+            row["gene"],
+            row["transcript"],
+            row["c_hgvs"],
+            row["p_hgvs"],
+        )
+        for row in rows
+    } == expected_events
+    assert {
+        row["gene"]: row["source_refs"][0]["id"] for row in rows
+    } == {
+        "APC": "GeneID:324",
+        "ATM": "GeneID:472",
+        "BRAF": "GeneID:673",
+        "BRCA2": "GeneID:675",
+        "MLH1": "GeneID:4292",
+        "PIK3CA": "GeneID:5290",
+        "PMS2": "GeneID:5395",
+        "PTEN": "GeneID:5728",
+        "SMAD4": "GeneID:4089",
+        "TP53": "GeneID:7157",
+    }
+    for row in rows:
+        assert row["panels"] == ["lung_588_pdl1"]
+        assert row["review_status"] == "needs_review"
+        assert row["runtime_eligible"] is False
+        assert row["report_text_allowed"] is False
+        assert row["patient_visible"] is False
+        assert row["secondary_review_status"] == (
+            "pending_report_group_review"
+        )
+        assert row["intro"]
+        assert row["mutation_analysis"]
+        assert row["superseded_risk"]
+        assert row["source_refs"] == [
+            {
+                "type": "ncbi_gene",
+                "authority": "NCBI",
+                "id": row["source_refs"][0]["id"],
+                "url": (
+                    "https://www.ncbi.nlm.nih.gov/gene/"
+                    f"{row['source_refs'][0]['id'].split(':', 1)[1]}"
+                ),
+                "supports": "gene_identity_and_function_only",
+            }
+        ]
+        assert all(
+            row["evidence_boundaries"][field] is False
+            for field in (
+                "treatment_inference_allowed",
+                "immune_inference_allowed",
+                "prognostic_inference_allowed",
+                "hereditary_inference_allowed",
+            )
+        )
+
+    splice_rows = [
+        row for row in rows if row["variant_kind"] == "splice_region_or_site"
+    ]
+    assert {
+        (row["gene"], row["c_hgvs"], row["p_hgvs"])
+        for row in splice_rows
+    } == {
+        ("ATM", "c.1236-2A>T", ""),
+        ("MLH1", "c.790+1G>A", ""),
+        ("PTEN", "c.802-2A>T", ""),
+    }
+
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    provider = build_panel_gene_provider(ROOT, package)
+    mutation_types = {
+        "frameshift": "Frameshift",
+        "stop_gained": "Nonsense",
+        "missense": "Missense",
+        "splice_region_or_site": "Splice",
+    }
+    current_runtime_narratives = {}
+    for row in rows:
+        section = provider.build_gene_knowledge_section(
+            gene=row["gene"],
+            c_hgvs=row["c_hgvs"],
+            p_hgvs=row["p_hgvs"],
+            frequency=1.0,
+            mutation_type=mutation_types[row["variant_kind"]],
+            has_drug=False,
+        )
+        current_runtime_narratives[
+            (row["gene"], row["c_hgvs"], row["p_hgvs"])
+        ] = section["mutation_narrative"]
+        assert section["mutation_narrative"] != row["mutation_analysis"]
+
+    assert "结直肠癌" in current_runtime_narratives[
+        ("APC", "c.1269G>A", "p.W423*")
+    ]
+    assert "肠癌预后" in current_runtime_narratives[
+        ("BRAF", "c.1799T>A", "p.V600E")
+    ]
+    assert "结直肠癌" in current_runtime_narratives[
+        ("TP53", "c.734G>A", "p.G245D")
+    ]

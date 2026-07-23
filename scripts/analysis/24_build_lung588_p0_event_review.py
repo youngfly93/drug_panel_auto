@@ -35,8 +35,9 @@ from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
 
 
 PANEL_ID = "lung_588_pdl1"
-EVENT_NARRATIVE_CANDIDATE_RELATIVE_PATH = (
-    "rules/reviewed_part3_p0_event_narrative_candidates.yaml"
+EVENT_NARRATIVE_CANDIDATE_RELATIVE_PATHS = (
+    "rules/reviewed_part3_p0_event_narrative_candidates.yaml",
+    "rules/reviewed_part3_p0_cross_cancer_narrative_candidates.yaml",
 )
 
 
@@ -149,11 +150,18 @@ def _medical_rules(package: Any) -> dict[str, Any]:
     )
 
 
-def _event_narrative_candidate_contract(
+def _event_narrative_candidate_contracts(
     package: Any,
-) -> dict[str, Any]:
-    path = package._resolve_path(EVENT_NARRATIVE_CANDIDATE_RELATIVE_PATH)
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+) -> list[dict[str, Any]]:
+    return [
+        yaml.safe_load(
+            package._resolve_path(relative_path).read_text(
+                encoding="utf-8"
+            )
+        )
+        or {}
+        for relative_path in EVENT_NARRATIVE_CANDIDATE_RELATIVE_PATHS
+    ]
 
 
 def _candidate_evidence_review_contract(package: Any) -> dict[str, Any]:
@@ -245,7 +253,7 @@ def _event_narrative_candidates(
             continue
         key = _selector_key(row)
         candidate_id = _clean(row.get("candidate_id"))
-        if not all(key) or not candidate_id:
+        if not key[0] or not key[1] or not key[2] or not candidate_id:
             raise ValueError(
                 "Event narrative candidate lacks exact event identity"
             )
@@ -709,10 +717,39 @@ def _citation_units(
 def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
     package = PanelPackageLoader(project_root=root).load(PANEL_ID)
     medical = _medical_rules(package)
-    narrative_contract = _event_narrative_candidate_contract(package)
-    narrative_candidates_by_event = _event_narrative_candidates(
-        narrative_contract
-    )
+    narrative_contracts = _event_narrative_candidate_contracts(package)
+    narrative_candidates_by_event: dict[
+        tuple[str, str, str, str], dict[str, Any]
+    ] = {}
+    runtime_selector_contract: dict[str, Any] = {}
+    for narrative_contract in narrative_contracts:
+        contract_candidates = _event_narrative_candidates(
+            narrative_contract
+        )
+        duplicate_events = (
+            set(narrative_candidates_by_event) & set(contract_candidates)
+        )
+        if duplicate_events:
+            raise ValueError(
+                "Event narrative candidate appears in multiple contracts: "
+                f"{sorted(duplicate_events)!r}"
+            )
+        narrative_candidates_by_event.update(contract_candidates)
+        current_selector_contract = (
+            (narrative_contract.get("governance") or {}).get(
+                "runtime_selector_contract"
+            )
+            or {}
+        )
+        if (
+            runtime_selector_contract
+            and current_selector_contract != runtime_selector_contract
+        ):
+            raise ValueError(
+                "Event narrative candidate contracts disagree on the "
+                "runtime selector boundary"
+            )
+        runtime_selector_contract = current_selector_contract
     observed_event_keys = {
         (
             row["gene"],
@@ -756,12 +793,7 @@ def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
         candidates_by_event,
         non_promotions,
         narrative_candidates_by_event,
-        (
-            (narrative_contract.get("governance") or {}).get(
-                "runtime_selector_contract"
-            )
-            or {}
-        ),
+        runtime_selector_contract,
         reviewed_at=reviewed_at,
     )
     units.extend(
