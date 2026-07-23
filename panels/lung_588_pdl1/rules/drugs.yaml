@@ -6,6 +6,22 @@ updated: "2026-07-23"
 status: "draft"
 description: "Fail-closed lung588 treatment policy pending event-level medical review."
 
+governance:
+  schema_version: "1.0"
+  policy_id: "lung588_targeted_drug_governance_v1"
+  defaults:
+    targeted_drug:
+      review_status: "needs_review"
+      runtime_eligible: false
+      review_basis: "event_level_lung_cancer_review_required"
+      evidence_level: "not_assigned"
+      evidence_as_of: "2026-07-23"
+      cancer_scope: "lung_cancer_event_specific"
+      secondary_review_status: "pending_report_group_review"
+      source_refs:
+        - type: "panel_policy"
+          id: "lung588_fail_closed_targeted_drug_policy"
+
 drug_rules:
   approved_drug_rows_source: "none"
   brand_lookup_source: "config/drug_brands.yaml"

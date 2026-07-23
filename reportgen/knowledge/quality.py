@@ -28,6 +28,10 @@ SENTINEL_C_HGVS = "c.999999A>G"
 SENTINEL_P_HGVS = "p.X999999Y"
 SENTINEL_LOF_C_HGVS = "c.1del"
 SENTINEL_LOF_P_HGVS = "p.M1Rfs*2"
+BLOCKING_CITATION_REVIEW_STATUSES = {
+    "source_mismatch_confirmed",
+    "rejected_for_claim",
+}
 
 
 def _overlay_paths(package: Any) -> list[str]:
@@ -69,6 +73,48 @@ def build_panel_gene_provider(project_root: str | Path, package: Any) -> GeneKno
     )
     provider.load(str(root))
     return provider
+
+
+def load_panel_citation_source_reviews(package: Any) -> list[dict[str, Any]]:
+    """Load panel-owned, claim-level citation dispositions.
+
+    A structured PubMed record proves that an identifier exists; it does not
+    prove that the paper supports the sentence where it is cited.  Panels can
+    therefore record a confirmed source mismatch here and keep activation
+    fail-closed until the claim is removed or replaced and medically reviewed.
+    """
+    try:
+        path = package.resolve_rule_file("knowledge_coverage")
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (FileNotFoundError, KeyError, TypeError, ValueError):
+        return []
+
+    findings: list[dict[str, Any]] = []
+    for row in raw.get("citation_source_reviews") or []:
+        if not isinstance(row, Mapping):
+            continue
+        gene = str(row.get("gene") or "").strip().upper()
+        identifier = str(row.get("identifier") or "").strip()
+        status = str(row.get("status") or "").strip().lower()
+        if not gene or not identifier or not status:
+            continue
+        findings.append(
+            {
+                "review_id": str(row.get("review_id") or "").strip(),
+                "gene": gene,
+                "identifier": identifier,
+                "status": status,
+                "claim_contains": str(row.get("claim_contains") or "").strip(),
+                "disposition": str(row.get("disposition") or "").strip(),
+                "secondary_review_status": str(
+                    row.get("secondary_review_status") or ""
+                ).strip(),
+                "suggested_replacement_identifier": str(
+                    row.get("suggested_replacement_identifier") or ""
+                ).strip(),
+            }
+        )
+    return findings
 
 
 def is_generic_mutation_analysis(gene: str, text: str) -> bool:
@@ -117,6 +163,8 @@ def profile_panel_runtime_content(
     duplicate_fixed_domain: list[str] = []
     generic_analysis: list[str] = []
     texts: list[str] = []
+    identifiers_by_gene: dict[str, dict[str, set[str]]] = {}
+    runtime_text_by_gene: dict[str, str] = {}
     for gene in normalized_genes:
         section = provider.build_gene_knowledge_section(
             gene=gene,
@@ -130,6 +178,10 @@ def profile_panel_runtime_content(
         analysis = str(section.get("mutation_analysis") or "").strip()
         fixed_domain = str(section.get("fixed_domain_text") or "").strip()
         texts.extend((intro, analysis))
+        identifiers_by_gene[gene] = extract_reference_identifiers(
+            (intro, analysis, fixed_domain)
+        )
+        runtime_text_by_gene[gene] = "\n".join((intro, analysis, fixed_domain))
         if not intro:
             missing_intro.append(gene)
         if not analysis:
@@ -149,6 +201,30 @@ def profile_panel_runtime_content(
     unresolved_trials = sorted(
         identifiers["trial"] - set(lookup.get("trial") or {})
     )
+    source_mismatches: list[dict[str, Any]] = []
+    for finding in load_panel_citation_source_reviews(package):
+        if finding["status"] not in BLOCKING_CITATION_REVIEW_STATUSES:
+            continue
+        gene = finding["gene"]
+        identifier = finding["identifier"]
+        match = re.search(r"(?i)PMID\s*[:：]?\s*0*(\d{5,9})", identifier)
+        if not match or gene not in identifiers_by_gene:
+            continue
+        pmid = str(int(match.group(1)))
+        claim_contains = finding["claim_contains"]
+        if pmid not in identifiers_by_gene[gene]["pmid"]:
+            continue
+        source_mismatches.append(
+            {
+                **finding,
+                "identifier": f"PMID:{pmid}",
+                "present_in_runtime_text": True,
+                "claim_fragment_present": bool(
+                    claim_contains
+                    and claim_contains in runtime_text_by_gene[gene]
+                ),
+            }
+        )
     total = len(normalized_genes)
     return {
         "representative_variant": {
@@ -183,6 +259,7 @@ def profile_panel_runtime_content(
             "unresolved_pmids": unresolved_pmids,
             "cited_trials": len(identifiers["trial"]),
             "unresolved_trials": unresolved_trials,
+            "source_mismatches": source_mismatches,
         },
     }
 

@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 KNOWN_INPUTS = {
     "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646": {
         "alias": "CASE-LUNG-A",
-        "contract_id": None,
+        "contract_id": "case_lung_a",
         "pdl1_tps": 1.0,
         "pdl1_cps": 1.0,
         "pdl1_result": "阳性（低表达）",

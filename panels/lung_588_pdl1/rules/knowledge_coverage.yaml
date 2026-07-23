@@ -9,6 +9,31 @@ contract:
   ordered_gene_list_sha256: "f9e6be05c954a4d3df97f031d453fe1f58ea0689290b11de3c173f4a0edf08f1"
   gene_explanation: "基础解释、肺癌特异解释、来源和医学二审分别计数；非空文本不等于医学完成。"
   drug_knowledge: "候选证据不得直接进入患者报告；必须按癌种、事件、方向、证据和审核状态逐条放行。"
+citation_source_reviews:
+  - review_id: "lung588_stk11_pmid_25980754_mismatch"
+    gene: "STK11"
+    identifier: "PMID:25980754"
+    status: "source_mismatch_confirmed"
+    claim_contains: "KRAS/STK11共突变可能预测免疫治疗的不良反应"
+    disposition: "block_until_claim_replaced_and_secondarily_reviewed"
+    runtime_eligible: false
+    secondary_review_status: "pending_report_group_review"
+    finding: >
+      PMID 25980754 reports germline cancer-predisposition findings in people
+      evaluated for suspected Lynch syndrome. It does not evaluate PD-1/PD-L1
+      treatment response in KRAS/STK11-mutant lung cancer.
+    suggested_replacement_identifier: "PMID:29773717"
+    suggested_replacement_scope: >
+      KRAS-mutant lung adenocarcinoma with STK11/LKB1 alteration and response
+      to PD-1-axis inhibition; wording and applicability require report-group
+      secondary review before any patient-visible use.
+    source_refs:
+      - type: "pubmed"
+        id: "PMID:25980754"
+        url: "https://pubmed.ncbi.nlm.nih.gov/25980754/"
+      - type: "pubmed"
+        id: "PMID:29773717"
+        url: "https://pubmed.ncbi.nlm.nih.gov/29773717/"
 reportable_genes:
   - ABCB1
   - ABI1

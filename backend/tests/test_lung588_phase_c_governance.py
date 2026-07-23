@@ -19,6 +19,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from reportgen.core.field_mapper import FieldMapper
+from reportgen.knowledge.quality import profile_panel_runtime_content
+from reportgen.knowledge.release_gate import run_knowledge_release_gate
 from reportgen.panels.loader import load_panel_package
 from reportgen.rules.targeted_drugs import (
     evaluate_required_clinical_context,
@@ -220,6 +222,11 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     assert runtime["targeted_drug_rules"]["allowed_source_dbs"] == []
     assert runtime["targeted_drug_rules"]["clinical_context_rule"] == "clinical_context"
     assert runtime["approved_drug_rows"] == []
+    assert runtime["governance"]["schema_version"] == "1.0"
+    assert (
+        runtime["governance"]["defaults"]["targeted_drug"]["runtime_eligible"]
+        is False
+    )
     assert candidates["non_target_domains"]["immune_gene_associations"]["enabled"] is False
     assert candidates["non_target_domains"]["chemotherapy_pharmacogenomics"]["enabled"] is False
 
@@ -533,3 +540,107 @@ def test_lung588_machine_pre_uat_is_traceable_and_does_not_overclaim():
     assert all(case["unexpected_low_content_page_count"] == 0 for case in cases)
     assert all(case["content_failure_count"] == 0 for case in cases)
     assert len(record["remaining_blockers"]) >= 4
+
+
+def test_lung588_case_a_contract_is_registered_and_deidentified():
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    contract_path = package.resolve_context_contract_file("case_lung_a")
+    contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+
+    assert contract["contract_id"] == "case_lung_a"
+    assert contract["panel_id"] == "lung_588_pdl1"
+    assert contract["privacy"]["contains_phi"] is False
+    assert len(contract["privacy"]["source_excel_sha256"]) == 64
+    assert contract["fields"]["total_variants_count"]["equals"] == 7
+    assert contract["tables"]["all_variants"]["row_count"] == 7
+    assert {
+        row["match"]["gene"]["equals"]
+        for row in contract["tables"]["all_variants"]["rows"]
+    } == {"TP53", "ESR1", "FLT3", "GNAS", "APC", "IFNGR1", "TSC1"}
+    emitted = contract_path.read_text(encoding="utf-8")
+    assert "LZ258" not in emitted
+    assert "patient_name" not in emitted
+
+
+def test_lung588_semantic_citation_mismatch_remains_release_blocking():
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    genes = yaml.safe_load(
+        package.resolve_rule_file("knowledge_coverage").read_text(
+            encoding="utf-8"
+        )
+    )["reportable_genes"]
+    profile = profile_panel_runtime_content(ROOT, package, genes)
+
+    integrity = profile["citation_integrity"]
+    assert integrity["unresolved_pmids"] == []
+    assert integrity["source_mismatches"] == [
+        {
+            "review_id": "lung588_stk11_pmid_25980754_mismatch",
+            "gene": "STK11",
+            "identifier": "PMID:25980754",
+            "status": "source_mismatch_confirmed",
+            "claim_contains": "KRAS/STK11共突变可能预测免疫治疗的不良反应",
+            "disposition": (
+                "block_until_claim_replaced_and_secondarily_reviewed"
+            ),
+            "secondary_review_status": "pending_report_group_review",
+            "suggested_replacement_identifier": "PMID:29773717",
+            "present_in_runtime_text": True,
+            "claim_fragment_present": True,
+        }
+    ]
+
+    gate = run_knowledge_release_gate(
+        ROOT,
+        panel_ids=["lung_588_pdl1"],
+    )
+    assert gate["status"] == "FAIL"
+    codes = {issue["code"] for issue in gate["panels"][0]["issues"]}
+    assert "UNRESOLVED_RUNTIME_PMID" not in codes
+    assert "RUNTIME_CITATION_SOURCE_MISMATCH" in codes
+
+
+def test_lung588_medical_knowledge_queue_is_complete_and_deidentified(tmp_path):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(
+                ROOT
+                / "scripts"
+                / "analysis"
+                / "23_profile_lung588_medical_knowledge.py"
+            ),
+            "--project-root",
+            str(ROOT),
+            "--as-of",
+            "2026-07-23",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    inventory = json.loads(
+        (tmp_path / "knowledge_depth_inventory.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert inventory["denominator"]["total_genes"] == 588
+    assert sum(inventory["summary"]["priority_counts"].values()) == 588
+    assert inventory["summary"]["citation_source_mismatch_count"] == 1
+    stk11 = next(row for row in inventory["rows"] if row["gene"] == "STK11")
+    assert stk11["priority"] == "P0"
+    assert stk11["citation_source_mismatches"][0]["identifier"] == (
+        "PMID:25980754"
+    )
+    emitted = "\n".join(
+        path.read_text(encoding="utf-8-sig")
+        for path in tmp_path.iterdir()
+        if path.suffix in {".json", ".tsv"}
+    )
+    assert "LZ258" not in emitted
+    assert "patient_name" not in emitted

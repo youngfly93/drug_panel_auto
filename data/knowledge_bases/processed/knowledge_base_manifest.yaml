@@ -1,6 +1,6 @@
 schema_version: '1.0'
 manifest_id: reportgen_base_knowledge_manifest_v1
-updated: '2026-07-12'
+updated: '2026-07-23'
 policy:
   description: 基础 Excel 保留历史运行行为，但必须绑定文件哈希、来源类型和审核边界；逐条现代医学审批完成前不得显示为 approved_for_runtime。
   review_status: legacy_runtime
@@ -44,12 +44,12 @@ artifacts:
       id: immune_gene_list_public.xlsx
   reference_registry:
     path: data/knowledge_bases/processed/reference_registry.yaml
-    sha256: b681da39d2fdc1aebaf73fb543f699e7f92263798eb164489e08247dd7e3c56a
+    sha256: b854f26a368605bc82ab9e0be788e9be6df6c8e10add15e85ffb52593ff3b679
     source_type: ncbi_pubmed_esummary_registry
     content_types:
     - publication_title
     - publication_identifier
-    evidence_as_of: '2026-07-12'
+    evidence_as_of: '2026-07-23'
     source_refs:
     - type: ncbi_eutils
       id: pubmed_esummary

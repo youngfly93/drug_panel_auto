@@ -706,6 +706,17 @@ def _panel_report(
                 "identifiers": citation_integrity["unresolved_trials"],
             }
         )
+    if citation_integrity["source_mismatches"]:
+        issues.append(
+            {
+                "code": "RUNTIME_CITATION_SOURCE_MISMATCH",
+                "message": (
+                    f"{len(citation_integrity['source_mismatches'])} runtime "
+                    "claims cite a source confirmed not to support the claim"
+                ),
+                "findings": citation_integrity["source_mismatches"],
+            }
+        )
     if status_counts.get("not_recorded", 0):
         issues.append(
             {

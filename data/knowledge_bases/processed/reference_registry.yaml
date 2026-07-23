@@ -1,12 +1,13 @@
 schema_version: '1.0'
 registry_id: reportgen_pubmed_title_registry_v1
-generated_on: '2026-07-12'
+generated_on: '2026-07-23'
 source:
   type: ncbi_pubmed_esummary
   url: https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi
   panel_scope:
   - crc_301_msi
   - crc_358_msi
+  - lung_588_pdl1
 references:
 - type: pubmed
   id: PMID:1338691
@@ -2999,6 +3000,13 @@ references:
     Jan 19.
   url: https://pubmed.ncbi.nlm.nih.gov/25978029/
   retrieved_on: '2026-07-12'
+- type: pubmed
+  id: PMID:25980754
+  title: Identification of a Variety of Mutations in Cancer Predisposition Genes in Patients With Suspected Lynch Syndrome.
+  citation: PMID:25980754 Identification of a Variety of Mutations in Cancer Predisposition Genes in Patients With Suspected
+    Lynch Syndrome. Gastroenterology. 2015 Sep.
+  url: https://pubmed.ncbi.nlm.nih.gov/25980754/
+  retrieved_on: '2026-07-23'
 - type: pubmed
   id: PMID:26001971
   title: Chromosomal rearrangements involving the NTRK1 gene in colorectal carcinoma.

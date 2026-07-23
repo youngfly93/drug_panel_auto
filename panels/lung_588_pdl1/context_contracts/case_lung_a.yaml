@@ -1,0 +1,50 @@
+schema_version: "1.0"
+contract_id: "case_lung_a"
+panel_id: "lung_588_pdl1"
+description: "De-identified pre-render contract for historical lung588 case A."
+severity_default: "fail"
+privacy:
+  contains_phi: false
+  source_excel_sha256: "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646"
+
+fields:
+  total_variants_count:
+    equals: 7
+  tmb_value:
+    equals: "14.3"
+  tmb_status:
+    equals: "H"
+  msi_status:
+    equals: "MSS"
+  pdl1_tps:
+    equals: 1.0
+  pdl1_cps:
+    equals: 1.0
+  pdl1_result:
+    equals: "阳性（低表达）"
+
+tables:
+  all_variants:
+    row_count: 7
+    rows:
+      - id: "tp53_y236c"
+        match: {gene: {equals: "TP53"}, cHGVS: {equals: "c.707A>G"}}
+        expect: {pHGVS: {equals: "p.Y236C"}}
+      - id: "esr1_q414h"
+        match: {gene: {equals: "ESR1"}, cHGVS: {equals: "c.1242G>T"}}
+        expect: {pHGVS: {equals: "p.Q414H"}}
+      - id: "flt3_r387stop"
+        match: {gene: {equals: "FLT3"}, cHGVS: {equals: "c.1159C>T"}}
+        expect: {pHGVS: {equals: "p.R387*"}}
+      - id: "gnas_r232l"
+        match: {gene: {equals: "GNAS"}, cHGVS: {equals: "c.695G>T"}}
+        expect: {pHGVS: {equals: "p.R232L"}}
+      - id: "apc_w423stop"
+        match: {gene: {equals: "APC"}, cHGVS: {equals: "c.1269G>A"}}
+        expect: {pHGVS: {equals: "p.W423*"}}
+      - id: "ifngr1_s378fs"
+        match: {gene: {equals: "IFNGR1"}, cHGVS: {equals: "c.1132_1133del"}}
+        expect: {pHGVS: {equals: "p.S378Ffs*6"}}
+      - id: "tsc1_f158fs"
+        match: {gene: {equals: "TSC1"}, cHGVS: {equals: "c.474del"}}
+        expect: {pHGVS: {equals: "p.F158Lfs*9"}}

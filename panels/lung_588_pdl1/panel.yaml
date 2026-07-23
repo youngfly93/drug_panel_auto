@@ -172,6 +172,7 @@ template_contract:
     - "__PART3_MARKER__"
 
 context_contracts:
+  case_lung_a: "context_contracts/case_lung_a.yaml"
   case_lung_b: "context_contracts/case_lung_b.yaml"
   case_lung_c: "context_contracts/case_lung_c.yaml"
 
