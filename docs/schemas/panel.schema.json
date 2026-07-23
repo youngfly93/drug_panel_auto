@@ -39,8 +39,8 @@
     },
     "status": {
       "type": "string",
-      "description": "Lifecycle. active = serving customers; pilot = internal validation only; deprecated = scheduled for removal.",
-      "enum": ["active", "pilot", "deprecated"]
+      "description": "Lifecycle. draft = engineering-only and not available for delivery; pilot = internal validation only; active = serving customers; deprecated = scheduled for removal.",
+      "enum": ["draft", "pilot", "active", "deprecated"]
     },
     "description": {
       "type": "string"
@@ -87,6 +87,30 @@
         }
       }
     },
+    "batch_generation": {
+      "type": "object",
+      "description": "Panel-owned batch availability and per-case clinical-input policy.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "clinical_info_mode": {
+          "type": "string",
+          "enum": ["shared", "per_case_required"]
+        },
+        "reason": { "type": "string" }
+      }
+    },
+    "part3_knowledge": {
+      "type": "object",
+      "description": "Panel-owned gate for patient-visible Part-3 gene/variant knowledge. Disabled panels render an explicit notice and must not fall back to the shared knowledge base.",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "disabled_notice": { "type": "string", "minLength": 1 }
+      }
+    },
     "enhancer": {
       "type": "string",
       "description": "Fully-qualified Python class path of a PanelEnhancer (module:Class). Empty string = no enhancement (NoopEnhancer). Same enhancer can serve multiple panels (e.g. CRC358Enhancer serves both crc_358_msi and crc_301_msi)."
@@ -112,7 +136,7 @@
           "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
           "status": {
             "type": "string",
-            "enum": ["active", "pilot", "deprecated"]
+            "enum": ["draft", "pilot", "active", "deprecated"]
           },
           "description": { "type": "string" },
           "processors": {
@@ -178,13 +202,34 @@
             "type": "object",
             "properties": {
               "required": { "type": "boolean" },
+              "minimum": { "type": "number" },
+              "maximum": { "type": "number" },
               "source_priority": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "missing_values": {
                 "type": "array",
                 "items": { "type": "string" }
               },
               "allowed_values": {
                 "type": "array",
                 "items": { "type": "string" }
+              },
+              "classification_ranges": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["field"],
+                  "properties": {
+                    "field": { "type": "string" },
+                    "minimum": { "type": "number" },
+                    "maximum": { "type": "number" },
+                    "minimum_inclusive": { "type": "boolean" },
+                    "maximum_inclusive": { "type": "boolean" }
+                  }
+                }
               }
             }
           }

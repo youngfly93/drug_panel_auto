@@ -1,0 +1,199 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+display_name: "肺癌588基因+PD-L1"
+version: "0.1.0"
+status: "draft"
+description: >
+  Independent lung 588-gene + PD-L1 package. The engineering draft supports
+  reviewed I/II/III variant extraction and controlled per-case PD-L1 input.
+  Targeted-drug, immune-association and chemotherapy-PGx conclusions remain
+  fail-closed until event-level medical review and case UAT are complete.
+
+aliases:
+  - "lung_588"
+  - "lung588"
+  - "lung_588_pdl1"
+
+project_detector_rules:
+  keywords:
+    - "肺癌588"
+    - "588基因+PD-L1"
+    - "肺癌588基因"
+  keyword_groups:
+    - any:
+        - "肺癌588"
+        - "肺癌588基因"
+        - "588基因+PD-L1"
+        - "588基因+pd-l1"
+      weight: 1
+
+batch_generation:
+  enabled: false
+  clinical_info_mode: "per_case_required"
+  reason: >
+    The source Excel does not contain PD-L1. A shared batch form would copy one
+    TPS/CPS/result into every patient, so batch generation remains blocked until
+    per-file clinical payloads are implemented and validated.
+
+part3_knowledge:
+  enabled: false
+  reason: >
+    The shared base workbook contains historical cross-cancer narratives and
+    references. Lung588 must use an independently reviewed event-level overlay
+    before any patient-visible Part-3 interpretation is enabled.
+  disabled_notice: >
+    本项目肺癌专属知识当前未启用，暂不提供第三部分的患者级基因解释和药物解析。
+    检测结果请以第二部分为准，
+    最终临床意义须由专业医师结合病理类型、疾病分期及现行诊疗规范综合判断。
+
+enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
+
+default_template: "lung_588_pdl1_golden_template_v0"
+templates:
+  - id: "lung_588_pdl1_golden_template_v0"
+    file: "templates/lung_588_pdl1_golden_template_v0.docx"
+    version: "0.1.0"
+    status: "draft"
+    description: >
+      Deterministic engineering template derived from the de-identified lung329
+      scaffold, relabelled for the independent 588 product and hardened so
+      unreviewed treatment/PGx content fails closed.
+    processors:
+      - "part3_formatted_sections"
+      - "rebuild_references"
+      - "signature_placeholder"
+      - "immune_table_notes"
+      - "bullet_lists"
+      - "signature_layout"
+      - "front_matter_spacing"
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
+      - "underlines_and_styles"
+
+mappings:
+  default: "config/mapping.yaml"
+
+rules:
+  panel_rules: "rules/panel.yaml"
+  report_text: "rules/report_text.yaml"
+  biomarkers: "rules/biomarkers.yaml"
+  guideline_tables: "rules/guideline_tables.yaml"
+  drugs: "rules/drugs.yaml"
+  knowledge_coverage: "rules/knowledge_coverage.yaml"
+  style: "rules/style.yaml"
+  filtering: "config/filtering.yaml"
+  drug_brands: "config/drug_brands.yaml"
+
+input_contract:
+  required_tables:
+    - "Variations"
+    - "TMB"
+    - "Msisensor"
+  optional_tables:
+    - "QC"
+    - "Hereditary_tumor"
+    - "CtDrug"
+    - "Hotspot"
+    - "Cnv"
+    - "Fusion"
+    - "HLA"
+    - "Ct1000"
+    - "Ct15"
+  required_single_fields:
+    - "patient_name"
+    - "sample_id"
+    - "project_name"
+    - "report_date"
+    - "pdl1_tps"
+    - "pdl1_cps"
+    - "pdl1_result"
+  required_columns:
+    Variations:
+      - "Gene_Symbol"
+      - "cHGVS"
+      - "ExistIn552"
+  biomarkers:
+    tmb_value:
+      required: true
+      minimum: 0
+      source_priority: ["excel"]
+    msi_status:
+      required: true
+      allowed_values: ["MSS", "MSI-L", "MSI-H"]
+      source_priority: ["excel"]
+    pdl1_tps:
+      required: true
+      minimum: 0
+      maximum: 100
+      source_priority: ["form"]
+    pdl1_cps:
+      required: true
+      minimum: 0
+      maximum: 100
+      source_priority: ["form"]
+    pdl1_result:
+      required: true
+      allowed_values: ["阳性（高表达）", "阳性（低表达）", "阴性"]
+      source_priority: ["form"]
+      classification_ranges:
+        "阳性（高表达）":
+          field: "pdl1_tps"
+          minimum: 50
+          maximum: 100
+        "阳性（低表达）":
+          field: "pdl1_tps"
+          minimum: 1
+          maximum: 50
+          maximum_inclusive: false
+        "阴性":
+          field: "pdl1_tps"
+          minimum: 0
+          maximum: 1
+          maximum_inclusive: false
+
+template_contract:
+  required_variables:
+    - "patient_name"
+    - "sample_id"
+    - "pdl1_tps"
+    - "pdl1_cps"
+    - "pdl1_result"
+  required_lists:
+    - "variants_2_1"
+    - "targeted_drug_tips"
+    - "nccn_results"
+    - "immune_positive_results"
+    - "immune_negative_results"
+    - "immune_hyperprogression_results"
+  required_markers:
+    - "__PART3_MARKER__"
+
+context_contracts:
+  case_lung_b: "context_contracts/case_lung_b.yaml"
+  case_lung_c: "context_contracts/case_lung_c.yaml"
+
+processors:
+  - "empty_table_rows"
+  - "part3_formatted_sections"
+  - "signature_placeholder"
+  - "report_content"
+  - "bullet_lists"
+  - "signature_layout"
+  - "cover_artifacts"
+  - "section_spacing"
+  - "page_layout"
+  - "gene_list_and_qc"
+  - "variant_tables"
+  - "hla_tail"
+  - "blank_page_cleanup"
+  - "toc_refresh"
+  - "final_refresh_cleanup"
+  - "underlines_and_styles"
+
+golden_cases:
+  - id: "lung_588_pdl1_contract"
+    runner: "reportgen.core.golden_case:run_golden_case"
+    command: "pytest backend/tests/test_lung588_contract.py -q"
+    synthetic: true
+    expected_qa_status: "PASS"

@@ -348,6 +348,12 @@ class PanelConfig:
     crc_important_genes: Set[str] = field(
         default_factory=lambda: set(_DEFAULT_CRC_IMPORTANT_GENES)
     )
+    # Compatibility field name retained for callers, while new panel packages
+    # may declare a neutral ``important_genes`` key in their rule file.
+    variant_filter_columns: List[str] = field(
+        default_factory=lambda: ["ExistInsmall358", "ExistInsmall301"]
+    )
+    variant_filter_values: List[str] = field(default_factory=lambda: ["1"])
     immune_positive_genes: Set[str] = field(
         default_factory=lambda: set(_DEFAULT_IMMUNE_POSITIVE_GENES)
     )
@@ -840,26 +846,80 @@ def load_panel_config(
         immune_tables,
         "hyperprogression",
     )
+    variant_filter = raw.get("variant_filter")
+    if not isinstance(variant_filter, dict):
+        variant_filter = {}
+    variant_filter_columns = [
+        str(value).strip()
+        for value in variant_filter.get("columns") or []
+        if str(value).strip()
+    ] or ["ExistInsmall358", "ExistInsmall301"]
+    variant_filter_values = [
+        str(value).strip()
+        for value in variant_filter.get("allowed_values") or []
+        if str(value).strip()
+    ] or ["1"]
+
+    important_gene_key = (
+        "important_genes" if "important_genes" in raw else "crc_important_genes"
+    )
+    declared_immune_categories = {
+        category
+        for category in ("positive", "negative", "hyperprogression")
+        if isinstance(immune_tables.get(category), dict)
+    }
+    guideline_tables = (
+        guideline_rule.get("guideline_tables")
+        if isinstance(guideline_rule.get("guideline_tables"), dict)
+        else {}
+    )
+    nccn_rule_declared = isinstance(guideline_tables.get("nccn_results"), dict)
 
     pc = PanelConfig(
         class_i_genes=as_gene_set("class_i_genes", set(_DEFAULT_CLASS_I_GENES)),
         class_ii_genes=as_gene_set("class_ii_genes", set(_DEFAULT_CLASS_II_GENES)),
-        crc_important_genes=as_gene_set("crc_important_genes", set(_DEFAULT_CRC_IMPORTANT_GENES)),
-        immune_positive_genes=immune_gene_sets.get("positive")
-        or as_gene_set("immune_positive_genes", set(_DEFAULT_IMMUNE_POSITIVE_GENES)),
-        immune_negative_genes=immune_gene_sets.get("negative")
-        or as_gene_set("immune_negative_genes", set(_DEFAULT_IMMUNE_NEGATIVE_GENES)),
-        immune_hyperprogression_genes=immune_gene_sets.get("hyperprogression")
-        or as_gene_set(
-            "immune_hyperprogression_genes",
-            set(_DEFAULT_IMMUNE_HYPERPROGRESSION_GENES),
+        crc_important_genes=as_gene_set(
+            important_gene_key, set(_DEFAULT_CRC_IMPORTANT_GENES)
         ),
-        immune_positive_rows=immune_positive_rows
-        or [dict(x) for x in _DEFAULT_IMMUNE_POSITIVE_ROWS],
-        immune_negative_rows=immune_negative_rows
-        or [dict(x) for x in _DEFAULT_IMMUNE_NEGATIVE_ROWS],
-        immune_hyperprogression_rows=immune_hyperprogression_rows
-        or [dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS],
+        variant_filter_columns=variant_filter_columns,
+        variant_filter_values=variant_filter_values,
+        immune_positive_genes=(
+            immune_gene_sets.get("positive", set())
+            if "positive" in declared_immune_categories
+            else as_gene_set(
+                "immune_positive_genes", set(_DEFAULT_IMMUNE_POSITIVE_GENES)
+            )
+        ),
+        immune_negative_genes=(
+            immune_gene_sets.get("negative", set())
+            if "negative" in declared_immune_categories
+            else as_gene_set(
+                "immune_negative_genes", set(_DEFAULT_IMMUNE_NEGATIVE_GENES)
+            )
+        ),
+        immune_hyperprogression_genes=(
+            immune_gene_sets.get("hyperprogression", set())
+            if "hyperprogression" in declared_immune_categories
+            else as_gene_set(
+                "immune_hyperprogression_genes",
+                set(_DEFAULT_IMMUNE_HYPERPROGRESSION_GENES),
+            )
+        ),
+        immune_positive_rows=(
+            immune_positive_rows
+            if "positive" in declared_immune_categories
+            else [dict(x) for x in _DEFAULT_IMMUNE_POSITIVE_ROWS]
+        ),
+        immune_negative_rows=(
+            immune_negative_rows
+            if "negative" in declared_immune_categories
+            else [dict(x) for x in _DEFAULT_IMMUNE_NEGATIVE_ROWS]
+        ),
+        immune_hyperprogression_rows=(
+            immune_hyperprogression_rows
+            if "hyperprogression" in declared_immune_categories
+            else [dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS]
+        ),
         reviewed_variant_overrides=reviewed_variant_overrides,
         blocked_reviewed_variant_overrides=blocked_reviewed_variant_overrides,
         drug_display_max_items=(
@@ -875,7 +935,11 @@ def load_panel_config(
         approved_drug_rows_display_mode=normalize_display_mode(
             drug_rules_config.get("approved_drug_rows_display_mode")
         ),
-        nccn_result_rows=nccn_rows or [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS],
+        nccn_result_rows=(
+            nccn_rows
+            if nccn_rule_declared
+            else [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS]
+        ),
     )
     if panel_display is not None:
         pc.panel_display_genes = panel_display
@@ -1260,6 +1324,30 @@ def _variant_level_matches(candidate: Any, allowed_values: List[str]) -> bool:
     return False
 
 
+def _variant_filter_value_matches(
+    candidate: Any,
+    allowed_values: List[str],
+) -> bool:
+    """Match membership flags without conflating numeric ``1`` with class I.
+
+    CRC workbooks use numeric 1 in dedicated membership columns, while the
+    lung588 source uses reviewed I/II/III labels in ``ExistIn552``. These are
+    distinct contracts and must be evaluated explicitly.
+    """
+    raw = "1" if candidate is True else str(candidate or "").strip()
+    if raw in {str(value).strip() for value in allowed_values}:
+        return True
+    candidate_class = _explicit_gene_class(raw)
+    if not candidate_class:
+        return False
+    allowed_classes = {
+        resolved
+        for value in allowed_values
+        if (resolved := _explicit_gene_class(value))
+    }
+    return candidate_class in allowed_classes
+
+
 def _override_gene_values(override: Dict[str, Any]) -> Set[str]:
     values = _as_text_list(override.get("gene") or override.get("genes"))
     return {value.upper() for value in values}
@@ -1470,9 +1558,12 @@ def build_variants_for_template(
     variants = []
 
     for row in variations:
-        # Filter: only include variants in the active CRC panel
+        # Filter: only include variants in the active panel contract.
         filter_val = row.get(filter_column)
-        if filter_val not in (1, "1", True):
+        if not _variant_filter_value_matches(
+            filter_val,
+            panel_config.variant_filter_values,
+        ):
             continue
 
         gene = _norm_text(row.get("Gene_Symbol") or row.get("Gene"))
@@ -2480,13 +2571,16 @@ def _build_nccn_and_immune_fields(
     report_data.set_table("immune_hyperprogression_results", immune_hyper_table_rows)
 
 
-def _resolve_crc_filter_column(excel_data: ExcelDataSource) -> Optional[str]:
-    """Pick the active panel membership column for CRC 358/301 Excel layouts."""
+def _resolve_panel_filter_column(
+    excel_data: ExcelDataSource,
+    panel_config: PanelConfig,
+) -> Optional[str]:
+    """Pick the first panel-declared membership/classification column."""
     variations_data = excel_data.get_table_data("Variations") or []
     if not variations_data:
-        return "ExistInsmall358"
+        return panel_config.variant_filter_columns[0]
     first_row_keys = set(variations_data[0].keys()) if variations_data[0] else set()
-    for candidate in ("ExistInsmall358", "ExistInsmall301"):
+    for candidate in panel_config.variant_filter_columns:
         if candidate in first_row_keys:
             return candidate
     return None
@@ -2929,13 +3023,14 @@ def enhance_report_data(
 
             drug_lookup = _drug_lookup
 
-    # Panel 前置校验：CRC-358 使用 ExistInsmall358，CRC-301 使用 ExistInsmall301。
-    # 两者都不存在时才跳过，避免把非 CRC panel 强行套用 CRC 口径。
-    filter_column = _resolve_crc_filter_column(excel_data)
+    # Panel 前置校验：筛选列与可接受值由当前 Panel 规则声明。缺列时
+    # 必须跳过增强，不能回退到其他癌种的成员资格口径。
+    filter_column = _resolve_panel_filter_column(excel_data, pc)
     if not filter_column:
         import logging
         logging.getLogger("reportgen").warning(
-            "Variations 表缺少 ExistInsmall358/ExistInsmall301 列，跳过 CRC panel 增强逻辑"
+            "Variations 表缺少 Panel 声明的筛选列 %s，跳过增强逻辑",
+            pc.variant_filter_columns,
         )
         return report_data
 

@@ -3958,6 +3958,29 @@ class TemplateRenderer:
         # 从占位标记位置开始，链式插入
         current = placeholder_para._element
 
+        disabled_notice = str(context.get("part3_disabled_notice") or "").strip()
+        if disabled_notice:
+            current = add_para_after(
+                current,
+                disabled_notice,
+                size=10.5,
+                color="C65911",
+                justify=True,
+                spacing_before=200,
+                spacing_after=200,
+            )
+            if amino_table_element is not None:
+                current.addnext(amino_table_element)
+            placeholder_para._element.getparent().remove(
+                placeholder_para._element
+            )
+            doc.save(file_path)
+            self.logger.info(
+                "Part 3 医学知识按 Panel 门禁关闭",
+                status=context.get("part3_knowledge_status", "disabled"),
+            )
+            return
+
         body_options = {
             "size": 10.5,
             "justify": True,
@@ -7158,9 +7181,29 @@ class TemplateRenderer:
         doc = Document(file_path)
         changed = self._apply_gene_list_table_borders(doc, context)
         content_cfg = self._report_content_config(context)
-        style_cfg = content_cfg.get("gene_list_table_style")
-        style_cfg = style_cfg if isinstance(style_cfg, dict) else {}
+        legacy_style_cfg = content_cfg.get("gene_list_table_style")
+        style_cfg = (
+            dict(legacy_style_cfg)
+            if isinstance(legacy_style_cfg, dict)
+            else {}
+        )
+        # New panels own their layout tokens in rules/style.yaml. Preserve the
+        # legacy report_content fallback for CRC, then let the active Panel
+        # override only the gene-list values it explicitly declares.
+        style_cfg.update(self._panel_style_config(context, "gene_list_table"))
         row_height_cm = self._float_config(style_cfg.get("row_height_cm"), 0.88)
+        header_row_height_cm = self._float_config(
+            style_cfg.get("header_row_height_cm"),
+            row_height_cm,
+        )
+        row_height_rule = str(
+            style_cfg.get("row_height_rule") or "at_least"
+        ).strip().lower()
+        resolved_height_rule = (
+            WD_ROW_HEIGHT_RULE.EXACTLY
+            if row_height_rule in {"exact", "exactly"}
+            else WD_ROW_HEIGHT_RULE.AT_LEAST
+        )
         header_font_size = self._float_config(style_cfg.get("header_font_size"), 14.0)
         body_font_size = self._float_config(style_cfg.get("body_font_size"), 10.5)
         w_br = qn("w:br")
@@ -7179,8 +7222,10 @@ class TemplateRenderer:
 
             seen_title_paragraphs: set[int] = set()
             for row_idx, row in enumerate(table.rows):
-                row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
-                row.height = Cm(row_height_cm)
+                row.height_rule = resolved_height_rule
+                row.height = Cm(
+                    header_row_height_cm if row_idx == 0 else row_height_cm
+                )
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
                         # The legacy merged title row carries an embedded page

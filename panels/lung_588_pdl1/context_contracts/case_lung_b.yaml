@@ -1,0 +1,52 @@
+schema_version: "1.0"
+contract_id: "case_lung_b"
+panel_id: "lung_588_pdl1"
+description: "De-identified pre-render contract for historical lung588 case B."
+severity_default: "fail"
+privacy:
+  contains_phi: false
+  source_excel_sha256: "623c96cee1eb7b16cacb62cababba3b790e82007a00a59d0f159efbe025db000"
+  reference_docx_sha256_prefix: "8c9cb41572686445"
+
+fields:
+  total_variants_count:
+    equals: 8
+  tmb_value:
+    equals: "7.5"
+  tmb_status:
+    equals: "L"
+  msi_status:
+    equals: "MSS"
+  pdl1_tps:
+    equals: 50.0
+  pdl1_cps:
+    equals: 52.0
+  pdl1_result:
+    equals: "阳性（高表达）"
+
+tables:
+  all_variants:
+    row_count: 8
+    rows:
+      - id: "tp53_h193l"
+        match: {gene: {equals: "TP53"}, cHGVS: {equals: "c.578A>T"}}
+        expect: {pHGVS: {equals: "p.H193L"}}
+      - id: "atm_splice"
+        match: {gene: {equals: "ATM"}, cHGVS: {equals: "c.1236-2A>T"}}
+      - id: "tsc1_r692stop"
+        match: {gene: {equals: "TSC1"}, cHGVS: {equals: "c.2074C>T"}}
+        expect: {pHGVS: {equals: "p.R692*"}}
+      - id: "msh3_q969stop"
+        match: {gene: {equals: "MSH3"}, cHGVS: {equals: "c.2905C>T"}}
+        expect: {pHGVS: {equals: "p.Q969*"}}
+      - id: "brca2_r2336h"
+        match: {gene: {equals: "BRCA2"}, cHGVS: {equals: "c.7007G>A"}}
+        expect: {pHGVS: {equals: "p.R2336H"}}
+      - id: "mlh1_splice"
+        match: {gene: {equals: "MLH1"}, cHGVS: {equals: "c.790+1G>A"}}
+      - id: "pms2_r20q"
+        match: {gene: {equals: "PMS2"}, cHGVS: {equals: "c.59G>A"}}
+        expect: {pHGVS: {equals: "p.R20Q"}}
+      - id: "braf_d594g"
+        match: {gene: {equals: "BRAF"}, cHGVS: {equals: "c.1781A>G"}}
+        expect: {pHGVS: {equals: "p.D594G"}}

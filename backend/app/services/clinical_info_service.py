@@ -83,7 +83,16 @@ FIELD_GROUPS = {
     },
     "biomarkers": {
         "label": "检测指标",
-        "fields": ["msi_status", "msi_score", "tmb_value", "tmb_unit", "final_conclusion"],
+        "fields": [
+            "msi_status",
+            "msi_score",
+            "tmb_value",
+            "tmb_unit",
+            "pdl1_tps",
+            "pdl1_cps",
+            "pdl1_result",
+            "final_conclusion",
+        ],
     },
 }
 
@@ -168,8 +177,19 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
     },
     "crc_301_msi": {"hide": ALWAYS_HIDE},
     "crc_358_msi": {"hide": ALWAYS_HIDE},
+    "lung_329_pdl1": {
+        "show": ["pdl1_tps", "pdl1_cps", "pdl1_result"],
+        "hide": ALWAYS_HIDE,
+    },
+    "lung_588_pdl1": {
+        "show": ["pdl1_tps", "pdl1_cps", "pdl1_result"],
+        "hide": ALWAYS_HIDE,
+        "require": ["pdl1_tps", "pdl1_cps", "pdl1_result"],
+    },
     "mlf_result": {"hide": ALWAYS_HIDE},
 }
+
+PROJECT_ONLY_FIELDS = {"pdl1_tps", "pdl1_cps", "pdl1_result", "methylation_result"}
 
 # UI component mapping by field type
 TYPE_TO_COMPONENT = {
@@ -215,6 +235,13 @@ def _build_ui_hints(key: str, field_def: dict) -> FieldUiHints:
             span=12,
             options=options,
             allow_create=True,
+        )
+    if key == "pdl1_result":
+        return FieldUiHints(
+            component="select",
+            placeholder="请选择PD-L1结果分层",
+            span=12,
+            options=["阳性（高表达）", "阳性（低表达）", "阴性"],
         )
 
     ftype = field_def.get("type", "string")
@@ -273,7 +300,11 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
 
     # Apply project-type overrides
     overrides = PROJECT_FIELD_OVERRIDES.get(project_type, {}) if project_type else {}
-    hide_fields = set(overrides.get("hide", []))
+    show_fields = set(overrides.get("show", []))
+    hide_fields = (
+        set(overrides.get("hide", []))
+        | (PROJECT_ONLY_FIELDS - show_fields)
+    )
     require_fields = set(overrides.get("require", []))
     for key in require_fields:
         if key in all_fields:

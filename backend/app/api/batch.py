@@ -22,6 +22,7 @@ from fastapi import (
     Request,
     UploadFile,
 )
+from reportgen.core.enhancer_registry import get_panel_registry
 from reportgen.panels.release_scope import PanelReleaseDisabledError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -70,6 +71,26 @@ from app.time_utils import utc_now_naive
 router = APIRouter(prefix="/reports", tags=["reports-batch"])
 
 IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
+
+
+def _batch_generation_policy_error(project_type: Optional[str]) -> Optional[str]:
+    """Return a safe reason when the selected Panel disallows shared batches."""
+    if not str(project_type or "").strip():
+        return None
+    try:
+        registration = get_panel_registry().get(project_type)
+    except Exception:
+        return None
+    package = registration.package if registration else None
+    policy = (package.raw.get("batch_generation") or {}) if package else {}
+    if not isinstance(policy, dict) or policy.get("enabled", True):
+        return None
+    if policy.get("clinical_info_mode") == "per_case_required":
+        return (
+            "该项目的临床指标必须逐病例录入，当前批量表单仅支持整批共享字段，"
+            "为避免患者间结果串用，暂不开放批量生成。"
+        )
+    return str(policy.get("reason") or "该项目当前未开放批量生成。").strip()
 
 
 def _validated_reference_gate_mode(value: str | None, user: User) -> str:
@@ -384,6 +405,9 @@ def _prepare_item_clinical_payload(
         detected_project_name or shared_clinical_info.get("project_name"),
     )
     _raise_if_project_type_disabled(bridge, detected_project_type)
+    batch_policy_error = _batch_generation_policy_error(detected_project_type)
+    if batch_policy_error:
+        raise ValueError(batch_policy_error)
 
     clinical_payload = bridge.get_mapped_clinical_fields(excel_data)
     clinical_payload.update(
@@ -1024,6 +1048,9 @@ def batch_generate_from_files(
 ):
     """Persist a production batch and return before preflight/enrichment."""
     _raise_if_project_type_disabled(bridge, project_type)
+    batch_policy_error = _batch_generation_policy_error(project_type)
+    if batch_policy_error:
+        raise HTTPException(status_code=409, detail=batch_policy_error)
     accept_started = time.perf_counter()
     reference_gate_mode = _validated_reference_gate_mode(
         reference_gate_mode,

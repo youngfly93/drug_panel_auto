@@ -202,6 +202,31 @@ single_values:
     default_value: "mutations/Mb"
     description: "TMB单位"
 
+  # PD-L1 IHC 指标。肺癌 NGS Excel 不包含这些字段；由受控 Web 表单逐病例录入，
+  # 并由 Panel input_contract 做范围与结果一致性校验。
+  pdl1_tps:
+    synonyms: ["PD-L1 TPS", "TPS", "PD-L1 TPS（%）"]
+    type: float
+    required: false
+    default_value: null
+    format_template: "{:.1f}"
+    description: "PD-L1肿瘤细胞阳性比例评分TPS（0-100）"
+
+  pdl1_cps:
+    synonyms: ["PD-L1 CPS", "CPS"]
+    type: float
+    required: false
+    default_value: null
+    format_template: "{:.1f}"
+    description: "PD-L1联合阳性评分CPS（0-100）"
+
+  pdl1_result:
+    synonyms: ["PD-L1结果", "PD-L1 Result"]
+    type: string
+    required: false
+    default_value: ""
+    description: "PD-L1结果分层"
+
   # 终版展示字段（由程序计算，不直接来自Excel）
   tmb_summary:
     synonyms: []

@@ -1,0 +1,18 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+rule_id: "guideline_tables"
+version: "0.1.0"
+updated: "2026-07-23"
+status: "draft"
+description: "Lung588 guideline rows remain empty until current-version review."
+
+guideline_tables:
+  nccn_results:
+    output_table: "nccn_results"
+    output_field_prefix: "nccn_"
+    required_columns: ["检测基因", "检测内容", "检测结果"]
+    rows: []
+  chemotherapy:
+    output_table: "chemotherapy"
+    row_source: "disabled"
+    required_columns: ["药物名称", "相关基因", "药物适应情况"]

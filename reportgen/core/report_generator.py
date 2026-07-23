@@ -5,6 +5,7 @@
 """
 
 import json
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -53,6 +54,200 @@ from reportgen.utils.file_utils import (
     safe_filename,
 )
 from reportgen.utils.logger import get_logger
+
+
+BIOMARKER_FIELD_ALIASES = {
+    "msi_status": ("msi_status", "MSI状态"),
+    "tmb_value": ("tmb_value", "TMB"),
+    "pdl1_tps": ("pdl1_tps", "PD-L1 TPS", "TPS"),
+    "pdl1_cps": ("pdl1_cps", "PD-L1 CPS", "CPS"),
+    "pdl1_result": ("pdl1_result", "PD-L1结果", "PD-L1 Result"),
+}
+
+
+def _numeric_biomarker_value(value: Any) -> Optional[float]:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+        return numeric if math.isfinite(numeric) else None
+    text = str(value).strip().rstrip("%").strip()
+    if not text:
+        return None
+    try:
+        numeric = float(text)
+        return numeric if math.isfinite(numeric) else None
+    except ValueError:
+        return None
+
+
+def validate_panel_biomarker_contracts(
+    report_data: ReportData,
+    biomarker_contracts: Any,
+) -> list[dict[str, Any]]:
+    """Validate required biomarker values and cross-field classifications.
+
+    The rule shape is panel-owned. In addition to the existing
+    ``required``/``allowed_values`` contract, numeric fields may declare
+    ``minimum``/``maximum`` and categorical fields may declare
+    ``classification_ranges`` keyed by their allowed display value.
+    """
+    if not isinstance(biomarker_contracts, dict):
+        return []
+
+    failures: list[dict[str, Any]] = []
+
+    def resolved_value(field_name: str) -> Any:
+        aliases = BIOMARKER_FIELD_ALIASES.get(field_name, (field_name,))
+        return next(
+            (
+                report_data.get_field(alias)
+                for alias in aliases
+                if report_data.get_field(alias) not in (None, "")
+            ),
+            None,
+        )
+
+    for raw_field_name, spec in biomarker_contracts.items():
+        field_name = str(raw_field_name)
+        if not isinstance(spec, dict):
+            continue
+        value = resolved_value(field_name)
+        # Numeric zero is a valid value for TMB/TPS/CPS. Avoid truthiness here:
+        # ``str(value or "")`` would silently turn 0 into a missing result.
+        text_value = "" if value is None else str(value).strip()
+        allowed = [str(item).strip() for item in spec.get("allowed_values") or []]
+        missing_values = {
+            str(item).strip()
+            for item in spec.get("missing_values") or ["", "未检测", "--"]
+        }
+        if spec.get("required", False) and (
+            text_value in missing_values or (allowed and text_value not in allowed)
+        ):
+            failures.append(
+                {
+                    "field": field_name,
+                    "reason": "missing_or_disallowed",
+                    "value": text_value,
+                    "allowed_values": allowed,
+                }
+            )
+            continue
+
+        if text_value in missing_values:
+            continue
+        if allowed and text_value not in allowed:
+            failures.append(
+                {
+                    "field": field_name,
+                    "reason": "disallowed_value",
+                    "value": text_value,
+                    "allowed_values": allowed,
+                }
+            )
+            continue
+
+        if "minimum" in spec or "maximum" in spec:
+            numeric = _numeric_biomarker_value(value)
+            if numeric is None:
+                failures.append(
+                    {
+                        "field": field_name,
+                        "reason": "not_numeric",
+                        "value": text_value,
+                    }
+                )
+                continue
+            minimum = spec.get("minimum")
+            maximum = spec.get("maximum")
+            if minimum is not None and numeric < float(minimum):
+                failures.append(
+                    {
+                        "field": field_name,
+                        "reason": "below_minimum",
+                        "value": text_value,
+                        "minimum": minimum,
+                    }
+                )
+            if maximum is not None and numeric > float(maximum):
+                failures.append(
+                    {
+                        "field": field_name,
+                        "reason": "above_maximum",
+                        "value": text_value,
+                        "maximum": maximum,
+                    }
+                )
+
+        ranges = spec.get("classification_ranges")
+        if not isinstance(ranges, dict) or text_value not in ranges:
+            continue
+        range_spec = ranges.get(text_value)
+        if not isinstance(range_spec, dict):
+            continue
+        source_field = str(range_spec.get("field") or "").strip()
+        source_value = resolved_value(source_field)
+        numeric = _numeric_biomarker_value(source_value)
+        if not source_field or numeric is None:
+            failures.append(
+                {
+                    "field": field_name,
+                    "reason": "classification_source_missing",
+                    "source_field": source_field,
+                }
+            )
+            continue
+        minimum = range_spec.get("minimum")
+        maximum = range_spec.get("maximum")
+        min_inclusive = bool(range_spec.get("minimum_inclusive", True))
+        max_inclusive = bool(range_spec.get("maximum_inclusive", True))
+        below = minimum is not None and (
+            numeric < float(minimum)
+            if min_inclusive
+            else numeric <= float(minimum)
+        )
+        above = maximum is not None and (
+            numeric > float(maximum)
+            if max_inclusive
+            else numeric >= float(maximum)
+        )
+        if below or above:
+            failures.append(
+                {
+                    "field": field_name,
+                    "reason": "classification_inconsistent",
+                    "value": text_value,
+                    "source_field": source_field,
+                    "source_value": source_value,
+                }
+            )
+    return failures
+
+
+def apply_pdl1_display_fields(report_data: ReportData) -> None:
+    """Build neutral report text from controlled PD-L1 form values.
+
+    This function deliberately reports the supplied IHC values without
+    generating a patient-level treatment recommendation.
+    """
+    tps = report_data.get_field("pdl1_tps")
+    cps = report_data.get_field("pdl1_cps")
+    result = str(report_data.get_field("pdl1_result") or "").strip()
+    if tps in (None, "") and cps in (None, "") and not result:
+        return
+
+    def display(value: Any) -> str:
+        numeric = _numeric_biomarker_value(value)
+        if numeric is None:
+            return str(value or "--").strip()
+        return f"{numeric:g}"
+
+    report_data.set_field(
+        "pdl1_table_interpretation",
+        "本次PD-L1免疫组化检测结果："
+        f"TPS {display(tps)}%，CPS {display(cps)}，{result or '结果未填写'}。"
+        "本结果须结合病理类型、分期、检测抗体及现行诊疗规范综合判断。",
+    )
 
 
 @dataclass
@@ -662,46 +857,61 @@ class ReportGenerator:
             raise RuntimeError("Report data is unavailable before panel rule execution.")
 
         gene_knowledge_provider = None
-        try:
-            kb_enabled = bool(
-                self.config_loader.get_setting(
-                    "knowledge_bases.gene_knowledge_db.enabled", False
+        panel_raw = getattr(state.panel_package, "raw", None) or {}
+        part3_policy = panel_raw.get("part3_knowledge") or {}
+        part3_enabled = bool(part3_policy.get("enabled", True))
+        if not part3_enabled:
+            disabled_notice = str(
+                part3_policy.get("disabled_notice")
+                or "第三部分医学知识尚未完成审核，当前版本不输出相关解释。"
+            ).strip()
+            state.report_data.set_field("part3_knowledge_status", "disabled")
+            state.report_data.set_field("part3_disabled_notice", disabled_notice)
+            stage.metrics["part3_knowledge_enabled"] = False
+        else:
+            try:
+                kb_enabled = bool(
+                    self.config_loader.get_setting(
+                        "knowledge_bases.gene_knowledge_db.enabled", False
+                    )
+                ) or bool(
+                    self.config_loader.get_setting(
+                        "knowledge_bases.gene_transcript_db.enabled", False
+                    )
                 )
-            ) or bool(
-                self.config_loader.get_setting(
-                    "knowledge_bases.gene_transcript_db.enabled", False
-                )
-            )
-            if kb_enabled:
-                from reportgen.knowledge import GeneKnowledgeProvider  # lazy import
+                if kb_enabled:
+                    from reportgen.knowledge import GeneKnowledgeProvider  # lazy import
 
-                kb_cfg = self.config_loader.get_setting("knowledge_bases", {}) or {}
-                # Panel-scope the reviewed Part-3 overlay: each panel uses its
-                # own reviewed_part3_knowledge (declared in panel.yaml rules).
-                # Panels that don't declare one get NO overlay instead of
-                # inheriting the global CRC file — so non-CRC panels
-                # (lung/endometrial) no longer pick up colorectal wording.
-                gene_kb_cfg = dict(kb_cfg.get("gene_knowledge_db", {}) or {})
-                gene_kb_cfg["reviewed_part3_overlay_path"] = ""
-                gene_kb_cfg["reviewed_part3_overlay_paths"] = (
-                    self._resolve_panel_reviewed_part3_overlays(state.panel_package)
-                )
-                provider_cfg = {
-                    "enabled": True,
-                    "panel_id": state.canonical_project_type,
-                    "gene_symbol_aliases": (
-                        (getattr(state.panel_package, "raw", None) or {}).get(
-                            "gene_symbol_aliases"
+                    kb_cfg = self.config_loader.get_setting("knowledge_bases", {}) or {}
+                    # Panel-scope the reviewed Part-3 overlay: each panel uses its
+                    # own reviewed_part3_knowledge (declared in panel.yaml rules).
+                    # Panels that don't declare one get NO overlay instead of
+                    # inheriting the global CRC file — so non-CRC panels
+                    # (lung/endometrial) no longer pick up colorectal wording.
+                    gene_kb_cfg = dict(kb_cfg.get("gene_knowledge_db", {}) or {})
+                    gene_kb_cfg["reviewed_part3_overlay_path"] = ""
+                    gene_kb_cfg["reviewed_part3_overlay_paths"] = (
+                        self._resolve_panel_reviewed_part3_overlays(
+                            state.panel_package
                         )
-                        or {}
-                    ),
-                    "gene_knowledge_db": gene_kb_cfg,
-                    "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
-                }
-                gene_knowledge_provider = GeneKnowledgeProvider(provider_cfg)
-        except Exception as kb_err:
-            gene_knowledge_provider = None
-            stage.warn("GENE_KNOWLEDGE_PROVIDER_UNAVAILABLE", str(kb_err))
+                    )
+                    provider_cfg = {
+                        "enabled": True,
+                        "panel_id": state.canonical_project_type,
+                        "gene_symbol_aliases": (
+                            panel_raw.get("gene_symbol_aliases")
+                            or {}
+                        ),
+                        "gene_knowledge_db": gene_kb_cfg,
+                        "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
+                    }
+                    gene_knowledge_provider = GeneKnowledgeProvider(provider_cfg)
+                stage.metrics["part3_knowledge_enabled"] = bool(
+                    gene_knowledge_provider
+                )
+            except Exception as kb_err:
+                gene_knowledge_provider = None
+                stage.warn("GENE_KNOWLEDGE_PROVIDER_UNAVAILABLE", str(kb_err))
 
         self.logger.log_event(
             "template_enhancement_started",
@@ -717,6 +927,7 @@ class ReportGenerator:
             project_type=state.canonical_project_type,
             panel_package=state.panel_package,
         )
+        apply_pdl1_display_fields(state.report_data)
         self._apply_clinical_diagnosis_for_display(state.report_data)
         self.logger.log_event(
             "template_enhancement_completed",
@@ -795,37 +1006,10 @@ class ReportGenerator:
             if isinstance(panel_contract, dict)
             else {}
         ) or {}
-        biomarker_failures: list[dict[str, Any]] = []
-        field_aliases = {
-            "msi_status": ("msi_status", "MSI状态"),
-            "tmb_value": ("tmb_value", "TMB"),
-        }
-        for field_name, spec in biomarker_contracts.items():
-            if not isinstance(spec, dict) or not spec.get("required", False):
-                continue
-            aliases = field_aliases.get(str(field_name), (str(field_name),))
-            value = next(
-                (
-                    state.report_data.get_field(alias)
-                    for alias in aliases
-                    if state.report_data.get_field(alias) not in (None, "")
-                ),
-                None,
-            )
-            text_value = str(value or "").strip()
-            allowed = [str(item).strip() for item in spec.get("allowed_values") or []]
-            missing_values = {
-                str(item).strip()
-                for item in spec.get("missing_values") or ["", "未检测", "--"]
-            }
-            if text_value in missing_values or (allowed and text_value not in allowed):
-                biomarker_failures.append(
-                    {
-                        "field": str(field_name),
-                        "value": text_value,
-                        "allowed_values": allowed,
-                    }
-                )
+        biomarker_failures = validate_panel_biomarker_contracts(
+            state.report_data,
+            biomarker_contracts,
+        )
         if biomarker_failures:
             duration = time.time() - start_time
             error_msg = "Panel 必检生物标志物缺失或无法解析，阻断报告生成"
@@ -1009,6 +1193,17 @@ class ReportGenerator:
                 )
                 if str(value).strip()
             ]
+            part3_explicitly_disabled = (
+                str(
+                    state.template_context.get("part3_knowledge_status") or ""
+                ).strip().lower()
+                == "disabled"
+                and bool(
+                    str(
+                        state.template_context.get("part3_disabled_notice") or ""
+                    ).strip()
+                )
+            )
             if expected_variant_keys:
                 missing_variant_keys = sorted(
                     set(expected_variant_keys) - set(rendered_variant_keys)
@@ -1028,10 +1223,17 @@ class ReportGenerator:
                         f"missing={missing_variant_keys}, "
                         f"unexpected={unexpected_variant_keys}"
                     )
-            elif total_variants > 0 and not gene_sections:
+            elif (
+                total_variants > 0
+                and not gene_sections
+                and not part3_explicitly_disabled
+            ):
                 structural_errors.append(
                     "variants are present but gene_knowledge_sections is empty"
                 )
+            stage.metrics["part3_explicitly_disabled"] = (
+                part3_explicitly_disabled
+            )
 
         if structural_errors:
             duration = time.time() - start_time

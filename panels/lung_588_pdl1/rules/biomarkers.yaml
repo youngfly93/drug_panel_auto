@@ -1,0 +1,30 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+rule_id: "biomarkers"
+version: "0.1.0"
+updated: "2026-07-23"
+status: "draft"
+description: "Lung588 biomarker display policy; unreviewed immune-gene claims are disabled."
+
+biomarkers:
+  tmb:
+    field: "tmb_summary"
+    low_label: "TMB-L"
+    high_label: "TMB-H"
+    reference_threshold: "10 mutations/Mb"
+  msi:
+    field: "msi_summary"
+    allowed_values: ["MSS", "MSI-L", "MSI-H"]
+  pdl1:
+    source: "controlled_form"
+    fields: ["pdl1_tps", "pdl1_cps", "pdl1_result"]
+  immune_gene_tables:
+    positive:
+      genes: []
+      rows: []
+    negative:
+      genes: []
+      rows: []
+    hyperprogression:
+      genes: []
+      rows: []

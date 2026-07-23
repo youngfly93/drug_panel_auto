@@ -152,13 +152,14 @@ known-good process and refuses the switch when any is truthy.
 
 ### CRC358-only limited release
 
-When CRC358 is released before CRC301 has completed its own case-level UAT,
-the production release must set all three scope guards to `crc_301_msi`:
+When CRC358 is released before CRC301 and the new lung588 draft have completed
+their own case-level UAT, the production release must disable both
+`crc_301_msi` and `lung_588_pdl1` in all three scope guards:
 
 ```text
-REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi
-RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi
-VITE_DISABLED_PROJECT_TYPES=crc_301_msi
+REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1
+RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1
+VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1
 ```
 
 The first guard blocks direct/core generation, the second blocks Web API and

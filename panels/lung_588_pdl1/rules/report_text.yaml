@@ -1,0 +1,33 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+rule_id: "report_text"
+version: "0.1.0"
+updated: "2026-07-23"
+status: "draft"
+description: "Neutral lung588 engineering wording without patient-level treatment claims."
+
+texts:
+  tmb_table_immuno_tips:
+    purpose: "TMB result boundary."
+    source: "engineering_draft"
+    text: "仅报告检测值及分层；治疗意义须结合病理类型、分期和现行指南审核。"
+  tmb_detail_interpretation:
+    purpose: "TMB educational boundary."
+    source: "engineering_draft"
+    text: "肿瘤突变负荷为每兆碱基范围内的体细胞突变数量；本值不能单独决定治疗方案。"
+  tmb_drug_note:
+    purpose: "TMB drug boundary."
+    source: "engineering_draft"
+    text: "本报告不依据TMB单独生成患者级用药结论。"
+  msi_educational_tips:
+    purpose: "MSI result boundary."
+    source: "engineering_draft"
+    text: "仅报告微卫星状态；治疗意义须由专业医师结合病理类型、分期和现行诊疗规范综合判断。"
+  msi_crc_interpretation:
+    purpose: "Compatibility field retained without CRC-specific wording."
+    source: "engineering_draft"
+    text: "本报告不依据MSI单独生成患者级治疗结论。"
+  patient_letter_project_label:
+    purpose: "Patient letter panel name."
+    source: "product_contract"
+    text: "肺癌588基因+PD-L1检测项目"

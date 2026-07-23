@@ -1,0 +1,24 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+rule_id: "drugs"
+version: "0.1.0"
+updated: "2026-07-23"
+status: "draft"
+description: "Fail-closed lung588 treatment policy pending event-level medical review."
+
+drug_rules:
+  approved_drug_rows_source: "none"
+  brand_lookup_source: "config/drug_brands.yaml"
+  immunotherapy_brand_list_source: "config/drug_brands.yaml"
+  evidence_levels:
+    allowed: ["A", "B", "C", "D"]
+
+targeted_drug_rules:
+  enabled: false
+  base_db_enabled: false
+  allowed_source_dbs: []
+  allow_internal_rows: false
+  require_cancer_profile_match: true
+  approved_drug_rows_enabled: false
+
+approved_drug_rows: []

@@ -297,6 +297,7 @@ const total = ref(0)
 const projectOptions = [
   { label: '结直肠癌301基因+MSI', value: 'crc_301_msi' },
   { label: '结直肠癌358基因+MSI', value: 'crc_358_msi' },
+  { label: '肺癌588基因+PD-L1', value: 'lung_588_pdl1' },
   { label: '肺癌329基因+PD-L1', value: 'lung_329_pdl1' },
   { label: '子宫内膜癌29基因', value: 'endometrial_29' },
   { label: '肺癌甲基化', value: 'lung_methylation' },

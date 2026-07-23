@@ -1,0 +1,55 @@
+schema_version: "1.0"
+contract_id: "case_lung_c"
+panel_id: "lung_588_pdl1"
+description: "De-identified pre-render contract for historical lung588 case C."
+severity_default: "fail"
+privacy:
+  contains_phi: false
+  source_excel_sha256: "7b39431044c4a9298f7663c97a47c4df83b5b1e0875d88a64b3e24c05bfa498a"
+  reference_docx_sha256_prefix: "4754ededa67eeeef"
+
+fields:
+  total_variants_count:
+    equals: 9
+  tmb_value:
+    equals: "6.3"
+  tmb_status:
+    equals: "L"
+  msi_status:
+    equals: "MSS"
+  pdl1_tps:
+    equals: 5.0
+  pdl1_cps:
+    equals: 6.0
+  pdl1_result:
+    equals: "阳性（低表达）"
+
+tables:
+  all_variants:
+    row_count: 9
+    rows:
+      - id: "braf_v600e"
+        match: {gene: {equals: "BRAF"}, cHGVS: {equals: "c.1799T>A"}}
+        expect: {pHGVS: {equals: "p.V600E"}}
+      - id: "smad4_frameshift"
+        match: {gene: {equals: "SMAD4"}, cHGVS: {equals: "c.1389_1396del"}}
+        expect: {pHGVS: {equals: "p.A464Rfs*27"}}
+      - id: "pten_splice"
+        match: {gene: {equals: "PTEN"}, cHGVS: {equals: "c.802-2A>T"}}
+      - id: "erbb2_g660d"
+        match: {gene: {equals: "ERBB2"}, cHGVS: {equals: "c.1979G>A"}}
+        expect: {pHGVS: {equals: "p.G660D"}}
+      - id: "atm_splice"
+        match: {gene: {equals: "ATM"}, cHGVS: {equals: "c.1236-2A>T"}}
+      - id: "tp53_g245d"
+        match: {gene: {equals: "TP53"}, cHGVS: {equals: "c.734G>A"}}
+        expect: {pHGVS: {equals: "p.G245D"}}
+      - id: "tsc2_q883stop"
+        match: {gene: {equals: "TSC2"}, cHGVS: {equals: "c.2647C>T"}}
+        expect: {pHGVS: {equals: "p.Q883*"}}
+      - id: "brip1_w714stop"
+        match: {gene: {equals: "BRIP1"}, cHGVS: {equals: "c.2142G>A"}}
+        expect: {pHGVS: {equals: "p.W714*"}}
+      - id: "pik3ca_a1066v"
+        match: {gene: {equals: "PIK3CA"}, cHGVS: {equals: "c.3197C>T"}}
+        expect: {pHGVS: {equals: "p.A1066V"}}

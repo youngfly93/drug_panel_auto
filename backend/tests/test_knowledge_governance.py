@@ -106,8 +106,16 @@ def test_production_knowledge_release_gate_is_self_contained_and_passes(tmp_path
     assert {row["panel_id"] for row in result["non_blocking_panel_readiness"]} == {
         "endometrial_29",
         "lung_329_pdl1",
+        "lung_588_pdl1",
         "lung_methylation",
     }
+    lung588 = next(
+        row
+        for row in result["non_blocking_panel_readiness"]
+        if row["panel_id"] == "lung_588_pdl1"
+    )
+    assert lung588["status"] == "draft"
+    assert lung588["readiness"] == "NOT_PRODUCTION_ACTIVE"
 
 
 def test_effective_governance_keeps_legacy_and_approved_states_distinct():
