@@ -80,6 +80,7 @@ rules:
   biomarkers: "rules/biomarkers.yaml"
   guideline_tables: "rules/guideline_tables.yaml"
   drugs: "rules/drugs.yaml"
+  medical_candidates: "rules/medical_candidates.yaml"
   knowledge_coverage: "rules/knowledge_coverage.yaml"
   style: "rules/style.yaml"
   filtering: "config/filtering.yaml"
@@ -194,6 +195,8 @@ processors:
 golden_cases:
   - id: "lung_588_pdl1_contract"
     runner: "reportgen.core.golden_case:run_golden_case"
-    command: "pytest backend/tests/test_lung588_contract.py -q"
+    command: >-
+      pytest backend/tests/test_lung588_contract.py
+      backend/tests/test_lung588_phase_c_governance.py -q
     synthetic: true
     expected_qa_status: "PASS"
