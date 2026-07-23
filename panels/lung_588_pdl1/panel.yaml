@@ -80,6 +80,7 @@ rules:
   biomarkers: "rules/biomarkers.yaml"
   guideline_tables: "rules/guideline_tables.yaml"
   drugs: "rules/drugs.yaml"
+  pdl1_product_contract: "rules/pdl1_product_contract.yaml"
   clinical_context: "rules/clinical_context.yaml"
   medical_candidates: "rules/medical_candidates.yaml"
   candidate_evidence_review: "rules/candidate_evidence_review.yaml"
@@ -111,6 +112,11 @@ input_contract:
     - "pdl1_tps"
     - "pdl1_cps"
     - "pdl1_result"
+    - "pdl1_assay_profile_id"
+    - "pdl1_source_record_id"
+    - "pdl1_source_record_date"
+    - "pdl1_specimen_id"
+    - "pdl1_image_disposition"
   required_columns:
     Variations:
       - "Gene_Symbol"
@@ -139,21 +145,22 @@ input_contract:
       required: true
       allowed_values: ["阳性（高表达）", "阳性（低表达）", "阴性"]
       source_priority: ["form"]
-      classification_ranges:
-        "阳性（高表达）":
-          field: "pdl1_tps"
-          minimum: 50
-          maximum: 100
-        "阳性（低表达）":
-          field: "pdl1_tps"
-          minimum: 1
-          maximum: 50
-          maximum_inclusive: false
-        "阴性":
-          field: "pdl1_tps"
-          minimum: 0
-          maximum: 1
-          maximum_inclusive: false
+    pdl1_assay_profile_id:
+      required: true
+      source_priority: ["form"]
+    pdl1_source_record_id:
+      required: true
+      source_priority: ["form"]
+    pdl1_source_record_date:
+      required: true
+      source_priority: ["form"]
+    pdl1_specimen_id:
+      required: true
+      source_priority: ["form"]
+    pdl1_image_disposition:
+      required: true
+      allowed_values: ["无病例专属图像（报告不展示）"]
+      source_priority: ["form"]
 
 template_contract:
   required_variables:
@@ -162,6 +169,8 @@ template_contract:
     - "pdl1_tps"
     - "pdl1_cps"
     - "pdl1_result"
+    - "pdl1_assay_provenance"
+    - "pdl1_source_provenance"
   required_lists:
     - "variants_2_1"
     - "targeted_drug_tips"

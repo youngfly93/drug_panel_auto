@@ -91,6 +91,8 @@ PDL1_IMAGE_NOTICE = (
     "附图：本病例未提供可追溯的PD-L1免疫组化图像，故不展示；"
     "TPS、CPS及结果判定须与原始检测记录核对。"
 )
+PDL1_ASSAY_PROVENANCE_MARKER = "{{ pdl1_assay_provenance }}"
+PDL1_SOURCE_PROVENANCE_MARKER = "{{ pdl1_source_provenance }}"
 REFERENCE_LINES = (
     "1. PMID:39375078. Chinese guidelines for molecular testing of non-small cell lung cancer "
     "(2024 edition). https://pubmed.ncbi.nlm.nih.gov/39375078/",
@@ -630,6 +632,8 @@ def _validate_hardened_document(document: DocumentObject) -> None:
         "{{ pdl1_tps }}",
         "{{ pdl1_cps }}",
         "{{ pdl1_result }}",
+        PDL1_ASSAY_PROVENANCE_MARKER,
+        PDL1_SOURCE_PROVENANCE_MARKER,
         PDL1_IMAGE_NOTICE,
         "肺癌588基因+PD-L1检测项目",
         "Gene List for MLseq (n=588)",
@@ -851,7 +855,11 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
         "3.2 PD-L1表达检测结果",
         "用药提示",
         "3.3微卫星不稳定性（MSI）检测结果",
-        ("{{ pdl1_table_interpretation }}",),
+        (
+            "{{ pdl1_table_interpretation }}",
+            PDL1_ASSAY_PROVENANCE_MARKER,
+            PDL1_SOURCE_PROVENANCE_MARKER,
+        ),
         replacement_heading="结果解释边界",
     )
     _collapse_between(

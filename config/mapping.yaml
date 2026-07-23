@@ -233,7 +233,7 @@ single_values:
     description: "TMB单位"
 
   # PD-L1 IHC 指标。肺癌 NGS Excel 不包含这些字段；由受控 Web 表单逐病例录入，
-  # 并由 Panel input_contract 做范围与结果一致性校验。
+  # Panel input_contract 校验数值范围，具体检测方案合同校验结果分层一致性。
   pdl1_tps:
     synonyms: ["PD-L1 TPS", "TPS", "PD-L1 TPS（%）"]
     type: float
@@ -256,6 +256,42 @@ single_values:
     required: false
     default_value: ""
     description: "PD-L1结果分层"
+
+  pdl1_assay_profile_id:
+    synonyms: ["PD-L1检测方案"]
+    type: string
+    required: false
+    default_value: ""
+    description: "经报告组二审启用的PD-L1检测方案；无可选项时禁止生成"
+
+  pdl1_source_record_id:
+    synonyms: ["PD-L1原始记录编号"]
+    type: string
+    required: false
+    default_value: ""
+    description: "逐病例原始PD-L1免疫组化报告或实验室记录编号"
+
+  pdl1_source_record_date:
+    synonyms: ["PD-L1原始记录日期"]
+    type: date
+    required: false
+    default_value: null
+    format_template: "%Y-%m-%d"
+    description: "原始PD-L1免疫组化记录签发或检测日期"
+
+  pdl1_specimen_id:
+    synonyms: ["PD-L1检测标本标识"]
+    type: string
+    required: false
+    default_value: ""
+    description: "与PD-L1原始记录一致的逐病例标本或蜡块标识"
+
+  pdl1_image_disposition:
+    synonyms: ["PD-L1图像处置"]
+    type: string
+    required: false
+    default_value: ""
+    description: "当前仅允许无病例专属图像且报告不展示；禁止复用模板静态图"
 
   # 终版展示字段（由程序计算，不直接来自Excel）
   tmb_summary:

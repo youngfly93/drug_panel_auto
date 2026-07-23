@@ -117,6 +117,15 @@ def _clinical_info(case: dict[str, Any]) -> dict[str, Any]:
         "pdl1_tps": case["pdl1_tps"],
         "pdl1_cps": case["pdl1_cps"],
         "pdl1_result": case["pdl1_result"],
+        "pdl1_assay_profile_id": "nsclc_22c3_pharmdx_tps_v1",
+        "pdl1_source_record_id": (
+            f"SYNTHETIC-VISUAL-QA-IHC-{case['alias']}"
+        ),
+        "pdl1_source_record_date": "2026-07-23",
+        "pdl1_specimen_id": (
+            f"SYNTHETIC-VISUAL-QA-SPECIMEN-{case['alias']}"
+        ),
+        "pdl1_image_disposition": "无病例专属图像（报告不展示）",
     }
 
 
@@ -128,6 +137,11 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
     from reportgen.core.enhancer_registry import get_enhancer, get_panel_registry
     from reportgen.core.report_generator import validate_panel_biomarker_contracts
     from reportgen.models.excel_data import ExcelDataSource
+    from reportgen.rules.pdl1 import (
+        apply_pdl1_product_display_fields,
+        load_pdl1_product_contract,
+        validate_pdl1_product_contract,
+    )
 
     working = ExcelDataSource(
         file_path=excel_data.file_path,
@@ -157,9 +171,18 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
         project_type="lung_588_pdl1",
         panel_package=package,
     )
+    pdl1_product_contract = load_pdl1_product_contract(package)
+    apply_pdl1_product_display_fields(
+        report_data,
+        pdl1_product_contract,
+    )
     biomarker_failures = validate_panel_biomarker_contracts(
         report_data,
         package.input_contract.get("biomarkers"),
+    )
+    pdl1_product_failures = validate_pdl1_product_contract(
+        report_data,
+        pdl1_product_contract,
     )
     context = report_data.get_template_context()
     contract_report = None
@@ -188,6 +211,11 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
         },
         "biomarker_contract_status": "PASS" if not biomarker_failures else "FAIL",
         "biomarker_failures": biomarker_failures,
+        "pdl1_product_contract_status": (
+            "PASS" if not pdl1_product_failures else "FAIL"
+        ),
+        "pdl1_product_failures": pdl1_product_failures,
+        "pdl1_input_provenance": "synthetic_visual_qa_only",
         "context_contract": {
             "contract_id": contract_id,
             "status": contract_report["status"]
@@ -378,6 +406,10 @@ def validate_inputs(
             failures.append(f"{row['alias']}: disabled drug rules produced rows")
         if row["biomarker_contract_status"] != "PASS":
             failures.append(f"{row['alias']}: biomarker contract failed")
+        if row["pdl1_product_contract_status"] != "PASS":
+            failures.append(
+                f"{row['alias']}: PD-L1 product contract blocked"
+            )
         contract_status = row["context_contract"]["status"]
         if contract_status not in {"PASS", "NOT_APPLICABLE"}:
             failures.append(f"{row['alias']}: context contract failed")
@@ -437,6 +469,10 @@ def main() -> int:
                 },
                 "contract_statuses": {
                     row["alias"]: row["context_contract"]["status"]
+                    for row in payload["cases"]
+                },
+                "pdl1_product_statuses": {
+                    row["alias"]: row["pdl1_product_contract_status"]
                     for row in payload["cases"]
                 },
                 "render_statuses": {

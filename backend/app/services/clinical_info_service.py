@@ -100,6 +100,11 @@ FIELD_GROUPS = {
             "pdl1_tps",
             "pdl1_cps",
             "pdl1_result",
+            "pdl1_assay_profile_id",
+            "pdl1_source_record_id",
+            "pdl1_source_record_date",
+            "pdl1_specimen_id",
+            "pdl1_image_disposition",
             "final_conclusion",
         ],
     },
@@ -195,13 +200,27 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
             "pdl1_tps",
             "pdl1_cps",
             "pdl1_result",
+            "pdl1_assay_profile_id",
+            "pdl1_source_record_id",
+            "pdl1_source_record_date",
+            "pdl1_specimen_id",
+            "pdl1_image_disposition",
             "lung_histology",
             "disease_extent",
             "prior_systemic_therapy",
             "companion_diagnostic_status",
         ],
         "hide": ALWAYS_HIDE,
-        "require": ["pdl1_tps", "pdl1_cps", "pdl1_result"],
+        "require": [
+            "pdl1_tps",
+            "pdl1_cps",
+            "pdl1_result",
+            "pdl1_assay_profile_id",
+            "pdl1_source_record_id",
+            "pdl1_source_record_date",
+            "pdl1_specimen_id",
+            "pdl1_image_disposition",
+        ],
     },
     "mlf_result": {"hide": ALWAYS_HIDE},
 }
@@ -210,6 +229,11 @@ PROJECT_ONLY_FIELDS = {
     "pdl1_tps",
     "pdl1_cps",
     "pdl1_result",
+    "pdl1_assay_profile_id",
+    "pdl1_source_record_id",
+    "pdl1_source_record_date",
+    "pdl1_specimen_id",
+    "pdl1_image_disposition",
     "methylation_result",
     "lung_histology",
     "disease_extent",
@@ -231,6 +255,7 @@ CONTROLLED_FIELD_OPTIONS = {
         "待确认",
         "不符合",
     ],
+    "pdl1_image_disposition": ["无病例专属图像（报告不展示）"],
 }
 
 # UI component mapping by field type
@@ -254,6 +279,43 @@ def _is_computed_field(field_def: dict) -> bool:
     """Check if a field is computed (empty synonyms and not required from user)."""
     synonyms = field_def.get("synonyms", [])
     return isinstance(synonyms, list) and len(synonyms) == 0
+
+
+def _runtime_pdl1_profile_ids() -> list[str]:
+    """Return only secondarily reviewed PD-L1 profiles enabled by the panel."""
+
+    try:
+        from reportgen.panels.loader import PanelPackageLoader
+        from reportgen.rules.schema import load_rule_yaml
+
+        package = PanelPackageLoader(
+            project_root=settings.upstream_root
+        ).load("lung_588_pdl1")
+        contract = load_rule_yaml(
+            package.resolve_rule_file("pdl1_product_contract")
+        )
+    except Exception:
+        return []
+
+    runtime_ids = {
+        str(value).strip()
+        for value in contract.get("runtime_profiles") or []
+        if str(value).strip()
+    }
+    approved: list[str] = []
+    for profile in contract.get("candidate_profiles") or []:
+        if not isinstance(profile, dict):
+            continue
+        profile_id = str(profile.get("profile_id") or "").strip()
+        if (
+            profile_id in runtime_ids
+            and profile.get("runtime_eligible") is True
+            and profile.get("report_text_allowed") is True
+            and profile.get("secondary_review_status")
+            == "approved_by_report_group"
+        ):
+            approved.append(profile_id)
+    return sorted(approved)
 
 
 def _build_ui_hints(key: str, field_def: dict) -> FieldUiHints:
@@ -284,6 +346,18 @@ def _build_ui_hints(key: str, field_def: dict) -> FieldUiHints:
             placeholder="请选择PD-L1结果分层",
             span=12,
             options=["阳性（高表达）", "阳性（低表达）", "阴性"],
+        )
+    if key == "pdl1_assay_profile_id":
+        options = _runtime_pdl1_profile_ids()
+        return FieldUiHints(
+            component="select",
+            placeholder=(
+                "请选择经二审的PD-L1检测方案"
+                if options
+                else "暂无经报告组二审的PD-L1检测方案"
+            ),
+            span=12,
+            options=options,
         )
     if key in CONTROLLED_FIELD_OPTIONS:
         return FieldUiHints(

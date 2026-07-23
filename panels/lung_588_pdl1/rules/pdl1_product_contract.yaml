@@ -1,0 +1,137 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+rule_id: "pdl1_product_contract"
+version: "0.1.0"
+updated: "2026-07-23"
+status: "draft"
+description: >
+  Product and provenance contract for per-case PD-L1 IHC results. The lung NGS
+  workbook is not a PD-L1 source. No assay profile is currently authorized for
+  runtime report generation.
+
+governance:
+  contract_id: "lung588_pdl1_product_contract_v1"
+  evidence_as_of: "2026-07-23"
+  reviewer: "codex"
+  reviewer_type: "ai_assisted_product_safety_review"
+  primary_review_status: "completed_non_authoritative_scope_review"
+  secondary_review_status: "pending_report_group_review"
+  runtime_enabled: false
+  report_text_allowed: false
+  promotion_blocked: true
+  treatment_inference_allowed: false
+  blocking_reason: >
+    The historical reports and available NGS inputs do not identify the
+    patient-level PD-L1 assay clone, staining platform, source IHC record, or
+    validated scoring profile. These facts cannot be inferred from TPS/CPS
+    alone.
+
+input_provenance:
+  ngs_excel_is_pdl1_source: false
+  per_case_source_record_required: true
+  required_fields:
+    - "pdl1_assay_profile_id"
+    - "pdl1_source_record_id"
+    - "pdl1_source_record_date"
+    - "pdl1_specimen_id"
+    - "pdl1_image_disposition"
+  source_identity_policy: >
+    The source record and specimen identity must be captured per case. Shared
+    batch values and values inferred from the NGS workbook are prohibited.
+
+image_policy:
+  static_template_patient_image_allowed: false
+  case_specific_image_pipeline_implemented: false
+  allowed_runtime_dispositions:
+    - "无病例专属图像（报告不展示）"
+  prohibited_dispositions:
+    - "复用模板静态图像"
+    - "未校验病例身份的上传图像"
+  current_notice: >
+    本病例未提供可追溯的PD-L1免疫组化图像，故不展示；TPS、CPS及结果判定
+    须与原始检测记录核对。
+
+runtime_profiles: []
+
+candidate_profiles:
+  - profile_id: "nsclc_22c3_pharmdx_tps_v1"
+    status: "candidate"
+    runtime_eligible: false
+    report_text_allowed: false
+    secondary_review_status: "pending_report_group_review"
+    assay_name: "PD-L1 IHC 22C3 pharmDx"
+    antibody_clone: "22C3"
+    staining_platform: "Autostainer Link 48"
+    visualization_system: "EnVision FLEX"
+    specimen_scope: "FFPE non-small cell lung cancer tissue"
+    disease_scope: "non-small_cell_lung_cancer"
+    primary_scoring_method: "TPS"
+    required_case_score_fields:
+      - "pdl1_tps"
+      - "pdl1_cps"
+      - "pdl1_result"
+    cps_disposition: >
+      CPS is retained as a required field of the current report product and
+      must be transcribed from the case-specific source record. It is not used
+      by this candidate profile to classify NSCLC PD-L1 expression or infer
+      treatment eligibility.
+    display_classification:
+      "阴性":
+        field: "pdl1_tps"
+        minimum: 0
+        maximum: 1
+        maximum_inclusive: false
+      "阳性（低表达）":
+        field: "pdl1_tps"
+        minimum: 1
+        maximum: 50
+        maximum_inclusive: false
+      "阳性（高表达）":
+        field: "pdl1_tps"
+        minimum: 50
+        maximum: 100
+    interpretation_boundary: >
+      This profile records an assay-specific display classification only. It
+      does not generate a patient-level immune-checkpoint-inhibitor
+      recommendation; clinical circumstances and the current drug label must
+      be reviewed separately.
+    source_refs:
+      - source_id: "CAP-PDL1-TMB-LUNG-2024"
+        source_type: "professional_guideline"
+        authority: "CAP-AMP-IASLC-PPS-LUNGevity"
+        url: "https://www.cap.org/cap-guidelines/pd-l1-and-tmb-testing-of-patients-with-lung-cancer-for-immunooncology-therapies/"
+        supports: >
+          Use of a validated PD-L1 IHC assay in advanced NSCLC and use of
+          regulatory-approved assays as intended; the guideline does not
+          recommend one universal clone.
+        does_not_support: >
+          Treating all clones, platforms, scoring systems, diseases, or drug
+          indications as interchangeable.
+      - source_id: "FDA-P150013-S016"
+        source_type: "companion_diagnostic_label"
+        authority: "FDA"
+        url: "https://www.accessdata.fda.gov/cdrh_docs/pdf15/P150013S016C.pdf"
+        supports: >
+          Clone 22C3, EnVision FLEX on Autostainer Link 48, and TPS scoring for
+          NSCLC, including the 1% and 50% expression boundaries described in
+          the device labeling.
+        does_not_support: >
+          Assuming that CPS is the NSCLC treatment-selection score or that a
+          different assay/platform has the same intended use without
+          validation.
+      - source_id: "FDA-CDX-LIST-PDL1"
+        source_type: "companion_diagnostic_registry"
+        authority: "FDA"
+        url: "https://www.fda.gov/medical-devices/in-vitro-diagnostics/list-cleared-or-approved-companion-diagnostic-devices-in-vitro-and-imaging-tools"
+        supports: >
+          Assay-, cancer-, treatment-, and cutoff-specific companion
+          diagnostic registrations for PD-L1.
+        does_not_support: >
+          A universal PD-L1 cutoff independent of assay, cancer type, or
+          intended treatment.
+    unresolved_requirements:
+      - "report_group_confirms_actual_assay_name_clone_and_platform"
+      - "report_group_confirms_scoring_and_display_classification"
+      - "source_record_and_specimen_identity_uat"
+      - "report_group_secondary_review"
+      - "case_level_uat"

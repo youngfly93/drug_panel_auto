@@ -46,7 +46,12 @@ from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
 from reportgen.panels.validation import validate_panel_package_path
 from reportgen.panels.release_scope import ensure_project_type_enabled
-from reportgen.rules import PanelRuleEngine
+from reportgen.rules import (
+    PanelRuleEngine,
+    apply_pdl1_product_display_fields,
+    load_pdl1_product_contract,
+    validate_pdl1_product_contract,
+)
 from reportgen.rules.evaluators import apply_report_text_rules, collect_report_texts
 from reportgen.utils.file_utils import (
     ensure_directory_exists,
@@ -927,6 +932,13 @@ class ReportGenerator:
             project_type=state.canonical_project_type,
             panel_package=state.panel_package,
         )
+        pdl1_product_contract = load_pdl1_product_contract(
+            state.panel_package
+        )
+        apply_pdl1_product_display_fields(
+            state.report_data,
+            pdl1_product_contract,
+        )
         apply_pdl1_display_fields(state.report_data)
         self._apply_clinical_diagnosis_for_display(state.report_data)
         self.logger.log_event(
@@ -1019,6 +1031,32 @@ class ReportGenerator:
                 details={"failures": biomarker_failures},
             )
             self.logger.error(error_msg, failures=biomarker_failures)
+            return {
+                "success": False,
+                "output_file": None,
+                "duration": duration,
+                "errors": [error_msg],
+                "warnings": state.report_data.validation_errors,
+                "panel_package_validation": state.panel_package_validation,
+            }
+
+        pdl1_contract = load_pdl1_product_contract(state.panel_package)
+        pdl1_failures = validate_pdl1_product_contract(
+            state.report_data,
+            pdl1_contract,
+        )
+        if pdl1_failures:
+            duration = time.time() - start_time
+            error_msg = (
+                "PD-L1检测方案或逐病例来源尚未满足产品合同，"
+                "阻断报告生成"
+            )
+            stage.fail(
+                "PANEL_PDL1_PRODUCT_CONTRACT_BLOCKED",
+                error_msg,
+                details={"failures": pdl1_failures},
+            )
+            self.logger.error(error_msg, failures=pdl1_failures)
             return {
                 "success": False,
                 "output_file": None,

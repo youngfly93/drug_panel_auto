@@ -6,6 +6,11 @@ from reportgen.rules.loader import (
     RulePackageReport,
     load_rule_package,
 )
+from reportgen.rules.pdl1 import (
+    apply_pdl1_product_display_fields,
+    load_pdl1_product_contract,
+    validate_pdl1_product_contract,
+)
 from reportgen.rules.schema import (
     RULE_SCHEMA_VERSION,
     RuleFileReport,
@@ -23,5 +28,8 @@ __all__ = [
     "RuleValidationIssue",
     "load_rule_package",
     "load_rule_yaml",
+    "load_pdl1_product_contract",
+    "validate_pdl1_product_contract",
+    "apply_pdl1_product_display_fields",
     "validate_rule_mapping",
 ]
