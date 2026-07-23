@@ -14,6 +14,8 @@ import hashlib
 import io
 import json
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -45,6 +47,7 @@ KNOWN_INPUTS = {
         "pdl1_result": "阳性（低表达）",
     },
 }
+COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _sha256(path: Path) -> str:
@@ -53,6 +56,36 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _source_revision() -> str:
+    """Return a quiet immutable source identity in Git and release archives."""
+
+    configured = str(os.environ.get("REPORTGEN_SOURCE_REVISION") or "").strip()
+    if COMMIT_RE.fullmatch(configured):
+        return configured
+
+    revision_file = ROOT / "REVISION"
+    if revision_file.is_file():
+        lines = revision_file.read_text(encoding="utf-8").strip().splitlines()
+        revision = lines[0] if lines else ""
+        if COMMIT_RE.fullmatch(revision):
+            return revision
+
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    revision = completed.stdout.strip()
+    return (
+        revision if completed.returncode == 0 and COMMIT_RE.fullmatch(revision) else ""
+    )
 
 
 def _safe_variant_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -153,7 +186,9 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
         "biomarker_failures": biomarker_failures,
         "context_contract": {
             "contract_id": contract_id,
-            "status": contract_report["status"] if contract_report else "NOT_APPLICABLE",
+            "status": contract_report["status"]
+            if contract_report
+            else "NOT_APPLICABLE",
             "summary": contract_report["summary"] if contract_report else {},
         },
     }
@@ -224,9 +259,7 @@ def _render_case(
         )
         lowered = visible.lower()
         content_failures.extend(
-            f"forbidden:{text}"
-            for text in forbidden_texts
-            if text.lower() in lowered
+            f"forbidden:{text}" for text in forbidden_texts if text.lower() in lowered
         )
     else:
         content_failures.append("output_missing")
@@ -299,11 +332,14 @@ def validate_inputs(
         excel_path = located[digest]
         # Upstream loggers may mention real filenames/sample IDs. Capture both
         # streams so this validation emits only the de-identified payload below.
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-            io.StringIO()
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
         ):
             excel_data = bridge.read_excel(str(excel_path))
-            detected = bridge.detect_project_type(str(excel_path), excel_data=excel_data)
+            detected = bridge.detect_project_type(
+                str(excel_path), excel_data=excel_data
+            )
             result = _enhance_case(bridge, excel_data, case)
             report_generation = (
                 _render_case(
@@ -349,7 +385,7 @@ def validate_inputs(
         "schema_version": "1.0",
         "panel_id": "lung_588_pdl1",
         "status": "FAIL" if failures else "PASS",
-        "source_commit": os.popen(f"git -C '{ROOT}' rev-parse HEAD").read().strip(),
+        "source_commit": _source_revision(),
         "case_count": len(rows),
         "cases": rows,
         "failures": failures,
@@ -372,9 +408,7 @@ def main() -> int:
     parser.add_argument("--render-dpi", type=int, default=120)
     args = parser.parse_args()
     render_output_dir = (
-        args.render_output_dir.resolve()
-        if args.render_output_dir is not None
-        else None
+        args.render_output_dir.resolve() if args.render_output_dir is not None else None
     )
     if render_output_dir is not None:
         render_output_dir.mkdir(parents=True, exist_ok=True)

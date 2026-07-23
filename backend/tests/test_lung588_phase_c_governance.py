@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
 
 from reportgen.panels.loader import load_panel_package
 from scripts.repair_docx_relationships import repair_docx
+from scripts import validate_lung588_real_inputs
 
 
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -27,6 +28,7 @@ OFFICE_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relations
 WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 PANEL_DIR = ROOT / "panels" / "lung_588_pdl1"
+PRE_UAT_RECORD = PANEL_DIR / "uat" / "lung588_machine_pre_uat_20260723.yaml"
 
 
 def _sha256(path: Path) -> str:
@@ -289,3 +291,53 @@ def test_historical_semantic_audit_emits_deidentified_nonruntime_inventory(tmp_p
     assert "姓名" not in emitted
     assert "报告编号" not in emitted
     assert "LZ258" not in emitted
+
+
+def test_real_input_validator_reads_quiet_release_revision(tmp_path, monkeypatch):
+    revision = "1" * 40
+    (tmp_path / "REVISION").write_text(f"{revision}\n", encoding="utf-8")
+    monkeypatch.setattr(validate_lung588_real_inputs, "ROOT", tmp_path)
+
+    assert validate_lung588_real_inputs._source_revision() == revision
+
+
+def test_real_input_validator_handles_empty_release_revision(tmp_path, monkeypatch):
+    (tmp_path / "REVISION").write_text("", encoding="utf-8")
+    monkeypatch.setattr(validate_lung588_real_inputs, "ROOT", tmp_path)
+
+    assert validate_lung588_real_inputs._source_revision() == ""
+
+
+def test_lung588_machine_pre_uat_is_traceable_and_does_not_overclaim():
+    record = yaml.safe_load(PRE_UAT_RECORD.read_text(encoding="utf-8"))
+
+    assert record["status"] == "partial_not_release_eligible"
+    assert record["source_commit"] == ("c23e9f044c55102c0c0d58217fe3efd2f3ccdc88")
+    assert record["environment"]["host_alias"] == "iyun129"
+    assert record["environment"]["production_switched"] is False
+    assert record["environment"]["production_health_after_test"] == "PASS"
+    assert record["release_requirements"] == {
+        "required_real_case_count": 10,
+        "machine_executed_real_case_count": 3,
+        "machine_pass_count": 3,
+        "machine_observed_pass_rate": 1.0,
+        "report_group_reviewed_case_count": 0,
+        "formal_uat_requirement_met": False,
+        "p0_count_in_observed_cases": 0,
+    }
+
+    cases = record["cases"]
+    assert [case["alias"] for case in cases] == [
+        "CASE-LUNG-A",
+        "CASE-LUNG-B",
+        "CASE-LUNG-C",
+    ]
+    assert [case["report_variant_count"] for case in cases] == [7, 8, 9]
+    assert all(case["biomarker_contract_status"] == "PASS" for case in cases)
+    assert all(case["targeted_drug_runtime_row_count"] == 0 for case in cases)
+    assert all(case["report_qa_status"] == "PASS" for case in cases)
+    assert all(case["page_count"] == 27 for case in cases)
+    assert all(case["blank_page_count"] == 0 for case in cases)
+    assert all(case["unexpected_low_content_page_count"] == 0 for case in cases)
+    assert all(case["content_failure_count"] == 0 for case in cases)
+    assert len(record["remaining_blockers"]) >= 4

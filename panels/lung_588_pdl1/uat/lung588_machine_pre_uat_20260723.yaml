@@ -1,0 +1,95 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+record_id: "lung588_machine_pre_uat_20260723"
+status: "partial_not_release_eligible"
+executed_at: "2026-07-23"
+source_commit: "c23e9f044c55102c0c0d58217fe3efd2f3ccdc88"
+purpose: >
+  De-identified machine pre-UAT on the production Linux renderer. This record
+  is not report-group case review and does not satisfy the 10-case release
+  requirement.
+
+environment:
+  host_alias: "iyun129"
+  platform: "Linux"
+  machine: "x86_64"
+  libreoffice_version: "LibreOffice 7.3.7.2 30(Build:2)"
+  pdf_renderer_version: "pdftoppm version 22.02.0"
+  profile_mode: "isolated"
+  font_substitution_profile: "reportgen-cjk-font-substitution-v2"
+  font_substitution_profile_sha256: "ac68dee9344ddedefc8a3e579ba75d28657331300c36cb182ca84962dff95afb"
+  execution_mode: "isolated_qa_copy"
+  production_release_during_test: "49bae3da7387b7b7f789bcf7e8d7bc8dcdbbc4d4"
+  production_switched: false
+  production_health_after_test: "PASS"
+
+artifact_identity:
+  source_archive_sha256: "cd8de38a589bcdcfe0ae28632f0f0249141f95b73a548f946701a310ef9e3e21"
+  deidentified_input_archive_sha256: "cea064df2ccdccc40a02ffef945a5970e5a8d70d9988608f52fad944694a98b4"
+  validation_json_sha256: "e05e5571b561f12549d4ce3725e5678da5afb05875924cc616a32f6f194bcc4d"
+  storage_policy: >
+    Source Excel files and rendered patient-level artifacts remain in the
+    access-controlled QA workspace and are not committed to Git.
+
+release_requirements:
+  required_real_case_count: 10
+  machine_executed_real_case_count: 3
+  machine_pass_count: 3
+  machine_observed_pass_rate: 1.0
+  report_group_reviewed_case_count: 0
+  formal_uat_requirement_met: false
+  p0_count_in_observed_cases: 0
+
+cases:
+  - alias: "CASE-LUNG-A"
+    source_sha256: "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646"
+    report_variant_count: 7
+    biomarker_contract_status: "PASS"
+    exact_context_contract_status: "NOT_APPLICABLE"
+    targeted_drug_runtime_row_count: 0
+    report_qa_status: "PASS"
+    page_count: 27
+    blank_page_count: 0
+    unexpected_low_content_page_count: 0
+    content_failure_count: 0
+    qa_json_sha256: "5bc90357430500037c39f0c04af5b58a618a685aa646e9b2bb0f0d92213d6618"
+    review_scope: "machine_structure_and_visual_only"
+  - alias: "CASE-LUNG-B"
+    source_sha256: "623c96cee1eb7b16cacb62cababba3b790e82007a00a59d0f159efbe025db000"
+    report_variant_count: 8
+    biomarker_contract_status: "PASS"
+    exact_context_contract_status: "PASS"
+    targeted_drug_runtime_row_count: 0
+    report_qa_status: "PASS"
+    page_count: 27
+    blank_page_count: 0
+    unexpected_low_content_page_count: 0
+    content_failure_count: 0
+    qa_json_sha256: "5f2086eae1358e2c142d94dd0620a3677ff3630fc593ff922820b4aacadc39d9"
+    review_scope: "machine_exact_contract_structure_and_visual"
+  - alias: "CASE-LUNG-C"
+    source_sha256: "7b39431044c4a9298f7663c97a47c4df83b5b1e0875d88a64b3e24c05bfa498a"
+    report_variant_count: 9
+    biomarker_contract_status: "PASS"
+    exact_context_contract_status: "PASS"
+    targeted_drug_runtime_row_count: 0
+    report_qa_status: "PASS"
+    page_count: 27
+    blank_page_count: 0
+    unexpected_low_content_page_count: 0
+    content_failure_count: 0
+    qa_json_sha256: "ede7234e0cf2067814736b6344894f6b4a2790b4ae1366cbda6167c34ed1d161"
+    review_scope: "machine_exact_contract_structure_and_visual"
+
+observed_safety_assertions:
+  - "All three biomarker contracts passed."
+  - "CASE-LUNG-B and CASE-LUNG-C exact context contracts passed."
+  - "All three reports retained zero runtime targeted-drug rows."
+  - "All three reports had 27 pages, zero blank pages, and zero unexpected low-content pages."
+  - "No cross-cancer text, unrendered placeholder, or stale PD-L1 patient image was detected."
+
+remaining_blockers:
+  - "At least seven additional real, de-identified lung588 cases are required."
+  - "All ten cases require recorded report-group UAT decisions."
+  - "The four exact-event treatment candidates require event-level medical secondary review."
+  - "PD-L1 antibody clone, test platform, and image/no-image product contract remain pending."
