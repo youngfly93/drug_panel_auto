@@ -63,6 +63,7 @@ candidate_rules:
     gene: "BRAF"
     selector:
       event_type: "snv"
+      transcript: "NM_004333.6"
       c_hgvs: "c.1799T>A"
       p_hgvs: "p.V600E"
     direction: "benefit"
@@ -105,6 +106,7 @@ candidate_rules:
     gene: "BRAF"
     selector:
       event_type: "snv"
+      transcript: "NM_004333.6"
       c_hgvs: "c.1799T>A"
       p_hgvs: "p.V600E"
     direction: "benefit"
@@ -148,6 +150,7 @@ candidate_rules:
     gene: "ERBB2"
     selector:
       event_type: "snv"
+      transcript: "NM_004448.4"
       c_hgvs: "c.1979G>A"
       p_hgvs: "p.G660D"
       protein_domain: "transmembrane_domain"
@@ -202,6 +205,7 @@ candidate_rules:
     gene: "ERBB2"
     selector:
       event_type: "snv"
+      transcript: "NM_004448.4"
       c_hgvs: "c.1979G>A"
       p_hgvs: "p.G660D"
       protein_domain: "transmembrane_domain"
@@ -253,6 +257,7 @@ candidate_rules:
 explicit_non_promotions:
   - selector:
       gene: "BRAF"
+      transcript: "NM_004333.6"
       c_hgvs: "c.1781A>G"
       p_hgvs: "p.D594G"
     disposition: "not_migrated"
@@ -268,6 +273,7 @@ explicit_non_promotions:
         url: "https://pubmed.ncbi.nlm.nih.gov/31929109/"
   - selector:
       gene: "ERBB2"
+      transcript: "NM_004448.4"
       c_hgvs: "c.1979G>A"
       p_hgvs: "p.G660D"
     excluded_therapies:

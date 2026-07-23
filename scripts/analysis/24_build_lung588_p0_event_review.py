@@ -1,0 +1,605 @@
+# 步骤: 24_build_lung588_p0_event_review
+# 上游: lung588 context_contracts/medical_candidates/knowledge_coverage + panel-scoped runtime knowledge provider
+# 输出: .work/lung588_p0_event_review/p0_event_review.json + p0_event_review.tsv
+# 种子: 无（精确事件去重、固定优先级和字典序）
+"""Build the de-identified first-review packet for lung588 P0 events."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import json
+import re
+import subprocess
+import sys
+from collections import Counter, defaultdict
+from datetime import date
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from reportgen.knowledge.quality import (  # noqa: E402
+    build_panel_gene_provider,
+    extract_reference_identifiers,
+    is_generic_mutation_analysis,
+    load_panel_citation_source_reviews,
+)
+from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
+
+
+PANEL_ID = "lung_588_pdl1"
+
+
+def _clean(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _git_head(root: Path) -> str:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
+
+
+def _equals(spec: Any) -> str:
+    if isinstance(spec, dict):
+        return _clean(spec.get("equals"))
+    return ""
+
+
+def _variant_kind(c_hgvs: str, p_hgvs: str) -> str:
+    if "fs" in p_hgvs.lower():
+        return "frameshift"
+    if p_hgvs.endswith("*"):
+        return "stop_gained"
+    if re.search(r"[+-]\d", c_hgvs):
+        return "splice_region_or_site"
+    if p_hgvs.startswith("p.") and re.search(r"[A-Z*]\d+[A-Z*]", p_hgvs):
+        return "missense"
+    return "other_or_unresolved"
+
+
+def _provider_mutation_type(kind: str) -> str:
+    return {
+        "frameshift": "Frameshift",
+        "stop_gained": "Nonsense",
+        "splice_region_or_site": "Splice",
+        "missense": "Missense",
+    }.get(kind, "Unknown")
+
+
+def _observed_variants(package: Any) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    contracts = (package.raw or {}).get("context_contracts") or {}
+    for contract_id, raw_path in sorted(contracts.items()):
+        path = package._resolve_path(raw_path)
+        contract = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        rows = (
+            ((contract.get("tables") or {}).get("all_variants") or {}).get(
+                "rows"
+            )
+            or []
+        )
+        case_alias = str(contract_id).upper().replace("_", "-")
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            match = row.get("match") or {}
+            expect = row.get("expect") or {}
+            gene = _equals(match.get("gene")).upper()
+            transcript = _equals(expect.get("transcript"))
+            c_hgvs = _equals(match.get("cHGVS"))
+            p_hgvs = _equals(expect.get("pHGVS"))
+            if not gene or not transcript or not c_hgvs:
+                continue
+            key = (gene, transcript, c_hgvs, p_hgvs)
+            item = grouped.setdefault(
+                key,
+                {
+                    "gene": gene,
+                    "transcript": transcript,
+                    "chromosome": _equals(expect.get("chromosome")),
+                    "exon": _equals(expect.get("exon")),
+                    "c_hgvs": c_hgvs,
+                    "p_hgvs": p_hgvs,
+                    "observations": [],
+                },
+            )
+            item["observations"].append(
+                {
+                    "case_alias": case_alias,
+                    "gene_class": _equals(expect.get("gene_class")),
+                    "frequency": _equals(expect.get("frequency")),
+                }
+            )
+    return [
+        {
+            **item,
+            "observations": sorted(
+                item["observations"],
+                key=lambda row: row["case_alias"],
+            ),
+        }
+        for _, item in sorted(grouped.items())
+    ]
+
+
+def _medical_rules(package: Any) -> dict[str, Any]:
+    return (
+        yaml.safe_load(
+            package.resolve_rule_file("medical_candidates").read_text(
+                encoding="utf-8"
+            )
+        )
+        or {}
+    )
+
+
+def _selector_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    selector = row.get("selector") or {}
+    return (
+        _clean(row.get("gene") or selector.get("gene")).upper(),
+        _clean(selector.get("transcript")),
+        _clean(selector.get("c_hgvs")),
+        _clean(selector.get("p_hgvs")),
+    )
+
+
+def _reference_rows(identifiers: dict[str, set[str]]) -> list[dict[str, str]]:
+    rows = [
+        {"type": "pubmed", "id": f"PMID:{value}"}
+        for value in sorted(identifiers["pmid"], key=int)
+    ]
+    rows.extend(
+        {"type": "clinical_trial", "id": value}
+        for value in sorted(identifiers["trial"])
+    )
+    return rows
+
+
+def _content_hash(section: dict[str, Any]) -> str:
+    selected = {
+        key: _clean(section.get(key))
+        for key in ("intro", "mutation_analysis", "fixed_domain_text")
+    }
+    encoded = json.dumps(
+        selected,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _unit_id(kind: str, *parts: str) -> str:
+    identity = "\0".join(parts).encode("utf-8")
+    return f"{kind}:{hashlib.sha256(identity).hexdigest()[:16]}"
+
+
+def _variant_units(
+    package: Any,
+    provider: Any,
+    candidates_by_event: dict[
+        tuple[str, str, str, str], list[dict[str, Any]]
+    ],
+    non_promotions: set[tuple[str, str, str, str]],
+    *,
+    reviewed_at: str,
+) -> list[dict[str, Any]]:
+    units: list[dict[str, Any]] = []
+    for event in _observed_variants(package):
+        gene = event["gene"]
+        transcript = event["transcript"]
+        c_hgvs = event["c_hgvs"]
+        p_hgvs = event["p_hgvs"]
+        key = (gene, transcript, c_hgvs, p_hgvs)
+        kind = _variant_kind(c_hgvs, p_hgvs)
+        first_frequency = next(
+            (
+                float(row["frequency"])
+                for row in event["observations"]
+                if row["frequency"]
+            ),
+            0.0,
+        )
+        section = provider.build_gene_knowledge_section(
+            gene=gene,
+            c_hgvs=c_hgvs,
+            p_hgvs=p_hgvs or "--",
+            frequency=first_frequency,
+            mutation_type=_provider_mutation_type(kind),
+            has_drug=bool(candidates_by_event.get(key)),
+        )
+        intro = _clean(section.get("intro"))
+        analysis = _clean(section.get("mutation_analysis"))
+        fixed_domain = _clean(section.get("fixed_domain_text"))
+        identifiers = extract_reference_identifiers(
+            (intro, analysis, fixed_domain)
+        )
+        candidate_ids = [
+            _clean(row.get("candidate_id"))
+            for row in candidates_by_event.get(key, [])
+        ]
+        if key in non_promotions:
+            decision = (
+                "retain_detected_variant_and_prohibit_broader_drug_rule_inheritance"
+            )
+            question = "确认该精确事件仅进入检测结果，不继承同基因其他位点药物规则"
+        elif candidate_ids:
+            decision = (
+                "retain_detected_variant_and_keep_treatment_candidates_hidden"
+            )
+            question = "逐条审核精确事件药物候选、适应证上下文和正式报告措辞"
+        elif not analysis or is_generic_mutation_analysis(gene, analysis):
+            decision = "rewrite_event_interpretation_before_promotion"
+            question = "补充肺癌边界明确、来源可追溯的事件/基因解释"
+        else:
+            decision = "source_scope_review_required_before_promotion"
+            question = "核对现有解释是否支持该肺癌精确事件，禁止从基因级证据外推用药"
+        units.append(
+            {
+                "review_unit_id": _unit_id(
+                    "variant",
+                    gene,
+                    transcript,
+                    c_hgvs,
+                    p_hgvs,
+                ),
+                "unit_type": "variant_narrative",
+                "priority": "P0",
+                "gene": gene,
+                "transcript": transcript,
+                "chromosome": event["chromosome"],
+                "exon": event["exon"],
+                "c_hgvs": c_hgvs,
+                "p_hgvs": p_hgvs,
+                "variant_kind": kind,
+                "case_observations": event["observations"],
+                "input_gene_classes": sorted(
+                    {
+                        row["gene_class"]
+                        for row in event["observations"]
+                        if row["gene_class"]
+                    }
+                ),
+                "candidate_ids": candidate_ids,
+                "explicit_non_promotion": key in non_promotions,
+                "current_content_status": (
+                    "missing"
+                    if not analysis
+                    else (
+                        "generic_fallback"
+                        if is_generic_mutation_analysis(gene, analysis)
+                        else "specific_but_not_lung_event_approved"
+                    )
+                ),
+                "current_intro": intro,
+                "current_mutation_analysis": analysis,
+                "current_fixed_domain_text": fixed_domain,
+                "current_content_sha256": _content_hash(section),
+                "current_source_refs": _reference_rows(identifiers),
+                "patient_visible_part2_result_allowed": True,
+                "patient_visible_part3_interpretation_allowed": False,
+                "patient_visible_drug_conclusion_allowed": False,
+                "runtime_eligible": False,
+                "primary_review": {
+                    "status": "completed_ai_assisted_triage",
+                    "decision": decision,
+                    "reviewer": "codex",
+                    "reviewer_type": "ai_assisted_first_review",
+                    "reviewed_at": reviewed_at,
+                },
+                "secondary_review": {
+                    "status": "pending_report_group_review",
+                    "decision": "",
+                    "reviewer": "",
+                    "reviewed_at": "",
+                },
+                "medical_review_question": question,
+            }
+        )
+    return units
+
+
+def _candidate_units(
+    candidate_rules: list[dict[str, Any]],
+    *,
+    reviewed_at: str,
+) -> list[dict[str, Any]]:
+    units: list[dict[str, Any]] = []
+    for row in candidate_rules:
+        selector = row.get("selector") or {}
+        therapy = row.get("therapy") or {}
+        units.append(
+            {
+                "review_unit_id": _clean(row.get("candidate_id")),
+                "unit_type": "targeted_drug_candidate",
+                "priority": "P0",
+                "gene": _clean(row.get("gene")).upper(),
+                "transcript": _clean(selector.get("transcript")),
+                "c_hgvs": _clean(selector.get("c_hgvs")),
+                "p_hgvs": _clean(selector.get("p_hgvs")),
+                "therapy": _clean(therapy.get("generic_name_zh")),
+                "direction": _clean(row.get("direction")),
+                "clinical_scope": row.get("clinical_scope") or {},
+                "required_context_fields": row.get(
+                    "required_context_fields"
+                )
+                or [],
+                "context_requirements": row.get("context_requirements") or {},
+                "evidence_class": _clean(row.get("evidence_class")),
+                "evidence_summary": _clean(row.get("evidence_summary")),
+                "source_refs": row.get("source_refs") or [],
+                "patient_visible_part2_result_allowed": False,
+                "patient_visible_part3_interpretation_allowed": False,
+                "patient_visible_drug_conclusion_allowed": False,
+                "runtime_eligible": False,
+                "primary_review": {
+                    "status": "completed_ai_assisted_triage",
+                    "decision": (
+                        "retain_nonruntime_candidate_pending_report_group_review"
+                    ),
+                    "reviewer": "codex",
+                    "reviewer_type": "ai_assisted_first_review",
+                    "reviewed_at": reviewed_at,
+                },
+                "secondary_review": {
+                    "status": "pending_report_group_review",
+                    "decision": "",
+                    "reviewer": "",
+                    "reviewed_at": "",
+                },
+                "medical_review_question": (
+                    "确认精确位点、肺癌亚型、疾病范围、既往治疗、伴随诊断、"
+                    "药物方向和当前标签后决定是否晋级"
+                ),
+            }
+        )
+    return units
+
+
+def _citation_units(
+    package: Any,
+    *,
+    reviewed_at: str,
+) -> list[dict[str, Any]]:
+    units: list[dict[str, Any]] = []
+    for finding in load_panel_citation_source_reviews(package):
+        units.append(
+            {
+                "review_unit_id": finding["review_id"],
+                "unit_type": "citation_source_mismatch",
+                "priority": "P0",
+                "gene": finding["gene"],
+                "identifier": finding["identifier"],
+                "claim_contains": finding["claim_contains"],
+                "disposition": finding["disposition"],
+                "suggested_replacement_identifier": finding[
+                    "suggested_replacement_identifier"
+                ],
+                "patient_visible_part2_result_allowed": False,
+                "patient_visible_part3_interpretation_allowed": False,
+                "patient_visible_drug_conclusion_allowed": False,
+                "runtime_eligible": False,
+                "primary_review": {
+                    "status": "completed_ai_assisted_triage",
+                    "decision": (
+                        "reject_current_source_for_claim_and_request_replacement_review"
+                    ),
+                    "reviewer": "codex",
+                    "reviewer_type": "ai_assisted_first_review",
+                    "reviewed_at": reviewed_at,
+                },
+                "secondary_review": {
+                    "status": "pending_report_group_review",
+                    "decision": "",
+                    "reviewer": "",
+                    "reviewed_at": "",
+                },
+                "medical_review_question": (
+                    "确认删除旧错引，并复核建议替代来源及收窄后的正式措辞"
+                ),
+            }
+        )
+    return units
+
+
+def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
+    package = PanelPackageLoader(project_root=root).load(PANEL_ID)
+    medical = _medical_rules(package)
+    candidate_rules = [
+        row
+        for row in medical.get("candidate_rules") or []
+        if isinstance(row, dict)
+    ]
+    candidates_by_event: dict[
+        tuple[str, str, str, str], list[dict[str, Any]]
+    ] = defaultdict(list)
+    for row in candidate_rules:
+        candidates_by_event[_selector_key(row)].append(row)
+    non_promotions = {
+        _selector_key(row)
+        for row in medical.get("explicit_non_promotions") or []
+        if isinstance(row, dict) and row.get("selector")
+    }
+    provider = build_panel_gene_provider(root, package)
+    units = _variant_units(
+        package,
+        provider,
+        candidates_by_event,
+        non_promotions,
+        reviewed_at=reviewed_at,
+    )
+    units.extend(
+        _candidate_units(candidate_rules, reviewed_at=reviewed_at)
+    )
+    units.extend(_citation_units(package, reviewed_at=reviewed_at))
+    order = {
+        "citation_source_mismatch": 0,
+        "targeted_drug_candidate": 1,
+        "variant_narrative": 2,
+    }
+    units.sort(
+        key=lambda row: (
+            order.get(row["unit_type"], 99),
+            _clean(row.get("gene")),
+            _clean(row.get("c_hgvs")),
+            _clean(row.get("p_hgvs")),
+            row["review_unit_id"],
+        )
+    )
+    unit_counts = Counter(row["unit_type"] for row in units)
+    decision_counts = Counter(
+        row["primary_review"]["decision"] for row in units
+    )
+    case_aliases = sorted(
+        {
+            observation["case_alias"]
+            for row in units
+            for observation in row.get("case_observations") or []
+        }
+    )
+    return {
+        "schema_version": "1.0",
+        "packet_id": "lung588_p0_event_first_review_20260723",
+        "panel_id": PANEL_ID,
+        "git_head": _git_head(root),
+        "reviewed_at": reviewed_at,
+        "status": "primary_review_complete_secondary_review_pending",
+        "privacy": {
+            "contains_phi": False,
+            "case_identity": "CASE aliases and exact structured events only",
+        },
+        "scope": {
+            "case_aliases": case_aliases,
+            "historical_reports_are_current_medical_truth": False,
+            "runtime_activation_in_scope": False,
+        },
+        "summary": {
+            "review_unit_count": len(units),
+            "unit_type_counts": dict(sorted(unit_counts.items())),
+            "primary_decision_counts": dict(sorted(decision_counts.items())),
+            "secondary_review_completed_count": 0,
+            "patient_visible_part3_allowed_count": sum(
+                row["patient_visible_part3_interpretation_allowed"]
+                for row in units
+            ),
+            "patient_visible_drug_allowed_count": sum(
+                row["patient_visible_drug_conclusion_allowed"]
+                for row in units
+            ),
+        },
+        "promotion_requirements": [
+            "report_group_event_level_secondary_review",
+            "source_supports_exact_claim",
+            "lung_cancer_and_variant_scope_confirmed",
+            "positive_and_negative_rule_tests",
+            "case_level_uat",
+        ],
+        "units": units,
+    }
+
+
+def write_outputs(
+    packet: dict[str, Any],
+    json_path: Path,
+    tsv_path: Path,
+) -> None:
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(
+        json.dumps(packet, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    fields = [
+        "review_unit_id",
+        "unit_type",
+        "priority",
+        "gene",
+        "transcript",
+        "chromosome",
+        "exon",
+        "c_hgvs",
+        "p_hgvs",
+        "variant_kind",
+        "therapy",
+        "case_observations",
+        "input_gene_classes",
+        "candidate_ids",
+        "explicit_non_promotion",
+        "current_content_status",
+        "current_source_refs",
+        "source_refs",
+        "identifier",
+        "suggested_replacement_identifier",
+        "primary_review",
+        "secondary_review",
+        "medical_review_question",
+        "runtime_eligible",
+    ]
+    with tsv_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
+        writer.writeheader()
+        for row in packet["units"]:
+            writer.writerow(
+                {
+                    field: (
+                        json.dumps(
+                            row.get(field),
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        )
+                        if isinstance(row.get(field), (dict, list))
+                        else row.get(field, "")
+                    )
+                    for field in fields
+                }
+            )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
+    parser.add_argument("--reviewed-at", default=date.today().isoformat())
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(".work/lung588_p0_event_review"),
+    )
+    args = parser.parse_args()
+    root = args.project_root.resolve()
+    output_dir = (
+        args.output_dir
+        if args.output_dir.is_absolute()
+        else root / args.output_dir
+    )
+    packet = build_packet(root, args.reviewed_at)
+    json_path = output_dir / "p0_event_review.json"
+    tsv_path = output_dir / "p0_event_review.tsv"
+    write_outputs(packet, json_path, tsv_path)
+    print(
+        json.dumps(
+            {
+                "status": packet["status"],
+                **packet["summary"],
+                "json": str(json_path),
+                "tsv": str(tsv_path),
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

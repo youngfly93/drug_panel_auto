@@ -189,6 +189,9 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     assert {rule["gene"] for rule in rules} == {"BRAF", "ERBB2"}
     assert all(rule["selector"]["c_hgvs"].startswith("c.") for rule in rules)
     assert all(rule["selector"]["p_hgvs"].startswith("p.") for rule in rules)
+    assert all(
+        rule["selector"]["transcript"].startswith("NM_") for rule in rules
+    )
     assert all(rule["runtime_eligible"] is False for rule in rules)
     assert all(rule["report_text_allowed"] is False for rule in rules)
     assert all(rule["review_status"] == "needs_review" for rule in rules)
@@ -557,6 +560,14 @@ def test_lung588_case_a_contract_is_registered_and_deidentified():
         row["match"]["gene"]["equals"]
         for row in contract["tables"]["all_variants"]["rows"]
     } == {"TP53", "ESR1", "FLT3", "GNAS", "APC", "IFNGR1", "TSC1"}
+    assert all(
+        row["expect"]["transcript"]["equals"].startswith("NM_")
+        and row["expect"]["chromosome"]["equals"]
+        and row["expect"]["exon"]["equals"]
+        and row["expect"]["gene_class"]["equals"] in {"Ⅱ类", "Ⅲ类"}
+        and row["expect"]["frequency"]["equals"]
+        for row in contract["tables"]["all_variants"]["rows"]
+    )
     emitted = contract_path.read_text(encoding="utf-8")
     assert "LZ258" not in emitted
     assert "patient_name" not in emitted
@@ -637,6 +648,111 @@ def test_lung588_medical_knowledge_queue_is_complete_and_deidentified(tmp_path):
     assert stk11["citation_source_mismatches"][0]["identifier"] == (
         "PMID:25980754"
     )
+    emitted = "\n".join(
+        path.read_text(encoding="utf-8-sig")
+        for path in tmp_path.iterdir()
+        if path.suffix in {".json", ".tsv"}
+    )
+    assert "LZ258" not in emitted
+    assert "patient_name" not in emitted
+
+
+def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
+    tmp_path,
+):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(
+                ROOT
+                / "scripts"
+                / "analysis"
+                / "24_build_lung588_p0_event_review.py"
+            ),
+            "--project-root",
+            str(ROOT),
+            "--reviewed-at",
+            "2026-07-23",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    packet = json.loads(
+        (tmp_path / "p0_event_review.json").read_text(encoding="utf-8")
+    )
+    assert packet["status"] == (
+        "primary_review_complete_secondary_review_pending"
+    )
+    assert packet["summary"]["review_unit_count"] == 28
+    assert packet["summary"]["unit_type_counts"] == {
+        "citation_source_mismatch": 1,
+        "targeted_drug_candidate": 4,
+        "variant_narrative": 23,
+    }
+    assert packet["summary"]["secondary_review_completed_count"] == 0
+    assert packet["summary"]["patient_visible_part3_allowed_count"] == 0
+    assert packet["summary"]["patient_visible_drug_allowed_count"] == 0
+    assert packet["scope"]["case_aliases"] == [
+        "CASE-LUNG-A",
+        "CASE-LUNG-B",
+        "CASE-LUNG-C",
+    ]
+    assert all(unit["runtime_eligible"] is False for unit in packet["units"])
+    assert all(
+        unit["primary_review"]["status"]
+        == "completed_ai_assisted_triage"
+        for unit in packet["units"]
+    )
+    assert all(
+        unit["secondary_review"]["status"]
+        == "pending_report_group_review"
+        for unit in packet["units"]
+    )
+
+    variants = [
+        unit
+        for unit in packet["units"]
+        if unit["unit_type"] == "variant_narrative"
+    ]
+    atm = next(
+        unit
+        for unit in variants
+        if unit["gene"] == "ATM"
+        and unit["c_hgvs"] == "c.1236-2A>T"
+    )
+    assert [row["case_alias"] for row in atm["case_observations"]] == [
+        "CASE-LUNG-B",
+        "CASE-LUNG-C",
+    ]
+    assert [row["frequency"] for row in atm["case_observations"]] == [
+        "1.67",
+        "0.92",
+    ]
+    assert atm["transcript"] == "NM_000051.4"
+    assert atm["chromosome"] == "11"
+    assert atm["exon"] == "10"
+    braf_d594g = next(
+        unit
+        for unit in variants
+        if unit["gene"] == "BRAF" and unit["p_hgvs"] == "p.D594G"
+    )
+    assert braf_d594g["explicit_non_promotion"] is True
+    assert braf_d594g["patient_visible_drug_conclusion_allowed"] is False
+
+    mismatch = next(
+        unit
+        for unit in packet["units"]
+        if unit["unit_type"] == "citation_source_mismatch"
+    )
+    assert mismatch["identifier"] == "PMID:25980754"
+    assert mismatch["suggested_replacement_identifier"] == "PMID:29773717"
+
     emitted = "\n".join(
         path.read_text(encoding="utf-8-sig")
         for path in tmp_path.iterdir()

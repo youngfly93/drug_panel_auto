@@ -92,8 +92,12 @@ def _safe_variant_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         {
             "gene": row.get("gene"),
+            "transcript": row.get("transcript"),
+            "chromosome": row.get("chromosome"),
+            "exon": row.get("exon"),
             "cHGVS": row.get("cHGVS"),
             "pHGVS": row.get("pHGVS"),
+            "mutation_type": row.get("mutation_type"),
             "gene_class": row.get("gene_class"),
             "frequency": row.get("frequency"),
         }

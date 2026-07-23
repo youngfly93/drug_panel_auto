@@ -29,22 +29,64 @@ tables:
     rows:
       - id: "tp53_y236c"
         match: {gene: {equals: "TP53"}, cHGVS: {equals: "c.707A>G"}}
-        expect: {pHGVS: {equals: "p.Y236C"}}
+        expect:
+          transcript: {equals: "NM_000546.6"}
+          chromosome: {equals: "17"}
+          exon: {equals: "7"}
+          pHGVS: {equals: "p.Y236C"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "51.91"}
       - id: "esr1_q414h"
         match: {gene: {equals: "ESR1"}, cHGVS: {equals: "c.1242G>T"}}
-        expect: {pHGVS: {equals: "p.Q414H"}}
+        expect:
+          transcript: {equals: "NM_000125.4"}
+          chromosome: {equals: "6"}
+          exon: {equals: "6"}
+          pHGVS: {equals: "p.Q414H"}
+          gene_class: {equals: "Ⅲ类"}
+          frequency: {equals: "47.09"}
       - id: "flt3_r387stop"
         match: {gene: {equals: "FLT3"}, cHGVS: {equals: "c.1159C>T"}}
-        expect: {pHGVS: {equals: "p.R387*"}}
+        expect:
+          transcript: {equals: "NM_004119.3"}
+          chromosome: {equals: "13"}
+          exon: {equals: "9"}
+          pHGVS: {equals: "p.R387*"}
+          gene_class: {equals: "Ⅲ类"}
+          frequency: {equals: "32.97"}
       - id: "gnas_r232l"
         match: {gene: {equals: "GNAS"}, cHGVS: {equals: "c.695G>T"}}
-        expect: {pHGVS: {equals: "p.R232L"}}
+        expect:
+          transcript: {equals: "NM_000516.7"}
+          chromosome: {equals: "20"}
+          exon: {equals: "9"}
+          pHGVS: {equals: "p.R232L"}
+          gene_class: {equals: "Ⅲ类"}
+          frequency: {equals: "30.60"}
       - id: "apc_w423stop"
         match: {gene: {equals: "APC"}, cHGVS: {equals: "c.1269G>A"}}
-        expect: {pHGVS: {equals: "p.W423*"}}
+        expect:
+          transcript: {equals: "NM_000038.6"}
+          chromosome: {equals: "5"}
+          exon: {equals: "10"}
+          pHGVS: {equals: "p.W423*"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "1.88"}
       - id: "ifngr1_s378fs"
         match: {gene: {equals: "IFNGR1"}, cHGVS: {equals: "c.1132_1133del"}}
-        expect: {pHGVS: {equals: "p.S378Ffs*6"}}
+        expect:
+          transcript: {equals: "NM_000416.3"}
+          chromosome: {equals: "6"}
+          exon: {equals: "7"}
+          pHGVS: {equals: "p.S378Ffs*6"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "1.36"}
       - id: "tsc1_f158fs"
         match: {gene: {equals: "TSC1"}, cHGVS: {equals: "c.474del"}}
-        expect: {pHGVS: {equals: "p.F158Lfs*9"}}
+        expect:
+          transcript: {equals: "NM_000368.5"}
+          chromosome: {equals: "9"}
+          exon: {equals: "6"}
+          pHGVS: {equals: "p.F158Lfs*9"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "0.93"}

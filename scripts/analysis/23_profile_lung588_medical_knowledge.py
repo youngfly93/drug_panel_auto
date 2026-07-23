@@ -84,15 +84,33 @@ def _observed_events(package: Any) -> dict[str, list[dict[str, str]]]:
             match = row.get("match") or {}
             expect = row.get("expect") or {}
             gene = _clean(((match.get("gene") or {}).get("equals"))).upper()
+            transcript = _clean(
+                ((expect.get("transcript") or {}).get("equals"))
+            )
+            chromosome = _clean(
+                ((expect.get("chromosome") or {}).get("equals"))
+            )
+            exon = _clean(((expect.get("exon") or {}).get("equals")))
             c_hgvs = _clean(((match.get("cHGVS") or {}).get("equals")))
             p_hgvs = _clean(((expect.get("pHGVS") or {}).get("equals")))
+            gene_class = _clean(
+                ((expect.get("gene_class") or {}).get("equals"))
+            )
+            frequency = _clean(
+                ((expect.get("frequency") or {}).get("equals"))
+            )
             if not gene:
                 continue
             events[gene].append(
                 {
                     "case_alias": str(contract_id).upper().replace("_", "-"),
+                    "transcript": transcript,
+                    "chromosome": chromosome,
+                    "exon": exon,
                     "c_hgvs": c_hgvs,
                     "p_hgvs": p_hgvs,
+                    "gene_class": gene_class,
+                    "frequency": frequency,
                 }
             )
     return events
@@ -114,6 +132,7 @@ def _candidate_events(package: Any) -> dict[str, list[dict[str, str]]]:
         events[gene].append(
             {
                 "candidate_id": _clean(row.get("candidate_id")),
+                "transcript": _clean(selector.get("transcript")),
                 "c_hgvs": _clean(selector.get("c_hgvs")),
                 "p_hgvs": _clean(selector.get("p_hgvs")),
                 "therapy": _clean(therapy.get("generic_name_zh")),

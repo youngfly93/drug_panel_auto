@@ -30,23 +30,71 @@ tables:
     rows:
       - id: "tp53_h193l"
         match: {gene: {equals: "TP53"}, cHGVS: {equals: "c.578A>T"}}
-        expect: {pHGVS: {equals: "p.H193L"}}
+        expect:
+          transcript: {equals: "NM_000546.6"}
+          chromosome: {equals: "17"}
+          exon: {equals: "6"}
+          pHGVS: {equals: "p.H193L"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "4.27"}
       - id: "atm_splice"
         match: {gene: {equals: "ATM"}, cHGVS: {equals: "c.1236-2A>T"}}
+        expect:
+          transcript: {equals: "NM_000051.4"}
+          chromosome: {equals: "11"}
+          exon: {equals: "10"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "1.67"}
       - id: "tsc1_r692stop"
         match: {gene: {equals: "TSC1"}, cHGVS: {equals: "c.2074C>T"}}
-        expect: {pHGVS: {equals: "p.R692*"}}
+        expect:
+          transcript: {equals: "NM_000368.5"}
+          chromosome: {equals: "9"}
+          exon: {equals: "17"}
+          pHGVS: {equals: "p.R692*"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "0.93"}
       - id: "msh3_q969stop"
         match: {gene: {equals: "MSH3"}, cHGVS: {equals: "c.2905C>T"}}
-        expect: {pHGVS: {equals: "p.Q969*"}}
+        expect:
+          transcript: {equals: "NM_002439.5"}
+          chromosome: {equals: "5"}
+          exon: {equals: "21"}
+          pHGVS: {equals: "p.Q969*"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "0.81"}
       - id: "brca2_r2336h"
         match: {gene: {equals: "BRCA2"}, cHGVS: {equals: "c.7007G>A"}}
-        expect: {pHGVS: {equals: "p.R2336H"}}
+        expect:
+          transcript: {equals: "NM_000059.4"}
+          chromosome: {equals: "13"}
+          exon: {equals: "13"}
+          pHGVS: {equals: "p.R2336H"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "0.66"}
       - id: "mlh1_splice"
         match: {gene: {equals: "MLH1"}, cHGVS: {equals: "c.790+1G>A"}}
+        expect:
+          transcript: {equals: "NM_000249.4"}
+          chromosome: {equals: "3"}
+          exon: {equals: "9"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "0.65"}
       - id: "pms2_r20q"
         match: {gene: {equals: "PMS2"}, cHGVS: {equals: "c.59G>A"}}
-        expect: {pHGVS: {equals: "p.R20Q"}}
+        expect:
+          transcript: {equals: "NM_000535.7"}
+          chromosome: {equals: "7"}
+          exon: {equals: "2"}
+          pHGVS: {equals: "p.R20Q"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "0.61"}
       - id: "braf_d594g"
         match: {gene: {equals: "BRAF"}, cHGVS: {equals: "c.1781A>G"}}
-        expect: {pHGVS: {equals: "p.D594G"}}
+        expect:
+          transcript: {equals: "NM_004333.6"}
+          chromosome: {equals: "7"}
+          exon: {equals: "15"}
+          pHGVS: {equals: "p.D594G"}
+          gene_class: {equals: "Ⅱ类"}
+          frequency: {equals: "0.61"}
