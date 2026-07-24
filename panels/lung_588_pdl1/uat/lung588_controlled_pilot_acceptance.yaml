@@ -1,0 +1,74 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+record_id: "lung588_controlled_pilot_acceptance_v1"
+status: "contract_defined_pending_execution"
+release_tier: "controlled_internal_pilot"
+updated: "2026-07-24"
+
+purpose: >
+  Permit transparent report-group pilot validation when only three real lung588
+  NGS cases are available. Seven synthetic cases add deterministic engineering
+  boundary coverage but are never counted as real medical UAT.
+
+eligibility:
+  required_confirmed_real_ngs_cases: 3
+  required_synthetic_boundary_cases: 7
+  required_real_case_count_for_active_release: 10
+  minimum_real_case_pass_rate: 1.0
+  minimum_synthetic_boundary_pass_rate: 1.0
+  p0_allowed: 0
+
+real_case_scope:
+  aliases:
+    - "CASE-LUNG-A"
+    - "CASE-LUNG-B"
+    - "CASE-LUNG-C"
+  allowed_claims:
+    - "NGS field mapping and panel identification regression"
+    - "historical exact variant/TMB/MSI contract for registered cases"
+    - "Linux Word structure and visual regression"
+  prohibited_claims:
+    - "ten real cases completed"
+    - "actual PD-L1 assay clone or platform verified"
+    - "patient-level immunotherapy eligibility verified"
+
+synthetic_boundary_cases:
+  - id: "SYN-L588-01-PDL1-NEGATIVE"
+    covers: ["PD-L1 supplied negative category", "TPS/CPS zero", "TMB zero"]
+  - id: "SYN-L588-02-PDL1-LOW-LOWER"
+    covers: ["PD-L1 low display", "BRAF V600E exact positive selector input"]
+  - id: "SYN-L588-03-PDL1-LOW-UPPER"
+    covers: ["PD-L1 low display", "BRAF D594G V600E negative control"]
+  - id: "SYN-L588-04-PDL1-HIGH-LOWER"
+    covers: ["PD-L1 high display", "ERBB2 G660D exact event"]
+  - id: "SYN-L588-05-PDL1-HIGH-UPPER"
+    covers: ["PD-L1 maximum values", "EGFR L858R"]
+  - id: "SYN-L588-06-MSIH-TMBH"
+    covers: ["MSI-H", "high TMB", "KRAS G12C"]
+  - id: "SYN-L588-07-MULTI-VARIANT"
+    covers: ["multi-row pagination", "cross-case leak guard"]
+
+pdl1_pilot_boundary:
+  runtime_profile: "legacy_unspecified_ihc_transcription_v1"
+  input_mode: "verbatim_case_source_record_transcription"
+  actual_clone_and_platform_verified: false
+  treatment_inference_allowed: false
+  required_visible_notice: >
+    The original record did not provide clone/platform; TPS, CPS and result are
+    transcribed without deriving assay equivalence or drug eligibility.
+  source_record_and_specimen_required_per_case: true
+  static_patient_image_allowed: false
+
+runtime_boundaries:
+  panel_status: "pilot"
+  batch_generation_enabled: false
+  part3_knowledge_enabled: false
+  targeted_drug_rules_enabled: false
+  external_delivery_without_manual_review: false
+  active_release_promotion_blocked: true
+
+execution:
+  command: >-
+    python scripts/validate_lung588_pilot_boundary_suite.py
+    --require-visual
+  receipt: ".work/lung588_pilot_boundary_suite_20260724/validation.json"

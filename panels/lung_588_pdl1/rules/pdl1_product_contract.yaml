@@ -1,13 +1,15 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "pdl1_product_contract"
-version: "0.1.0"
-updated: "2026-07-23"
-status: "draft"
+version: "0.2.0"
+updated: "2026-07-24"
+status: "pilot"
 description: >
   Product and provenance contract for per-case PD-L1 IHC results. The lung NGS
-  workbook is not a PD-L1 source. No assay profile is currently authorized for
-  runtime report generation.
+  workbook is not a PD-L1 source. A display-only legacy transcription profile
+  is available for controlled report-group pilot use when the source record
+  does not state the assay clone or platform. It never infers treatment
+  eligibility.
 
 governance:
   contract_id: "lung588_pdl1_product_contract_v1"
@@ -15,16 +17,18 @@ governance:
   reviewer: "codex"
   reviewer_type: "ai_assisted_product_safety_review"
   primary_review_status: "completed_non_authoritative_scope_review"
-  secondary_review_status: "pending_report_group_review"
-  runtime_enabled: false
-  report_text_allowed: false
+  secondary_review_status: "product_owner_authorized_controlled_pilot"
+  runtime_mode: "controlled_pilot_transcription"
+  runtime_enabled: true
+  report_text_allowed: true
   promotion_blocked: true
   treatment_inference_allowed: false
   blocking_reason: >
-    The historical reports and available NGS inputs do not identify the
-    patient-level PD-L1 assay clone, staining platform, source IHC record, or
-    validated scoring profile. These facts cannot be inferred from TPS/CPS
-    alone.
+    Active production promotion remains blocked because the historical
+    reports do not identify the assay clone or staining platform and only
+    three real NGS cases are available. The pilot profile transcribes explicit
+    source-record values and displays the missing method facts; it does not
+    validate assay interchangeability or infer treatment eligibility.
 
 input_provenance:
   ngs_excel_is_pdl1_source: false
@@ -51,9 +55,55 @@ image_policy:
     本病例未提供可追溯的PD-L1免疫组化图像，故不展示；TPS、CPS及结果判定
     须与原始检测记录核对。
 
-runtime_profiles: []
+runtime_profiles:
+  - "legacy_unspecified_ihc_transcription_v1"
 
 candidate_profiles:
+  - profile_id: "legacy_unspecified_ihc_transcription_v1"
+    status: "pilot"
+    runtime_eligible: true
+    report_text_allowed: true
+    secondary_review_status: "product_owner_authorized_controlled_pilot"
+    validation_mode: "verbatim_source_record"
+    treatment_inference_allowed: false
+    assay_name: "PD-L1蛋白表达（免疫组化；具体检测方案未提供）"
+    antibody_clone: "原始记录未提供"
+    staining_platform: "原始记录未提供"
+    visualization_system: "原始记录未提供"
+    specimen_scope: "由逐病例原始PD-L1记录明确的受检标本"
+    disease_scope: "lung_cancer_controlled_pilot"
+    primary_scoring_method: "TPS、CPS及结果判定原值转录"
+    required_case_score_fields:
+      - "pdl1_tps"
+      - "pdl1_cps"
+      - "pdl1_result"
+    allowed_display_values:
+      - "阳性（高表达）"
+      - "阳性（低表达）"
+      - "阴性"
+    report_method_notice: >
+      原始记录未提供抗体克隆、染色平台及显色系统；本报告仅转录TPS、CPS和
+      结果判定，不据此推导检测方案等效性或患者级用药资格。
+    interpretation_boundary: >
+      Values and the display category must be transcribed from the same
+      case-specific source record. This profile does not recalculate a
+      threshold, identify the assay, or generate an immunotherapy
+      recommendation.
+    source_refs:
+      - source_id: "LOCAL-HISTORICAL-REPORT-CONTRACT"
+        source_type: "reviewed_historical_report_structure"
+        authority: "report_group_historical_final"
+        supports: >
+          The historical report structure displays method as
+          immunohistochemistry together with TPS, CPS and a supplied result.
+        does_not_support: >
+          Any claim about antibody clone, staining platform, assay
+          interchangeability, cutoff validation or drug eligibility.
+    unresolved_requirements:
+      - "actual_assay_name_clone_and_platform_for_active_release"
+      - "ten_real_case_uat_for_active_release"
+      - "report_group_method_contract_confirmation"
+
   - profile_id: "nsclc_22c3_pharmdx_tps_v1"
     status: "candidate"
     runtime_eligible: false

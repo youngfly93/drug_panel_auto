@@ -118,14 +118,10 @@ def _clinical_info(case: dict[str, Any]) -> dict[str, Any]:
         "pdl1_tps": case["pdl1_tps"],
         "pdl1_cps": case["pdl1_cps"],
         "pdl1_result": case["pdl1_result"],
-        "pdl1_assay_profile_id": "nsclc_22c3_pharmdx_tps_v1",
-        "pdl1_source_record_id": (
-            f"SYNTHETIC-VISUAL-QA-IHC-{case['alias']}"
-        ),
+        "pdl1_assay_profile_id": ("legacy_unspecified_ihc_transcription_v1"),
+        "pdl1_source_record_id": (f"SYNTHETIC-VISUAL-QA-IHC-{case['alias']}"),
         "pdl1_source_record_date": "2026-07-23",
-        "pdl1_specimen_id": (
-            f"SYNTHETIC-VISUAL-QA-SPECIMEN-{case['alias']}"
-        ),
+        "pdl1_specimen_id": (f"SYNTHETIC-VISUAL-QA-SPECIMEN-{case['alias']}"),
         "pdl1_image_disposition": "无病例专属图像（报告不展示）",
     }
 
@@ -379,9 +375,7 @@ def _build_uat_readiness(rows: list[dict[str, Any]]) -> dict[str, Any]:
         blockers.append(
             {
                 "code": "REPORT_GROUP_UAT_INCOMPLETE",
-                "message": (
-                    "0/10 cases have a recorded report-group UAT decision"
-                ),
+                "message": ("0/10 cases have a recorded report-group UAT decision"),
             }
         )
     return {
@@ -397,12 +391,8 @@ def _build_uat_readiness(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "pdl1_product_status": (
             "PASS" if pdl1_product_pass_count == len(rows) else "BLOCKED"
         ),
-        "verified_case_pdl1_source_count": (
-            verified_case_pdl1_source_count
-        ),
-        "report_group_reviewed_case_count": (
-            report_group_reviewed_case_count
-        ),
+        "verified_case_pdl1_source_count": (verified_case_pdl1_source_count),
+        "report_group_reviewed_case_count": (report_group_reviewed_case_count),
         "formal_uat_status": "BLOCKED",
         "formal_uat_requirement_met": False,
         "blockers": blockers,
@@ -496,9 +486,7 @@ def validate_inputs(
         if row["biomarker_contract_status"] != "PASS":
             failures.append(f"{row['alias']}: biomarker contract failed")
         if row["pdl1_product_contract_status"] != "PASS":
-            failures.append(
-                f"{row['alias']}: PD-L1 product contract blocked"
-            )
+            failures.append(f"{row['alias']}: PD-L1 product contract blocked")
         contract_status = row["context_contract"]["status"]
         if contract_status not in {"PASS", "NOT_APPLICABLE"}:
             failures.append(f"{row['alias']}: context contract failed")

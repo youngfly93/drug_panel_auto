@@ -1,11 +1,11 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 display_name: "肺癌588基因+PD-L1"
-version: "0.1.0"
-status: "draft"
+version: "0.2.0"
+status: "pilot"
 description: >
-  Independent lung 588-gene + PD-L1 package. The engineering draft supports
-  reviewed I/II/III variant extraction and controlled per-case PD-L1 input.
+  Independent lung 588-gene + PD-L1 package. The controlled pilot supports
+  reviewed I/II/III variant extraction and source-record PD-L1 transcription.
   Targeted-drug, immune-association and chemotherapy-PGx conclusions remain
   fail-closed until event-level medical review and case UAT are complete.
 
@@ -57,8 +57,8 @@ default_template: "lung_588_pdl1_golden_template_v0"
 templates:
   - id: "lung_588_pdl1_golden_template_v0"
     file: "templates/lung_588_pdl1_golden_template_v0.docx"
-    version: "0.1.0"
-    status: "draft"
+    version: "0.2.0"
+    status: "pilot"
     description: >
       Deterministic engineering template derived from the de-identified lung329
       scaffold, relabelled for the independent 588 product and hardened so
@@ -216,5 +216,11 @@ golden_cases:
     command: >-
       pytest backend/tests/test_lung588_contract.py
       backend/tests/test_lung588_phase_c_governance.py -q
+    synthetic: true
+    expected_qa_status: "PASS"
+  - id: "lung_588_pdl1_controlled_pilot_boundary"
+    runner: "reportgen.core.golden_case:run_golden_case"
+    command: >-
+      python scripts/validate_lung588_pilot_boundary_suite.py
     synthetic: true
     expected_qa_status: "PASS"

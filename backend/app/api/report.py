@@ -101,9 +101,7 @@ def upload_report_feedback(
     """
     filename = (file.filename or "").lower()
     if not filename.endswith((".docx", ".doc", ".pdf", ".txt", ".md")):
-        raise HTTPException(
-            status_code=400, detail="反馈文件仅支持 DOCX/DOC/PDF/TXT/MD 格式"
-        )
+        raise HTTPException(status_code=400, detail="反馈文件仅支持 DOCX/DOC/PDF/TXT/MD 格式")
 
     task = db.query(Task).filter(Task.id == task_id).first()
     if task is None or not user_can_access_task(current_user, task):
@@ -116,18 +114,14 @@ def upload_report_feedback(
         try:
             if summary_path.exists():
                 summary = json.loads(summary_path.read_text(encoding="utf-8"))
-                sid = str(
-                    (summary.get("patient") or {}).get("sample_id") or ""
-                ).strip()
+                sid = str((summary.get("patient") or {}).get("sample_id") or "").strip()
                 if sid:
                     sample_id = sid
         except Exception:  # noqa: BLE001 - best-effort sample_id resolution
             pass
 
     try:
-        stored_path, size = save_feedback_upload(
-            file, sample_id, note=note, task_id=task_id
-        )
+        stored_path, size = save_feedback_upload(file, sample_id, note=note, task_id=task_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -146,9 +140,9 @@ def upload_report_feedback(
             "size": size,
         },
     )
-DOWNLOAD_SLOW_WARN_SECONDS = float(
-    os.environ.get("RG_WEB_DOWNLOAD_SLOW_WARN_SECONDS", "10")
-)
+
+
+DOWNLOAD_SLOW_WARN_SECONDS = float(os.environ.get("RG_WEB_DOWNLOAD_SLOW_WARN_SECONDS", "10"))
 
 
 def _raise_required_dates_if_missing(
@@ -249,9 +243,7 @@ def _task_download_context(task: Task) -> dict:
         completed_at = task.completed_at
         if completed_at.tzinfo is None:
             completed_at = completed_at.replace(tzinfo=timezone.utc)
-        seconds_since_completed = (
-            datetime.now(timezone.utc) - completed_at
-        ).total_seconds()
+        seconds_since_completed = (datetime.now(timezone.utc) - completed_at).total_seconds()
     return {
         "task_id": task.id,
         "task_type": task.task_type,
@@ -299,9 +291,7 @@ def _observed_file_response(
     if prepare_duration_ms is not None:
         headers["X-ReportGen-Prepare-Duration-Ms"] = str(prepare_duration_ms)
     if task.duration_seconds is not None:
-        headers["X-ReportGen-Task-Duration-Seconds"] = str(
-            _round_seconds(task.duration_seconds)
-        )
+        headers["X-ReportGen-Task-Duration-Seconds"] = str(_round_seconds(task.duration_seconds))
     if db is not None and request.method.upper() != "HEAD":
         record_audit_event(
             db,
@@ -518,6 +508,7 @@ REVIEW_STATUSES = {
     "delivered": "已交付",
     "rejected": "退回修改",
 }
+CONTROLLED_PILOT_PROJECT_TYPES = {"lung_588_pdl1"}
 
 
 def _require_override_permission(override_gate: bool, user: User) -> None:
@@ -640,6 +631,15 @@ def _is_required_field_warning(message: object) -> bool:
     return "缺失必填字段" in text or "missing required" in text.lower()
 
 
+def _controlled_pilot_review_required(
+    project_type: object,
+    review_status: object,
+) -> bool:
+    return str(project_type or "").strip().lower() in CONTROLLED_PILOT_PROJECT_TYPES and str(
+        review_status or ""
+    ).strip().lower() not in {"reviewed", "delivered"}
+
+
 def _qa_has_full_visual_pass(qa_path: str | None) -> bool:
     if not qa_path:
         return False
@@ -661,8 +661,7 @@ def _qa_has_full_visual_pass(qa_path: str | None) -> bool:
         "font_substitution_profile_sha256",
     )
     fingerprint_complete = all(
-        str(renderer.get(field) or "").strip()
-        not in {"", "none", "unavailable"}
+        str(renderer.get(field) or "").strip() not in {"", "none", "unavailable"}
         for field in required_renderer_fields
     )
     font_profile_hash_valid = bool(
@@ -694,9 +693,7 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
         else task.status in {"pending", "running"}
     )
     if task_is_active:
-        issues.append(
-            _gate_issue("blocker", "TASK_NOT_FINISHED", "任务仍在生成中，不能进入交付。")
-        )
+        issues.append(_gate_issue("blocker", "TASK_NOT_FINISHED", "任务仍在生成中，不能进入交付。"))
     if task.status == "cancelled":
         issues.append(_gate_issue("blocker", "TASK_CANCELLED", "任务已取消。"))
     if task_errors:
@@ -705,6 +702,18 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
                 "blocker",
                 "TASK_ERRORS",
                 "任务存在错误: " + "；".join(str(item) for item in task_errors[:3]),
+            )
+        )
+    review_state = _load_review_state(task)
+    if _controlled_pilot_review_required(
+        task.project_type,
+        review_state.get("status"),
+    ):
+        issues.append(
+            _gate_issue(
+                "blocker",
+                "CONTROLLED_PILOT_REVIEW_REQUIRED",
+                "肺癌588处于受控试运行，必须先由复核人标记“已审核”后才能交付。",
             )
         )
 
@@ -904,7 +913,7 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
                 "diff_markdown_file",
             )
         },
-        "review": _load_review_state(task),
+        "review": review_state,
     }
 
 
@@ -935,9 +944,7 @@ def _visual_render_dir(output_path: Optional[str]) -> Optional[Path]:
     return path.parent / "rendered_pages" / path.stem
 
 
-def _visual_render_page_path(
-    output_path: Optional[str], filename: str
-) -> Optional[Path]:
+def _visual_render_page_path(output_path: Optional[str], filename: str) -> Optional[Path]:
     render_dir = _visual_render_dir(output_path)
     if not render_dir:
         return None
@@ -953,9 +960,7 @@ def _report_diff_dir(output_path: Optional[str]) -> Optional[Path]:
     return diff_svc.report_diff_dir(output_path)
 
 
-def _report_diff_artifact_path(
-    output_path: Optional[str], filename: str
-) -> Optional[Path]:
+def _report_diff_artifact_path(output_path: Optional[str], filename: str) -> Optional[Path]:
     return diff_svc.report_diff_artifact_path(output_path, filename)
 
 
@@ -1083,10 +1088,7 @@ def _business_report_filename(
         or info.get("癌种")
     )
     resolved_project_name = (
-        project_name
-        or info.get("project_name")
-        or info.get("项目名称")
-        or info.get("检测项目")
+        project_name or info.get("project_name") or info.get("项目名称") or info.get("检测项目")
     )
 
     if not any([patient_name, sample_id, cancer, resolved_project_name, project_type]):
@@ -1097,12 +1099,9 @@ def _business_report_filename(
     project_part = _normalize_project_filename_part(resolved_project_name, project_type)
     org_part = _compact_filename_part(settings.report_filename_org_code, "mljy")
     sample_part = _compact_filename_part(sample_id, "编号未填").lower()
-    revision_part = _compact_filename_part(
-        settings.report_filename_revision_label, "修改版"
-    )
+    revision_part = _compact_filename_part(settings.report_filename_revision_label, "修改版")
     return (
-        f"{patient_part}-{cancer_part}-{project_part}-"
-        f"{org_part}-{sample_part}-{revision_part}.docx"
+        f"{patient_part}-{cancer_part}-{project_part}-{org_part}-{sample_part}-{revision_part}.docx"
     )
 
 
@@ -1158,9 +1157,7 @@ def _generate_response_from_result(
     output_filename = None
     output_file_base64 = None
     if include_inline_file and result.get("success", False):
-        _physical_filename, output_file_base64 = _inline_docx_payload(
-            result.get("output_file")
-        )
+        _physical_filename, output_file_base64 = _inline_docx_payload(result.get("output_file"))
         output_filename = _business_report_filename(
             clinical_info=clinical_info,
             project_type=project_type,
@@ -1179,9 +1176,7 @@ def _generate_response_from_result(
         report_summary_file=result.get("report_summary_file"),
         qa_status=result.get("qa_status"),
         qa_issues=(result.get("qa_report") or {}).get("issues") or [],
-        visual_render=((result.get("qa_report") or {}).get("checks") or {}).get(
-            "visual_render"
-        ),
+        visual_render=((result.get("qa_report") or {}).get("checks") or {}).get("visual_render"),
         panel_package_validation=result.get("panel_package_validation"),
         generation_id=result.get("generation_id"),
         stage_results=result.get("stage_results") or [],
@@ -1254,9 +1249,7 @@ def generate_report(
         status="running",
         project_type=effective_project_type,
         clinical_info_snapshot=(
-            json.dumps(clinical_payload, ensure_ascii=False)
-            if clinical_payload
-            else None
+            json.dumps(clinical_payload, ensure_ascii=False) if clinical_payload else None
         ),
         started_at=utc_now_naive(),
     )
@@ -1385,9 +1378,7 @@ def generate_report_from_file(
     try:
         clinical_payload = json.loads(clinical_info or "{}")
     except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=400, detail=f"临床信息不是合法 JSON: {exc}"
-        ) from exc
+        raise HTTPException(status_code=400, detail=f"临床信息不是合法 JSON: {exc}") from exc
     if not isinstance(clinical_payload, dict):
         raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
 
@@ -1433,9 +1424,7 @@ def generate_report_from_file(
         status="running",
         project_type=detected_project_type,
         clinical_info_snapshot=(
-            json.dumps(clinical_payload, ensure_ascii=False)
-            if clinical_payload
-            else None
+            json.dumps(clinical_payload, ensure_ascii=False) if clinical_payload else None
         ),
         started_at=utc_now_naive(),
     )
@@ -1565,9 +1554,7 @@ def generate_report_from_file_async(
     try:
         clinical_payload = json.loads(clinical_info or "{}")
     except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=400, detail=f"临床信息不是合法 JSON: {exc}"
-        ) from exc
+        raise HTTPException(status_code=400, detail=f"临床信息不是合法 JSON: {exc}") from exc
     if not isinstance(clinical_payload, dict):
         raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
 
@@ -1614,9 +1601,7 @@ def generate_report_from_file_async(
         status="pending",
         project_type=detected_project_type,
         clinical_info_snapshot=(
-            json.dumps(clinical_payload, ensure_ascii=False)
-            if clinical_payload
-            else None
+            json.dumps(clinical_payload, ensure_ascii=False) if clinical_payload else None
         ),
     )
     request_path = write_single_generation_request(
@@ -1794,9 +1779,7 @@ def get_field_provenance(task_id: str, db: Session = Depends(get_db)):
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"字段来源报告读取失败: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"字段来源报告读取失败: {exc}") from exc
     return ApiResponse(data=payload)
 
 
@@ -2007,9 +1990,7 @@ def download_batch_item_report(
     file_index: int,
     request: Request,
     db: Session = Depends(get_db),
-    override_gate: bool = Query(
-        False, description="复核人显式放行：QA FAIL 时仍允许下载交付"
-    ),
+    override_gate: bool = Query(False, description="复核人显式放行：QA FAIL 时仍允许下载交付"),
     current_user: User = Depends(require_user),
 ):
     _require_override_permission(override_gate, current_user)
@@ -2031,10 +2012,7 @@ def download_batch_item_report(
 
     # 交付门禁（第3步）：与单份下载一致——QA=FAIL 的批量逐文件报告不允许直接
     # 下载交付，需复核人显式 override。只拦 FAIL 这一硬失败，不误伤 WARN/无记录。
-    if (
-        _load_json_dict(row.validation_summary).get("qa_status") == "FAIL"
-        and not override_gate
-    ):
+    if _load_json_dict(row.validation_summary).get("qa_status") == "FAIL" and not override_gate:
         raise HTTPException(
             status_code=409,
             detail=(
@@ -2176,9 +2154,7 @@ def download_audit_package(
     gate = _quality_gate_payload(task, db)
     review_state = _load_review_state(task)
     zip_path = output_root / (
-        f"{task_id}_audit_package.zip"
-        if include_failed
-        else f"{task_id}_passed_audit_package.zip"
+        f"{task_id}_audit_package.zip" if include_failed else f"{task_id}_passed_audit_package.zip"
     )
     prepare_started = time.perf_counter()
     manifest = {
@@ -2488,9 +2464,7 @@ def diff_batch_report_against_registered_references(
     try:
         batch_report = json.loads(report_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"批量验证报告读取失败: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"批量验证报告读取失败: {exc}") from exc
     result = diff_svc.run_batch_reference_diff(
         db,
         task,
@@ -2634,6 +2608,20 @@ def _download_report_response(
                 "确需交付可由复核人显式 override（下载时加 override_gate=1）。"
             ),
         )
+    review_state = _load_review_state(task)
+    if (
+        _controlled_pilot_review_required(
+            task.project_type,
+            review_state.get("status"),
+        )
+        and not override_gate
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "肺癌588处于受控试运行，报告须先由复核人在任务详情中标记“已审核”后才能下载交付。"
+            ),
+        )
 
     clinical_info = _clinical_snapshot(task)
     download_filename = _business_report_filename(
@@ -2669,9 +2657,7 @@ def download_report(
     task_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    override_gate: bool = Query(
-        False, description="复核人显式放行：QA FAIL 时仍允许下载交付"
-    ),
+    override_gate: bool = Query(False, description="复核人显式放行：QA FAIL 时仍允许下载交付"),
     current_user: User = Depends(require_user),
 ):
     return _download_report_response(

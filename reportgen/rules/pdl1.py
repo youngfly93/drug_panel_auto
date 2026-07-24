@@ -9,14 +9,17 @@ from typing import Any
 from reportgen.rules.schema import load_rule_yaml
 
 
+REPORT_GROUP_APPROVED = "approved_by_report_group"
+CONTROLLED_PILOT_APPROVED = "product_owner_authorized_controlled_pilot"
+CONTROLLED_PILOT_MODE = "controlled_pilot_transcription"
+
+
 def _clean(value: Any) -> str:
     return str(value or "").strip()
 
 
 def _is_blank(value: Any) -> bool:
-    return value is None or (
-        isinstance(value, str) and not value.strip()
-    )
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def load_pdl1_product_contract(panel_package: Any) -> dict[str, Any]:
@@ -82,10 +85,30 @@ def _validate_profile_scores(
                 }
             )
 
-    classifications = profile.get("display_classification") or {}
     result = _clean(report_data.get_field("pdl1_result"))
     if not result:
         return failures
+
+    validation_mode = _clean(profile.get("validation_mode"))
+    if validation_mode == "verbatim_source_record":
+        allowed_values = {
+            _clean(value)
+            for value in profile.get("allowed_display_values") or []
+            if _clean(value)
+        }
+        if result not in allowed_values:
+            failures.append(
+                {
+                    "field": "pdl1_result",
+                    "reason": "source_record_classification_not_allowed",
+                    "value": result,
+                    "assay_profile_id": profile_id,
+                    "allowed_values": sorted(allowed_values),
+                }
+            )
+        return failures
+
+    classifications = profile.get("display_classification") or {}
     range_spec = classifications.get(result)
     if not isinstance(range_spec, Mapping):
         failures.append(
@@ -95,9 +118,7 @@ def _validate_profile_scores(
                 "value": result,
                 "assay_profile_id": profile_id,
                 "allowed_values": sorted(
-                    _clean(value)
-                    for value in classifications
-                    if _clean(value)
+                    _clean(value) for value in classifications if _clean(value)
                 ),
             }
         )
@@ -121,21 +142,13 @@ def _validate_profile_scores(
 
     minimum = range_spec.get("minimum")
     maximum = range_spec.get("maximum")
-    minimum_inclusive = bool(
-        range_spec.get("minimum_inclusive", True)
-    )
-    maximum_inclusive = bool(
-        range_spec.get("maximum_inclusive", True)
-    )
+    minimum_inclusive = bool(range_spec.get("minimum_inclusive", True))
+    maximum_inclusive = bool(range_spec.get("maximum_inclusive", True))
     below = minimum is not None and (
-        numeric < float(minimum)
-        if minimum_inclusive
-        else numeric <= float(minimum)
+        numeric < float(minimum) if minimum_inclusive else numeric <= float(minimum)
     )
     above = maximum is not None and (
-        numeric > float(maximum)
-        if maximum_inclusive
-        else numeric >= float(maximum)
+        numeric > float(maximum) if maximum_inclusive else numeric >= float(maximum)
     )
     if below or above:
         failures.append(
@@ -151,6 +164,53 @@ def _validate_profile_scores(
     return failures
 
 
+def _controlled_pilot_governance(
+    contract: Mapping[str, Any],
+) -> bool:
+    governance = contract.get("governance") or {}
+    return (
+        _clean(contract.get("status")) == "pilot"
+        and _clean(governance.get("runtime_mode")) == CONTROLLED_PILOT_MODE
+        and governance.get("runtime_enabled") is True
+        and governance.get("report_text_allowed") is True
+        and governance.get("promotion_blocked") is True
+        and governance.get("treatment_inference_allowed") is False
+        and _clean(governance.get("secondary_review_status"))
+        == CONTROLLED_PILOT_APPROVED
+    )
+
+
+def is_pdl1_profile_runtime_allowed(
+    profile: Mapping[str, Any],
+    contract: Mapping[str, Any],
+) -> bool:
+    """Return whether a profile may be selected in this release tier."""
+
+    profile_id = _clean(profile.get("profile_id"))
+    runtime_profiles = {
+        _clean(value)
+        for value in contract.get("runtime_profiles") or []
+        if _clean(value)
+    }
+    if (
+        not profile_id
+        or profile_id not in runtime_profiles
+        or profile.get("runtime_eligible") is not True
+        or profile.get("report_text_allowed") is not True
+    ):
+        return False
+
+    review_status = _clean(profile.get("secondary_review_status"))
+    if review_status == REPORT_GROUP_APPROVED:
+        return True
+    return (
+        _controlled_pilot_governance(contract)
+        and review_status == CONTROLLED_PILOT_APPROVED
+        and _clean(profile.get("validation_mode")) == "verbatim_source_record"
+        and profile.get("treatment_inference_allowed") is False
+    )
+
+
 def validate_pdl1_product_contract(
     report_data: Any,
     contract: Mapping[str, Any] | None,
@@ -162,26 +222,25 @@ def validate_pdl1_product_contract(
 
     failures: list[dict[str, Any]] = []
     governance = contract.get("governance") or {}
-    if (
-        governance.get("runtime_enabled") is not True
-        or governance.get("report_text_allowed") is not True
-        or governance.get("promotion_blocked") is not False
-        or governance.get("secondary_review_status")
-        != "approved_by_report_group"
-    ):
+    fully_approved = (
+        governance.get("runtime_enabled") is True
+        and governance.get("report_text_allowed") is True
+        and governance.get("promotion_blocked") is False
+        and governance.get("secondary_review_status") == REPORT_GROUP_APPROVED
+    )
+    controlled_pilot = _controlled_pilot_governance(contract)
+    if not fully_approved and not controlled_pilot:
         failures.append(
             {
                 "field": "pdl1_assay_profile_id",
                 "reason": "product_contract_not_runtime_approved",
-                "secondary_review_status": governance.get(
-                    "secondary_review_status"
-                ),
+                "secondary_review_status": governance.get("secondary_review_status"),
             }
         )
 
-    required_fields = (
-        (contract.get("input_provenance") or {}).get("required_fields") or []
-    )
+    required_fields = (contract.get("input_provenance") or {}).get(
+        "required_fields"
+    ) or []
     for raw_field in required_fields:
         field = _clean(raw_field)
         value = report_data.get_field(field)
@@ -205,33 +264,18 @@ def validate_pdl1_product_contract(
             }
         )
     elif profile is not None:
-        runtime_profiles = {
-            _clean(value)
-            for value in contract.get("runtime_profiles") or []
-            if _clean(value)
-        }
-        if (
-            profile_id not in runtime_profiles
-            or profile.get("runtime_eligible") is not True
-            or profile.get("report_text_allowed") is not True
-            or profile.get("secondary_review_status")
-            != "approved_by_report_group"
-        ):
+        if not is_pdl1_profile_runtime_allowed(profile, contract):
             failures.append(
                 {
                     "field": "pdl1_assay_profile_id",
                     "reason": "assay_profile_not_runtime_approved",
                     "value": profile_id,
-                    "secondary_review_status": profile.get(
-                        "secondary_review_status"
-                    ),
+                    "secondary_review_status": profile.get("secondary_review_status"),
                 }
             )
         failures.extend(_validate_profile_scores(report_data, profile))
 
-    image_disposition = _clean(
-        report_data.get_field("pdl1_image_disposition")
-    )
+    image_disposition = _clean(report_data.get_field("pdl1_image_disposition"))
     image_policy = contract.get("image_policy") or {}
     allowed_images = {
         _clean(value)
@@ -250,8 +294,7 @@ def validate_pdl1_product_contract(
     if (
         image_disposition
         and "无病例专属图像" not in image_disposition
-        and image_policy.get("case_specific_image_pipeline_implemented")
-        is not True
+        and image_policy.get("case_specific_image_pipeline_implemented") is not True
     ):
         failures.append(
             {
@@ -281,6 +324,7 @@ def apply_pdl1_product_display_fields(
     platform = _clean(profile.get("staining_platform"))
     visualization = _clean(profile.get("visualization_system"))
     scoring = _clean(profile.get("primary_scoring_method"))
+    method_notice = _clean(profile.get("report_method_notice"))
     report_data.set_field("pdl1_assay_name", assay_name)
     report_data.set_field("pdl1_antibody_clone", clone)
     report_data.set_field("pdl1_test_platform", platform)
@@ -292,7 +336,8 @@ def apply_pdl1_product_display_fields(
         f"{assay_name or '--'}；抗体克隆：{clone or '--'}；"
         f"染色平台：{platform or '--'}；"
         f"显色系统：{visualization or '--'}；"
-        f"主要评分方法：{scoring or '--'}。",
+        f"主要评分方法：{scoring or '--'}。"
+        + (f" {method_notice}" if method_notice else ""),
     )
 
     source_record = _clean(report_data.get_field("pdl1_source_record_id"))

@@ -282,38 +282,24 @@ def _is_computed_field(field_def: dict) -> bool:
 
 
 def _runtime_pdl1_profile_ids() -> list[str]:
-    """Return only secondarily reviewed PD-L1 profiles enabled by the panel."""
+    """Return PD-L1 profiles enabled for the current release tier."""
 
     try:
         from reportgen.panels.loader import PanelPackageLoader
+        from reportgen.rules.pdl1 import is_pdl1_profile_runtime_allowed
         from reportgen.rules.schema import load_rule_yaml
 
-        package = PanelPackageLoader(
-            project_root=settings.upstream_root
-        ).load("lung_588_pdl1")
-        contract = load_rule_yaml(
-            package.resolve_rule_file("pdl1_product_contract")
-        )
+        package = PanelPackageLoader(project_root=settings.upstream_root).load("lung_588_pdl1")
+        contract = load_rule_yaml(package.resolve_rule_file("pdl1_product_contract"))
     except Exception:
         return []
 
-    runtime_ids = {
-        str(value).strip()
-        for value in contract.get("runtime_profiles") or []
-        if str(value).strip()
-    }
     approved: list[str] = []
     for profile in contract.get("candidate_profiles") or []:
         if not isinstance(profile, dict):
             continue
         profile_id = str(profile.get("profile_id") or "").strip()
-        if (
-            profile_id in runtime_ids
-            and profile.get("runtime_eligible") is True
-            and profile.get("report_text_allowed") is True
-            and profile.get("secondary_review_status")
-            == "approved_by_report_group"
-        ):
+        if is_pdl1_profile_runtime_allowed(profile, contract):
             approved.append(profile_id)
     return sorted(approved)
 
@@ -352,9 +338,7 @@ def _build_ui_hints(key: str, field_def: dict) -> FieldUiHints:
         return FieldUiHints(
             component="select",
             placeholder=(
-                "请选择经二审的PD-L1检测方案"
-                if options
-                else "暂无经报告组二审的PD-L1检测方案"
+                "请选择PD-L1检测/转录方案" if options else "暂无经报告组二审的PD-L1检测方案"
             ),
             span=12,
             options=options,

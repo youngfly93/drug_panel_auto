@@ -45,10 +45,12 @@ from reportgen.rules.pdl1 import (
 )
 
 from app.api.batch import _batch_generation_policy_error
+from app.api.report import _controlled_pilot_review_required
 from app.services.clinical_info_service import get_clinical_form_schema
 
 PANEL_DIR = ROOT / "panels" / "lung_588_pdl1"
 TEMPLATE = PANEL_DIR / "templates" / "lung_588_pdl1_golden_template_v0.docx"
+PILOT_ACCEPTANCE = PANEL_DIR / "uat" / "lung588_controlled_pilot_acceptance.yaml"
 SOURCE_TEMPLATE = (
     ROOT / "panels" / "lung_329_pdl1" / "templates" / "lung_329_pdl1_golden_template_v1.docx"
 )
@@ -86,12 +88,57 @@ def test_lung588_package_is_independent_and_valid():
     assert report.ok, report.to_dict()
     assert package.panel_id == "lung_588_pdl1"
     assert package.display_name == "肺癌588基因+PD-L1"
-    assert package.raw["status"] == "draft"
-    assert package.default_template.status == "draft"
+    assert package.raw["status"] == "pilot"
+    assert package.default_template.status == "pilot"
     assert package.raw["part3_knowledge"]["enabled"] is False
     assert "cross-cancer" in package.raw["part3_knowledge"]["reason"]
     assert "肺癌专属知识当前未启用" in (package.raw["part3_knowledge"]["disabled_notice"])
     assert package.resolve_template_file() == TEMPLATE.resolve()
+
+
+def test_lung588_controlled_pilot_does_not_overclaim_real_uat():
+    contract = yaml.safe_load(PILOT_ACCEPTANCE.read_text(encoding="utf-8"))
+
+    assert contract["status"] == "contract_defined_pending_execution"
+    assert contract["release_tier"] == "controlled_internal_pilot"
+    eligibility = contract["eligibility"]
+    assert eligibility["required_confirmed_real_ngs_cases"] == 3
+    assert eligibility["required_synthetic_boundary_cases"] == 7
+    assert eligibility["required_real_case_count_for_active_release"] == 10
+    assert eligibility["p0_allowed"] == 0
+    assert len(contract["real_case_scope"]["aliases"]) == 3
+    assert len(contract["synthetic_boundary_cases"]) == 7
+    assert {row["id"] for row in contract["synthetic_boundary_cases"]} == {
+        "SYN-L588-01-PDL1-NEGATIVE",
+        "SYN-L588-02-PDL1-LOW-LOWER",
+        "SYN-L588-03-PDL1-LOW-UPPER",
+        "SYN-L588-04-PDL1-HIGH-LOWER",
+        "SYN-L588-05-PDL1-HIGH-UPPER",
+        "SYN-L588-06-MSIH-TMBH",
+        "SYN-L588-07-MULTI-VARIANT",
+    }
+    assert contract["pdl1_pilot_boundary"]["actual_clone_and_platform_verified"] is False
+    assert contract["pdl1_pilot_boundary"]["treatment_inference_allowed"] is False
+    assert contract["runtime_boundaries"] == {
+        "panel_status": "pilot",
+        "batch_generation_enabled": False,
+        "part3_knowledge_enabled": False,
+        "targeted_drug_rules_enabled": False,
+        "external_delivery_without_manual_review": False,
+        "active_release_promotion_blocked": True,
+    }
+    assert _controlled_pilot_review_required(
+        "lung_588_pdl1",
+        "draft",
+    )
+    assert not _controlled_pilot_review_required(
+        "lung_588_pdl1",
+        "reviewed",
+    )
+    assert not _controlled_pilot_review_required(
+        "crc_358_msi",
+        "draft",
+    )
 
 
 def test_lung588_gene_denominator_is_exact_and_ordered():
@@ -367,14 +414,11 @@ def test_lung588_pdl1_form_is_project_scoped_and_required():
         "阳性（低表达）",
         "阴性",
     ]
-    assert lung_fields["pdl1_assay_profile_id"].ui.options == []
-    assert (
-        lung_fields["pdl1_assay_profile_id"].ui.placeholder
-        == "暂无经报告组二审的PD-L1检测方案"
-    )
-    assert lung_fields["pdl1_image_disposition"].ui.options == [
-        "无病例专属图像（报告不展示）"
+    assert lung_fields["pdl1_assay_profile_id"].ui.options == [
+        "legacy_unspecified_ihc_transcription_v1"
     ]
+    assert lung_fields["pdl1_assay_profile_id"].ui.placeholder == "请选择PD-L1检测/转录方案"
+    assert lung_fields["pdl1_image_disposition"].ui.options == ["无病例专属图像（报告不展示）"]
     assert not pdl1_fields & crc_fields
 
     treatment_context = {
@@ -495,46 +539,45 @@ def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification(
     assert "帕博利珠单抗" not in interpretation
 
 
-def test_lung588_pdl1_product_profile_is_traceable_and_runtime_blocked():
+def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
     package = load_panel_package("lung_588_pdl1", project_root=ROOT)
     contract = load_pdl1_product_contract(package)
 
-    assert contract["status"] == "draft"
+    assert contract["status"] == "pilot"
     governance = contract["governance"]
-    assert governance["runtime_enabled"] is False
-    assert governance["report_text_allowed"] is False
+    assert governance["runtime_enabled"] is True
+    assert governance["report_text_allowed"] is True
     assert governance["promotion_blocked"] is True
-    assert governance["secondary_review_status"] == (
-        "pending_report_group_review"
-    )
-    assert contract["runtime_profiles"] == []
+    assert governance["secondary_review_status"] == ("product_owner_authorized_controlled_pilot")
+    assert governance["runtime_mode"] == "controlled_pilot_transcription"
+    assert governance["treatment_inference_allowed"] is False
+    assert contract["runtime_profiles"] == ["legacy_unspecified_ihc_transcription_v1"]
     assert contract["input_provenance"]["ngs_excel_is_pdl1_source"] is False
-    assert (
-        contract["image_policy"]["static_template_patient_image_allowed"]
-        is False
-    )
-    assert (
-        contract["image_policy"][
-            "case_specific_image_pipeline_implemented"
-        ]
-        is False
-    )
+    assert contract["image_policy"]["static_template_patient_image_allowed"] is False
+    assert contract["image_policy"]["case_specific_image_pipeline_implemented"] is False
 
     profiles = contract["candidate_profiles"]
-    assert len(profiles) == 1
-    profile = profiles[0]
+    assert len(profiles) == 2
+    pilot_profile = next(
+        row for row in profiles if row["profile_id"] == "legacy_unspecified_ihc_transcription_v1"
+    )
+    assert pilot_profile["runtime_eligible"] is True
+    assert pilot_profile["report_text_allowed"] is True
+    assert pilot_profile["validation_mode"] == "verbatim_source_record"
+    assert pilot_profile["treatment_inference_allowed"] is False
+    assert pilot_profile["antibody_clone"] == "原始记录未提供"
+    assert pilot_profile["staining_platform"] == "原始记录未提供"
+
+    profile = next(row for row in profiles if row["profile_id"] == "nsclc_22c3_pharmdx_tps_v1")
     assert profile["profile_id"] == "nsclc_22c3_pharmdx_tps_v1"
     assert profile["runtime_eligible"] is False
     assert profile["report_text_allowed"] is False
-    assert profile["secondary_review_status"] == (
-        "pending_report_group_review"
-    )
+    assert profile["secondary_review_status"] == ("pending_report_group_review")
     assert profile["antibody_clone"] == "22C3"
     assert profile["staining_platform"] == "Autostainer Link 48"
     assert profile["primary_scoring_method"] == "TPS"
     assert all(
-        source["supports"] and source["does_not_support"]
-        for source in profile["source_refs"]
+        source["supports"] and source["does_not_support"] for source in profile["source_refs"]
     )
 
     data = ReportData()
@@ -549,20 +592,11 @@ def test_lung588_pdl1_product_profile_is_traceable_and_runtime_blocked():
         "pdl1_image_disposition",
         "无病例专属图像（报告不展示）",
     )
-    reasons = {
-        failure["reason"]
-        for failure in validate_pdl1_product_contract(data, contract)
-    }
-    assert reasons == {
-        "product_contract_not_runtime_approved",
-        "assay_profile_not_runtime_approved",
-    }
+    reasons = {failure["reason"] for failure in validate_pdl1_product_contract(data, contract)}
+    assert reasons == {"assay_profile_not_runtime_approved"}
 
     data.set_field("pdl1_result", "阳性（高表达）")
-    reasons = {
-        failure["reason"]
-        for failure in validate_pdl1_product_contract(data, contract)
-    }
+    reasons = {failure["reason"] for failure in validate_pdl1_product_contract(data, contract)}
     assert "classification_inconsistent_with_assay_profile" in reasons
     data.set_field("pdl1_result", "阳性（低表达）")
 
@@ -576,7 +610,9 @@ def test_lung588_pdl1_product_profile_is_traceable_and_runtime_blocked():
         }
     )
     approved["runtime_profiles"] = [profile["profile_id"]]
-    approved_profile = approved["candidate_profiles"][0]
+    approved_profile = next(
+        row for row in approved["candidate_profiles"] if row["profile_id"] == profile["profile_id"]
+    )
     approved_profile.update(
         {
             "runtime_eligible": True,
@@ -596,15 +632,42 @@ def test_lung588_pdl1_product_profile_is_traceable_and_runtime_blocked():
     data.set_field("pdl1_result", "阳性（低表达）")
     apply_pdl1_product_display_fields(data, approved)
     assert "22C3" in data.get_field("pdl1_assay_provenance")
-    assert "Autostainer Link 48" in data.get_field(
-        "pdl1_assay_provenance"
+    assert "Autostainer Link 48" in data.get_field("pdl1_assay_provenance")
+    assert "SYNTHETIC-IHC-001" in data.get_field("pdl1_source_provenance")
+    assert "SYNTHETIC-SPECIMEN-001" in data.get_field("pdl1_source_provenance")
+
+    pilot_data = ReportData()
+    pilot_data.set_field(
+        "pdl1_assay_profile_id",
+        pilot_profile["profile_id"],
     )
-    assert "SYNTHETIC-IHC-001" in data.get_field(
-        "pdl1_source_provenance"
+    pilot_data.set_field("pdl1_source_record_id", "SYNTHETIC-IHC-002")
+    pilot_data.set_field("pdl1_source_record_date", "2026-07-24")
+    pilot_data.set_field("pdl1_specimen_id", "SYNTHETIC-SPECIMEN-002")
+    pilot_data.set_field("pdl1_tps", 5)
+    pilot_data.set_field("pdl1_cps", 6)
+    # The unspecified legacy profile must transcribe the source-record
+    # category instead of pretending that a known assay threshold applies.
+    pilot_data.set_field("pdl1_result", "阳性（高表达）")
+    pilot_data.set_field(
+        "pdl1_image_disposition",
+        "无病例专属图像（报告不展示）",
     )
-    assert "SYNTHETIC-SPECIMEN-001" in data.get_field(
-        "pdl1_source_provenance"
-    )
+    assert validate_pdl1_product_contract(pilot_data, contract) == []
+    apply_pdl1_product_display_fields(pilot_data, contract)
+    provenance = pilot_data.get_field("pdl1_assay_provenance")
+    assert "原始记录未提供" in provenance
+    assert "不据此推导" in provenance
+    assert "22C3" not in provenance
+
+    pilot_data.set_field("pdl1_result", "未经允许的分层")
+    assert {
+        failure["reason"]
+        for failure in validate_pdl1_product_contract(
+            pilot_data,
+            contract,
+        )
+    } == {"source_record_classification_not_allowed"}
 
 
 def test_lung588_generation_cannot_bypass_pending_pdl1_profile(tmp_path):
@@ -653,13 +716,80 @@ def test_lung588_generation_cannot_bypass_pending_pdl1_profile(tmp_path):
     )
 
     assert result["success"] is False
-    assert any(
-        "PD-L1检测方案或逐病例来源" in error
-        for error in result["errors"]
-    )
+    assert any("PD-L1检测方案或逐病例来源" in error for error in result["errors"])
     assert any(
         issue["code"] == "PANEL_PDL1_PRODUCT_CONTRACT_BLOCKED"
         for stage in result["stage_results"]
         for issue in stage.get("issues") or []
     )
     assert not list(output_dir.glob("*.docx"))
+
+
+def test_lung588_generation_allows_source_record_only_pilot_profile(
+    tmp_path,
+):
+    xlsx_path = tmp_path / "SYNTHETIC-LUNG588-PILOT.xlsx"
+    xlsx_path.write_bytes(b"synthetic")
+    excel_data = ExcelDataSource(
+        file_path=str(xlsx_path),
+        single_values={
+            "患者姓名": "SYNTHETIC_PATIENT",
+            "样本编号": "SYNTHETIC_CASE_PILOT",
+            "检测项目": "肺癌588基因+PD-L1",
+            "报告日期": "2026-07-24",
+            "TMB": 5,
+            "MSI状态": "MSS",
+            "PD-L1 TPS": 5,
+            "PD-L1 CPS": 6,
+            # Verbatim transcription is intentional: the unknown assay must
+            # not silently inherit the 22C3/TPS display thresholds.
+            "PD-L1结果": "阳性（高表达）",
+            "PD-L1检测方案": ("legacy_unspecified_ihc_transcription_v1"),
+            "PD-L1原始记录编号": "SYNTHETIC-IHC-PILOT-001",
+            "PD-L1原始记录日期": "2026-07-24",
+            "PD-L1检测标本标识": "SYNTHETIC-SPECIMEN-PILOT-001",
+            "PD-L1图像处置": "无病例专属图像（报告不展示）",
+        },
+        table_data={
+            "Variations": [
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "TP53",
+                    "cHGVS": "c.734G>A",
+                    "pHGVS_S": "p.G245D",
+                    "Freq(%)": 30,
+                }
+            ]
+        },
+        sheet_names=["Variations"],
+    )
+    output_dir = tmp_path / "out"
+
+    result = ReportGenerator(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).generate(
+        excel_file=str(xlsx_path),
+        excel_data=excel_data,
+        template_file=str(TEMPLATE),
+        output_dir=str(output_dir),
+        project_type="lung_588_pdl1",
+    )
+
+    assert result["success"] is True, result["errors"]
+    output = Path(result["output_file"])
+    assert output.is_file()
+    visible = "\n".join(
+        [
+            *(paragraph.text for paragraph in Document(output).paragraphs),
+            *(
+                cell.text
+                for table in Document(output).tables
+                for row in table.rows
+                for cell in row.cells
+            ),
+        ]
+    )
+    assert "原始记录未提供" in visible
+    assert "不据此推导" in visible
+    assert "22C3" not in visible
