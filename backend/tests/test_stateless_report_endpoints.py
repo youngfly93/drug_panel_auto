@@ -1597,6 +1597,67 @@ def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):
     assert attempt(None) == 200  # 无 QA 记录的历史任务不误伤
 
 
+def test_lung588_controlled_pilot_download_requires_manual_review(tmp_path):
+    """肺癌588受控试运行即使 QA=PASS，也必须完成人工复核后才能下载。
+
+    该门禁仅作用于肺癌588，不得误伤现有肠癌生产线。
+    """
+    from unittest.mock import MagicMock, patch
+
+    from fastapi import HTTPException
+
+    docx = tmp_path / "r.docx"
+    docx.write_text("fake")
+    docx.with_suffix(".qa.json").write_text(
+        json.dumps({"status": "PASS", "issues": []}),
+        encoding="utf-8",
+    )
+
+    def attempt(project_type, review_status, *, override=False, role="operator"):
+        task = SimpleNamespace(
+            output_path=str(docx),
+            project_type=project_type,
+            status="completed",
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = task
+        with patch.object(
+            report_api,
+            "_load_review_state",
+            return_value={"status": review_status},
+        ), patch.object(
+            report_api,
+            "_observed_file_response",
+            return_value="OK",
+        ), patch.object(
+            report_api,
+            "_clinical_snapshot",
+            return_value={},
+        ), patch.object(
+            report_api,
+            "_business_report_filename",
+            return_value="x.docx",
+        ):
+            try:
+                report_api._download_report_response(
+                    "t1",
+                    db,
+                    MagicMock(),
+                    SimpleNamespace(id=1, role=role),
+                    override_gate=override,
+                )
+                return 200
+            except HTTPException as exc:
+                return exc.status_code
+
+    assert attempt("lung_588_pdl1", "draft") == 409
+    assert attempt("lung_588_pdl1", "reviewed") == 200
+    assert attempt("lung_588_pdl1", "delivered") == 200
+    assert attempt("lung_588_pdl1", "draft", override=True) == 403
+    assert attempt("lung_588_pdl1", "draft", override=True, role="reviewer") == 200
+    assert attempt("crc_358_msi", "draft") == 200
+
+
 def test_batch_item_download_blocks_qa_fail(tmp_path):
     """交付门禁（第3步）：批量逐文件下载与单份一致——QA=FAIL 被 409 拦截、
     override 放行、PASS/WARN/无记录不误伤。"""
