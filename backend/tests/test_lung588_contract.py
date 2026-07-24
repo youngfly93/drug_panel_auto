@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 """Independent lung588 engineering-contract regression tests."""
 
+import asyncio
 import copy
 import hashlib
 import io
@@ -8,6 +9,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from zipfile import ZipFile
 
 import yaml
@@ -15,6 +17,7 @@ from docx import Document
 from docx.enum.table import WD_ROW_HEIGHT_RULE
 from docx.oxml.ns import qn
 from docxtpl import DocxTemplate
+from fastapi import HTTPException
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "backend"
@@ -44,6 +47,7 @@ from reportgen.rules.pdl1 import (
     validate_pdl1_product_contract,
 )
 
+from app.api import batch as batch_api
 from app.api.batch import _batch_generation_policy_error
 from app.api.report import _controlled_pilot_review_required
 from app.services.clinical_info_service import get_clinical_form_schema
@@ -470,6 +474,25 @@ def test_lung588_batch_is_blocked_until_per_case_pdl1_exists():
     assert "逐病例" in error
     assert "串用" in error
     assert _batch_generation_policy_error("crc_358_msi") is None
+
+
+def test_lung588_legacy_batch_endpoint_enforces_policy_before_input_resolution():
+    bridge = SimpleNamespace(ensure_project_type_enabled=lambda _project_type: None)
+
+    try:
+        asyncio.run(
+            batch_api.batch_generate(
+                project_type="lung_588_pdl1",
+                bridge=bridge,
+                current_user=SimpleNamespace(id=1, role="admin"),
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "逐病例" in str(exc.detail)
+        assert "串用" in str(exc.detail)
+    else:
+        raise AssertionError("legacy /batch must fail closed for lung588")
 
 
 def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification():

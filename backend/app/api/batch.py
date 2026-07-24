@@ -974,6 +974,9 @@ async def batch_generate(
     or input_dir (directory path containing Excel files).
     """
     _raise_if_project_type_disabled(bridge, project_type)
+    batch_policy_error = _batch_generation_policy_error(project_type)
+    if batch_policy_error:
+        raise HTTPException(status_code=409, detail=batch_policy_error)
     task_id = str(uuid.uuid4())
     output_dir = ensure_report_dir(task_id)
 
