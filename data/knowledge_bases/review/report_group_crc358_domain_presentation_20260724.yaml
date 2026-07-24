@@ -1,16 +1,16 @@
 schema_version: "1.0"
-receipt_id: report_group_crc358_regression_restore_20260723
+receipt_id: report_group_crc358_domain_presentation_20260724
 status: approved
 decision: approved_for_runtime
-reviewed_at: "2026-07-23"
+reviewed_at: "2026-07-24"
 reviewer:
   group: report_group
   individual_identity: not_recorded
   attested_by: project_owner
-  attestation_basis: project_owner_confirmed_prior_secondary_review_and_current_report_group_regression_feedback
+  attestation_basis: project_owner_confirmed_prior_secondary_review_and_report_group_20260724_domain_presentation_feedback
 candidate_identity:
   kind: content_bundle_sha256
-  value: 2688bce6237e660766c4bc01d0d38da2bc01b8836ba5ea9ffc0a7b832b793302
+  value: 3a31926c3b30cd58414d856074db21d325974b7d100e0cb60d4e77117a8c6ed2
 scope:
   panels: [crc_358_msi]
   includes:
@@ -19,6 +19,8 @@ scope:
     - restored_historical_exact_pms2_s425lfs23_rule
     - flt3_g846d_research_only_contract
     - exact_selector_precedence_over_broader_pending_lof_guards
+    - report_group_requested_part3_domain_label
+    - fixed_domain_and_first_variant_narrative_merge
   excludes:
     - pending_part2_rows_without_report_group_approval
     - pending_part3_rows_without_report_group_approval
@@ -26,21 +28,24 @@ scope:
     - production_deployment
     - production_linux_renderer_acceptance
 notes:
-  - 本凭据依据项目负责人确认的既有报告组二审，以及报告组对生产回归的当次反馈，绑定 CRC358 当前知识文件字节。
+  - 本凭据继承 2026-07-23 CRC358 回归恢复二审边界，并依据报告组 2026-07-24 书面反馈，批准第三部分使用“基因结构域：”标签并合并固定结构域与首段位点解释。
   - 未记录个人审核人姓名，因此仅声明报告组级审批，不虚构个人签名。
   - BRCA1 p.Q169* 与 PMS2 p.S425Lfs*23 仅按历史终版中的精确变异规则恢复，不扩展为同基因任意变异获益。
   - FLT3 p.G846D 保留研究提示，不恢复为临床获益药物。
   - 本凭据不提升仍处于 pending/needs_review 的知识行；这些行继续 fail closed。
+  - 本次批准仅覆盖呈现合同，不改变药物方向、证据等级、癌种或变异事件适用边界。
   - 任一 artifact 的 SHA256 变化都会使发布门禁中的本凭据失效。
 artifacts:
   - path: panels/crc_358_msi/golden_cases/crc358_reviewed_case_a.yaml
-    sha256: 70e70b2d4d024a00f12ff2ab2b262b82157f51a774ff3573560d81c203e577e9
+    sha256: 5e34ab5636479821f28f6a2435a34c77733acae30cd8d0c3b920108e012a0cae
   - path: panels/crc_358_msi/panel.yaml
     sha256: 2f0452bb43f13102398882ca379c03bb6bb1d3f44d25e2a1d0a6698ad078e7e0
   - path: panels/crc_358_msi/rules/crc.yaml
     sha256: 4ca135d350eff4e82a3bcf921091363c0215c78594bc5cd4c8805635d81f7671
   - path: panels/crc_358_msi/rules/drugs.yaml
-    sha256: cbacf3d7fcbddfcdd28edec30f8320da2f1b85947b96f48d957031cd794238b7
+    sha256: b483565f56f7235c455280d57012ee9cced21bfbc9ebac84acc1f221694660d8
+  - path: panels/crc_358_msi/rules/style.yaml
+    sha256: e7cb51c5eeabe99a3bc0e1d9a77600fec4db57dcb76c757606f9e93cf04f80f8
   - path: panels/crc_358_msi/rules/reviewed_part3_corrections_20260720.yaml
     sha256: a46f39eb540336b52990aeed110d755d01ffa6c8dcfa4ecbb4c8194bdb81cc02
   - path: panels/crc_358_msi/rules/reviewed_part3_crc358_reviewed_case_a.yaml

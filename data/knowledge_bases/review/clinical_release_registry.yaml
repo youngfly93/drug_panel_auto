@@ -20,10 +20,10 @@ panels:
   crc_358_msi:
     secondary_review_owner: report_group
     secondary_review_status: completed
-    secondary_review_completed_at: '2026-07-23'
-    secondary_review_receipt_id: report_group_crc358_regression_restore_20260723
-    secondary_review_receipt: data/knowledge_bases/review/report_group_crc358_regression_restore_20260723.yaml
-    attestation: project_owner_confirmed_prior_secondary_review_and_current_report_group_regression_feedback
+    secondary_review_completed_at: '2026-07-24'
+    secondary_review_receipt_id: report_group_crc358_domain_presentation_20260724
+    secondary_review_receipt: data/knowledge_bases/review/report_group_crc358_domain_presentation_20260724.yaml
+    attestation: project_owner_confirmed_prior_secondary_review_and_report_group_20260724_domain_presentation_feedback
     uat:
       reviewed_reports: 0
       passed_reports: 0

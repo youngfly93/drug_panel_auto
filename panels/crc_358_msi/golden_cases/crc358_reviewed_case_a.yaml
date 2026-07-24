@@ -8,9 +8,9 @@ privacy:
 source:
   type: historical_report_group_final
   reference_docx_sha256: a2dc7e1fee96ae6b5e2c49a864c18853516edf85edeea8c796c65b9ad6c33931
-  review_binding: historical_final_plus_reviewed_limited_release_regression_restore
+  review_binding: historical_final_plus_reviewed_limited_release_domain_presentation
   secondary_review_status: report_group_approved
-  secondary_review_receipt_id: report_group_crc358_regression_restore_20260723
+  secondary_review_receipt_id: report_group_crc358_domain_presentation_20260724
 medical_uat:
   status: blocked
   blockers:
@@ -105,13 +105,13 @@ expectations:
       - ATR|C.1291DEL|P.R431GFS*8
     required_gene_sections:
       - key: KRAS|C.34G>T|P.G12C
-        normalized_text_sha256: 93f5c08e44b369732d97e5a58bef01d4e4441b954eeda7ba20d48b441c61a7f6
+        normalized_text_sha256: 700a643dc435280bdc06029cb75d94b2814f63c6f8ae478350b9f1a1e3914881
       - key: TP53|C.499C>T|P.Q167*
-        normalized_text_sha256: 4f1153dc125847ca22ff204252825eb6b7a2ee6968f99cb4f9668c8136db85e1
+        normalized_text_sha256: e2913f8a36a5529eec7477e8e61ddac686edb4434bb2750b56c330c5900d027b
       - key: FLT3|C.2537G>A|P.G846D
-        normalized_text_sha256: a94331bb923b481dc436873090138582751c91cbacd1fccd0267d787453ccd4c
+        normalized_text_sha256: 1e89f7205c595d18c71af4db519dd97dfa50f02feae8d97897405e4bb4095cd7
       - key: ATR|C.1291DEL|P.R431GFS*8
-        normalized_text_sha256: be83514efa905c15b7139e6770ead04540081bd796c9462b7c925724cf2cc115
+        normalized_text_sha256: 42cc5b8e397c7815012e11ea9e7a133ab5fb85ee567e297daa6493f71c3f968d
     required_drug_sections:
       - key_prefix: benefit:KRAS|C.34G>T|P.G12C|索托拉西布/阿达格拉西布
         normalized_text_sha256: a1804b4ba810f8bfbbfe439829d09db463d38545495445532b888b9a2578d1b7
@@ -188,10 +188,10 @@ intentional_deviations:
     approval_status: report_group_approved
 approved_reference_deviation:
   policy: exact_normalized_report_diff_v1
-  normalized_report_diff_sha256: e41b49b05955d487fdad15f9127850631ce0bf976244d479b587c14d88c1a562
+  normalized_report_diff_sha256: 602ac173347c121bb041d340a94785b342170234d6a94198785fba9d70148629
   approval_status: report_group_approved
-  approval_receipt_id: report_group_crc358_regression_restore_20260723
-  supersedes: historical_final_exact_output_contract
+  approval_receipt_id: report_group_crc358_domain_presentation_20260724
+  supersedes: report_group_crc358_regression_restore_20260723_reference_deviation
   reasons:
     - restore_reviewed_exact_brca1_q169star_and_pms2_s425lfs23_rules
     - preserve_flt3_g846d_as_research_only_without_false_benefit
@@ -200,3 +200,4 @@ approved_reference_deviation:
     - corrected_kras_g12c_everolimus_evidence_attribution
     - reviewed_gene_domain_and_variant_narrative_updates
     - reviewed_dynamic_approved_drug_and_immune_wording_contracts
+    - report_group_domain_label_and_first_narrative_merge_20260724

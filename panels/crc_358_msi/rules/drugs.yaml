@@ -45,7 +45,7 @@ drug_rules:
     prior_contract_id: crc358_reviewed_historical_table_contract
     transition_status: report_group_approved_supersession
     approved_at: "2026-07-22"
-    approval_receipt_id: report_group_crc358_regression_restore_20260723
+    approval_receipt_id: report_group_crc358_domain_presentation_20260724
     source_ref:
       type: report_group_feedback
       id: feedback_20260720_crc_approved_drug_dynamic_display
@@ -1003,7 +1003,7 @@ approved_drug_rows:
     runtime_eligible: true
     review_basis: historical_guideline_table_plus_report_group_rule_stated_20260720
     secondary_review_status: report_group_approved
-    secondary_review_receipt_id: report_group_crc358_regression_restore_20260723
+    secondary_review_receipt_id: report_group_crc358_domain_presentation_20260724
     source_refs:
       - type: guideline_summary
         id: legacy_crc_approved_drug_table

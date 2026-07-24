@@ -494,7 +494,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
         "transition_status": "report_group_approved_supersession",
         "approved_at": "2026-07-22",
         "approval_receipt_id": (
-            "report_group_crc358_regression_restore_20260723"
+            "report_group_crc358_domain_presentation_20260724"
         ),
         "source_ref": {
             "type": "report_group_feedback",
@@ -503,7 +503,7 @@ def test_crc_drug_rule_contains_active_approved_rows():
     }
     assert rows[0]["secondary_review_status"] == "report_group_approved"
     assert rows[0]["secondary_review_receipt_id"] == (
-        "report_group_crc358_regression_restore_20260723"
+        "report_group_crc358_domain_presentation_20260724"
     )
     assert "crc_approved_drugs" not in engine.get("panel_rules")
 
