@@ -2,16 +2,17 @@
 module: lung588-controlled-pilot
 agent: codex
 identity_kind: git_commit
-identity_value: b97b8afafc0c417514730c19e557c993c2fe5039
+identity_value: ba69637566b4a2927780cb1f15d94b457070f1d6
 ---
 
 # 肺癌588受控试运行审计（Codex）
 
 本审计只覆盖运行时冻结提交
-`b97b8afafc0c417514730c19e557c993c2fe5039`。其后
-`c8d49c6a14a14186d0ba389e96785fcc4f286f62` 仅追加 Linux QA
-验收记录、规格状态和相应契约测试，`ad50b8a` 仅追加下载闸行为测试；两者相对
-冻结提交均未修改应用运行代码、模板或医学规则。
+`ba69637566b4a2927780cb1f15d94b457070f1d6`。完整Word渲染证据生成自其祖先
+`b97b8afafc0c417514730c19e557c993c2fe5039`；两者之间唯一应用运行代码差异
+是下载接口仅对肺癌受控试运行读取人工审核状态，不涉及报告生成器、模板或医学
+规则。中间提交 `c8d49c6` 追加 Linux QA 验收记录，`ad50b8a` 追加下载闸行为
+测试，`d26fcd6` 追加本审计初稿。
 
 本轮按产品负责人要求采用 Codex 单方审计，不生成或冒充 Claude 配对审计。
 审计只记录 CASE 别名、聚合结果和收据哈希；三份真实 Excel、生成的
@@ -46,7 +47,10 @@ Word/PDF/PNG、患者信息及原始路径均不进入 Git。
 ## 冻结凭据
 
 - 运行时冻结提交：
-  `b97b8afafc0c417514730c19e557c993c2fe5039`。
+  `ba69637566b4a2927780cb1f15d94b457070f1d6`。
+- Word生成与视觉QA被测祖先：
+  `b97b8afafc0c417514730c19e557c993c2fe5039`；从该祖先至冻结提交，
+  报告生成器、模板和医学规则无差异。
 - Linux隔离QA源码归档SHA256：
   `85de784da8d63fcbc4db0b587fbf3841a1187027fc482f3d6828723d43cf6241`。
 - 七份合成边界报告：7/7机器与视觉PASS，页数
@@ -58,7 +62,7 @@ Word/PDF/PNG、患者信息及原始路径均不进入 Git。
   与
   `.work/lung588_controlled_pilot_linux_b97b8af/real/validation.json`；
   收据文件处于 Git 外，仅在本地受控工作区保存。
-- 定向契约与下载闸回归：15 passed，0 failed；此前冻结定向集合
+- 定向契约、知识门禁与下载闸回归：17 passed，0 failed；此前冻结定向集合
   54 passed，0 failed。
 - 生产测试期间版本：
   `49bae3da7387b7b7f789bcf7e8d7bc8dcdbbc4d4`；未发生切换。
