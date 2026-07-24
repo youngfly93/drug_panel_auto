@@ -875,6 +875,7 @@ class TemplateRenderer:
             "基因简介：",
             "基因变异说明：",
             "基因变异解析：",
+            "基因结构域：",
             "基因变异与药物关联分析：",
             "药物疗效临床解析：",
             "基因变异与研究方案关联：",
@@ -3729,6 +3730,73 @@ class TemplateRenderer:
 
         self.logger.debug("清理章节前空白段落", removed=removed)
 
+    @classmethod
+    def _part3_gene_analysis_presentation(
+        cls,
+        section: dict,
+        context: dict | None,
+    ) -> tuple[str, str]:
+        """Resolve the panel-owned Part-3 analysis label and paragraph layout.
+
+        Knowledge governance keeps stable domain text separate from the
+        replaceable variant narrative.  A panel may nevertheless request that
+        the first rendered paragraph reads as one continuous statement.  Do
+        that only at presentation time so variant overlays still cannot replace
+        the fixed gene-level field.
+        """
+
+        analysis = str(section.get("mutation_analysis") or "").strip()
+        style = cls._panel_style_config(context, "part3_gene_analysis")
+        default_label = str(style.get("default_label") or "基因变异解析：")
+        fixed_domain = str(section.get("fixed_domain_text") or "").strip()
+        if not fixed_domain:
+            return default_label, analysis
+
+        fixed_label = str(style.get("fixed_domain_label") or default_label)
+        if not cls._truthy(
+            style.get("merge_fixed_domain_with_first_narrative")
+        ):
+            return fixed_label, analysis
+
+        narrative = str(section.get("mutation_narrative") or "").strip()
+        if not narrative:
+            # Backward-compatible contexts may expose only the composed field.
+            # Strip the canonical leading field by exact prefix, never by a
+            # broad regex that could remove reviewed prose from the middle.
+            narrative = analysis
+            if narrative == fixed_domain:
+                narrative = ""
+            elif narrative.startswith(fixed_domain):
+                narrative = narrative[len(fixed_domain) :].lstrip()
+        elif narrative == fixed_domain:
+            narrative = ""
+        elif narrative.startswith(fixed_domain):
+            narrative = narrative[len(fixed_domain) :].lstrip()
+
+        fixed_lines = [
+            line.strip()
+            for line in fixed_domain.splitlines()
+            if line.strip()
+        ]
+        fixed_paragraph = "".join(
+            line
+            if line.endswith(("。", "！", "？", ".", "!", "?"))
+            else f"{line}。"
+            for line in fixed_lines
+        )
+        narrative_paragraphs = [
+            line.strip()
+            for line in narrative.splitlines()
+            if line.strip()
+        ]
+        if not narrative_paragraphs:
+            return fixed_label, fixed_paragraph
+
+        first_paragraph = f"{fixed_paragraph}{narrative_paragraphs[0]}"
+        return fixed_label, "\n".join(
+            [first_paragraph, *narrative_paragraphs[1:]]
+        )
+
     def _render_part3_formatted(self, file_path: str, context: dict) -> None:
         """Replace ``__PART3_MARKER__`` with data-driven Part 3 sections.
 
@@ -4040,10 +4108,16 @@ class TemplateRenderer:
                 current = add_para_after(current, "基因变异说明：", **label_options)
                 current = add_text_block(current, desc, **body_options)
 
-            # 基因变异解析
-            analysis = section.get("mutation_analysis", "")
+            # Panel-owned structure/domain presentation.  CRC panels render
+            # the governed fixed-domain field and the first variant narrative
+            # as one paragraph; panels without that style token keep the
+            # historical "基因变异解析" behavior.
+            analysis_label, analysis = self._part3_gene_analysis_presentation(
+                section,
+                context,
+            )
             if analysis:
-                current = add_para_after(current, "基因变异解析：", **label_options)
+                current = add_para_after(current, analysis_label, **label_options)
                 current = add_text_block(current, analysis, **body_options)
 
         # === 靶向药物解析 ===

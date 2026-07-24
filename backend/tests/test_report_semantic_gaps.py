@@ -124,6 +124,106 @@ def test_base_domain_column_wins_when_legacy_intro_tail_conflicts():
     assert "1068个氨基酸" in pik3ca["fixed_domain_text"]
 
 
+@pytest.mark.parametrize(
+    ("gene", "c_hgvs", "p_hgvs", "fixed_marker", "first_narrative_marker"),
+    [
+        ("APC", "c.994C>T", "p.R332*", "Disordered（239-305位氨基酸）", "p.R332*"),
+        ("SMAD4", "c.1577A>G", "p.E526G", "MH2结构域（323-552位氨基酸）", "DWA结构域"),
+    ],
+)
+@pytest.mark.parametrize("panel_id", ["crc_301_msi", "crc_358_msi"])
+def test_crc_part3_domain_presentation_matches_report_group_side(
+    panel_id,
+    gene,
+    c_hgvs,
+    p_hgvs,
+    fixed_marker,
+    first_narrative_marker,
+):
+    package = load_panel_package(panel_id, project_root=ROOT)
+    context = {
+        "panel_style": ReportGenerator._load_panel_style_config(package),
+    }
+    section = _section(_crc358_provider(), gene, c_hgvs, p_hgvs)
+
+    label, rendered = TemplateRenderer._part3_gene_analysis_presentation(
+        section,
+        context,
+    )
+    paragraphs = rendered.splitlines()
+    narrative_paragraphs = section["mutation_narrative"].splitlines()
+
+    assert label == "基因结构域："
+    assert fixed_marker in section["fixed_domain_text"]
+    assert first_narrative_marker in narrative_paragraphs[0]
+    assert paragraphs[0] == (
+        section["fixed_domain_text"] + narrative_paragraphs[0]
+    )
+    assert paragraphs[1:] == narrative_paragraphs[1:]
+    assert rendered.count("编码的蛋白全长") == 1
+
+
+def test_crc_part3_domain_presentation_renders_one_first_paragraph(tmp_path):
+    package = load_panel_package("crc_358_msi", project_root=ROOT)
+    panel_style = ReportGenerator._load_panel_style_config(package)
+    section = _section(
+        _crc358_provider(),
+        "SMAD4",
+        "c.1577A>G",
+        "p.E526G",
+    )
+    output = tmp_path / "crc-domain-presentation.docx"
+    doc = Document()
+    doc.add_paragraph("__PART3_MARKER__")
+    doc.save(output)
+
+    TemplateRenderer(log_level="ERROR")._render_part3_formatted(
+        str(output),
+        {
+            "project_type": "crc_358_msi",
+            "panel_style": panel_style,
+            "gene_knowledge_sections": [section],
+            "total_variants_count": 1,
+            "targeted_or_immune_related_count": 0,
+        },
+    )
+
+    paragraphs = [
+        paragraph.text.strip()
+        for paragraph in Document(output).paragraphs
+        if paragraph.text.strip()
+    ]
+    label_index = paragraphs.index("基因结构域：")
+    assert "基因变异解析：" not in paragraphs
+    assert paragraphs[label_index + 1] == (
+        section["fixed_domain_text"]
+        + section["mutation_narrative"].splitlines()[0]
+    )
+    assert paragraphs[label_index + 2] == section["mutation_narrative"].splitlines()[1]
+
+
+def test_part3_domain_presentation_keeps_legacy_fallback_without_fixed_domain():
+    label, rendered = TemplateRenderer._part3_gene_analysis_presentation(
+        {
+            "mutation_analysis": "独立变异解析。",
+            "mutation_narrative": "独立变异解析。",
+            "fixed_domain_text": "",
+        },
+        {
+            "panel_style": {
+                "part3_gene_analysis": {
+                    "fixed_domain_label": "基因结构域：",
+                    "default_label": "基因变异解析：",
+                    "merge_fixed_domain_with_first_narrative": True,
+                }
+            }
+        },
+    )
+
+    assert label == "基因变异解析："
+    assert rendered == "独立变异解析。"
+
+
 def test_missing_gene_domains_ship_as_governed_first_review_overlay():
     overlay_path = ROOT / "panels/crc_358_msi/rules/reviewed_part3_domain_overlay_20260720.yaml"
     package = load_panel_package("crc_358_msi", project_root=ROOT)

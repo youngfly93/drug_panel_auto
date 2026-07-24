@@ -445,7 +445,12 @@ def extract_candidates_from_paragraphs(
             flush()
             mode = "variant_description"
             continue
-        if text in {"基因变异解析：", "基因变异解析:"}:
+        if text in {
+            "基因变异解析：",
+            "基因变异解析:",
+            "基因结构域：",
+            "基因结构域:",
+        }:
             flush()
             mode = "mutation_analysis"
             continue

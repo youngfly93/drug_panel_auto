@@ -191,6 +191,34 @@ def test_extract_part3_skips_orphan_drug_text_without_gene_context():
     assert rows == []
 
 
+def test_extract_part3_accepts_report_group_domain_label():
+    paragraphs = [
+        "封面",
+        "第三部分：基因变异及相应靶向/免疫药物解析",
+        "基因变异解析",
+        "u SMAD4：c.1577A>G，p.E526G；20%",
+        "基因简介：",
+        "SMAD4基因简介。",
+        "基因结构域：",
+        (
+            "SMAD4基因编码的蛋白全长为552个氨基酸，"
+            "主要包含MH1和MH2结构域。该样本检出的p.E526G"
+            "突变位于MH2结构域。"
+        ),
+        "第四部分：附录",
+    ]
+
+    rows = extract_candidates_from_paragraphs(
+        paragraphs,
+        "hash-domain-label",
+        "crc_358_msi",
+    )
+
+    mutation = next(row for row in rows if row.content_type == "mutation_analysis")
+    assert mutation.gene == "SMAD4"
+    assert "p.E526G突变位于MH2结构域" in mutation.candidate_text
+
+
 def test_extract_part3_resets_composite_context_before_gene_intro():
     paragraphs = [
         "封面",

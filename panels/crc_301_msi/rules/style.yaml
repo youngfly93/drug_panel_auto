@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "crc_301_msi"
 rule_id: "style"
-version: "0.2.0"
-updated: "2026-05-21"
+version: "0.3.0"
+updated: "2026-07-24"
 status: "active"
 description: "CRC table style tokens used by the DOCX post-render processors."
 
@@ -14,6 +14,11 @@ style:
     body_font_color: "000000"
     border_color: "000000"
     border_size: "6"
+  part3_gene_analysis:
+    # 与 CRC358 共用报告组确认的结构域呈现合同。
+    fixed_domain_label: "基因结构域："
+    default_label: "基因变异解析："
+    merge_fixed_domain_with_first_narrative: true
   variant_summary_table:
     font_name: "微软雅黑"
     header_fill: "00B7C7"

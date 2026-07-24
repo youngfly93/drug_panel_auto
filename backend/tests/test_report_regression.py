@@ -3160,8 +3160,13 @@ def test_crc_style_rule_contains_active_table_tokens():
     rule = engine.get("style")
     style = rule["style"]
 
-    assert rule["version"] == "0.2.0"
+    assert rule["version"] == "0.3.0"
     assert rule["status"] == "active"
+    assert style["part3_gene_analysis"] == {
+        "fixed_domain_label": "基因结构域：",
+        "default_label": "基因变异解析：",
+        "merge_fixed_domain_with_first_narrative": True,
+    }
     assert style["variant_summary_table"]["link_underline"] is True
     assert "未见突变" in style["variant_summary_table"]["plain_texts"]
     assert style["variant_detail_table"]["link_color"] == "0000FF"
