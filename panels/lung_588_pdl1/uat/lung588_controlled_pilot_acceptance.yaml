@@ -1,9 +1,11 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 record_id: "lung588_controlled_pilot_acceptance_v1"
-status: "contract_defined_pending_execution"
+status: "passed_controlled_pilot"
 release_tier: "controlled_internal_pilot"
 updated: "2026-07-24"
+executed_at: "2026-07-24"
+subject_commit: "b97b8afafc0c417514730c19e557c993c2fe5039"
 
 purpose: >
   Permit transparent report-group pilot validation when only three real lung588
@@ -72,3 +74,57 @@ execution:
     python scripts/validate_lung588_pilot_boundary_suite.py
     --require-visual
   receipt: ".work/lung588_pilot_boundary_suite_20260724/validation.json"
+
+environment:
+  host_alias: "iyun129"
+  execution_mode: "isolated_qa_copy"
+  platform: "Linux"
+  machine: "x86_64"
+  libreoffice_version: "LibreOffice 7.3.7.2 30(Build:2)"
+  pdf_renderer_version: "pdftoppm version 22.02.0"
+  profile_mode: "isolated"
+  production_switched: false
+  production_revision_during_test: "49bae3da7387b7b7f789bcf7e8d7bc8dcdbbc4d4"
+  production_health_after_test: "PASS"
+
+results:
+  identity_match: true
+  p0_count: 0
+  confirmed_real_ngs:
+    status: "PASS"
+    case_count: 3
+    passed_case_count: 3
+    variant_counts:
+      CASE-LUNG-A: 7
+      CASE-LUNG-B: 8
+      CASE-LUNG-C: 9
+    pdl1_product_transcription_contract_pass_count: 3
+    verified_case_specific_ihc_source_count: 0
+    page_counts: [27, 27, 27]
+    blank_page_count: 0
+    unexpected_low_content_page_count: 0
+    receipt_sha256: "bbc72c83c4a37263d173ca7f18cad75306323d9cb4325a4e74a85a144168b8a5"
+  synthetic_boundary:
+    status: "PASS"
+    case_count: 7
+    passed_case_count: 7
+    page_counts: [26, 26, 26, 26, 26, 26, 27]
+    blank_page_count: 0
+    unexpected_low_content_page_count: 0
+    runtime_targeted_drug_count: 0
+    runtime_part3_section_count: 0
+    receipt_sha256: "7bcfc8dafbb2065c3b52454aa296679c46965589744580b914e27a3500b28466"
+
+release_decision:
+  controlled_pilot_status: "PASS"
+  active_release_status: "BLOCKED"
+  active_release_blockers:
+    - "Only 3/10 required real cases are available."
+    - "Actual PD-L1 clone/platform remains unverified."
+    - "The three machine cases do not contain verified case-specific IHC source records."
+    - "Lung588 targeted-drug, Part-3 and batch-generation capabilities remain disabled."
+  allowed_next_action: >
+    Deploy the exact subject commit as an iyun129 report-group controlled
+    pilot. Every generated lung588 report requires a per-case PD-L1 source
+    record and reviewer approval before download. Do not describe this as an
+    active medical release or ten-real-case UAT.

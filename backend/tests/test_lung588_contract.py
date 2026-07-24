@@ -99,13 +99,14 @@ def test_lung588_package_is_independent_and_valid():
 def test_lung588_controlled_pilot_does_not_overclaim_real_uat():
     contract = yaml.safe_load(PILOT_ACCEPTANCE.read_text(encoding="utf-8"))
 
-    assert contract["status"] == "contract_defined_pending_execution"
+    assert contract["status"] == "passed_controlled_pilot"
     assert contract["release_tier"] == "controlled_internal_pilot"
     eligibility = contract["eligibility"]
     assert eligibility["required_confirmed_real_ngs_cases"] == 3
     assert eligibility["required_synthetic_boundary_cases"] == 7
     assert eligibility["required_real_case_count_for_active_release"] == 10
     assert eligibility["p0_allowed"] == 0
+    assert contract["subject_commit"] == ("b97b8afafc0c417514730c19e557c993c2fe5039")
     assert len(contract["real_case_scope"]["aliases"]) == 3
     assert len(contract["synthetic_boundary_cases"]) == 7
     assert {row["id"] for row in contract["synthetic_boundary_cases"]} == {
@@ -127,6 +128,16 @@ def test_lung588_controlled_pilot_does_not_overclaim_real_uat():
         "external_delivery_without_manual_review": False,
         "active_release_promotion_blocked": True,
     }
+    results = contract["results"]
+    assert results["identity_match"] is True
+    assert results["p0_count"] == 0
+    assert results["confirmed_real_ngs"]["passed_case_count"] == 3
+    assert results["confirmed_real_ngs"]["verified_case_specific_ihc_source_count"] == 0
+    assert results["synthetic_boundary"]["passed_case_count"] == 7
+    assert results["synthetic_boundary"]["runtime_targeted_drug_count"] == 0
+    assert results["synthetic_boundary"]["runtime_part3_section_count"] == 0
+    assert contract["release_decision"]["controlled_pilot_status"] == "PASS"
+    assert contract["release_decision"]["active_release_status"] == "BLOCKED"
     assert _controlled_pilot_review_required(
         "lung_588_pdl1",
         "draft",
