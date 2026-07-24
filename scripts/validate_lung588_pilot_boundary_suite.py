@@ -200,6 +200,11 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 
 
 def _source_revision() -> str:
+    configured = str(os.environ.get("REPORTGEN_SOURCE_REVISION") or "").strip()
+    if len(configured) == 40 and all(
+        character in "0123456789abcdef" for character in configured.lower()
+    ):
+        return configured.lower()
     revision_file = ROOT / "REVISION"
     if revision_file.is_file():
         revision = revision_file.read_text(encoding="utf-8").strip()
