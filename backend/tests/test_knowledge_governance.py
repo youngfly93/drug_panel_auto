@@ -114,7 +114,7 @@ def test_production_knowledge_release_gate_is_self_contained_and_passes(tmp_path
         for row in result["non_blocking_panel_readiness"]
         if row["panel_id"] == "lung_588_pdl1"
     )
-    assert lung588["status"] == "draft"
+    assert lung588["status"] == "pilot"
     assert lung588["readiness"] == "NOT_PRODUCTION_ACTIVE"
 
 
