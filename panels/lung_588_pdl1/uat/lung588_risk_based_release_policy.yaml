@@ -1,0 +1,52 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+policy_id: "lung588_risk_based_all_available_cases_v1"
+status: "active_policy"
+effective_date: "2026-07-25"
+decision_owner: "product_owner"
+
+supersedes:
+  - "fixed_ten_real_case_threshold"
+
+rationale: >
+  The former ten-real-case threshold was an internal conservative release
+  convention, not a regulatory or report-group-mandated sample size. Formal
+  promotion now evaluates every registered real case available at the frozen
+  release identity, together with case-specific PD-L1 provenance, report-group
+  decisions, P0 defects and deterministic synthetic boundary coverage.
+
+real_case_policy:
+  selection: "all_registered_real_cases_available_at_release_freeze"
+  fixed_minimum_real_case_count: null
+  require_non_empty_case_set: true
+  required_review_fraction: 1.0
+  required_pass_fraction: 1.0
+  p0_allowed: 0
+
+case_requirements:
+  ngs_structure_must_pass: true
+  pdl1_product_contract_must_pass: true
+  verified_case_specific_ihc_source_required: true
+  report_group_decision_required: true
+  report_group_reviewer_and_date_required: true
+
+synthetic_boundary_policy:
+  required_suite: "lung588_pilot_boundary_suite"
+  counts_as_real_case_uat: false
+  purpose:
+    - "PD-L1 display boundaries"
+    - "MSI/TMB boundaries"
+    - "exact-event positive and negative controls"
+    - "long-table pagination"
+    - "cross-case leak protection"
+
+unchanged_release_boundaries:
+  batch_generation_enabled: false
+  part3_knowledge_enabled: false
+  targeted_drug_rules_enabled: false
+  external_delivery_without_manual_review: false
+
+historical_record_policy: >
+  Receipts and audits frozen before this effective date retain the former
+  ten-case wording as historical evidence. They do not define the current
+  promotion denominator and must not be rewritten retroactively.

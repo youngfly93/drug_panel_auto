@@ -691,6 +691,7 @@ def test_real_input_validator_handles_empty_release_revision(tmp_path, monkeypat
 def test_real_input_validator_separates_ngs_pre_uat_from_formal_uat():
     rows = [
         {
+            "alias": f"CASE-LUNG-{alias}",
             "auto_detection": {
                 "detected": False,
                 "project_type": None,
@@ -701,15 +702,16 @@ def test_real_input_validator_separates_ngs_pre_uat_from_formal_uat():
             "pdl1_input_provenance": "synthetic_visual_qa_only",
             "context_contract": {"status": "PASS"},
         }
-        for _ in range(3)
+        for alias in ("A", "B", "C")
     ]
 
     readiness = validate_lung588_real_inputs._build_uat_readiness(rows)
 
-    assert readiness["scope"] == "machine_pre_uat_only"
-    assert readiness["required_formal_uat_case_count"] == 10
+    assert readiness["scope"] == "risk_based_all_available_real_cases"
+    assert readiness["policy_id"] == "lung588_risk_based_all_available_cases_v1"
+    assert readiness["fixed_minimum_real_case_count"] is None
     assert readiness["observed_real_input_count"] == 3
-    assert readiness["additional_real_case_count_required"] == 7
+    assert readiness["required_report_group_review_case_count"] == 3
     assert readiness["ngs_structure_pass_count"] == 3
     assert readiness["ngs_structure_status"] == "PASS"
     assert readiness["pdl1_product_pass_count"] == 0
@@ -719,10 +721,98 @@ def test_real_input_validator_separates_ngs_pre_uat_from_formal_uat():
     assert readiness["formal_uat_status"] == "BLOCKED"
     assert readiness["formal_uat_requirement_met"] is False
     assert {blocker["code"] for blocker in readiness["blockers"]} == {
-        "INSUFFICIENT_REAL_CASES",
         "PDL1_PRODUCT_CONTRACT_BLOCKED",
         "PDL1_CASE_SOURCE_NOT_VERIFIED",
         "REPORT_GROUP_UAT_INCOMPLETE",
+    }
+
+
+def test_real_input_validator_can_pass_three_cases_without_fixed_denominator():
+    rows = [
+        {
+            "alias": f"CASE-LUNG-{alias}",
+            "auto_detection": {
+                "detected": False,
+                "project_type": None,
+            },
+            "targeted_drug_count": 0,
+            "biomarker_contract_status": "PASS",
+            "pdl1_product_contract_status": "PASS",
+            "pdl1_input_provenance": "case_specific_verified_ihc_source",
+            "context_contract": {"status": "PASS"},
+        }
+        for alias in ("A", "B", "C")
+    ]
+    decisions = {
+        f"CASE-LUNG-{alias}": {
+            "decision": "pass",
+            "reviewer": "报告组审核人",
+            "reviewed_at": "2026-07-25",
+            "p0_count": 0,
+        }
+        for alias in ("A", "B", "C")
+    }
+
+    readiness = validate_lung588_real_inputs._build_uat_readiness(
+        rows,
+        report_group_decisions=decisions,
+    )
+
+    assert readiness["observed_real_input_count"] == 3
+    assert readiness["required_report_group_review_case_count"] == 3
+    assert readiness["report_group_reviewed_case_count"] == 3
+    assert readiness["report_group_passed_case_count"] == 3
+    assert readiness["formal_uat_status"] == "PASS"
+    assert readiness["formal_uat_requirement_met"] is True
+    assert readiness["blockers"] == []
+
+
+def test_real_input_validator_blocks_empty_real_case_set():
+    readiness = validate_lung588_real_inputs._build_uat_readiness(
+        [],
+        report_group_decisions={},
+    )
+
+    assert readiness["fixed_minimum_real_case_count"] is None
+    assert readiness["formal_uat_status"] == "BLOCKED"
+    assert {blocker["code"] for blocker in readiness["blockers"]} == {
+        "NO_REGISTERED_REAL_CASES"
+    }
+
+
+def test_real_input_validator_keeps_failure_and_p0_as_release_blockers():
+    rows = [
+        {
+            "alias": "CASE-LUNG-A",
+            "auto_detection": {
+                "detected": False,
+                "project_type": None,
+            },
+            "targeted_drug_count": 0,
+            "biomarker_contract_status": "PASS",
+            "pdl1_product_contract_status": "PASS",
+            "pdl1_input_provenance": "case_specific_verified_ihc_source",
+            "context_contract": {"status": "PASS"},
+        }
+    ]
+    decisions = {
+        "CASE-LUNG-A": {
+            "decision": "fail",
+            "reviewer": "报告组审核人",
+            "reviewed_at": "2026-07-25",
+            "p0_count": 1,
+        }
+    }
+
+    readiness = validate_lung588_real_inputs._build_uat_readiness(
+        rows,
+        report_group_decisions=decisions,
+    )
+
+    assert readiness["formal_uat_status"] == "BLOCKED"
+    assert {blocker["code"] for blocker in readiness["blockers"]} == {
+        "REPORT_GROUP_UAT_FAILED",
+        "P0_DEFECTS_PRESENT",
     }
 
 

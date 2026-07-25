@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import yaml
 from docx import Document
 
 
@@ -48,7 +49,20 @@ KNOWN_INPUTS = {
     },
 }
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-REQUIRED_FORMAL_UAT_CASE_COUNT = 10
+UAT_POLICY_PATH = (
+    ROOT
+    / "panels"
+    / "lung_588_pdl1"
+    / "uat"
+    / "lung588_risk_based_release_policy.yaml"
+)
+REPORT_GROUP_UAT_DECISIONS_PATH = (
+    ROOT
+    / "panels"
+    / "lung_588_pdl1"
+    / "uat"
+    / "lung588_report_group_uat_decisions.yaml"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -87,6 +101,77 @@ def _source_revision() -> str:
     return (
         revision if completed.returncode == 0 and COMMIT_RE.fullmatch(revision) else ""
     )
+
+
+def _load_yaml_mapping(path: Path) -> dict[str, Any]:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"expected a mapping in {path}")
+    return payload
+
+
+def _load_uat_release_policy(path: Path = UAT_POLICY_PATH) -> dict[str, Any]:
+    policy = _load_yaml_mapping(path)
+    case_policy = policy.get("real_case_policy")
+    if not isinstance(case_policy, dict):
+        raise RuntimeError("lung588 UAT policy is missing real_case_policy")
+    if case_policy.get("fixed_minimum_real_case_count") is not None:
+        raise RuntimeError(
+            "lung588 risk-based UAT policy must not restore a fixed case count"
+        )
+    for key in ("required_review_fraction", "required_pass_fraction"):
+        value = case_policy.get(key)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or float(value) != 1.0
+        ):
+            raise RuntimeError(f"lung588 UAT policy has invalid {key}: {value!r}")
+    if not case_policy.get("require_non_empty_case_set"):
+        raise RuntimeError("lung588 UAT policy must require a non-empty real case set")
+    return policy
+
+
+def _load_report_group_uat_decisions(
+    path: Path = REPORT_GROUP_UAT_DECISIONS_PATH,
+    *,
+    expected_policy_id: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    payload = _load_yaml_mapping(path)
+    if expected_policy_id and payload.get("policy_id") != expected_policy_id:
+        raise RuntimeError(
+            "lung588 report-group UAT register does not match the active policy"
+        )
+    decisions: dict[str, dict[str, Any]] = {}
+    for item in payload.get("cases") or []:
+        if not isinstance(item, dict):
+            raise RuntimeError("lung588 report-group UAT case entry must be a mapping")
+        alias = str(item.get("alias") or "").strip()
+        decision = str(item.get("decision") or "").strip().lower()
+        if not alias:
+            raise RuntimeError("lung588 report-group UAT case alias is required")
+        if alias in decisions:
+            raise RuntimeError(f"duplicate lung588 report-group UAT alias: {alias}")
+        if decision not in {"pass", "fail", "pending"}:
+            raise RuntimeError(
+                f"invalid lung588 report-group UAT decision for {alias}: {decision!r}"
+            )
+        p0_count = item.get("p0_count")
+        if decision in {"pass", "fail"} and (
+            isinstance(p0_count, bool)
+            or not isinstance(p0_count, int)
+            or p0_count < 0
+        ):
+            raise RuntimeError(
+                f"completed lung588 UAT decision for {alias} requires p0_count"
+            )
+        decisions[alias] = {
+            "decision": decision,
+            "reviewer": str(item.get("reviewer") or "").strip(),
+            "reviewed_at": str(item.get("reviewed_at") or "").strip(),
+            "p0_count": p0_count,
+        }
+    return decisions
 
 
 def _safe_variant_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -317,9 +402,24 @@ def _render_case(
     }
 
 
-def _build_uat_readiness(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Separate machine NGS checks from clinical PD-L1 and formal UAT."""
+def _build_uat_readiness(
+    rows: list[dict[str, Any]],
+    *,
+    policy: dict[str, Any] | None = None,
+    report_group_decisions: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Evaluate every available real case without a fixed numeric denominator."""
 
+    policy = policy or _load_uat_release_policy()
+    case_policy = policy["real_case_policy"]
+    report_group_decisions = (
+        report_group_decisions
+        if report_group_decisions is not None
+        else _load_report_group_uat_decisions(
+            expected_policy_id=str(policy["policy_id"])
+        )
+    )
+    aliases = [str(row.get("alias") or "").strip() for row in rows]
     ngs_structure_pass_count = sum(
         not row["auto_detection"]["detected"]
         and row["targeted_drug_count"] == 0
@@ -334,19 +434,54 @@ def _build_uat_readiness(rows: list[dict[str, Any]]) -> dict[str, Any]:
         row["pdl1_input_provenance"] == "case_specific_verified_ihc_source"
         for row in rows
     )
-    report_group_reviewed_case_count = 0
-    blockers = []
-    additional_case_count = max(
-        REQUIRED_FORMAL_UAT_CASE_COUNT - len(rows),
-        0,
+    missing_case_alias_count = sum(not alias for alias in aliases)
+    missing_decision_aliases = [
+        alias
+        for alias in aliases
+        if alias and alias not in report_group_decisions
+    ]
+    complete_decisions = {
+        alias: report_group_decisions[alias]
+        for alias in aliases
+        if alias in report_group_decisions
+        and report_group_decisions[alias]["decision"] in {"pass", "fail"}
+        and report_group_decisions[alias]["reviewer"]
+        and report_group_decisions[alias]["reviewed_at"]
+        and isinstance(report_group_decisions[alias].get("p0_count"), int)
+        and not isinstance(report_group_decisions[alias].get("p0_count"), bool)
+    }
+    report_group_reviewed_case_count = len(complete_decisions)
+    report_group_passed_case_count = sum(
+        item["decision"] == "pass" for item in complete_decisions.values()
     )
-    if additional_case_count:
+    report_group_failed_case_count = sum(
+        item["decision"] == "fail" for item in complete_decisions.values()
+    )
+    p0_count = sum(int(item["p0_count"]) for item in complete_decisions.values())
+    required_review_case_count = len(rows)
+    p0_allowed = int(case_policy.get("p0_allowed", 0))
+    blockers: list[dict[str, str]] = []
+    if not rows:
         blockers.append(
             {
-                "code": "INSUFFICIENT_REAL_CASES",
+                "code": "NO_REGISTERED_REAL_CASES",
+                "message": "the frozen release has no registered real lung588 cases",
+            }
+        )
+    if missing_case_alias_count:
+        blockers.append(
+            {
+                "code": "REAL_CASE_ALIAS_MISSING",
+                "message": f"{missing_case_alias_count} observed cases lack a stable alias",
+            }
+        )
+    if ngs_structure_pass_count != len(rows):
+        blockers.append(
+            {
+                "code": "NGS_STRUCTURE_INCOMPLETE",
                 "message": (
-                    f"{additional_case_count} additional real, de-identified "
-                    "lung588 cases are required"
+                    f"{len(rows) - ngs_structure_pass_count} observed cases "
+                    "do not pass the frozen NGS structure contract"
                 ),
             }
         )
@@ -371,18 +506,52 @@ def _build_uat_readiness(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 ),
             }
         )
-    if report_group_reviewed_case_count < REQUIRED_FORMAL_UAT_CASE_COUNT:
+    if missing_decision_aliases:
+        blockers.append(
+            {
+                "code": "REPORT_GROUP_UAT_RECORD_MISSING",
+                "message": (
+                    f"{len(missing_decision_aliases)} observed cases are absent "
+                    "from the report-group UAT register"
+                ),
+            }
+        )
+    if report_group_reviewed_case_count != required_review_case_count:
         blockers.append(
             {
                 "code": "REPORT_GROUP_UAT_INCOMPLETE",
-                "message": ("0/10 cases have a recorded report-group UAT decision"),
+                "message": (
+                    f"{report_group_reviewed_case_count}/"
+                    f"{required_review_case_count} observed cases have a complete "
+                    "report-group UAT decision, reviewer and date"
+                ),
             }
         )
+    if report_group_failed_case_count:
+        blockers.append(
+            {
+                "code": "REPORT_GROUP_UAT_FAILED",
+                "message": (
+                    f"{report_group_failed_case_count} observed cases have a "
+                    "report-group FAIL decision"
+                ),
+            }
+        )
+    if p0_count > p0_allowed:
+        blockers.append(
+            {
+                "code": "P0_DEFECTS_PRESENT",
+                "message": f"P0 count {p0_count} exceeds allowed count {p0_allowed}",
+            }
+        )
+    formal_uat_status = "PASS" if not blockers else "BLOCKED"
     return {
-        "scope": "machine_pre_uat_only",
-        "required_formal_uat_case_count": REQUIRED_FORMAL_UAT_CASE_COUNT,
+        "scope": "risk_based_all_available_real_cases",
+        "policy_id": policy["policy_id"],
+        "case_set_policy": case_policy["selection"],
+        "fixed_minimum_real_case_count": None,
         "observed_real_input_count": len(rows),
-        "additional_real_case_count_required": additional_case_count,
+        "required_report_group_review_case_count": required_review_case_count,
         "ngs_structure_pass_count": ngs_structure_pass_count,
         "ngs_structure_status": (
             "PASS" if ngs_structure_pass_count == len(rows) else "FAIL"
@@ -393,8 +562,12 @@ def _build_uat_readiness(rows: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "verified_case_pdl1_source_count": (verified_case_pdl1_source_count),
         "report_group_reviewed_case_count": (report_group_reviewed_case_count),
-        "formal_uat_status": "BLOCKED",
-        "formal_uat_requirement_met": False,
+        "report_group_passed_case_count": report_group_passed_case_count,
+        "report_group_failed_case_count": report_group_failed_case_count,
+        "p0_count": p0_count,
+        "p0_allowed": p0_allowed,
+        "formal_uat_status": formal_uat_status,
+        "formal_uat_requirement_met": formal_uat_status == "PASS",
         "blockers": blockers,
     }
 

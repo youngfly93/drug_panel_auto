@@ -97,7 +97,42 @@ def test_lung588_package_is_independent_and_valid():
     assert package.raw["part3_knowledge"]["enabled"] is False
     assert "cross-cancer" in package.raw["part3_knowledge"]["reason"]
     assert "肺癌专属知识当前未启用" in (package.raw["part3_knowledge"]["disabled_notice"])
+    assert package.raw["release_governance"] == {
+        "uat_policy": "uat/lung588_risk_based_release_policy.yaml",
+        "report_group_uat_decisions": (
+            "uat/lung588_report_group_uat_decisions.yaml"
+        ),
+    }
     assert package.resolve_template_file() == TEMPLATE.resolve()
+
+
+def test_lung588_current_uat_policy_has_no_fixed_case_denominator():
+    policy = yaml.safe_load(
+        (PANEL_DIR / "uat" / "lung588_risk_based_release_policy.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    decisions = yaml.safe_load(
+        (PANEL_DIR / "uat" / "lung588_report_group_uat_decisions.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert policy["status"] == "active_policy"
+    assert policy["supersedes"] == ["fixed_ten_real_case_threshold"]
+    assert policy["real_case_policy"]["fixed_minimum_real_case_count"] is None
+    assert policy["real_case_policy"]["selection"] == (
+        "all_registered_real_cases_available_at_release_freeze"
+    )
+    assert policy["real_case_policy"]["required_review_fraction"] == 1.0
+    assert policy["real_case_policy"]["required_pass_fraction"] == 1.0
+    assert decisions["policy_id"] == policy["policy_id"]
+    assert [item["alias"] for item in decisions["cases"]] == [
+        "CASE-LUNG-A",
+        "CASE-LUNG-B",
+        "CASE-LUNG-C",
+    ]
+    assert {item["decision"] for item in decisions["cases"]} == {"pending"}
 
 
 def test_lung588_controlled_pilot_does_not_overclaim_real_uat():

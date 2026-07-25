@@ -35,6 +35,10 @@ batch_generation:
     TPS/CPS/result into every patient, so batch generation remains blocked until
     per-file clinical payloads are implemented and validated.
 
+release_governance:
+  uat_policy: "uat/lung588_risk_based_release_policy.yaml"
+  report_group_uat_decisions: "uat/lung588_report_group_uat_decisions.yaml"
+
 part3_knowledge:
   enabled: false
   reason: >
