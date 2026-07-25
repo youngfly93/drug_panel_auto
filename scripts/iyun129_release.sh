@@ -25,9 +25,9 @@ PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v
 TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
 RG_WEB_DOCS_ENABLED="${RG_WEB_DOCS_ENABLED:-0}"
 RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
-# CRC301 and the lung588 draft remain disabled until their independent
-# case-level UAT and promotion gates are complete.
-RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_588_pdl1}"
+# CRC301 and all unpromoted lung packages remain disabled until their
+# independent case-level UAT and promotion gates are complete.
+RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation}"
 REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 
 status_remote() {

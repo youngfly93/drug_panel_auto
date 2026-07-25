@@ -11,6 +11,7 @@ from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
@@ -614,16 +615,30 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert data["qa_status"] == "PASS"
 
 
-def test_crc301_limited_release_blocks_single_and_batch_before_queue(
+@pytest.mark.parametrize(
+    "disabled_panel",
+    [
+        "crc_301_msi",
+        "lung_329_pdl1",
+        "lung_588_pdl1",
+        "lung_methylation",
+    ],
+)
+def test_limited_release_blocks_single_and_batch_before_queue(
     tmp_path,
     monkeypatch,
+    disabled_panel,
 ):
-    monkeypatch.setattr(settings, "disabled_project_types", "crc_301_msi")
+    monkeypatch.setattr(
+        settings,
+        "disabled_project_types",
+        "crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation",
+    )
     with _client(tmp_path, monkeypatch) as client:
         single = client.post(
             "/api/v1/reports/generate-file-async",
             files={"file": ("case.xlsx", b"placeholder", "application/vnd.ms-excel")},
-            data={"clinical_info": "{}", "project_type": "crc_301_msi"},
+            data={"clinical_info": "{}", "project_type": disabled_panel},
         )
         batch = client.post(
             "/api/v1/reports/batch-files",
@@ -633,7 +648,7 @@ def test_crc301_limited_release_blocks_single_and_batch_before_queue(
                     ("case.xlsx", b"placeholder", "application/vnd.ms-excel"),
                 )
             ],
-            data={"project_type": "crc_301_msi"},
+            data={"project_type": disabled_panel},
         )
 
     assert single.status_code == 409
@@ -647,12 +662,29 @@ def test_crc301_limited_release_blocks_single_and_batch_before_queue(
         db.close()
 
 
-def test_crc301_auto_detected_batch_item_stops_before_mapping(tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "disabled_project_types", "crc_301_msi")
+@pytest.mark.parametrize(
+    "disabled_panel",
+    [
+        "crc_301_msi",
+        "lung_329_pdl1",
+        "lung_588_pdl1",
+        "lung_methylation",
+    ],
+)
+def test_auto_detected_disabled_batch_item_stops_before_mapping(
+    tmp_path,
+    monkeypatch,
+    disabled_panel,
+):
+    monkeypatch.setattr(
+        settings,
+        "disabled_project_types",
+        "crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation",
+    )
     bridge = FakeBridge()
     bridge.detect_result = {
-        "project_type": "crc_301_msi",
-        "project_name": "结直肠癌301基因+MSI",
+        "project_type": disabled_panel,
+        "project_name": "未晋级产品",
         "confidence": 0.99,
         "detected": True,
     }
@@ -674,7 +706,7 @@ def test_crc301_auto_detected_batch_item_stops_before_mapping(tmp_path, monkeypa
         assert exc.status_code == 409
         assert "未开放生产生成" in str(exc.detail)
     else:
-        raise AssertionError("auto-detected CRC301 batch item was not rejected")
+        raise AssertionError("auto-detected disabled batch item was not rejected")
 
 
 def test_generate_file_fills_missing_report_date(tmp_path, monkeypatch):
