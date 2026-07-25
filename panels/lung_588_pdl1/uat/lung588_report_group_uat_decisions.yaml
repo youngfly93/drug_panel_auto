@@ -1,0 +1,34 @@
+schema_version: "1.0"
+panel_id: "lung_588_pdl1"
+policy_id: "lung588_risk_based_all_available_cases_v1"
+status: "pending_report_group_review"
+updated: "2026-07-25"
+
+cases:
+  - alias: "CASE-LUNG-A"
+    decision: "pending"
+    reviewer: null
+    reviewed_at: null
+    p0_count: null
+    notes: null
+  - alias: "CASE-LUNG-B"
+    decision: "pending"
+    reviewer: null
+    reviewed_at: null
+    p0_count: null
+    notes: null
+  - alias: "CASE-LUNG-C"
+    decision: "pending"
+    reviewer: null
+    reviewed_at: null
+    p0_count: null
+    notes: null
+
+allowed_decisions:
+  - "pass"
+  - "fail"
+  - "pending"
+
+privacy:
+  contains_phi: false
+  aliases_only: true
