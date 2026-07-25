@@ -37,6 +37,7 @@ def test_release_checklist_uses_real_iyun129_topology() -> None:
 
 def test_iyun129_wrapper_pins_production_coordinates() -> None:
     wrapper = _read("scripts/iyun129_deploy_clean.sh")
+    limited_release_panels = "crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation"
 
     assert "SSH_HOST:-iyun129" in wrapper
     assert "/media/desk16/iy12922/apps" in wrapper
@@ -59,6 +60,7 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert "RG_WEB_DISABLED_PROJECT_TYPES" in wrapper
     assert "REPORTGEN_DISABLED_PROJECT_TYPES" in wrapper
     assert "VITE_DISABLED_PROJECT_TYPES" in wrapper
+    assert f"RG_WEB_DISABLED_PROJECT_TYPES:-{limited_release_panels}" in wrapper
     assert "REQUIRE_ORIGIN_MAIN_REACHABILITY:-1" in wrapper
     assert 'git fetch --prune "$ORIGIN_REMOTE" main' in wrapper
     assert 'git merge-base --is-ancestor "$resolved_ref" "$ORIGIN_MAIN_REF"' in wrapper
@@ -76,6 +78,17 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert "--protocol http2" in cloudflared_start
     assert "cloudflared_tunnel_ha_connections" in cloudflared_start
     assert "cloudflared_tunnel_ha_connections" in cloudflared_watchdog
+
+
+def test_iyun129_switch_keeps_all_unpromoted_panels_fail_closed() -> None:
+    release = _read("scripts/iyun129_release.sh")
+    limited_release_panels = "crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation"
+
+    assert f"RG_WEB_DISABLED_PROJECT_TYPES:-{limited_release_panels}" in release
+    assert (
+        'REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-'
+        '$RG_WEB_DISABLED_PROJECT_TYPES}"'
+    ) in release
 
 
 def test_iyun129_wrapper_rejects_commit_not_reachable_from_origin_main(

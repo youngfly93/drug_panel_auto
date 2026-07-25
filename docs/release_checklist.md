@@ -152,21 +152,22 @@ known-good process and refuses the switch when any is truthy.
 
 ### CRC358-only limited release
 
-When CRC358 is released before CRC301 and the new lung588 draft have completed
-their own case-level UAT, the production release must disable both
-`crc_301_msi` and `lung_588_pdl1` in all three scope guards:
+When CRC358 is released before CRC301 and the lung packages have completed
+their own case-level UAT and promotion, the production release must disable
+`crc_301_msi`, `lung_329_pdl1`, `lung_588_pdl1`, and `lung_methylation` in all
+three scope guards:
 
 ```text
-REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1
-RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1
-VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1
+REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation
+RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation
+VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation
 ```
 
 The first guard blocks direct/core generation, the second blocks Web API and
-batch entry points, and the third removes CRC301 from the production generation
-selector. The iyun129 deployment wrapper supplies these values by default for
-the limited release. The backend guards are authoritative: a hidden frontend
-option alone is not a release boundary.
+batch entry points, and the third removes all four unpromoted products from the
+production generation selector. The iyun129 deployment wrapper supplies these
+values by default for the limited release. The backend guards are authoritative:
+a hidden or absent frontend option alone is not a release boundary.
 
 Any CRC358 knowledge row whose secondary review is still pending must remain
 visible in governance counts but set `runtime_eligible: false`. Exact pending
