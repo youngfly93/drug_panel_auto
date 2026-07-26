@@ -3011,7 +3011,9 @@ def test_panel_package_loader_reads_lung_methylation_package():
 
     assert package.panel_id == "lung_methylation"
     assert package.display_name == "肺癌甲基化"
+    assert package.raw["status"] == "draft"
     assert package.default_template.template_id == "lung_methylation_minimal_v1"
+    assert package.default_template.status == "draft"
     assert package.resolve_template_file().exists()
     assert package.resolve_rule_file("panel_rules").name == "lung_methylation.yaml"
     assert package.input_contract["required_tables"] == ["甲基化位点"]
@@ -3019,6 +3021,7 @@ def test_panel_package_loader_reads_lung_methylation_package():
     assert package.qa_profile["current_output"]["enabled"] is False
     assert package.qa_profile["legacy_reference"]["enabled"] is False
     assert package.golden_cases[0]["id"] == "lung_methylation_synthetic_positive"
+    assert package.golden_cases[0]["counts_as_production_evidence"] is False
 
 
 def test_panel_package_registry_validator_accepts_builtin_packages():

@@ -173,6 +173,16 @@ the production generation selector. The iyun129 deployment wrapper supplies
 these values by default. The backend guards are authoritative: a hidden or
 absent frontend option alone is not a release boundary.
 
+`panels/lung_methylation/release_readiness.yaml` is the committed promotion
+record for the methylation draft. Its synthetic golden proves only that the
+engineering pipeline can render a document; it is not production evidence.
+Before any backup or server mutation,
+`scripts/check_production_panel_scope.py` requires every panel whose readiness
+record is `production_eligible: false` to remain present in the Web, core, and
+frontend disabled scopes. Promotion additionally requires a SHA-pinned,
+same-case report-group final DOCX and source Excel, report-group secondary
+review, historical-golden PASS, and production-equivalent Linux visual QA.
+
 Any CRC358 knowledge row whose secondary review is still pending must remain
 visible in governance counts but set `runtime_eligible: false`. Exact pending
 variant selectors must fail closed before legacy database or external-drug

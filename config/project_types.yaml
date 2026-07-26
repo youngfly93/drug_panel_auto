@@ -52,11 +52,12 @@ project_types:
         weight: 1
       - any: ["甲基化", "methylation"]
         weight: 1
-    # NOTE: lung_methylation_template.docx is not present in this repo checkout.
-    # Update this path if you have a dedicated methylation template locally.
+    # Engineering detection contract only. Production remains fail-closed until
+    # panels/lung_methylation/release_readiness.yaml records a reviewed same-case
+    # final DOCX + source Excel pair and passes the promotion gates.
     template: "templates/aligned_template_with_cnv_fusion_hla_FIXED.docx"
     priority: 10
-    description: "肺癌甲基化检测（若未配置独立模板则回退至主线 aligned 模板；字段含义与展示略有差异，以 mapping/settings 为准）"
+    description: "肺癌甲基化工程草案（仅用于合成管线验证，当前禁止生产生成）"
 
 # 默认配置
 default:

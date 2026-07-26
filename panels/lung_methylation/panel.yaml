@@ -1,9 +1,12 @@
 schema_version: "1.0"
 panel_id: "lung_methylation"
 display_name: "肺癌甲基化"
-version: "0.1.0"
-status: "pilot"
-description: "M3 pilot package for lung methylation report generation."
+version: "0.1.1"
+status: "draft"
+description: >-
+  Engineering-only draft package for validating the panel architecture with a
+  synthetic fixture. No formal same-case reference DOCX and source Excel pair
+  has been registered, so this package is not eligible for production use.
 
 aliases:
   - "lung_methylation_panel"
@@ -32,9 +35,9 @@ default_template: "lung_methylation_minimal_v1"
 templates:
   - id: "lung_methylation_minimal_v1"
     file: "templates/lung_methylation_minimal_v1.docx"
-    version: "0.1.0"
-    status: "pilot"
-    description: "Minimal M3 pilot template for lung methylation."
+    version: "0.1.1"
+    status: "draft"
+    description: "Synthetic engineering template; not a report-group golden template."
 
 mappings:
   default: "config/mapping.yaml"
@@ -85,4 +88,5 @@ golden_cases:
     runner: "reportgen.core.golden_case:run_golden_case"
     command: "reportgen qa run --panel lung_methylation"
     synthetic: true
+    counts_as_production_evidence: false
     expected_qa_status: "PASS"
