@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# 步骤: 70 肺癌588工程模板构建
+# 步骤: 70 肺癌329受控试运行模板临床内容硬化
 # 上游: 受控外部迁移源（不进入Git或生产发布包）
-# 输出: panels/lung_588_pdl1/templates/lung_588_pdl1_golden_template_v0.docx
+# 输出: panels/lung_329_pdl1/templates/lung_329_pdl1_golden_template_v2.docx
 # 种子: 无（确定性文档变换）
-"""Build the independent lung588 draft template without static treatment claims.
+"""Build the lung329 v2 controlled-pilot template without static clinical claims.
 
 The migration source is supplied explicitly from controlled external storage
 and is never tracked or shipped. Its dynamic variant/PD-L1 scaffolding is
 useful, but several report-visible tables contain fixed historical treatment
-recommendations or patient genotypes. This script produces a lung588 template
-whose active report data comes from ReportGen context only. Unreviewed clinical
+recommendations or patient genotypes. This script produces a v2 template whose
+active report data comes from ReportGen context only. Unreviewed clinical
 sections fail closed with an explicit review notice.
 """
 
@@ -28,27 +28,18 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from docx import Document
 from docx.document import Document as DocumentObject
-from docx.enum.table import WD_ROW_HEIGHT_RULE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = (
     ROOT
     / "panels"
-    / "lung_588_pdl1"
+    / "lung_329_pdl1"
     / "templates"
-    / "lung_588_pdl1_golden_template_v0.docx"
-)
-GENE_LIST_RULE = (
-    ROOT
-    / "panels"
-    / "lung_588_pdl1"
-    / "rules"
-    / "knowledge_coverage.yaml"
+    / "lung_329_pdl1_golden_template_v2.docx"
 )
 REFERENCE_VARIANT_TEMPLATE = (
     ROOT
@@ -60,26 +51,22 @@ REFERENCE_VARIANT_TEMPLATE = (
 EXPECTED_SOURCE_SHA256 = (
     "bbecf470feedab8ba20c4d84f7e4f8f0e2f0714f8f50818dc0419d72d2767e66"
 )
-EXPECTED_GENE_LIST_SHA256 = (
-    "f9e6be05c954a4d3df97f031d453fe1f58ea0689290b11de3c173f4a0edf08f1"
-)
 
 REVIEW_NOTICE = (
-    "肺癌专属治疗知识和事件级药物规则当前未启用，本报告不输出患者级用药结论；"
-    "最终治疗方案须由专业医师结合病理类型、疾病分期及现行诊疗规范综合判断。"
+    "肺癌专属治疗知识和事件级药物规则尚未完成报告组二审及病例级验收，"
+    "当前版本不输出患者级用药结论。"
 )
 CHEMOTHERAPY_NOTICE = (
-    "化疗药物多态性与方案模块当前未启用，本报告不输出患者级化疗敏感性、"
-    "毒性或剂量结论。"
+    "化疗药物多态性与方案模块尚未完成数据接入、医学审核及脱敏UAT，"
+    "当前版本不输出患者级化疗敏感性、毒性或剂量结论。"
 )
 APPENDIX_NOTICE = (
-    "本节当前版本暂不提供；相关诊疗信息请咨询专业医师。"
+    "本节历史静态内容已停用；经医学审核并建立可追溯来源后再恢复展示。"
 )
 IMMUNE_RESEARCH_NOTICE = (
-    "本节仅展示研究性免疫相关基因检测事实，不得据此预测个体疗效、"
-    "耐药或超进展，也不得自动生成治疗方案。"
+    "免疫正相关、负相关及超进展基因分类尚未完成肺癌专属医学审核，"
+    "当前版本不展示患者级基因结果，也不据此预测疗效、耐药或超进展。"
 )
-IMMUNE_RESEARCH_RESULT = "研究性相关标志物，不能单独用于治疗决策。"
 PDL1_IMAGE_NOTICE = (
     "附图：本病例未提供可追溯的PD-L1免疫组化图像，故不展示；"
     "TPS、CPS及结果判定须与原始检测记录核对。"
@@ -97,8 +84,6 @@ REFERENCE_LINES = (
 )
 
 FORBIDDEN_OUTPUT_TOKENS = (
-    "肺癌329",
-    "n=329",
     "非小细胞肺癌NCCN指南（2022 V3）",
     "非小细胞肺癌CSCO指南（2022）",
     "多西他赛单药方案",
@@ -291,15 +276,8 @@ def _remove_table(table) -> None:
         parent.remove(table._tbl)
 
 
-def _remove_static_pdl1_image(document: DocumentObject) -> None:
-    """Remove the scaffold's patient-specific PD-L1 image and orphaned media part.
-
-    The source scaffold contains a fixed microscopy image between the PD-L1 and
-    MSI headings. Reusing it while only replacing TPS/CPS would create a
-    cross-case image leak. The builder therefore removes both the visible
-    drawing and its unique package relationship, and leaves an explicit
-    patient-facing no-image notice.
-    """
+def _remove_static_pdl1_image(document: DocumentObject) -> set[str]:
+    """Remove the inherited case-specific PD-L1 image and its package relation."""
     start = _body_paragraph(document, "3.2 PD-L1表达检测结果")
     end = _body_paragraph(document, "3.3微卫星不稳定性（MSI）检测结果")
     children = list(document.element.body.iterchildren())
@@ -308,22 +286,19 @@ def _remove_static_pdl1_image(document: DocumentObject) -> None:
     if end_index <= start_index:
         raise ValueError("invalid PD-L1 section order")
 
-    image_relationship_ids: set[str] = set()
+    relationship_ids: set[str] = set()
+    image_hashes: set[str] = set()
     image_paragraph_count = 0
-    notice_count = 0
+    label_count = 0
     caption_count = 0
     for child in list(children[start_index + 1 : end_index]):
         text = _element_text(child)
         compact_text = _compact(text)
         drawings = list(child.iter(qn("w:drawing")))
-        picts = list(child.iter(qn("w:pict")))
 
         if compact_text == _compact("附图："):
-            paragraph = next(
-                candidate for candidate in document.paragraphs if candidate._p is child
-            )
-            _replace_paragraph_text(paragraph, PDL1_IMAGE_NOTICE)
-            notice_count += 1
+            document.element.body.remove(child)
+            label_count += 1
             continue
 
         if compact_text.startswith(_compact("图1")) and "PD-L1" in text:
@@ -332,25 +307,26 @@ def _remove_static_pdl1_image(document: DocumentObject) -> None:
             continue
 
         if not compact_text and drawings:
-            if len(drawings) != 1 or picts:
-                raise ValueError("unexpected static PD-L1 image representation")
-            relationship_ids = {
+            embedded = {
                 blip.get(qn("r:embed"))
                 for blip in child.iter(qn("a:blip"))
                 if blip.get(qn("r:embed"))
             }
-            if len(relationship_ids) != 1:
-                raise ValueError(
-                    "static PD-L1 image must use one embedded relationship"
-                )
-            image_relationship_ids.update(relationship_ids)
+            if len(drawings) != 1 or len(embedded) != 1:
+                raise ValueError("unexpected static PD-L1 image representation")
+            relationship_id = next(iter(embedded))
+            relationship = document.part.rels.get(relationship_id)
+            if relationship is None or not relationship.reltype.endswith("/image"):
+                raise ValueError("static PD-L1 drawing does not resolve to an image")
+            image_hashes.add(hashlib.sha256(relationship.target_part.blob).hexdigest())
+            relationship_ids.add(relationship_id)
             document.element.body.remove(child)
             image_paragraph_count += 1
 
-    if (image_paragraph_count, notice_count, caption_count) != (1, 1, 1):
+    if (image_paragraph_count, label_count, caption_count) != (1, 1, 1):
         raise ValueError(
             "unexpected PD-L1 scaffold assets: "
-            f"image={image_paragraph_count}, notice={notice_count}, "
+            f"image={image_paragraph_count}, label={label_count}, "
             f"caption={caption_count}"
         )
 
@@ -359,10 +335,70 @@ def _remove_static_pdl1_image(document: DocumentObject) -> None:
         for blip in document.element.iter(qn("a:blip"))
         if blip.get(qn("r:embed"))
     }
-    for relationship_id in image_relationship_ids:
+    for relationship_id in relationship_ids:
         if relationship_id in remaining_relationship_ids:
             raise ValueError("static PD-L1 image relationship is still referenced")
         document.part.drop_rel(relationship_id)
+    return image_hashes
+
+
+def _drop_unreferenced_document_media_relationships(
+    document: DocumentObject,
+) -> int:
+    """Remove media relations left behind when static report sections are deleted."""
+    used_ids = {
+        value
+        for element in document.element.iter()
+        for attribute in (qn("r:embed"), qn("r:link"))
+        if (value := element.get(attribute))
+    }
+    stale_ids = [
+        relationship_id
+        for relationship_id, relationship in document.part.rels.items()
+        if relationship.reltype.rsplit("/", 1)[-1] in {"image", "hdphoto"}
+        and relationship_id not in used_ids
+    ]
+    for relationship_id in stale_ids:
+        document.part.drop_rel(relationship_id)
+    return len(stale_ids)
+
+
+def _validate_output_media(
+    path: Path,
+    *,
+    forbidden_hashes: set[str],
+) -> None:
+    """Require every stored media part to be referenced and reject source-case images."""
+    with ZipFile(path, "r") as archive:
+        names = set(archive.namelist())
+        media_parts = {name for name in names if name.startswith("word/media/")}
+        relationship_targets: set[str] = set()
+        for name in names:
+            if not name.endswith(".rels"):
+                continue
+            for target in re.findall(
+                rb'Target="(?:\.\./)?media/([^"]+)"',
+                archive.read(name),
+            ):
+                relationship_targets.add(
+                    "word/media/" + target.decode("utf-8", errors="strict")
+                )
+        if media_parts != relationship_targets:
+            raise ValueError(
+                "hardened template contains missing or orphaned media parts: "
+                f"stored_only={sorted(media_parts - relationship_targets)}, "
+                f"target_only={sorted(relationship_targets - media_parts)}"
+            )
+        leaked = [
+            name
+            for name in sorted(media_parts)
+            if hashlib.sha256(archive.read(name)).hexdigest() in forbidden_hashes
+        ]
+        if leaked:
+            raise ValueError(
+                "hardened template retains the source-case PD-L1 image: "
+                + ", ".join(leaked)
+            )
 
 
 def _neutralize_table(table, values: Sequence[str]) -> None:
@@ -418,54 +454,6 @@ def _replace_variant_table(document: DocumentObject) -> None:
     _remove_table(abbreviated)
 
 
-def _load_lung588_gene_list() -> list[str]:
-    raw = yaml.safe_load(GENE_LIST_RULE.read_text(encoding="utf-8")) or {}
-    genes = [
-        str(value).strip().upper()
-        for value in raw.get("reportable_genes") or []
-        if str(value).strip()
-    ]
-    if len(genes) != 588 or len(set(genes)) != 588:
-        raise ValueError(
-            f"lung588 gene contract must contain 588 unique genes, got {len(genes)}"
-        )
-    digest = hashlib.sha256("\n".join(genes).encode("utf-8")).hexdigest()
-    if digest != EXPECTED_GENE_LIST_SHA256:
-        raise ValueError(
-            "lung588 ordered gene contract changed: "
-            f"expected={EXPECTED_GENE_LIST_SHA256}, actual={digest}"
-        )
-    return genes
-
-
-def _replace_gene_list(document: DocumentObject) -> None:
-    table = _find_table(document, ("Gene List for MLseq (n=329)",))
-    if len(table.columns) != 7 or len(table.rows) < 2:
-        raise ValueError("unexpected lung329 gene-list table shape")
-    body_template = copy.deepcopy(table.rows[1]._tr)
-    for row in list(table.rows[1:]):
-        table._tbl.remove(row._tr)
-
-    genes = _load_lung588_gene_list()
-    for offset in range(0, len(genes), 7):
-        table._tbl.append(copy.deepcopy(body_template))
-        row = table.rows[-1]
-        # The 329 scaffold uses 0.88 cm rows. With 588 genes that leaves only
-        # two rows on a fourth physical page in LibreOffice. Keep seven
-        # readable columns but compact each deterministic body row so the tail
-        # remains a meaningful page instead of an orphan.
-        row.height = Cm(0.72)
-        row.height_rule = WD_ROW_HEIGHT_RULE.EXACTLY
-        values = genes[offset : offset + 7]
-        for index, cell in enumerate(row.cells):
-            _replace_cell_text(cell, values[index] if index < len(values) else "")
-            for paragraph in cell.paragraphs:
-                paragraph.paragraph_format.line_spacing = 1.0
-                for run in paragraph.runs:
-                    run.font.size = Pt(10)
-    _replace_cell_text(table.rows[0].cells[0], "Gene List for MLseq (n=588)")
-
-
 def _replace_biomarker_cells(document: DocumentObject) -> None:
     table = _find_table(document, ("TMB/MSI/其它生物标志物检测结果", "用药提示"))
     replacements = {
@@ -494,58 +482,14 @@ def _insert_summary_count(document: DocumentObject) -> None:
 
 
 def _harden_immune_marker_section(document: DocumentObject) -> None:
-    """Retain dynamic result loops while removing unreviewed cross-cancer prose."""
-    start = _body_paragraph(
+    """Replace inherited immune-gene tables with one explicit disabled notice."""
+    _collapse_between(
         document,
         "3.4 免疫疗效正相关/负相关/超进展基因检测结果",
+        "4.化疗药物相关检测结果",
+        (IMMUNE_RESEARCH_NOTICE,),
+        replacement_heading="3.4 免疫相关基因模块（未启用）",
     )
-    end = _body_paragraph(document, "4.化疗药物相关检测结果")
-    children = list(document.element.body.iterchildren())
-    start_index = children.index(start._p)
-    end_index = children.index(end._p)
-    if end_index <= start_index:
-        raise ValueError("invalid immune marker section order")
-
-    keep_headings = {
-        _compact("免疫治疗正相关基因检测结果"),
-        _compact("免疫治疗负相关基因检测结果"),
-        _compact("免疫治疗超进展基因检测结果"),
-    }
-    intro = None
-    tables = []
-    for child in children[start_index + 1 : end_index]:
-        if child.tag == qn("w:tbl"):
-            table = next(
-                (candidate for candidate in document.tables if candidate._tbl is child),
-                None,
-            )
-            if table is None:
-                raise ValueError("unable to resolve immune marker table")
-            tables.append(table)
-            continue
-        if child.tag != qn("w:p"):
-            document.element.body.remove(child)
-            continue
-        text = _compact(_element_text(child))
-        if text in keep_headings:
-            continue
-        if intro is None:
-            intro = next(
-                paragraph for paragraph in document.paragraphs if paragraph._p is child
-            )
-            _replace_paragraph_text(intro, IMMUNE_RESEARCH_NOTICE)
-            continue
-        document.element.body.remove(child)
-
-    if intro is None or len(tables) != 3:
-        raise ValueError(
-            f"expected immune intro and three dynamic tables, found intro={intro is not None}, "
-            f"tables={len(tables)}"
-        )
-    for table in tables:
-        if len(table.rows) != 4 or len(table.columns) != 3:
-            raise ValueError("unexpected immune marker table shape")
-        _replace_cell_text(table.rows[2].cells[2], IMMUNE_RESEARCH_RESULT)
 
 
 def _prepare_toc_seed(document: DocumentObject) -> None:
@@ -628,8 +572,6 @@ def _validate_hardened_document(document: DocumentObject) -> None:
         PDL1_ASSAY_PROVENANCE_MARKER,
         PDL1_SOURCE_PROVENANCE_MARKER,
         PDL1_IMAGE_NOTICE,
-        "肺癌588基因+PD-L1检测项目",
-        "Gene List for MLseq (n=588)",
         "{%tr for row in variants_2_1 %}",
         "{%tr for row in nccn_results %}",
         REVIEW_NOTICE,
@@ -650,30 +592,6 @@ def _validate_hardened_document(document: DocumentObject) -> None:
         raise ValueError(
             f"expected one full dynamic variant table, found {len(full_variant_table)}"
         )
-    gene_table = _find_table(document, ("Gene List for MLseq (n=588)",))
-    rendered_genes = [
-        _compact(cell.text)
-        for row in gene_table.rows[1:]
-        for cell in row.cells
-        if _compact(cell.text)
-    ]
-    if rendered_genes != _load_lung588_gene_list():
-        raise ValueError("rendered lung588 gene list does not match the frozen contract")
-
-    start = _body_paragraph(document, "3.2 PD-L1表达检测结果")
-    end = _body_paragraph(document, "3.3微卫星不稳定性（MSI）检测结果")
-    children = list(document.element.body.iterchildren())
-    pdl1_children = children[
-        children.index(start._p) + 1 : children.index(end._p)
-    ]
-    blank_image_paragraphs = [
-        child
-        for child in pdl1_children
-        if not _compact(_element_text(child))
-        and any(True for _ in child.iter(qn("w:drawing")))
-    ]
-    if blank_image_paragraphs:
-        raise ValueError("hardened template retains a static PD-L1 image")
 
 
 def _normalize_zip_metadata(path: Path) -> None:
@@ -699,7 +617,7 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
     actual_source_hash = _sha256(source)
     if not allow_source_drift and actual_source_hash != EXPECTED_SOURCE_SHA256:
         raise ValueError(
-            "lung329 scaffold changed; review it before rebuilding lung588: "
+            "lung329 v1 source changed; review the template before rebuilding v2: "
             f"expected={EXPECTED_SOURCE_SHA256}, actual={actual_source_hash}"
         )
     if not REFERENCE_VARIANT_TEMPLATE.is_file():
@@ -709,7 +627,7 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
 
     _replace_paragraph_text(
         _body_paragraph(document, "肺癌329基因检测"),
-        "肺癌588基因+PD-L1检测项目",
+        "肺癌329基因+PD-L1检测项目",
     )
     _replace_paragraph_text(
         _body_paragraph(
@@ -732,46 +650,10 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
         ),
         "化疗药物多态性模块尚未完成接入和审核，当前版本不输出相关结论。",
     )
-    _replace_paragraph_text(
-        _body_paragraph(
-            document,
-            "分析样本微卫星不稳定性，给予用药提示。",
-        ),
-        "分析样本微卫星不稳定性并报告检测状态；治疗意义须结合临床信息综合判断。",
-    )
-    _replace_paragraph_text(
-        _body_paragraph(
-            document,
-            "报告第二部分：检测结果（提供本次检测涉及的靶向治疗、免疫治疗、化疗等综合检测结果），是本报告的关键信息。",
-        ),
-        "报告第二部分：检测结果。提供本次分子检测结果及当前已启用的审核结论，是本报告的关键信息。",
-    )
-    _replace_paragraph_text(
-        _body_paragraph(
-            document,
-            "报告第三部分：基因变异及相应靶向/免疫药物解析，该部分对第二部分中的基因变异和靶向/免疫药物提示进行详细解析，并且包含本报告的阅读说明。",
-        ),
-        "报告第三部分：基因变异及相应靶向/免疫药物解析。相关知识未启用时，本节仅显示解释边界和阅读说明。",
-    )
-    _replace_paragraph_text(
-        _body_paragraph(
-            document,
-            "报告第四部分：附录。提供所检测癌症的诊疗知识、癌症相关重要信号通路、所检测的基因列表信息、以及本报告的参考文献。",
-        ),
-        "报告第四部分：附录。提供检测基因列表、参考文献、检测方法、质量控制及报告说明。",
-    )
 
     _replace_variant_table(document)
-    _replace_gene_list(document)
     _replace_biomarker_cells(document)
-    _remove_static_pdl1_image(document)
-    _replace_paragraph_text(
-        _body_paragraph(
-            document,
-            "5、因肿瘤存在较大的异质性，送检样本不一定代表肿瘤的全貌。",
-        ),
-        "4、因肿瘤存在较大的异质性，送检样本不一定代表肿瘤的全貌。",
-    )
+    forbidden_media_hashes = _remove_static_pdl1_image(document)
     _insert_summary_count(document)
 
     _neutralize_table(
@@ -800,20 +682,6 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
     _replace_paragraph_text(
         _body_paragraph(
             document,
-            "注：1. 以上只列出 NCCN 指南推荐的检测基因，基因检测范围涵盖但不限于上表中列出的检测内容。",
-        ),
-        "注：本表仅在肺癌重点分子事件及相应指南口径完成审核后展示；当前版本未启用。",
-    )
-    _replace_paragraph_text(
-        _body_paragraph(
-            document,
-            "2. 检出详情，可查看基因变异检测结果。",
-        ),
-        "检出详情请查看本报告的基因变异检测结果。",
-    )
-    _replace_paragraph_text(
-        _body_paragraph(
-            document,
             "（*以下为本癌种FDA/NMPA批准的抗血管生成类的靶向药物，或国内临床实践中疗效较好的靶向药物，可以作为多线治疗的备选方案。）",
         ),
         REVIEW_NOTICE,
@@ -824,7 +692,7 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
         "非小细胞肺癌NCCN指南（2022 V3）",
         "3.免疫治疗疗效评估",
         (REVIEW_NOTICE,),
-        replacement_heading="肺癌临床指南说明（当前版本未启用）",
+        replacement_heading="肺癌临床指南说明（待报告组审核）",
     )
     _collapse_between(
         document,
@@ -852,6 +720,7 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
             "{{ pdl1_table_interpretation }}",
             PDL1_ASSAY_PROVENANCE_MARKER,
             PDL1_SOURCE_PROVENANCE_MARKER,
+            PDL1_IMAGE_NOTICE,
         ),
         replacement_heading="结果解释边界",
     )
@@ -891,7 +760,7 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
         "3.2 文中医学及生物学常见名词说明",
         (
             "正文如出现PMID或临床试验登记号，仅用于文献追溯；具体研究适用范围、"
-            "入组条件及证据等级须结合原始文献核对，不得把登记号本身作为用药依据。",
+            "入组条件及证据等级须由报告组复核，不得把登记号本身作为用药依据。",
         ),
     )
     _replace_last_reference_heading(document)
@@ -910,11 +779,13 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
     _remove_explicit_page_break_before(document, "4.化疗药物相关检测结果")
     _add_letter_divider_note(document)
     _prepare_toc_seed(document)
+    _drop_unreferenced_document_media_relationships(document)
     _validate_hardened_document(document)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     document.save(output)
     _normalize_zip_metadata(output)
+    _validate_output_media(output, forbidden_hashes=forbidden_media_hashes)
     return {
         "source": str(source),
         "source_sha256": actual_source_hash,

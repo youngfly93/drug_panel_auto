@@ -615,6 +615,45 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     assert data["qa_status"] == "PASS"
 
 
+def test_controlled_pilot_response_never_inlines_unreviewed_docx(tmp_path):
+    output = tmp_path / "controlled-pilot.docx"
+    output.write_bytes(b"PK\x03\x04synthetic")
+    result = {
+        "success": True,
+        "output_file": str(output),
+        "warnings": [],
+        "errors": [],
+    }
+
+    pilot = report_api._generate_response_from_result(
+        task_id="pilot-task",
+        result=result,
+        warnings=[],
+        diff_summary={},
+        auto_diff_ran=False,
+        clinical_info={"sample_id": "SYNTHETIC"},
+        project_type="lung_329_pdl1",
+        project_name="肺癌329基因+PD-L1",
+        include_inline_file=True,
+    )
+    crc = report_api._generate_response_from_result(
+        task_id="crc-task",
+        result=result,
+        warnings=[],
+        diff_summary={},
+        auto_diff_ran=False,
+        clinical_info={"sample_id": "SYNTHETIC"},
+        project_type="crc_358_msi",
+        project_name="结直肠癌358基因+MSI",
+        include_inline_file=True,
+    )
+
+    assert pilot.output_filename is None
+    assert pilot.output_file_base64 is None
+    assert crc.output_filename is not None
+    assert crc.output_file_base64 is not None
+
+
 @pytest.mark.parametrize(
     "disabled_panel",
     [
@@ -1687,7 +1726,71 @@ def test_lung588_controlled_pilot_download_requires_manual_review(tmp_path):
     assert attempt("lung_588_pdl1", "delivered") == 200
     assert attempt("lung_588_pdl1", "draft", override=True) == 403
     assert attempt("lung_588_pdl1", "draft", override=True, role="reviewer") == 200
+    assert attempt("lung_329_pdl1", "draft") == 409
+    assert attempt("lung_329_pdl1", "reviewed") == 200
+    assert attempt("lung_329_pdl1", "delivered") == 200
+    assert attempt("lung_329_pdl1", "draft", override=True) == 403
+    assert attempt("lung_329_pdl1", "draft", override=True, role="reviewer") == 200
     assert attempt("crc_358_msi", "draft") == 200
+
+
+def test_controlled_pilot_audit_package_requires_review_or_privileged_user(
+    tmp_path,
+    monkeypatch,
+):
+    """审计包不得成为受控试运行报告绕过人工复核的下载旁路。"""
+    task_id = "synthetic-lung329-audit-package"
+    report_path = tmp_path / "reports" / task_id / "synthetic-lung329.docx"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_bytes(b"PK\x03\x04synthetic-lung329")
+    report_path.with_suffix(".qa.json").write_text(
+        json.dumps({"status": "PASS", "issues": [], "checks": {}}),
+        encoding="utf-8",
+    )
+
+    with _client(tmp_path, monkeypatch, role="operator") as operator_client:
+        db = report_api.SessionLocal()
+        try:
+            db.add(
+                Task(
+                    id=task_id,
+                    user_id=1,
+                    task_type="single",
+                    status="completed",
+                    project_type="lung_329_pdl1",
+                    output_path=str(report_path),
+                    completed_files=1,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        blocked = operator_client.get(f"/api/v1/reports/{task_id}/audit-package")
+
+    assert blocked.status_code == 409
+    assert "仅供复核人或管理员下载" in blocked.json()["detail"]
+
+    with _client(tmp_path, monkeypatch, role="reviewer") as reviewer_client:
+        reviewer_download = reviewer_client.get(
+            f"/api/v1/reports/{task_id}/audit-package"
+        )
+        reviewed = reviewer_client.post(
+            f"/api/v1/reports/{task_id}/review-state",
+            json={"status": "reviewed", "operator": "Synthetic Reviewer"},
+        )
+
+    assert reviewer_download.status_code == 200
+    assert reviewer_download.headers["content-type"].startswith("application/zip")
+    assert reviewed.status_code == 200
+
+    with _client(tmp_path, monkeypatch, role="operator") as operator_client:
+        reviewed_download = operator_client.get(
+            f"/api/v1/reports/{task_id}/audit-package"
+        )
+
+    assert reviewed_download.status_code == 200
+    assert reviewed_download.headers["content-type"].startswith("application/zip")
 
 
 def test_batch_item_download_blocks_qa_fail(tmp_path):

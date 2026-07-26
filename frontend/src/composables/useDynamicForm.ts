@@ -34,6 +34,7 @@ export function useDynamicForm(projectType: Ref<string | null>) {
             const nameMap: Record<string, string> = {
               crc_301_msi: '结直肠癌301基因+MSI',
               crc_358_msi: '结直肠癌358基因+MSI',
+              lung_329_pdl1: '肺癌329基因+PD-L1',
               lung_588_pdl1: '肺癌588基因+PD-L1',
               mlf_result: 'MLF基因检测结果',
               lung_methylation: '肺癌甲基化',

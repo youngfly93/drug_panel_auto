@@ -61,9 +61,13 @@ Draft/pilot panels are reported as non-blocking readiness warnings.
 
 The same report contains a separate `clinical_release_readiness` status. It stays
 `BLOCKED` while report-group secondary review is pending, generic fallback remains
-above the accepted content-depth target, or real-report UAT has fewer than 10
-reviewed reports / less than 90% pass rate. An engineering `PASS` must not be
-described as medical approval or UAT completion.
+above the accepted content-depth target, or the active Panel-specific UAT policy
+is not satisfied. Legacy panels default to at least 10 reviewed reports and 90%
+pass rate; a Panel may declare a versioned risk-based policy. Such a policy may
+allow a controlled internal pilot without a fixed case-count minimum, but it must
+remain explicitly blocked from active medical promotion when real-case UAT is
+absent. An engineering `PASS` must not be described as medical approval or UAT
+completion.
 
 The knowledge gate can also be run directly:
 
@@ -150,24 +154,24 @@ cached PAGEREF directory construction and can produce an empty TOC even when
 HTTP health is green. The runtime start script checks them before stopping the
 known-good process and refuses the switch when any is truthy.
 
-### CRC358-only limited release
+### CRC358 + lung329 controlled-pilot release
 
-When CRC358 is released before CRC301 and the lung packages have completed
-their own case-level UAT and promotion, the production release must disable
-`crc_301_msi`, `lung_329_pdl1`, `lung_588_pdl1`, and `lung_methylation` in all
-three scope guards:
+The lung329 product is exposed only for single-case controlled generation:
+PD-L1 values and source identity are mandatory per case, shared batch
+generation is disabled, and download requires report-group review. CRC301,
+lung588 and lung methylation remain disabled in all three scope guards:
 
 ```text
-REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation
-RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation
-VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation
+REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation
+RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation
+VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation
 ```
 
 The first guard blocks direct/core generation, the second blocks Web API and
-batch entry points, and the third removes all four unpromoted products from the
-production generation selector. The iyun129 deployment wrapper supplies these
-values by default for the limited release. The backend guards are authoritative:
-a hidden or absent frontend option alone is not a release boundary.
+batch entry points, and the third removes the three unpromoted products from
+the production generation selector. The iyun129 deployment wrapper supplies
+these values by default. The backend guards are authoritative: a hidden or
+absent frontend option alone is not a release boundary.
 
 Any CRC358 knowledge row whose secondary review is still pending must remain
 visible in governance counts but set `runtime_eligible: false`. Exact pending

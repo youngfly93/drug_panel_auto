@@ -24,10 +24,11 @@ export TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}
 export HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"
 export RG_WEB_DOCS_ENABLED="${RG_WEB_DOCS_ENABLED:-0}"
 export RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
-# CRC301 and all unpromoted lung packages remain outside this release until
-# their independent case-level UAT and promotion gates are complete.
-# The same scope is enforced in the Web API, reportgen core, and compiled UI.
-export RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_329_pdl1,lung_588_pdl1,lung_methylation}"
+# Lung329 is exposed only as a single-case controlled pilot with mandatory
+# per-case PD-L1 provenance and review-before-download. CRC301, lung588 and
+# methylation remain outside this release. The same scope is enforced in the
+# Web API, reportgen core, and compiled UI.
+export RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_588_pdl1,lung_methylation}"
 export REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 export VITE_DISABLED_PROJECT_TYPES="${VITE_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 export ORIGIN_REMOTE="${ORIGIN_REMOTE:-origin}"

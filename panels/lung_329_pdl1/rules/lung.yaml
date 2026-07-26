@@ -1,0 +1,96 @@
+# 肺癌329基因+PD-L1面板的基因分层与报告展示元数据。
+# 仅存放面板级规则，不得写入患者标识或病例特异分支。
+schema_version: "1.0"
+panel_id: "lung_329_pdl1"
+rule_id: "lung"
+version: "0.3.0"
+updated: "2026-07-25"
+status: "pilot"
+notes:
+  - "肺癌驱动事件必须按精确变异、融合或拷贝数事件解释，基因阳性不等同于统一用药结论。"
+  - "药物结论由rules/drugs.yaml独立治理，人工审核前保持关闭。"
+
+variant_filter:
+  columns: ["ExistIn552"]
+  allowed_values: ["Ⅰ类", "Ⅱ类", "Ⅲ类"]
+
+class_i_genes:
+  - EGFR
+  - ALK
+  - ROS1
+  - KRAS
+  - BRAF
+  - MET
+  - RET
+  - ERBB2
+  - NTRK1
+  - NTRK2
+  - NTRK3
+
+class_ii_genes:
+  - TP53
+  - STK11
+  - KEAP1
+  - PIK3CA
+  - PTEN
+  - RB1
+  - NF1
+
+# 兼容渲染器内部历史字段名；加载器优先读取此通用键。
+important_genes:
+  - EGFR
+  - ALK
+  - ROS1
+  - KRAS
+  - BRAF
+  - MET
+  - RET
+  - ERBB2
+  - NTRK1
+  - NTRK2
+  - NTRK3
+  - TP53
+  - STK11
+  - KEAP1
+  - PIK3CA
+  - PTEN
+  - RB1
+  - NF1
+
+panel_display_genes:
+  - name: EGFR
+    transcript: NM_005228.5
+    chromosome: "7"
+  - name: ALK
+    transcript: NM_004304.5
+    chromosome: "2"
+  - name: ROS1
+    transcript: NM_002944.2
+    chromosome: "6"
+  - name: KRAS
+    transcript: NM_033360.4
+    chromosome: "12"
+  - name: BRAF
+    transcript: NM_004333.4
+    chromosome: "7"
+  - name: MET
+    transcript: NM_000245.4
+    chromosome: "7"
+  - name: RET
+    transcript: NM_020975.6
+    chromosome: "10"
+  - name: ERBB2
+    transcript: NM_004448.4
+    chromosome: "17"
+  - name: PIK3CA
+    transcript: NM_006218.4
+    chromosome: "3"
+  - name: PTEN
+    transcript: NM_000314.8
+    chromosome: "10"
+  - name: TP53
+    transcript: NM_000546.6
+    chromosome: "17"
+
+# 精确事件级用药规则只允许在rules/drugs.yaml中声明。
+reviewed_variant_overrides: []

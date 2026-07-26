@@ -192,8 +192,31 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
     "crc_301_msi": {"hide": ALWAYS_HIDE},
     "crc_358_msi": {"hide": ALWAYS_HIDE},
     "lung_329_pdl1": {
-        "show": ["pdl1_tps", "pdl1_cps", "pdl1_result"],
+        "show": [
+            "pdl1_tps",
+            "pdl1_cps",
+            "pdl1_result",
+            "pdl1_assay_profile_id",
+            "pdl1_source_record_id",
+            "pdl1_source_record_date",
+            "pdl1_specimen_id",
+            "pdl1_image_disposition",
+            "lung_histology",
+            "disease_extent",
+            "prior_systemic_therapy",
+            "companion_diagnostic_status",
+        ],
         "hide": ALWAYS_HIDE,
+        "require": [
+            "pdl1_tps",
+            "pdl1_cps",
+            "pdl1_result",
+            "pdl1_assay_profile_id",
+            "pdl1_source_record_id",
+            "pdl1_source_record_date",
+            "pdl1_specimen_id",
+            "pdl1_image_disposition",
+        ],
     },
     "lung_588_pdl1": {
         "show": [
@@ -281,15 +304,19 @@ def _is_computed_field(field_def: dict) -> bool:
     return isinstance(synonyms, list) and len(synonyms) == 0
 
 
-def _runtime_pdl1_profile_ids() -> list[str]:
-    """Return PD-L1 profiles enabled for the current release tier."""
+def _runtime_pdl1_profile_ids(project_type: Optional[str] = None) -> list[str]:
+    """Return PD-L1 profiles enabled for the selected lung-panel release tier."""
+
+    panel_id = str(project_type or "lung_588_pdl1").strip().lower()
+    if panel_id not in {"lung_329_pdl1", "lung_588_pdl1"}:
+        return []
 
     try:
         from reportgen.panels.loader import PanelPackageLoader
         from reportgen.rules.pdl1 import is_pdl1_profile_runtime_allowed
         from reportgen.rules.schema import load_rule_yaml
 
-        package = PanelPackageLoader(project_root=settings.upstream_root).load("lung_588_pdl1")
+        package = PanelPackageLoader(project_root=settings.upstream_root).load(panel_id)
         contract = load_rule_yaml(package.resolve_rule_file("pdl1_product_contract"))
     except Exception:
         return []
@@ -304,7 +331,11 @@ def _runtime_pdl1_profile_ids() -> list[str]:
     return sorted(approved)
 
 
-def _build_ui_hints(key: str, field_def: dict) -> FieldUiHints:
+def _build_ui_hints(
+    key: str,
+    field_def: dict,
+    project_type: Optional[str] = None,
+) -> FieldUiHints:
     """Build UI hints for a field."""
     if key == "signature_image_path" or key.endswith("_signature_image_path"):
         placeholder = "请选择或上传签名图片"
@@ -334,7 +365,7 @@ def _build_ui_hints(key: str, field_def: dict) -> FieldUiHints:
             options=["阳性（高表达）", "阳性（低表达）", "阴性"],
         )
     if key == "pdl1_assay_profile_id":
-        options = _runtime_pdl1_profile_ids()
+        options = _runtime_pdl1_profile_ids(project_type)
         return FieldUiHints(
             component="select",
             placeholder=(
@@ -402,7 +433,7 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
             format=field_def.get("format_template"),
             synonyms=synonyms,
             computed=computed,
-            ui=_build_ui_hints(key, field_def),
+            ui=_build_ui_hints(key, field_def, project_type),
         )
 
     # Apply project-type overrides

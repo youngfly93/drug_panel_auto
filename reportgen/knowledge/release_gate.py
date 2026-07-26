@@ -244,13 +244,35 @@ def validate_secondary_review_receipt(
     )
 
 
+def _panel_uat_policy(
+    project_root: Path,
+    panel_id: str,
+) -> dict[str, Any]:
+    """Load a panel-declared UAT policy without weakening legacy defaults."""
+
+    try:
+        package = PanelPackageLoader(project_root=project_root).load(panel_id)
+        declaration = (
+            (package.raw.get("release_governance") or {}).get("uat_policy")
+        )
+        if not str(declaration or "").strip():
+            return {}
+        path = package._resolve_path(str(declaration)).resolve()
+        path.relative_to(project_root.resolve())
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (FileNotFoundError, OSError, TypeError, ValueError, yaml.YAMLError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
 def _clinical_readiness(
     registry: Mapping[str, Any],
     panel_id: str,
     status_counts: Counter[str],
     secondary_receipt: Mapping[str, Any],
+    panel_uat_policy: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
-    policy = registry.get("policy") or {}
+    registry_policy = registry.get("policy") or {}
     record = (registry.get("panels") or {}).get(panel_id) or {}
     uat = record.get("uat") or {}
     reviewed = int(uat.get("reviewed_reports", 0) or 0)
@@ -258,8 +280,27 @@ def _clinical_readiness(
     observed_rate = round(100.0 * passed / reviewed, 2) if reviewed else None
     declared_rate = uat.get("pass_rate_percent")
     rate = observed_rate if observed_rate is not None else declared_rate
-    threshold = float(policy.get("uat_pass_rate_threshold_percent", 90.0) or 90.0)
-    minimum = int(policy.get("minimum_reviewed_reports", 10) or 10)
+    policy = dict(panel_uat_policy or {})
+    real_case_policy = policy.get("real_case_policy") or {}
+    has_panel_policy = isinstance(real_case_policy, Mapping) and bool(real_case_policy)
+    if has_panel_policy:
+        required_pass_fraction = float(
+            real_case_policy.get("required_pass_fraction", 1.0)
+        )
+        threshold = 100.0 * required_pass_fraction
+        fixed_minimum = real_case_policy.get("fixed_minimum_real_case_count")
+        minimum = int(fixed_minimum) if fixed_minimum is not None else None
+        require_non_empty = bool(
+            real_case_policy.get("require_non_empty_case_set", False)
+        )
+    else:
+        threshold = float(
+            registry_policy.get("uat_pass_rate_threshold_percent", 90.0) or 90.0
+        )
+        minimum = int(
+            registry_policy.get("minimum_reviewed_reports", 10) or 10
+        )
+        require_non_empty = True
     pending_rows = status_counts.get("provisional_runtime", 0) + status_counts.get(
         "needs_review", 0
     )
@@ -271,9 +312,15 @@ def _clinical_readiness(
         reasons.append("secondary_review_receipt_invalid")
     if pending_rows:
         reasons.append("pending_report_group_secondary_review")
-    if reviewed < minimum:
+    if minimum is not None and reviewed < minimum:
         reasons.append("insufficient_uat_reports")
-    if rate is None or float(rate) < threshold:
+    elif require_non_empty and reviewed == 0:
+        reasons.append("insufficient_uat_reports")
+    if reviewed and (rate is None or float(rate) < threshold):
+        reasons.append("uat_pass_rate_below_threshold_or_unknown")
+    elif not reviewed and has_panel_policy and not require_non_empty:
+        reasons.append("controlled_pilot_without_real_case_uat")
+    elif not reviewed and not has_panel_policy:
         reasons.append("uat_pass_rate_below_threshold_or_unknown")
     return {
         "status": "READY" if not reasons else "BLOCKED",
@@ -290,6 +337,10 @@ def _clinical_readiness(
             "pass_rate_percent": rate,
             "required_pass_rate_percent": threshold,
             "minimum_reviewed_reports": minimum,
+            "selection_policy": str(
+                real_case_policy.get("selection") or ""
+            ),
+            "panel_policy_id": str(policy.get("policy_id") or ""),
         },
         "blocking_reasons": reasons,
     }
@@ -778,6 +829,7 @@ def _panel_report(
         panel_id,
         clinical_status_counts,
         secondary_receipt,
+        _panel_uat_policy(project_root, panel_id),
     )
     if runtime_content["generic_fallback_count"]:
         clinical_readiness["status"] = "BLOCKED"

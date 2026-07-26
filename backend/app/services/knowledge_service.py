@@ -32,6 +32,7 @@ from reportgen.knowledge.quality import profile_panel_runtime_content  # noqa: E
 from reportgen.knowledge.release_gate import (  # noqa: E402
     _clinical_readiness,
     _clinical_release_registry,
+    _panel_uat_policy,
     _secondary_review_receipt,
 )
 from reportgen.panels.loader import PanelPackageLoader  # noqa: E402
@@ -1556,6 +1557,7 @@ def get_catalog_coverage(panel_id: str) -> dict[str, Any]:
             clinical_registry,
             panel_id,
         ),
+        _panel_uat_policy(_project_root(), panel_id),
     )
     if runtime_content_quality and runtime_content_quality["generic_fallback_count"]:
         clinical_release_readiness["status"] = "BLOCKED"
