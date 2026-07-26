@@ -368,8 +368,9 @@ def _safe_mined_line(line: str) -> bool:
 
 def _heading_like(line: str) -> bool:
     """Heuristic: does this recurring line look like a section heading (vs contact
-    info / figure caption / sentence fragment)? Used only to sort mining output;
-    nothing is discarded — non-heading recurring text is shown in a separate list."""
+    info / figure caption / sentence fragment)? Privacy-sensitive metadata and
+    contact details have already been discarded; this only sorts the remaining
+    safe recurring text into heading and non-heading lists."""
     if _CONTACT_NOISE.search(line):
         return False
     if _FIGURE_CAPTION.match(line):
@@ -700,10 +701,12 @@ def main() -> int:
         for line, frequency in known[:40]:
             lines_out.append(f"- `{line}` — 出现率 {frequency*100:.0f}%")
         lines_out.append("")
-        lines_out.append("## 📎 Other recurring fixed text (contact info / captions / sentences)")
+        lines_out.append("## 📎 Other safe recurring fixed text (captions / sentences)")
         lines_out.append("")
-        lines_out.append("> Not section headings; shown for completeness (these also need to be "
-                         "carried over verbatim when building the panel template).")
+        lines_out.append(
+            "> Not section headings; shown as structural candidates only. "
+            "Case metadata and contact details are excluded before aggregation."
+        )
         lines_out.append("")
         for line, frequency in novel_other[:30]:
             lines_out.append(f"- `{line}` — 出现率 {frequency*100:.0f}%")

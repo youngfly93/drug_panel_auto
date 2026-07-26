@@ -18,7 +18,7 @@ def _write_docx(path: Path, *, case_suffix: int) -> None:
     doc.add_paragraph("报告编号：MLJY-LZ25")
     doc.add_paragraph("送检日期：2025")
     doc.add_paragraph(f"样本编号：LZ25{case_suffix:04d}")
-    doc.add_paragraph("咨询电话：022-87190699")
+    doc.add_paragraph("咨询电话：000-00000000")
     doc.save(path)
 
 
