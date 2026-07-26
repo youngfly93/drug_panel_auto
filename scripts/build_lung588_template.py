@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # 步骤: 70 肺癌588工程模板构建
-# 上游: panels/lung_329_pdl1/templates/lung_329_pdl1_golden_template_v1.docx
+# 上游: 受控外部迁移源（不进入Git或生产发布包）
 # 输出: panels/lung_588_pdl1/templates/lung_588_pdl1_golden_template_v0.docx
 # 种子: 无（确定性文档变换）
 """Build the independent lung588 draft template without static treatment claims.
 
-The v1 template came from a de-identified historical report.  Its dynamic
-variant/PD-L1 scaffolding is useful, but several report-visible tables still
-contain fixed historical treatment recommendations or patient genotypes.  This
-script preserves v1 as an immutable migration input and produces a lung588 template
-whose active report data comes from ReportGen context only.  Unreviewed clinical
+The migration source is supplied explicitly from controlled external storage
+and is never tracked or shipped. Its dynamic variant/PD-L1 scaffolding is
+useful, but several report-visible tables contain fixed historical treatment
+recommendations or patient genotypes. This script produces a lung588 template
+whose active report data comes from ReportGen context only. Unreviewed clinical
 sections fail closed with an explicit review notice.
 """
 
@@ -36,13 +36,6 @@ from docx.shared import Cm, Pt
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SOURCE = (
-    ROOT
-    / "panels"
-    / "lung_329_pdl1"
-    / "templates"
-    / "lung_329_pdl1_golden_template_v1.docx"
-)
 DEFAULT_OUTPUT = (
     ROOT
     / "panels"
@@ -934,7 +927,12 @@ def build_template(source: Path, output: Path, *, allow_source_drift: bool = Fal
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
+    parser.add_argument(
+        "--source",
+        type=Path,
+        required=True,
+        help="受控外部迁移源；该文件不得复制到Git工作树或生产发布包。",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--allow-source-drift", action="store_true")
     args = parser.parse_args()

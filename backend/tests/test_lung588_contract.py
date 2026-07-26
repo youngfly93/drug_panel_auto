@@ -55,9 +55,6 @@ from app.services.clinical_info_service import get_clinical_form_schema
 PANEL_DIR = ROOT / "panels" / "lung_588_pdl1"
 TEMPLATE = PANEL_DIR / "templates" / "lung_588_pdl1_golden_template_v0.docx"
 PILOT_ACCEPTANCE = PANEL_DIR / "uat" / "lung588_controlled_pilot_acceptance.yaml"
-SOURCE_TEMPLATE = (
-    ROOT / "panels" / "lung_329_pdl1" / "templates" / "lung_329_pdl1_golden_template_v1.docx"
-)
 EXPECTED_GENE_SHA256 = "f9e6be05c954a4d3df97f031d453fe1f58ea0689290b11de3c173f4a0edf08f1"
 
 
@@ -280,33 +277,6 @@ def test_lung588_template_does_not_reuse_scaffold_pdl1_image():
     def compact(value: object) -> str:
         return "".join(str(value or "").split())
 
-    def pdl1_image_hash(document: Document) -> str:
-        start = next(
-            paragraph
-            for paragraph in document.paragraphs
-            if compact(paragraph.text) == compact("3.2 PD-L1表达检测结果")
-        )
-        end = next(
-            paragraph
-            for paragraph in document.paragraphs
-            if compact(paragraph.text) == compact("3.3微卫星不稳定性（MSI）检测结果")
-        )
-        children = list(document.element.body.iterchildren())
-        block = children[children.index(start._p) + 1 : children.index(end._p)]
-        candidates = []
-        for child in block:
-            text = "".join(node.text or "" for node in child.iter(qn("w:t"))).strip()
-            if text or not any(True for _ in child.iter(qn("w:drawing"))):
-                continue
-            candidates.extend(
-                blip.get(qn("r:embed"))
-                for blip in child.iter(qn("a:blip"))
-                if blip.get(qn("r:embed"))
-            )
-        assert len(candidates) == 1
-        return hashlib.sha256(document.part.related_parts[candidates[0]].blob).hexdigest()
-
-    source_image_hash = pdl1_image_hash(Document(SOURCE_TEMPLATE))
     generated = Document(TEMPLATE)
     start = next(
         paragraph
@@ -328,12 +298,18 @@ def test_lung588_template_does_not_reuse_scaffold_pdl1_image():
     ]
 
     with ZipFile(TEMPLATE) as archive:
-        generated_media_hashes = {
-            hashlib.sha256(archive.read(name)).hexdigest()
-            for name in archive.namelist()
-            if name.startswith("word/media/")
+        names = set(archive.namelist())
+        media_parts = {name for name in names if name.startswith("word/media/")}
+        relationship_targets = {
+            "word/media/" + target.decode("utf-8")
+            for name in names
+            if name.endswith(".rels")
+            for target in re.findall(
+                rb'Target="(?:\.\./)?media/([^"]+)"',
+                archive.read(name),
+            )
         }
-    assert source_image_hash not in generated_media_hashes
+    assert media_parts == relationship_targets
 
 
 def test_part3_disabled_policy_renders_notice_without_shared_knowledge(tmp_path):
