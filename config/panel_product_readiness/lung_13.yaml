@@ -1,0 +1,54 @@
+schema_version: "1.0"
+panel_id: "lung_13"
+product_name: "肺癌13基因"
+release_status: "NOT_BUILT"
+production_eligible: false
+enforced_targets:
+  - "iyun129"
+blocker_code: "formal_same_case_input_and_golden_missing"
+decision: >-
+  Reserve the product identity and keep every production entry point closed.
+  Do not create or promote a panel package until a report-group-selected final
+  DOCX and real source Excel cases establish the input and output contracts.
+
+aggregate_inventory:
+  historical_final_docx_count: 246
+  historical_pages_median: 42
+  historical_tables_median: 7
+  crc358_template_fit_classification: "stranger"
+  supplied_real_excel_count: 3
+  supplied_matching_lung_13_excel_count: 0
+  registered_same_case_docx_excel_pair_count: 0
+  inventory_date: "2026-07-26"
+  contains_patient_data: false
+
+promotion_evidence:
+  formal_reference_docx:
+    registered: false
+    sha256:
+  matched_source_excel:
+    registered: false
+    sha256:
+  second_real_source_excel:
+    registered: false
+    sha256:
+  same_case_verified: false
+  report_group_secondary_review:
+    status: "pending"
+    reviewer:
+    reviewed_at:
+  historical_golden_gate:
+    status: "NOT_RUN"
+  two_case_leak_test:
+    status: "NOT_RUN"
+  linux_visual_qa:
+    status: "NOT_RUN"
+
+development_requirements:
+  - "Select one report-group-approved final lung-13 DOCX as the golden exemplar."
+  - "Provide its exact same-case source Excel and at least one different real lung-13 Excel."
+  - "Freeze the Variations membership-column and supported SNV/CNV/fusion input contract."
+  - "Scrub PII, comments, tracked changes and seed-case literals before committing a template."
+  - "Build a lung-small-panel template family rather than inheriting the CRC358 large-panel template."
+  - "Keep targeted-drug and per-variant knowledge cancer/event specific and fail closed on misses."
+  - "Pass the two-case leak, missing-data, historical-diff and Linux visual gates."

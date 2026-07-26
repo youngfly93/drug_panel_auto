@@ -74,17 +74,35 @@ def validate_scope(
     }
     issues: list[str] = []
     checked: list[dict[str, Any]] = []
-    manifests = sorted(project_root.glob("panels/*/release_readiness.yaml"))
-    for path in manifests:
+    manifest_specs = [
+        (path, path.parent.name, "panel_package")
+        for path in project_root.glob("panels/*/release_readiness.yaml")
+        if not path.name.startswith("._")
+    ]
+    manifest_specs.extend(
+        (path, path.stem, "product_intake")
+        for path in project_root.glob(
+            "config/panel_product_readiness/*.yaml"
+        )
+        if not path.name.startswith("._")
+    )
+    seen_panel_ids: set[str] = set()
+    for path, expected_panel_id, source_kind in sorted(manifest_specs):
         try:
             manifest = _read_manifest(path)
         except (OSError, ValueError, yaml.YAMLError) as exc:
             issues.append(str(exc))
             continue
         panel_id = str(manifest.get("panel_id") or "").strip().lower()
-        if not panel_id or panel_id != path.parent.name:
-            issues.append(f"{path}: panel_id must match its panel directory")
+        if not panel_id or panel_id != expected_panel_id:
+            issues.append(
+                f"{path}: panel_id must match its readiness record location"
+            )
             continue
+        if panel_id in seen_panel_ids:
+            issues.append(f"{panel_id}: duplicate release-readiness manifests")
+            continue
+        seen_panel_ids.add(panel_id)
         targets = {
             str(item).strip().lower()
             for item in manifest.get("enforced_targets", [])
@@ -93,6 +111,7 @@ def validate_scope(
         production_eligible = manifest.get("production_eligible") is True
         row = {
             "panel_id": panel_id,
+            "source_kind": source_kind,
             "production_eligible": production_eligible,
             "enforced_for_target": target.lower() in targets,
         }

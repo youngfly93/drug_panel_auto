@@ -75,9 +75,9 @@ Panel：`lung_329_pdl1`
 三层范围必须一致：
 
 ```text
-REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation
-RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation
-VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation
+REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1
+RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1
+VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1
 ```
 
 模板迁移工具只接受显式提供的受控外部源文件，并校验固定源哈希。历史迁移
