@@ -508,7 +508,7 @@ REVIEW_STATUSES = {
     "delivered": "已交付",
     "rejected": "退回修改",
 }
-CONTROLLED_PILOT_PROJECT_TYPES = {"lung_588_pdl1"}
+CONTROLLED_PILOT_PROJECT_TYPES = {"lung_329_pdl1", "lung_588_pdl1"}
 
 
 def _require_override_permission(override_gate: bool, user: User) -> None:
@@ -1156,7 +1156,11 @@ def _generate_response_from_result(
 ) -> GenerateResponse:
     output_filename = None
     output_file_base64 = None
-    if include_inline_file and result.get("success", False):
+    controlled_pilot = (
+        str(project_type or "").strip().lower()
+        in CONTROLLED_PILOT_PROJECT_TYPES
+    )
+    if include_inline_file and not controlled_pilot and result.get("success", False):
         _physical_filename, output_file_base64 = _inline_docx_payload(result.get("output_file"))
         output_filename = _business_report_filename(
             clinical_info=clinical_info,
@@ -2143,7 +2147,7 @@ def download_audit_package(
     request: Request,
     include_failed: bool = Query(True),
     db: Session = Depends(get_db),
-    _current_user: User = Depends(require_user),
+    current_user: User = Depends(require_user),
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -2153,6 +2157,19 @@ def download_audit_package(
     output_root.mkdir(parents=True, exist_ok=True)
     gate = _quality_gate_payload(task, db)
     review_state = _load_review_state(task)
+    if (
+        _controlled_pilot_review_required(
+            task.project_type,
+            review_state.get("status"),
+        )
+        and current_user.role not in TASK_PRIVILEGED_ROLES
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "该肺癌Panel处于受控试运行，未审核报告的审计包仅供复核人或管理员下载。"
+            ),
+        )
     zip_path = output_root / (
         f"{task_id}_audit_package.zip" if include_failed else f"{task_id}_passed_audit_package.zip"
     )
@@ -2617,7 +2634,8 @@ def _download_report_response(
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    "肺癌588处于受控试运行，报告须先由复核人在任务详情中标记“已审核”后才能下载交付。"
+                    "该肺癌Panel处于受控试运行，报告须先由复核人在任务详情中"
+                    "标记“已审核”后才能下载交付。"
                 ),
             )
 

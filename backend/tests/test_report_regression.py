@@ -836,8 +836,8 @@ def test_report_generator_reads_status_from_panel_package():
     package = load_panel_package(ROOT / "panels" / "lung_329_pdl1")
     template_file = package.resolve_template_file()
 
-    assert ReportGenerator._panel_status(package) == "draft"
-    assert ReportGenerator._template_status(package, str(template_file)) == "draft"
+    assert ReportGenerator._panel_status(package) == "pilot"
+    assert ReportGenerator._template_status(package, str(template_file)) == "pilot"
 
 
 def test_write_report_summary_uses_docx_sidecar(tmp_path):

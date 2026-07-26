@@ -557,12 +557,13 @@ const disabledProjectTypes = new Set(
 const generationProjectOptions = [
   { label: '结直肠癌301基因+MSI', value: 'crc_301_msi' },
   { label: '结直肠癌358基因+MSI', value: 'crc_358_msi' },
+  { label: '肺癌329基因+PD-L1（单份受控试运行）', value: 'lung_329_pdl1' },
   { label: '肺癌588基因+PD-L1（单份验证）', value: 'lung_588_pdl1' },
   { label: 'MLF基因检测', value: 'mlf_result' },
   { label: '肺癌甲基化', value: 'lung_methylation' },
 ].filter((option) => !disabledProjectTypes.has(option.value))
 const batchGenerationProjectOptions = generationProjectOptions.filter(
-  (option) => option.value !== 'lung_588_pdl1',
+  (option) => !['lung_329_pdl1', 'lung_588_pdl1'].includes(option.value),
 )
 let batchPollTimer: number | null = null
 let singlePollTimer: number | null = null

@@ -1,13 +1,13 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 rule_id: "drugs"
-version: "0.3.0"
-updated: "2026-07-10"
-status: "active"
-description: "Lung Panel drug policy; reviewed runtime decisions are currently disabled."
+version: "0.4.0"
+updated: "2026-07-25"
+status: "pilot"
+description: "Fail-closed lung329 treatment policy pending event-level medical review."
 
 drug_rules:
-  approved_drug_rows_source: "drugs.yaml:approved_drug_rows"
+  approved_drug_rows_source: "none"
   brand_lookup_source: "config/drug_brands.yaml"
   immunotherapy_brand_list_source: "config/drug_brands.yaml"
   evidence_levels:

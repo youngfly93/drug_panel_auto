@@ -1,0 +1,50 @@
+schema_version: "1.0"
+panel_id: "lung_329_pdl1"
+policy_id: "lung329_risk_based_all_available_cases_v1"
+status: "active_policy"
+effective_date: "2026-07-25"
+decision_owner: "product_owner"
+
+supersedes:
+  - "fixed_ten_real_case_threshold"
+
+rationale: >
+  A fixed ten-case threshold was an internal conservative convention rather
+  than a report-group or regulatory sample-size requirement. Controlled-pilot
+  release evaluates every registered real case available at the frozen
+  identity and supplements it with deterministic synthetic boundary tests.
+  Synthetic cases never count as real medical UAT.
+
+real_case_policy:
+  selection: "all_registered_real_cases_available_at_release_freeze"
+  fixed_minimum_real_case_count: null
+  require_non_empty_case_set: false
+  required_review_fraction: 1.0
+  required_pass_fraction: 1.0
+  p0_allowed: 0
+  no_real_case_disposition: >
+    The release may only be labelled controlled internal pilot. It must not be
+    described as active medical release or completed real-case UAT.
+
+synthetic_boundary_policy:
+  required_suite: "lung329_controlled_pilot_synthetic_boundary_v1"
+  counts_as_real_case_uat: false
+  purpose:
+    - "PD-L1 source-record display boundaries"
+    - "MSI/TMB boundaries"
+    - "single and multi-variant pagination"
+    - "cross-case leak protection"
+    - "fail-closed treatment and Part-3 modules"
+
+unchanged_release_boundaries:
+  batch_generation_enabled: false
+  part3_knowledge_enabled: false
+  targeted_drug_rules_enabled: false
+  immune_gene_claims_enabled: false
+  external_delivery_without_manual_review: false
+  pdl1_treatment_inference_allowed: false
+
+active_release_promotion_requirements:
+  - "actual PD-L1 assay clone/platform and scoring contract confirmed"
+  - "all available real cases reviewed at the frozen identity"
+  - "event-level Part-3 and treatment knowledge independently approved before activation"

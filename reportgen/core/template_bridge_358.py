@@ -378,6 +378,9 @@ class PanelConfig:
             dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS
         ]
     )
+    # Preserve the distinction between an omitted category (legacy defaults)
+    # and a panel that explicitly declares an empty category to disable it.
+    declared_immune_categories: Set[str] = field(default_factory=set)
     panel_display_genes: List[Dict[str, str]] = field(
         default_factory=lambda: [dict(x) for x in _DEFAULT_PANEL_DISPLAY_GENES]
     )
@@ -928,6 +931,7 @@ def load_panel_config(
             if "hyperprogression" in declared_immune_categories
             else [dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS]
         ),
+        declared_immune_categories=set(declared_immune_categories),
         reviewed_variant_overrides=reviewed_variant_overrides,
         blocked_reviewed_variant_overrides=blocked_reviewed_variant_overrides,
         drug_display_max_items=(
@@ -2250,15 +2254,24 @@ def _build_nccn_and_immune_fields(
     """
     pc = panel_config or PanelConfig()
     nccn_rows = pc.nccn_result_rows or [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS]
-    imm_pos_rows = pc.immune_positive_rows or [
-        dict(x) for x in _DEFAULT_IMMUNE_POSITIVE_ROWS
-    ]
-    imm_neg_rows = pc.immune_negative_rows or [
-        dict(x) for x in _DEFAULT_IMMUNE_NEGATIVE_ROWS
-    ]
-    imm_hyper_rows = pc.immune_hyperprogression_rows or [
-        dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS
-    ]
+    imm_pos_rows = (
+        pc.immune_positive_rows
+        if "positive" in pc.declared_immune_categories
+        else pc.immune_positive_rows
+        or [dict(x) for x in _DEFAULT_IMMUNE_POSITIVE_ROWS]
+    )
+    imm_neg_rows = (
+        pc.immune_negative_rows
+        if "negative" in pc.declared_immune_categories
+        else pc.immune_negative_rows
+        or [dict(x) for x in _DEFAULT_IMMUNE_NEGATIVE_ROWS]
+    )
+    imm_hyper_rows = (
+        pc.immune_hyperprogression_rows
+        if "hyperprogression" in pc.declared_immune_categories
+        else pc.immune_hyperprogression_rows
+        or [dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS]
+    )
 
     # 先打固定默认值，避免 2.3/3.3 因任何解析缺口出现空白单元格。
     for row in nccn_rows:

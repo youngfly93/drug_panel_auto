@@ -226,19 +226,33 @@ def test_crc_coverage_reports_exact_base_and_reviewed_layer_counts(panel_id: str
     assert payload["warnings"] == []
 
 
-def test_non_crc_pilot_does_not_inherit_crc_coverage_denominator():
+def test_lung329_pilot_uses_own_coverage_and_risk_based_uat_policy():
     payload = service.get_catalog_coverage("lung_329_pdl1")
 
     assert payload["declared_gene_coverage"] == {
-        "denominator_name": "",
-        "total": 0,
-        "base_covered": 0,
+        "denominator_name": "reportable_genes",
+        "total": 329,
+        "base_covered": 258,
         "overlay_covered": 0,
-        "either_covered": 0,
-        "percent": None,
-        "label": "未声明覆盖分母",
+        "either_covered": 258,
+        "percent": 78.42,
+        "label": "reportable_genes 覆盖率",
     }
-    assert payload["knowledge_coverage_contract"]["total_genes"] == 0
+    contract = payload["knowledge_coverage_contract"]
+    assert contract["total_genes"] == 329
+    readiness = contract["clinical_release_readiness"]
+    assert readiness["status"] == "BLOCKED"
+    assert readiness["uat"]["minimum_reviewed_reports"] is None
+    assert readiness["uat"]["required_pass_rate_percent"] == 100.0
+    assert readiness["uat"]["panel_policy_id"] == (
+        "lung329_risk_based_all_available_cases_v1"
+    )
+    assert "controlled_pilot_without_real_case_uat" in readiness["blocking_reasons"]
+    assert "insufficient_uat_reports" not in readiness["blocking_reasons"]
+    assert (
+        "uat_pass_rate_below_threshold_or_unknown"
+        not in readiness["blocking_reasons"]
+    )
 
 
 def test_crc301_specific_overlay_closes_gene_gap_without_leaking_to_crc358():

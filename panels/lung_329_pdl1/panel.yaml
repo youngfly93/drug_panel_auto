@@ -1,13 +1,13 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 display_name: "肺癌329基因+PD-L1"
-version: "0.0.1"
-status: "draft"
+version: "0.3.0"
+status: "pilot"
 description: >
-  Lung 329-gene + PD-L1 panel package. Phase C-alpha MVP: reuses the CRC report
-  pipeline (enhancer/rules) to prove end-to-end plumbing. Lung-specific content
-  (PD-L1 module, per-variant analysis, per-drug PGx, lung NCCN tables) is added
-  in Phase C-beta. NOT production-ready.
+  Lung 329-gene + PD-L1 controlled-pilot package. It reports structured
+  molecular findings and transcribes a case-specific PD-L1 source record.
+  Patient-level targeted-drug, immune-association, chemotherapy-PGx and Part-3
+  knowledge conclusions remain fail-closed.
 
 aliases:
   - "lung_329"
@@ -27,36 +27,42 @@ project_detector_rules:
         - "329基因+PD-L1"
       weight: 1
 
-# Reuse the CRC enhancer (panel-parameterized) for the MVP, as crc_301 does.
+batch_generation:
+  enabled: false
+  clinical_info_mode: "per_case_required"
+  reason: >
+    The NGS workbook is not a PD-L1 source. A shared batch form could copy one
+    patient's TPS/CPS/result or provenance into other reports, so this panel is
+    restricted to single-case controlled generation.
+
+release_governance:
+  uat_policy: "uat/lung329_risk_based_release_policy.yaml"
+
+part3_knowledge:
+  enabled: false
+  reason: >
+    The inherited base workbook and provisional lung overlay have not completed
+    event-level report-group review for all 329 genes.
+  disabled_notice: >
+    本项目肺癌专属知识当前未启用，暂不提供第三部分的患者级基因解释和药物解析。
+    检测结果请以第二部分为准，最终临床意义须由专业医师结合病理类型、疾病分期及
+    现行诊疗规范综合判断。
+
+# 复用已参数化的兼容增强器；肺癌规则和知识内容均由本面板包隔离提供。
 enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
 
-default_template: "lung_329_pdl1_golden_template_v1"
+default_template: "lung_329_pdl1_golden_template_v2"
 templates:
-  - id: "lung_329_pdl1_golden_template_v0"
-    file: "templates/lung_329_pdl1_golden_template_v0.docx"
-    version: "0.0.1"
-    status: "deprecated"
-    description: "Phase C-alpha MVP (scalar-only, per-variant content neutralized). Superseded by v1."
-    processors:
-      - "part3_formatted_sections"
-      - "signature_placeholder"
-      - "bullet_lists"
-      - "signature_layout"
-      - "front_matter_spacing"
-      - "blank_page_cleanup"
-      - "toc_refresh"
-      - "final_refresh_cleanup"
-      - "underlines_and_styles"
-  - id: "lung_329_pdl1_golden_template_v1"
-    file: "templates/lung_329_pdl1_golden_template_v1.docx"
-    version: "0.1.0"
-    status: "draft"
+  - id: "lung_329_pdl1_golden_template_v2"
+    file: "templates/lung_329_pdl1_golden_template_v2.docx"
+    version: "0.2.0"
+    status: "pilot"
     description: >
-      Phase C-beta golden template: __PART3_MARKER__ (per-variant narrative) +
-      variant/drug/immune {%tr%} loops (variants_2_1, targeted_drug_tips,
-      immune_positive/negative/hyperprogression_results) + PD-L1 scalars
-      (pdl1_tps/cps/result, IHC form-entered). NCCN table and per-drug
-      chemotherapy PGx (~35 tables) deferred to a follow-up sub-phase.
+      Hardened fail-closed template. Legacy migration inputs are not registered
+      or shipped because they contained historical case media. This template
+      removes fixed historical patient genotypes and unreviewed treatment prose,
+      uses dynamic variant/event tables, displays case-specific PD-L1 source
+      provenance, and keeps unreviewed clinical modules visibly blocked.
     processors:
       - "part3_formatted_sections"
       - "rebuild_references"
@@ -74,26 +80,27 @@ mappings:
   default: "config/mapping.yaml"
 
 rules:
-  panel_rules: "rules/crc.yaml"
+  panel_rules: "rules/lung.yaml"
   report_text: "rules/report_text.yaml"
   biomarkers: "rules/biomarkers.yaml"
   guideline_tables: "rules/guideline_tables.yaml"
   drugs: "rules/drugs.yaml"
+  pdl1_product_contract: "rules/pdl1_product_contract.yaml"
+  knowledge_coverage: "rules/knowledge_coverage.yaml"
   style: "rules/style.yaml"
   filtering: "config/filtering.yaml"
   drug_brands: "config/drug_brands.yaml"
 
-# Reviewed Part-3 wording overlay (panel-scoped, lung-curated FIRST PASS, harvested
-# from reviewed lung reports, de-identified). Gene-level entries override the base
-# (CRC-emphasized) KB wording for any variant. NEEDS report-team review/extension.
+# The provisional overlay is retained as a review candidate only. The
+# part3_knowledge switch above prevents it from entering pilot reports.
 reviewed_part3_overlay: "rules/reviewed_part3_knowledge.yaml"
 
 input_contract:
   required_tables:
     - "Variations"
-  optional_tables:
     - "TMB"
     - "Msisensor"
+  optional_tables:
     - "QC"
     - "Cnv"
     - "Fusion"
@@ -104,6 +111,14 @@ input_contract:
     - "sample_id"
     - "project_name"
     - "report_date"
+    - "pdl1_tps"
+    - "pdl1_cps"
+    - "pdl1_result"
+    - "pdl1_assay_profile_id"
+    - "pdl1_source_record_id"
+    - "pdl1_source_record_date"
+    - "pdl1_specimen_id"
+    - "pdl1_image_disposition"
   required_columns:
     Variations:
       - "Gene_Symbol"
@@ -111,22 +126,57 @@ input_contract:
       - "ExistIn552"
   biomarkers:
     tmb_value:
-      required: false
-      source_priority: ["excel", "form", "patient_info"]
+      required: true
+      minimum: 0
+      source_priority: ["excel"]
     msi_status:
-      required: false
-      allowed_values: ["MSS", "MSI-L", "MSI-H", "未检测"]
+      required: true
+      allowed_values: ["MSS", "MSI-L", "MSI-H"]
+      source_priority: ["excel"]
+    pdl1_tps:
+      required: true
+      minimum: 0
+      maximum: 100
+      source_priority: ["form"]
+    pdl1_cps:
+      required: true
+      minimum: 0
+      maximum: 100
+      source_priority: ["form"]
+    pdl1_result:
+      required: true
+      allowed_values: ["阳性（高表达）", "阳性（低表达）", "阴性"]
+      source_priority: ["form"]
+    pdl1_assay_profile_id:
+      required: true
+      source_priority: ["form"]
+    pdl1_source_record_id:
+      required: true
+      source_priority: ["form"]
+    pdl1_source_record_date:
+      required: true
+      source_priority: ["form"]
+    pdl1_specimen_id:
+      required: true
+      source_priority: ["form"]
+    pdl1_image_disposition:
+      required: true
+      allowed_values: ["无病例专属图像（报告不展示）"]
+      source_priority: ["form"]
 
 template_contract:
   required_variables:
     - "patient_name"
     - "sample_id"
+    - "pdl1_tps"
+    - "pdl1_cps"
+    - "pdl1_result"
+    - "pdl1_assay_provenance"
+    - "pdl1_source_provenance"
   required_lists:
     - "targeted_drug_tips"
     - "variants_2_1"
-    - "immune_positive_results"
-    - "immune_negative_results"
-    - "immune_hyperprogression_results"
+    - "nccn_results"
   required_markers:
     - "__PART3_MARKER__"
 
@@ -149,8 +199,11 @@ processors:
   - "underlines_and_styles"
 
 golden_cases:
-  - id: "lung_329_pdl1_smoke_generation"
-    runner: "reportgen.core.golden_case:run_golden_case"
-    command: "pytest backend/tests/test_lung329_smoke.py -q"
+  - id: "lung_329_pdl1_controlled_pilot_boundary_suite"
+    runner: "scripts/validate_lung329_pilot_boundary_suite.py"
+    command: >-
+      python scripts/validate_lung329_pilot_boundary_suite.py
+      --require-visual
     synthetic: true
+    counts_as_clinical_uat: false
     expected_qa_status: "PASS"

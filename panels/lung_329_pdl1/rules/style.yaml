@@ -1,10 +1,10 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 rule_id: "style"
-version: "0.2.0"
-updated: "2026-05-21"
-status: "active"
-description: "CRC table style tokens used by the DOCX post-render processors."
+version: "0.3.0"
+updated: "2026-07-25"
+status: "pilot"
+description: "肺癌329报告DOCX后处理所需的表格样式令牌。"
 
 style:
   defaults:
@@ -61,3 +61,4 @@ style:
     item_font_size: 11
     item_bold: false
     content_top_padding_pt: 57
+    diagnosis_knowledge_label: "肺癌诊疗知识"
