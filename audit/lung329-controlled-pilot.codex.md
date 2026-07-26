@@ -2,13 +2,13 @@
 module: lung329-controlled-pilot
 agent: codex
 identity_kind: git_commit
-identity_value: ee7a10737f0d4fee279dd7fdae87e200984f2500
+identity_value: 81eb103d756c7e85b77d5e5c299ba683f260bcfa
 ---
 
 # 肺癌329受控试运行发布审计（Codex）
 
 本审计只覆盖冻结业务提交
-`ee7a10737f0d4fee279dd7fdae87e200984f2500`。项目负责人明确要求本轮由
+`81eb103d756c7e85b77d5e5c299ba683f260bcfa`。项目负责人明确要求本轮由
 Codex 自审，不要求 Claude 配对审计。肺癌329仅按单病例受控试运行发布，
 不等同于患者级医学知识、治疗规则或真实病例 UAT 已完成。
 
@@ -26,6 +26,7 @@ Codex 自审，不要求 Claude 配对审计。肺癌329仅按单病例受控试
 | lung329-controlled-pilot-08 | P1 | 删除固定“10例”阈值等于真实病例 UAT 已完成。 | 风险策略只允许无真实病例时标记 controlled pilot；合成7例明确不计真实 UAT，临床发布状态继续 BLOCKED。 | REFUTED |
 | lung329-controlled-pilot-09 | P1 | 本提交已通过生产同款 Linux 视觉 QA 并部署到 iyun129。 | 冻结时仅完成本地工程和合成边界验证；Linux候选、GitHub required check、生产切换和活实例验收仍是后续发布步骤。 | REFUTED |
 | lung329-controlled-pilot-10 | P0 | 删除当前 tip 的旧模板即可清除远端历史风险。 | 远端仓库为公开仓库；普通提交只能清理当前 tip，历史 Git 对象仍需独立授权的历史清除与安全事件处置。当前发布不得宣称仓库历史已完成隐私清理。 | CONFIRMED |
+| lung329-controlled-pilot-11 | P1 | 删除旧模板后，测试与离线构建可以继续隐式依赖工作区残留文件。 | GitHub 干净 checkout 首轮门禁发现肺588旧测试仍打开已删除的 v1；修复后测试只核验运行模板的 PD-L1 区无静态图且无孤儿媒体，肺588离线构建也必须显式传入受控外部源。删除源文件后的全量回归为707通过、4跳过、0失败。 | REFUTED |
 
 ## 方法保真与限制
 
@@ -33,7 +34,7 @@ Codex 自审，不要求 Claude 配对审计。肺癌329仅按单病例受控试
 |---|---|---|---|---|
 | lung329-controlled-pilot-M01 | 329只能以单病例、逐病例PD-L1来源、审核后下载方式试运行 | 前端标识“单份受控试运行”；后端批量策略、下载和审计包三条路径均失败关闭 | FAITHFUL | `panel.yaml`、`report.py`、`clinical_info_service.py` |
 | lung329-controlled-pilot-M02 | 医学内容未审核时不得用通用知识补齐患者结论 | 药物、免疫、化疗PGx和第三部分均关闭，并显示边界说明 | FAITHFUL | `rules/drugs.yaml`、`rules/biomarkers.yaml`、`part3_knowledge` |
-| lung329-controlled-pilot-M03 | 模板不得携带患者文本、病例图片或孤儿媒体 | 严格文字扫描0；v2媒体9/9均被引用；历史病例图与旧模板从当前tip移除 | FAITHFUL | v2 SHA、媒体合同测试、提交diff |
+| lung329-controlled-pilot-M03 | 模板不得携带患者文本、病例图片或孤儿媒体 | 严格文字扫描0；v2媒体9/9均被引用；历史病例图与旧模板从当前tip移除；肺329/588构建器只接受显式外部迁移源 | FAITHFUL | v2 SHA、媒体合同测试、构建入口与提交diff |
 | lung329-controlled-pilot-M04 | 新肺癌线不得冲刷CRC301/358既有生产行为 | 全量707项通过；CRC301/358知识门禁PASS、issues=0；肺癌显式空集合不改变未声明集合的兼容默认 | FAITHFUL | 全量回归与知识门禁凭据 |
 | lung329-controlled-pilot-M05 | 合成边界病例不得冒充真实医学UAT | 策略文件和结果均写明 synthetic、`counts_as_clinical_uat:false`；无真实病例时临床状态BLOCKED | HONEST_BOUNDARY | `uat/lung329_risk_based_release_policy.yaml` |
 | lung329-controlled-pilot-M06 | 生产部署必须锁定精确Git身份并用Linux同款渲染 | 冻结提交已形成；Linux渲染、CI和部署后验收尚未发生 | PENDING | 后续发布阶段 |
@@ -42,10 +43,12 @@ Codex 自审，不要求 Claude 配对审计。肺癌329仅按单病例受控试
 ## 冻结凭据
 
 - 被审业务提交：
-  `ee7a10737f0d4fee279dd7fdae87e200984f2500`；父提交与
-  `origin/main` 精确一致。
+  `81eb103d756c7e85b77d5e5c299ba683f260bcfa`；候选改动基于
+  `origin/main` 的 `1e24207591abb3df55e94cde96921e1371710b29`。
 - 后端全量回归：`707 passed, 4 skipped, 0 failed`；唯一 warning 为仓库
   既有未注册 `slow` 标记。
+- GitHub 首轮 required check 在干净 checkout 中发现并阻断旧源模板依赖；
+  修复已纳入本冻结提交，required check 必须在该 SHA 上重新执行。
 - 肺癌329合成边界套件：7/7 PASS；每例机器 QA PASS；药物、第三部分患者
   知识和免疫分类结果均为空。
 - Panel package 校验：PASS，0 errors、0 warnings。
