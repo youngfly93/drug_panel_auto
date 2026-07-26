@@ -35,6 +35,16 @@ export ORIGIN_REMOTE="${ORIGIN_REMOTE:-origin}"
 export ORIGIN_MAIN_REF="${ORIGIN_MAIN_REF:-$ORIGIN_REMOTE/main}"
 export REQUIRE_ORIGIN_MAIN_REACHABILITY="${REQUIRE_ORIGIN_MAIN_REACHABILITY:-1}"
 
+# A panel whose committed readiness manifest is BLOCKED must remain disabled in
+# the Web API, reportgen core, and compiled frontend. This runs before the first
+# production-side mutation, so an environment override cannot silently expose
+# the synthetic-only methylation package.
+python3 scripts/check_production_panel_scope.py \
+    --target iyun129 \
+    --web-disabled "$RG_WEB_DISABLED_PROJECT_TYPES" \
+    --core-disabled "$REPORTGEN_DISABLED_PROJECT_TYPES" \
+    --frontend-disabled "$VITE_DISABLED_PROJECT_TYPES"
+
 # iyun129 has a dedicated cloudflared watchdog; the Web watchdog must not race
 # it by trying to manage the same tunnel.
 export MANAGE_TUNNEL="${MANAGE_TUNNEL:-0}"

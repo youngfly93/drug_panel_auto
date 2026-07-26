@@ -29,6 +29,15 @@ RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
 # remain disabled until their independent promotion gates are complete.
 RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_588_pdl1,lung_methylation}"
 REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
+VITE_DISABLED_PROJECT_TYPES="${VITE_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
+
+check_production_scope() {
+    python3 scripts/check_production_panel_scope.py \
+        --target iyun129 \
+        --web-disabled "$RG_WEB_DISABLED_PROJECT_TYPES" \
+        --core-disabled "$REPORTGEN_DISABLED_PROJECT_TYPES" \
+        --frontend-disabled "$VITE_DISABLED_PROJECT_TYPES"
+}
 
 status_remote() {
     ssh "$SSH_HOST" bash -s -- \
@@ -170,6 +179,7 @@ case "$ACTION" in
             echo "$ACTION requires a release ID or revision prefix." >&2
             exit 2
         fi
+        check_production_scope
         resolved_target="$(resolve_remote "$TARGET")"
         echo "resolved_release=$resolved_target"
         install_runtime_tools

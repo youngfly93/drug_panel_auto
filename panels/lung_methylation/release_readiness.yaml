@@ -1,0 +1,40 @@
+schema_version: "1.0"
+panel_id: "lung_methylation"
+product_name: "肺癌甲基化"
+release_status: "BLOCKED"
+production_eligible: false
+enforced_targets:
+  - "iyun129"
+blocker_code: "formal_same_case_golden_pair_missing"
+decision: >-
+  Keep every production entry point closed until a report-group-approved final
+  DOCX and its exact same-case source Excel are registered and validated.
+
+promotion_evidence:
+  formal_reference_docx:
+    registered: false
+    sha256:
+  matched_source_excel:
+    registered: false
+    sha256:
+  same_case_verified: false
+  report_group_secondary_review:
+    status: "pending"
+    reviewer:
+    reviewed_at:
+  historical_golden_gate:
+    status: "NOT_RUN"
+  linux_visual_qa:
+    status: "NOT_RUN"
+  synthetic_golden:
+    available: true
+    counts_as_production_evidence: false
+
+promotion_requirements:
+  - "Register a de-identified report-group final DOCX with SHA-256."
+  - "Register the exact same-case source Excel with SHA-256."
+  - "Verify the DOCX and Excel belong to the same case without committing PII."
+  - "Freeze a field/section/table contract and pass the historical-golden diff gate."
+  - "Complete report-group secondary review with reviewer identity and date."
+  - "Pass production-equivalent Linux LibreOffice visual QA."
+  - "Remove lung_methylation from all three production scope guards in one reviewed release."

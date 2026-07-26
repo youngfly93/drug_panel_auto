@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -61,6 +62,10 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert "REPORTGEN_DISABLED_PROJECT_TYPES" in wrapper
     assert "VITE_DISABLED_PROJECT_TYPES" in wrapper
     assert f"RG_WEB_DISABLED_PROJECT_TYPES:-{limited_release_panels}" in wrapper
+    assert "scripts/check_production_panel_scope.py" in wrapper
+    assert wrapper.index("scripts/check_production_panel_scope.py") < wrapper.index(
+        "RUN_REMOTE_BACKUP"
+    )
     assert "REQUIRE_ORIGIN_MAIN_REACHABILITY:-1" in wrapper
     assert 'git fetch --prune "$ORIGIN_REMOTE" main' in wrapper
     assert 'git merge-base --is-ancestor "$resolved_ref" "$ORIGIN_MAIN_REF"' in wrapper
@@ -80,16 +85,100 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     assert "cloudflared_tunnel_ha_connections" in cloudflared_watchdog
 
 
+def test_lung_methylation_remains_draft_and_formally_blocked() -> None:
+    panel = yaml.safe_load(_read("panels/lung_methylation/panel.yaml"))
+    readiness = yaml.safe_load(
+        _read("panels/lung_methylation/release_readiness.yaml")
+    )
+
+    assert panel["status"] == "draft"
+    assert panel["templates"][0]["status"] == "draft"
+    assert panel["golden_cases"][0]["synthetic"] is True
+    assert panel["golden_cases"][0]["counts_as_production_evidence"] is False
+    assert readiness["panel_id"] == "lung_methylation"
+    assert readiness["release_status"] == "BLOCKED"
+    assert readiness["production_eligible"] is False
+    assert readiness["blocker_code"] == "formal_same_case_golden_pair_missing"
+    assert readiness["promotion_evidence"]["same_case_verified"] is False
+    assert (
+        readiness["promotion_evidence"]["synthetic_golden"][
+            "counts_as_production_evidence"
+        ]
+        is False
+    )
+
+
+def test_production_scope_gate_rejects_methylation_override(tmp_path: Path) -> None:
+    command = [
+        sys.executable,
+        str(ROOT / "scripts/check_production_panel_scope.py"),
+        "--project-root",
+        str(ROOT),
+        "--target",
+        "iyun129",
+        "--web-disabled",
+        "crc_301_msi,lung_588_pdl1",
+        "--core-disabled",
+        "crc_301_msi,lung_588_pdl1,lung_methylation",
+        "--frontend-disabled",
+        "crc_301_msi,lung_588_pdl1,lung_methylation",
+        "--output-json",
+        str(tmp_path / "blocked.json"),
+    ]
+    blocked = subprocess.run(command, capture_output=True, text=True)
+    assert blocked.returncode == 1
+    payload = json.loads((tmp_path / "blocked.json").read_text(encoding="utf-8"))
+    assert payload["status"] == "FAIL"
+    assert any("missing from web disabled scope" in row for row in payload["issues"])
+
+    command[command.index("crc_301_msi,lung_588_pdl1")] = (
+        "crc_301_msi,lung_588_pdl1,lung_methylation"
+    )
+    command[-1] = str(tmp_path / "closed.json")
+    closed = subprocess.run(command, capture_output=True, text=True)
+    assert closed.returncode == 0, closed.stdout + closed.stderr
+    payload = json.loads((tmp_path / "closed.json").read_text(encoding="utf-8"))
+    assert payload["status"] == "PASS"
+
+
 def test_iyun129_switch_enables_only_promoted_or_controlled_pilot_panels() -> None:
     release = _read("scripts/iyun129_release.sh")
     limited_release_panels = "crc_301_msi,lung_588_pdl1,lung_methylation"
 
     assert f"RG_WEB_DISABLED_PROJECT_TYPES:-{limited_release_panels}" in release
+    assert "VITE_DISABLED_PROJECT_TYPES" in release
+    assert "check_production_scope" in release
+    assert release.index("check_production_scope") < release.index(
+        'resolved_target="$(resolve_remote "$TARGET")"'
+    )
     assert "lung_329_pdl1" not in limited_release_panels
     assert (
         'REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-'
         '$RG_WEB_DISABLED_PROJECT_TYPES}"'
     ) in release
+
+
+def test_iyun129_switch_rejects_blocked_panel_scope_before_ssh() -> None:
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/iyun129_release.sh"), "switch", "0123456"],
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "RG_WEB_DISABLED_PROJECT_TYPES": "crc_301_msi,lung_588_pdl1",
+            "REPORTGEN_DISABLED_PROJECT_TYPES": (
+                "crc_301_msi,lung_588_pdl1,lung_methylation"
+            ),
+            "VITE_DISABLED_PROJECT_TYPES": (
+                "crc_301_msi,lung_588_pdl1,lung_methylation"
+            ),
+        },
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 1
+    assert "missing from web disabled scope" in result.stdout
+    assert "ssh:" not in result.stderr.lower()
 
 
 def test_iyun129_wrapper_rejects_commit_not_reachable_from_origin_main(
@@ -113,11 +202,25 @@ def test_iyun129_wrapper_rejects_commit_not_reachable_from_origin_main(
     git("config", "user.name", "Synthetic Release Test")
     git("config", "user.email", "release-test@example.invalid")
     (repo / "scripts").mkdir()
+    (repo / "panels/lung_methylation").mkdir(parents=True)
     (repo / "scripts/iyun62_deploy_clean.sh").write_text(
         "#!/usr/bin/env bash\nexit 99\n",
         encoding="utf-8",
     )
-    git("add", "scripts/iyun62_deploy_clean.sh")
+    (repo / "scripts/check_production_panel_scope.py").write_text(
+        _read("scripts/check_production_panel_scope.py"),
+        encoding="utf-8",
+    )
+    (repo / "panels/lung_methylation/release_readiness.yaml").write_text(
+        _read("panels/lung_methylation/release_readiness.yaml"),
+        encoding="utf-8",
+    )
+    git(
+        "add",
+        "scripts/iyun62_deploy_clean.sh",
+        "scripts/check_production_panel_scope.py",
+        "panels/lung_methylation/release_readiness.yaml",
+    )
     git("commit", "-m", "synthetic main")
     git("branch", "-M", "main")
     git("remote", "add", "origin", str(origin))
