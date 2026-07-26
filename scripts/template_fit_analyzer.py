@@ -351,8 +351,19 @@ def _mine_normalize(text: str) -> str:
 # noise that recurs but is NOT a section heading: contact info, figure/table
 # captions, sentence fragments.
 _CONTACT_NOISE = re.compile(r"www\.|@|电话|邮箱|网址|网站|地址[:：]|marvelbio|http")
+_CASE_METADATA_NOISE = re.compile(
+    r"患者姓名|姓名[:：]|报告编号|样本(?:编号|号)|送检日期|报告日期|"
+    r"采样日期|出生日期|身份证|住院号|门诊号|病理号|"
+    r"MLJY[-_]?LZ\d*|(?:LZ|LUNG)\d{2,}|20\d{2}[-/.年]",
+    re.IGNORECASE,
+)
 _FIGURE_CAPTION = re.compile(r"^[图表]\s*\d")
 _SENTENCE_END = ("。", "，", "；", "！", "？", ",", ".", ")", "）")
+
+
+def _safe_mined_line(line: str) -> bool:
+    """Exclude recurring case metadata and contact details before aggregation."""
+    return not _CONTACT_NOISE.search(line) and not _CASE_METADATA_NOISE.search(line)
 
 
 def _heading_like(line: str) -> bool:
@@ -393,7 +404,10 @@ def mine_section_titles(
                 continue
             any_para = True
             norm = _mine_normalize(content)
-            if 2 <= len(norm) <= _MINE_MAX_LEN:
+            if (
+                2 <= len(norm) <= _MINE_MAX_LEN
+                and _safe_mined_line(norm)
+            ):
                 seen_in_doc.add(norm)
         if any_para:
             n += 1
@@ -645,10 +659,26 @@ def main() -> int:
         mined = mine_section_titles(
             reports, list(SECTION_PATTERNS.keys()), min_doc_freq=args.min_doc_freq
         )
-        known = [(l, f) for l, f, k in mined["lines"] if k]
-        novel_all = [(l, f) for l, f, k in mined["lines"] if not k]
-        novel_headings = [(l, f) for l, f in novel_all if _heading_like(l)]
-        novel_other = [(l, f) for l, f in novel_all if not _heading_like(l)]
+        known = [
+            (line, frequency)
+            for line, frequency, is_known in mined["lines"]
+            if is_known
+        ]
+        novel_all = [
+            (line, frequency)
+            for line, frequency, is_known in mined["lines"]
+            if not is_known
+        ]
+        novel_headings = [
+            (line, frequency)
+            for line, frequency in novel_all
+            if _heading_like(line)
+        ]
+        novel_other = [
+            (line, frequency)
+            for line, frequency in novel_all
+            if not _heading_like(line)
+        ]
         meta = _build_metadata(args.golden, Path(__file__).resolve())
         lines_out = []
         lines_out.append(f"# Unsupervised Section Mining: {family_name}")
@@ -660,23 +690,23 @@ def main() -> int:
         lines_out.append("## 🆕 Novel section headings (NOT in golden — candidate new sections)")
         lines_out.append("")
         if novel_headings:
-            for l, f in novel_headings[:60]:
-                lines_out.append(f"- `{l}` — 出现率 {f*100:.0f}%")
+            for line, frequency in novel_headings[:60]:
+                lines_out.append(f"- `{line}` — 出现率 {frequency*100:.0f}%")
         else:
             lines_out.append("(none above threshold)")
         lines_out.append("")
         lines_out.append("## ✓ Recurring headings already covered by golden")
         lines_out.append("")
-        for l, f in known[:40]:
-            lines_out.append(f"- `{l}` — 出现率 {f*100:.0f}%")
+        for line, frequency in known[:40]:
+            lines_out.append(f"- `{line}` — 出现率 {frequency*100:.0f}%")
         lines_out.append("")
         lines_out.append("## 📎 Other recurring fixed text (contact info / captions / sentences)")
         lines_out.append("")
         lines_out.append("> Not section headings; shown for completeness (these also need to be "
                          "carried over verbatim when building the panel template).")
         lines_out.append("")
-        for l, f in novel_other[:30]:
-            lines_out.append(f"- `{l}` — 出现率 {f*100:.0f}%")
+        for line, frequency in novel_other[:30]:
+            lines_out.append(f"- `{line}` — 出现率 {frequency*100:.0f}%")
         lines_out.append("")
         lines_out.append("---")
         lines_out.append("## Provenance")

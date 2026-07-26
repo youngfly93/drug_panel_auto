@@ -162,16 +162,18 @@ generation is disabled, and download requires report-group review. CRC301,
 lung588 and lung methylation remain disabled in all three scope guards:
 
 ```text
-REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation
-RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation
-VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation
+REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13
+RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13
+VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13
 ```
 
 The first guard blocks direct/core generation, the second blocks Web API and
 batch entry points, and the third removes the three unpromoted products from
-the production generation selector. The iyun129 deployment wrapper supplies
-these values by default. The backend guards are authoritative: a hidden or
-absent frontend option alone is not a release boundary.
+the production generation selector. The list also reserves `lung_13`, which
+has a product-intake record but no Panel package or matching source Excel.
+The iyun129 deployment wrapper supplies these values by default. The backend
+guards are authoritative: a hidden or absent frontend option alone is not a
+release boundary.
 
 `panels/lung_methylation/release_readiness.yaml` is the committed promotion
 record for the methylation draft. Its synthetic golden proves only that the
@@ -182,6 +184,9 @@ record is `production_eligible: false` to remain present in the Web, core, and
 frontend disabled scopes. Promotion additionally requires a SHA-pinned,
 same-case report-group final DOCX and source Excel, report-group secondary
 review, historical-golden PASS, and production-equivalent Linux visual QA.
+Pre-package products use the same schema under
+`config/panel_product_readiness/`; this lets production fail closed before an
+unfinished Panel directory or frontend option exists.
 
 Any CRC358 knowledge row whose secondary review is still pending must remain
 visible in governance counts but set `runtime_eligible: false`. Exact pending
