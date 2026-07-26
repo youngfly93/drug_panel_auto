@@ -146,11 +146,39 @@ def test_iyun129_switch_enables_only_promoted_or_controlled_pilot_panels() -> No
     limited_release_panels = "crc_301_msi,lung_588_pdl1,lung_methylation"
 
     assert f"RG_WEB_DISABLED_PROJECT_TYPES:-{limited_release_panels}" in release
+    assert "VITE_DISABLED_PROJECT_TYPES" in release
+    assert "check_production_scope" in release
+    assert release.index("check_production_scope") < release.index(
+        'resolved_target="$(resolve_remote "$TARGET")"'
+    )
     assert "lung_329_pdl1" not in limited_release_panels
     assert (
         'REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-'
         '$RG_WEB_DISABLED_PROJECT_TYPES}"'
     ) in release
+
+
+def test_iyun129_switch_rejects_blocked_panel_scope_before_ssh() -> None:
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/iyun129_release.sh"), "switch", "0123456"],
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "RG_WEB_DISABLED_PROJECT_TYPES": "crc_301_msi,lung_588_pdl1",
+            "REPORTGEN_DISABLED_PROJECT_TYPES": (
+                "crc_301_msi,lung_588_pdl1,lung_methylation"
+            ),
+            "VITE_DISABLED_PROJECT_TYPES": (
+                "crc_301_msi,lung_588_pdl1,lung_methylation"
+            ),
+        },
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 1
+    assert "missing from web disabled scope" in result.stdout
+    assert "ssh:" not in result.stderr.lower()
 
 
 def test_iyun129_wrapper_rejects_commit_not_reachable_from_origin_main(
