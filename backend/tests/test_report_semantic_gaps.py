@@ -8,11 +8,13 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 import yaml
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from openpyxl import load_workbook
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +62,9 @@ def _panel_provider(panel_id: str) -> GeneKnowledgeProvider:
         {
             "enabled": True,
             "panel_id": panel_id,
+            "fixed_domain_source_policy": (
+                package.raw.get("fixed_domain_source_policy") or ""
+            ),
             "gene_symbol_aliases": package.raw.get("gene_symbol_aliases") or {},
             "gene_knowledge_db": gene_config,
         }
@@ -93,12 +98,12 @@ def test_fixed_domain_survives_erbb2_variant_overlay():
     assert combined.count("蛋白全长为1255个氨基酸") == 1
 
 
-def test_complementary_kras_domains_are_preserved_once():
+def test_crc_kras_uses_internal_curated_domain_once():
     section = _section(_crc358_provider(), "KRAS", "c.35G>A", "p.G12D")
     combined = f"{section['intro']}\n{section['mutation_analysis']}"
 
     assert combined.count("RAS结构域") == 1
-    assert combined.count("Hypervariable region") == 1
+    assert "Hypervariable region" not in combined
     assert combined.count("蛋白全长为189个氨基酸") == 1
 
 
@@ -110,7 +115,13 @@ def test_base_domain_column_wins_when_legacy_intro_tail_conflicts():
     gene_config["reviewed_part3_overlay_paths"] = []
     gene_config["reviewed_part3_overlay_path"] = ""
     provider = GeneKnowledgeProvider(
-        {"enabled": True, "gene_knowledge_db": gene_config}
+        {
+            "enabled": True,
+            "fixed_domain_source_policy": (
+                "internal_curated_column_authoritative"
+            ),
+            "gene_knowledge_db": gene_config,
+        }
     )
     assert provider.load(base_path=str(ROOT))
 
@@ -125,10 +136,20 @@ def test_base_domain_column_wins_when_legacy_intro_tail_conflicts():
 
 
 @pytest.mark.parametrize(
-    ("gene", "c_hgvs", "p_hgvs", "fixed_marker", "first_narrative_marker"),
+    ("gene", "c_hgvs", "p_hgvs", "fixed_marker"),
     [
-        ("APC", "c.994C>T", "p.R332*", "Disordered（239-305位氨基酸）", "p.R332*"),
-        ("SMAD4", "c.1577A>G", "p.E526G", "MH2结构域（323-552位氨基酸）", "DWA结构域"),
+        (
+            "APC",
+            "c.994C>T",
+            "p.R332*",
+            "EB-1结合结构域（2670-2843位氨基酸）",
+        ),
+        (
+            "SMAD4",
+            "c.1577A>G",
+            "p.E526G",
+            "DWB结构域（321-530位氨基酸）",
+        ),
     ],
 )
 @pytest.mark.parametrize("panel_id", ["crc_301_msi", "crc_358_msi"])
@@ -138,13 +159,12 @@ def test_crc_part3_domain_presentation_matches_report_group_side(
     c_hgvs,
     p_hgvs,
     fixed_marker,
-    first_narrative_marker,
 ):
     package = load_panel_package(panel_id, project_root=ROOT)
     context = {
         "panel_style": ReportGenerator._load_panel_style_config(package),
     }
-    section = _section(_crc358_provider(), gene, c_hgvs, p_hgvs)
+    section = _section(_panel_provider(panel_id), gene, c_hgvs, p_hgvs)
 
     label, rendered = TemplateRenderer._part3_gene_analysis_presentation(
         section,
@@ -155,7 +175,7 @@ def test_crc_part3_domain_presentation_matches_report_group_side(
 
     assert label == "基因结构域："
     assert fixed_marker in section["fixed_domain_text"]
-    assert first_narrative_marker in narrative_paragraphs[0]
+    assert narrative_paragraphs
     assert paragraphs[0] == (
         section["fixed_domain_text"] + narrative_paragraphs[0]
     )
@@ -188,10 +208,15 @@ def test_crc_part3_domain_presentation_renders_one_first_paragraph(tmp_path):
         },
     )
 
+    rendered_doc = Document(output)
+    nonempty_paragraphs = [
+        paragraph
+        for paragraph in rendered_doc.paragraphs
+        if paragraph.text.strip()
+    ]
     paragraphs = [
         paragraph.text.strip()
-        for paragraph in Document(output).paragraphs
-        if paragraph.text.strip()
+        for paragraph in nonempty_paragraphs
     ]
     label_index = paragraphs.index("基因结构域：")
     assert "基因变异解析：" not in paragraphs
@@ -200,6 +225,12 @@ def test_crc_part3_domain_presentation_renders_one_first_paragraph(tmp_path):
         + section["mutation_narrative"].splitlines()[0]
     )
     assert paragraphs[label_index + 2] == section["mutation_narrative"].splitlines()[1]
+    assert (
+        nonempty_paragraphs[
+            label_index + 1
+        ].paragraph_format.keep_together
+        is True
+    )
 
 
 def test_part3_domain_presentation_keeps_legacy_fallback_without_fixed_domain():
@@ -242,14 +273,183 @@ def test_missing_gene_domains_ship_as_governed_first_review_overlay():
         "PALB2": ("1186个氨基酸", "WD40重复结构域"),
         "DNMT3A": ("912个氨基酸", "ADD结构域"),
         "RAD51D": ("328个氨基酸", "RecA样ATP酶家族"),
-        "PIK3CA": ("1068个氨基酸", "PI3K/PI4K catalytic结构域"),
-        "SMAD4": ("552个氨基酸", "MH2结构域"),
+        "PIK3CA": ("1068个氨基酸", "PI3Kc结构域"),
+        "SMAD4": ("552个氨基酸", "DWB结构域"),
     }
     for gene, markers in expected.items():
         section = _section(provider, gene, "c.999A>G", "p.X333Y")
         combined = f"{section['intro']}\n{section['mutation_analysis']}"
         assert all(marker in combined for marker in markers), (gene, combined)
         assert combined.count("编码的蛋白全长") == 1, (gene, combined)
+
+
+def test_internal_workbook_keeps_curated_and_raw_domain_sources_separate():
+    settings = yaml.safe_load(
+        (ROOT / "config/settings.yaml").read_text(encoding="utf-8")
+    )
+    workbook_path = (
+        ROOT
+        / settings["knowledge_bases"]["gene_knowledge_db"]["path"]
+    )
+    workbook = load_workbook(
+        workbook_path,
+        read_only=True,
+        data_only=True,
+    )
+    sheet = workbook["基因变异解析"]
+    rows = {
+        str(row[0].value or "").strip(): (
+            str(row[1].value or ""),
+            str(row[4].value or ""),
+        )
+        for row in sheet.iter_rows(min_row=3)
+        if row[0].value
+    }
+    workbook.close()
+
+    assert "Disordered" in rows["APC"][0]
+    assert "EB-1结合结构域" in rows["APC"][1]
+    assert "DWB结构域" in rows["SMAD4"][1]
+    assert "PI3Kc结构域" in rows["PIK3CA"][1]
+    assert "Hypervariable region" in rows["KRAS"][0]
+    assert "RAS结构域" in rows["KRAS"][1]
+    assert rows["ERBB2"][1] == ""
+
+
+@pytest.mark.parametrize("panel_id", ["crc_301_msi", "crc_358_msi"])
+@pytest.mark.parametrize(
+    ("gene", "expected_marker"),
+    [
+        ("KIT", "Ig-like C2-type 1"),
+        ("STK11", "Protein kinase"),
+        ("VHL", "蛋白全长为213个氨基酸"),
+        ("ALK", "MAM 1"),
+        ("EGFR", "Protein kinase"),
+        ("ERBB2", "Protein kinase"),
+        ("MET", "Sema"),
+        ("RET", "Cadherin"),
+        ("RB1", "Domain A"),
+    ],
+)
+def test_crc_internal_domain_fallback_removes_non_domain_features(
+    panel_id,
+    gene,
+    expected_marker,
+):
+    fixed = _section(
+        _panel_provider(panel_id),
+        gene,
+        "c.999999A>G",
+        "p.X999999Y",
+    )["fixed_domain_text"]
+
+    assert expected_marker in fixed
+    for forbidden in (
+        "Disordered",
+        "Interaction with",
+        "Required for interaction",
+        "Sufficient for interaction",
+        "mediates interaction",
+        "Involved in binding",
+        "Important for dimerization",
+        "tandem repeats",
+    ):
+        assert forbidden.casefold() not in fixed.casefold(), (
+            gene,
+            forbidden,
+            fixed,
+        )
+    if gene == "RB1":
+        assert "Domain C" not in fixed
+
+
+@pytest.mark.parametrize("panel_id", ["crc_301_msi", "crc_358_msi"])
+def test_public_domain_overlay_cannot_replace_internal_curated_column(
+    panel_id,
+):
+    provider = _panel_provider(panel_id)
+    pik3ca = _section(provider, "PIK3CA", "c.1633G>A", "p.E545K")
+    smad4 = _section(provider, "SMAD4", "c.1577A>G", "p.E526G")
+
+    assert "PI3Kc结构域" in pik3ca["fixed_domain_text"]
+    assert "PI3K/PI4K catalytic结构域" not in pik3ca[
+        "fixed_domain_text"
+    ]
+    assert "DWA结构域" in smad4["fixed_domain_text"]
+    assert "DWB结构域" in smad4["fixed_domain_text"]
+    assert "MH1结构域" not in smad4["fixed_domain_text"]
+    assert "MH2结构域" not in smad4["fixed_domain_text"]
+
+
+def test_internal_curated_domain_loads_when_generic_intro_is_empty():
+    provider = GeneKnowledgeProvider(
+        {
+            "fixed_domain_source_policy": (
+                "internal_curated_column_authoritative"
+            )
+        }
+    )
+    provider._gene_analysis_df = pd.DataFrame(
+        [
+            {
+                "基因名称": "TEST1",
+                "基因简介": "",
+                "基因变异解析": "独立变异解释。",
+                "泛癌": (
+                    "TEST1基因编码的蛋白全长为100个氨基酸，"
+                    "主要包含Test结构域（1-80位氨基酸）。"
+                ),
+            }
+        ]
+    )
+    provider._build_gene_analysis_cache({})
+
+    assert "Test结构域" in provider._gene_fixed_domain_cache["TEST1"]
+    assert "TEST1" in provider._workbook_curated_domain_genes
+
+
+@pytest.mark.parametrize("panel_id", ["crc_301_msi", "crc_358_msi"])
+def test_crc_all_reportable_gene_text_excludes_raw_uniprot_features(
+    panel_id,
+):
+    provider = _panel_provider(panel_id)
+    coverage = yaml.safe_load(
+        (
+            ROOT
+            / f"panels/{panel_id}/rules/knowledge_coverage.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    forbidden_markers = (
+        "disordered",
+        "interaction with",
+        "required for interaction",
+        "sufficient for interaction",
+        "mediates interaction",
+        "involved in binding",
+        "important for dimerization",
+        "tandem repeats",
+    )
+
+    for gene in coverage["reportable_genes"]:
+        section = _section(
+            provider,
+            gene,
+            "c.999999A>G",
+            "p.X999999Y",
+        )
+        visible = "\n".join(
+            section[field]
+            for field in (
+                "intro",
+                "fixed_domain_text",
+                "mutation_analysis",
+            )
+        ).casefold()
+        assert not [
+            marker
+            for marker in forbidden_markers
+            if marker in visible
+        ], gene
 
 
 def test_high_risk_gene_fallbacks_are_governed_specific_and_drug_free():
@@ -2310,7 +2510,14 @@ def test_crc301_reuses_shared_domains_and_covers_its_panel_specific_genes():
         ReportGenerator._resolve_panel_reviewed_part3_overlays(package)
     )
     provider = GeneKnowledgeProvider(
-        {"enabled": True, "panel_id": "crc_301_msi", "gene_knowledge_db": gene_config}
+        {
+            "enabled": True,
+            "panel_id": "crc_301_msi",
+            "fixed_domain_source_policy": (
+                package.raw.get("fixed_domain_source_policy") or ""
+            ),
+            "gene_knowledge_db": gene_config,
+        }
     )
     assert provider.load(base_path=str(ROOT))
     coverage = yaml.safe_load(

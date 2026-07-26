@@ -3887,6 +3887,7 @@ class TemplateRenderer:
             num_id=None,
             ilvl=0,
             keep_next=False,
+            keep_lines=False,
         ):
             new_p = OxmlElement("w:p")
 
@@ -3906,6 +3907,9 @@ class TemplateRenderer:
             if keep_next:
                 ppr = ensure_ppr()
                 ppr.append(OxmlElement("w:keepNext"))
+            if keep_lines:
+                ppr = ensure_ppr()
+                ppr.append(OxmlElement("w:keepLines"))
             if num_id is not None:
                 ppr = ensure_ppr()
                 num_pr = OxmlElement("w:numPr")
@@ -4055,6 +4059,11 @@ class TemplateRenderer:
             "first_line_twips": 420,
             "first_line_chars": 200,
             "spacing_after": 200,
+            # A dynamic Part-3 paragraph is one semantic unit.  Keeping its
+            # lines together prevents a single trailing line from being
+            # stranded before the next forced section break.  Word/LibreOffice
+            # may still split a paragraph that is taller than a full page.
+            "keep_lines": True,
         }
         label_options = {
             "bold": True,

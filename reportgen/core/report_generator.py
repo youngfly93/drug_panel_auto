@@ -906,6 +906,9 @@ class ReportGenerator:
                     provider_cfg = {
                         "enabled": True,
                         "panel_id": state.canonical_project_type,
+                        "fixed_domain_source_policy": (
+                            panel_raw.get("fixed_domain_source_policy") or ""
+                        ),
                         "gene_symbol_aliases": (
                             panel_raw.get("gene_symbol_aliases")
                             or {}

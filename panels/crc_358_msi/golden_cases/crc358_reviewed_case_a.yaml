@@ -10,7 +10,7 @@ source:
   reference_docx_sha256: a2dc7e1fee96ae6b5e2c49a864c18853516edf85edeea8c796c65b9ad6c33931
   review_binding: historical_final_plus_reviewed_limited_release_domain_presentation
   secondary_review_status: report_group_approved
-  secondary_review_receipt_id: report_group_crc358_domain_presentation_20260724
+  secondary_review_receipt_id: report_group_crc358_internal_domain_source_20260726
 medical_uat:
   status: blocked
   blockers:
@@ -190,7 +190,7 @@ approved_reference_deviation:
   policy: exact_normalized_report_diff_v1
   normalized_report_diff_sha256: 602ac173347c121bb041d340a94785b342170234d6a94198785fba9d70148629
   approval_status: report_group_approved
-  approval_receipt_id: report_group_crc358_domain_presentation_20260724
+  approval_receipt_id: report_group_crc358_internal_domain_source_20260726
   supersedes: report_group_crc358_regression_restore_20260723_reference_deviation
   reasons:
     - restore_reviewed_exact_brca1_q169star_and_pms2_s425lfs23_rules
@@ -201,3 +201,4 @@ approved_reference_deviation:
     - reviewed_gene_domain_and_variant_narrative_updates
     - reviewed_dynamic_approved_drug_and_immune_wording_contracts
     - report_group_domain_label_and_first_narrative_merge_20260724
+    - report_group_internal_curated_domain_source_authority_20260726

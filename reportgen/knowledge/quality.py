@@ -64,6 +64,12 @@ def build_panel_gene_provider(project_root: str | Path, package: Any) -> GeneKno
         {
             "enabled": True,
             "panel_id": package.panel_id,
+            "fixed_domain_source_policy": (
+                (getattr(package, "raw", None) or {}).get(
+                    "fixed_domain_source_policy"
+                )
+                or ""
+            ),
             "gene_symbol_aliases": (
                 (getattr(package, "raw", None) or {}).get(
                     "gene_symbol_aliases"
