@@ -28,7 +28,7 @@ export RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.c
 # per-case PD-L1 provenance and review-before-download. CRC301, lung588 and
 # methylation remain outside this release. The same scope is enforced in the
 # Web API, reportgen core, and compiled UI.
-export RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_588_pdl1,lung_methylation,lung_13}"
+export RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1}"
 export REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 export VITE_DISABLED_PROJECT_TYPES="${VITE_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 export ORIGIN_REMOTE="${ORIGIN_REMOTE:-origin}"

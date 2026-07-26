@@ -162,15 +162,16 @@ generation is disabled, and download requires report-group review. CRC301,
 lung588 and lung methylation remain disabled in all three scope guards:
 
 ```text
-REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13
-RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13
-VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13
+REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1
+RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1
+VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1
 ```
 
 The first guard blocks direct/core generation, the second blocks Web API and
 batch entry points, and the third removes the three unpromoted products from
-the production generation selector. The list also reserves `lung_13`, which
-has a product-intake record but no Panel package or matching source Excel.
+the production generation selector. The list also reserves `lung_13`,
+`lung_62`, and `lung_62_pdl1`, which have product-intake records but no Panel
+package or matching source Excel.
 The iyun129 deployment wrapper supplies these values by default. The backend
 guards are authoritative: a hidden or absent frontend option alone is not a
 release boundary.

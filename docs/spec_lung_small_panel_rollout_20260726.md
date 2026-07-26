@@ -64,9 +64,12 @@ Panel 模板改个标题后上线。当前阶段只建立脱敏、可追溯的�
 
 ## 6. 发布状态
 
-`lung_13` 当前为 `NOT_BUILT / production_eligible: false`。其聚合库存和阻断
-原因记录在 `config/panel_product_readiness/lung_13.yaml`。iyun129 的 Web、
-核心生成器和编译前端三层禁用名单必须同时包含该产品；任何环境覆盖试图
-提前移除它，部署和 release 切换都会在服务器变更前失败。
+`lung_13`、`lung_62`、`lung_62_pdl1` 当前均为
+`NOT_BUILT / production_eligible: false`。其聚合库存和阻断原因分别记录在
+`config/panel_product_readiness/`。iyun129 的 Web、核心生成器和编译前端
+三层禁用名单必须同时包含这些产品；任何环境覆盖试图提前移除其中任一项，
+部署和 release 切换都会在服务器变更前失败。
 
-62 系列在 13 基因输入合同和小 Panel 模板族稳定后再按相同方法登记与建设。
+62 系列已经完成产品身份与阻断登记，但实施顺序不变：待 13 基因输入合同
+和小 Panel 模板族稳定后，先建设不带 PD-L1 的 62 基因，再建设带逐病例
+PD-L1 来源合同的 62+PD-L1。

@@ -1,0 +1,59 @@
+schema_version: "1.0"
+panel_id: "lung_62_pdl1"
+product_name: "肺癌62基因+PD-L1"
+release_status: "NOT_BUILT"
+production_eligible: false
+enforced_targets:
+  - "iyun129"
+blocker_code: "formal_same_case_input_golden_and_pdl1_provenance_missing"
+decision: >-
+  Treat lung-62 plus PD-L1 as a distinct product. Reuse only the reviewed
+  small-panel structural base; require case-specific PD-L1 source provenance
+  and a dedicated reviewed golden before any production entry is exposed.
+
+aggregate_inventory:
+  historical_final_docx_count: 55
+  historical_pages_median: 56
+  historical_tables_median: 10
+  crc358_template_fit_classification: "stranger"
+  supplied_real_excel_count: 3
+  supplied_matching_lung_62_pdl1_excel_count: 0
+  registered_same_case_docx_excel_pair_count: 0
+  inventory_date: "2026-07-26"
+  contains_patient_data: false
+
+promotion_evidence:
+  formal_reference_docx:
+    registered: false
+    sha256:
+  matched_source_excel:
+    registered: false
+    sha256:
+  second_real_source_excel:
+    registered: false
+    sha256:
+  same_case_verified: false
+  pdl1_case_source_contract:
+    status: "NOT_REGISTERED"
+    clone_required: true
+    platform_required: true
+    score_type_required: true
+    source_identity_required: true
+  report_group_secondary_review:
+    status: "pending"
+    reviewer:
+    reviewed_at:
+  historical_golden_gate:
+    status: "NOT_RUN"
+  two_case_leak_test:
+    status: "NOT_RUN"
+  linux_visual_qa:
+    status: "NOT_RUN"
+
+development_requirements:
+  - "Select and register a report-group-approved lung-62+PD-L1 final DOCX."
+  - "Provide its exact same-case source Excel and one different real lung-62+PD-L1 Excel."
+  - "Register per-case PD-L1 clone, platform, score type/value, result and source identity."
+  - "Reuse only reviewed small-panel structure; do not inherit lung329/588 patient conclusions."
+  - "Keep targeted-drug, immune and PD-L1 knowledge event- and cancer-specific."
+  - "Pass hardcoding, two-case leak, missing-source, historical-diff and Linux visual gates."

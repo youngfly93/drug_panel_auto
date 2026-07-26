@@ -1,0 +1,53 @@
+schema_version: "1.0"
+panel_id: "lung_62"
+product_name: "肺癌62基因"
+release_status: "NOT_BUILT"
+production_eligible: false
+enforced_targets:
+  - "iyun129"
+blocker_code: "formal_same_case_input_and_golden_missing"
+decision: >-
+  Keep the non-PD-L1 62-gene product separate from its PD-L1 sibling and from
+  the large-panel family. Do not create or promote a panel package until its
+  own reviewed final DOCX and real source Excel establish the contract.
+
+aggregate_inventory:
+  historical_final_docx_count: 33
+  historical_pages_median: 44
+  historical_tables_median: 7
+  crc358_template_fit_classification: "stranger"
+  supplied_real_excel_count: 3
+  supplied_matching_lung_62_excel_count: 0
+  registered_same_case_docx_excel_pair_count: 0
+  inventory_date: "2026-07-26"
+  contains_patient_data: false
+
+promotion_evidence:
+  formal_reference_docx:
+    registered: false
+    sha256:
+  matched_source_excel:
+    registered: false
+    sha256:
+  second_real_source_excel:
+    registered: false
+    sha256:
+  same_case_verified: false
+  report_group_secondary_review:
+    status: "pending"
+    reviewer:
+    reviewed_at:
+  historical_golden_gate:
+    status: "NOT_RUN"
+  two_case_leak_test:
+    status: "NOT_RUN"
+  linux_visual_qa:
+    status: "NOT_RUN"
+
+development_requirements:
+  - "Select and register a report-group-approved non-PD-L1 lung-62 final DOCX."
+  - "Provide its exact same-case source Excel and one different real lung-62 Excel."
+  - "Freeze the product-specific Variations membership and supported event contract."
+  - "Use the lung small-panel template family after lung-13 stabilizes."
+  - "Do not render a PD-L1 result from appendix wording or inferred values."
+  - "Pass hardcoding, two-case leak, knowledge-miss, historical-diff and Linux visual gates."
