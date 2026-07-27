@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "crc_358_msi"
 display_name: "结直肠癌358基因+MSI"
-version: "0.2.2"
+version: "0.2.3"
 status: "active"
 description: "CRC 358 + MSI panel package for the report production pipeline."
 
@@ -73,6 +73,7 @@ rules:
 # Reviewed Part-3 wording overlay (panel-scoped, CRC-curated). Declared at top
 # level (not under `rules:`) because it is a content overlay, not a schema'd
 # rule file. ReportGenerator resolves this per-panel for the gene KB provider.
+fixed_domain_source_policy: "internal_curated_column_authoritative"
 reviewed_part3_overlay: "rules/reviewed_part3_knowledge.yaml"
 reviewed_part3_overlay_additions:
   # CRC358 全 Panel 固定蛋白/结构域目录；仅含变异无关结构知识，

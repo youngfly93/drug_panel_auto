@@ -36,6 +36,31 @@ class GeneKnowledgeProvider:
         self.config = config or {}
         self._loaded = False
 
+        raw_domain_policy = str(
+            self.config.get("fixed_domain_source_policy")
+            or (self.config.get("gene_knowledge_db") or {}).get(
+                "fixed_domain_source_policy"
+            )
+            or ""
+        ).strip().lower()
+        supported_domain_policies = {
+            "",
+            "legacy_merge",
+            "internal_curated_column_authoritative",
+        }
+        if raw_domain_policy not in supported_domain_policies:
+            raise ValueError(
+                "unsupported fixed_domain_source_policy: "
+                f"{raw_domain_policy}"
+            )
+        self._fixed_domain_source_policy = (
+            raw_domain_policy or "legacy_merge"
+        )
+        self._internal_curated_domain_authority = (
+            self._fixed_domain_source_policy
+            == "internal_curated_column_authoritative"
+        )
+
         # Gene-symbol aliases are panel-scoped.  They normalize knowledge
         # lookup and Part-3 variant identity without rewriting the input gene
         # label shown in the report.  This is deliberately not a global alias
@@ -73,6 +98,7 @@ class GeneKnowledgeProvider:
         # replaceable gene/variant narrative.  Otherwise a reviewed overlay can
         # silently discard the only copy of fixed structural knowledge.
         self._gene_fixed_domain_cache: Dict[str, str] = {}
+        self._workbook_curated_domain_genes: set[str] = set()
         self._reviewed_gene_analysis_cache: Dict[str, Dict[str, str]] = {}
         self._reviewed_gene_section_overrides: Dict[str, Dict[str, str]] = {}
         # gene-level (variant-agnostic) Part-3 overrides; lower precedence than
@@ -292,6 +318,7 @@ class GeneKnowledgeProvider:
                     )
                     replace_fields = set()
                 gene_key = self._hgvs_key(row.get("gene"))
+                canonical_gene_key = self._canonical_gene_key(gene_key)
                 # Historical reviewed rows often stored a stable protein/domain
                 # sentence at the front of a variant-specific analysis.  Treat
                 # only that narrowly recognisable sentence as gene-level fixed
@@ -302,6 +329,25 @@ class GeneKnowledgeProvider:
                     section.get("mutation_analysis", ""),
                     section.get("intro", ""),
                 )
+                if (
+                    self._internal_curated_domain_authority
+                    and canonical_gene_key
+                    in self._workbook_curated_domain_genes
+                ):
+                    # CRC's dedicated workbook column is the report group's
+                    # authoritative fixed-domain source.  Public/catalog and
+                    # variant overlays may still provide narrative, but cannot
+                    # replace or append a second domain vocabulary.
+                    explicit_fixed = ""
+                    derived_fixed = ""
+                    section.pop("fixed_domain_text", None)
+                elif self._internal_curated_domain_authority:
+                    explicit_fixed = self._sanitize_raw_domain_features(
+                        explicit_fixed
+                    )
+                    derived_fixed = self._sanitize_raw_domain_features(
+                        derived_fixed
+                    )
                 if explicit_fixed:
                     # An explicit reviewed field is the configured source of
                     # truth.  Later overlays intentionally supersede legacy
@@ -759,7 +805,40 @@ class GeneKnowledgeProvider:
             # 缓存基因简介。部分处理后的知识库会把稳定的蛋白结构域摘要
             # 拼到简介末尾；将其拆到独立缓存，避免后续 overlay 整段覆盖。
             intro = self._norm_text(row.get(intro_col))
-            if intro and gene_upper not in self._gene_intro_cache:
+            if self._internal_curated_domain_authority:
+                intro_body, intro_domain_text = (
+                    self._split_intro_domain_tail(gene_upper, intro)
+                    if intro
+                    else ("", "")
+                )
+                if intro and gene_upper not in self._gene_intro_cache:
+                    self._gene_intro_cache[gene_upper] = (
+                        intro_body or intro
+                    )
+                curated_domain_text = reviewed.get("domain_text", "")
+                if curated_domain_text:
+                    fixed_domain_text = self._merge_fixed_domain_texts(
+                        curated_domain_text
+                    )
+                    self._workbook_curated_domain_genes.add(
+                        self._canonical_gene_key(gene_upper)
+                    )
+                else:
+                    # Some historical rows have not yet migrated the dedicated
+                    # column.  Reuse the same internal workbook as a fill-missing
+                    # source, but remove raw UniProt features that are not
+                    # protein domains.
+                    fixed_domain_text = self._merge_fixed_domain_texts(
+                        self._sanitize_raw_domain_features(intro_domain_text)
+                    )
+                if (
+                    fixed_domain_text
+                    and gene_upper not in self._gene_fixed_domain_cache
+                ):
+                    self._gene_fixed_domain_cache[
+                        gene_upper
+                    ] = fixed_domain_text
+            elif intro and gene_upper not in self._gene_intro_cache:
                 intro_body, intro_domain_text = self._split_intro_domain_tail(
                     gene_upper, intro
                 )
@@ -844,6 +923,72 @@ class GeneKnowledgeProvider:
         """Backward-compatible wrapper used by legacy callers/tests."""
         body, _ = self._split_intro_domain_tail(gene, intro)
         return body or intro
+
+    @staticmethod
+    def _sanitize_raw_domain_features(value: str) -> str:
+        """Remove non-domain UniProt features from a fixed-domain fallback.
+
+        This is intentionally used only by the CRC internal-source policy.
+        The shared workbook and legacy panel behavior remain unchanged.
+        """
+
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        forbidden_markers = (
+            "disordered",
+            "interaction with",
+            "required for interaction",
+            "sufficient for interaction",
+            "mediates interaction",
+            "involved in binding",
+            "important for dimerization",
+            "tandem repeats",
+        )
+        folded = text.casefold()
+        if not any(marker in folded for marker in forbidden_markers):
+            return text
+
+        stable_prefix = re.match(
+            r"^(.*?编码的蛋白全长(?:为)?\s*\d+\s*(?:个|位)?氨基酸)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        pivot = re.search(r"主要(?:包含|结构区域包括)", text)
+        if not pivot:
+            return (
+                f"{stable_prefix.group(1).rstrip('，,。.;；')}。"
+                if stable_prefix
+                else ""
+            )
+
+        prefix = text[: pivot.end()]
+        body = text[pivot.end() :].strip().rstrip("。.；;")
+        body = re.sub(
+            r"[，,、]?\s*等\s*\d+\s*个结构域\s*$",
+            "",
+            body,
+        )
+        candidates = re.split(
+            r"(?<=）)\s*(?:[,，、])\s*",
+            body,
+        )
+        kept = [
+            item.strip().rstrip("。.；;")
+            for item in candidates
+            if item.strip()
+            and not any(
+                marker in item.casefold()
+                for marker in forbidden_markers
+            )
+        ]
+        if kept:
+            return f"{prefix}{'、'.join(kept)}。"
+        return (
+            f"{stable_prefix.group(1).rstrip('，,。.;；')}。"
+            if stable_prefix
+            else ""
+        )
 
     @staticmethod
     def _extract_fixed_domain_sentence(gene: str, *values: str) -> str:
@@ -942,11 +1087,16 @@ class GeneKnowledgeProvider:
 
         # Replace any older fixed-domain sentence with the canonical merged
         # statement. Variant-specific domain/consequence sentences are kept.
-        cleaned = re.sub(
-            r"[^。\n]*编码的蛋白全长[^。\n]*(?:。|$)",
-            "",
-            analysis,
-        )
+        if analysis == fixed:
+            cleaned = ""
+        elif analysis.startswith(fixed):
+            cleaned = analysis[len(fixed) :].lstrip()
+        else:
+            cleaned = re.sub(
+                r"[^。\n]*编码的蛋白全长[^。\n]*(?:。|$)",
+                "",
+                analysis,
+            )
         cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
         return f"{fixed}\n{cleaned}" if cleaned else fixed
 
@@ -1634,11 +1784,23 @@ class GeneKnowledgeProvider:
             reviewed_override.get("mutation_analysis") or mutation_analysis
         )
 
-        fixed_domain_text = self._merge_fixed_domain_texts(
-            self._first_gene_value(self._gene_fixed_domain_cache, gene) or "",
-            gene_override.get("fixed_domain_text", ""),
-            reviewed_override.get("fixed_domain_text", ""),
+        base_fixed_domain_text = (
+            self._first_gene_value(self._gene_fixed_domain_cache, gene) or ""
         )
+        if (
+            self._internal_curated_domain_authority
+            and self._canonical_gene_key(gene)
+            in self._workbook_curated_domain_genes
+        ):
+            fixed_domain_text = self._merge_fixed_domain_texts(
+                base_fixed_domain_text
+            )
+        else:
+            fixed_domain_text = self._merge_fixed_domain_texts(
+                base_fixed_domain_text,
+                gene_override.get("fixed_domain_text", ""),
+                reviewed_override.get("fixed_domain_text", ""),
+            )
         mutation_analysis = self._compose_fixed_domain_analysis(
             fixed_domain_text, mutation_analysis
         )

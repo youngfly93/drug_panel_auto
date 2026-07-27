@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "crc_301_msi"
 display_name: "结直肠癌301基因+MSI"
-version: "0.1.2"
+version: "0.1.3"
 status: "active"
 description: "CRC 301 + MSI panel package reusing the CRC report pipeline."
 
@@ -80,6 +80,7 @@ rules:
 
 # Reviewed Part-3 wording overlay (panel-scoped). CRC-301 reuses CRC-358's
 # reviewed wording (same cancer family). Top-level, not under `rules:`.
+fixed_domain_source_policy: "internal_curated_column_authoritative"
 reviewed_part3_overlay: "panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml"
 reviewed_part3_overlay_additions:
   - "rules/reviewed_part3_knowledge.yaml"

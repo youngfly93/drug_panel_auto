@@ -1,0 +1,104 @@
+schema_version: "1.0"
+receipt_id: report_group_crc358_internal_domain_source_20260726
+status: approved
+decision: approved_for_runtime
+reviewed_at: "2026-07-26"
+reviewer:
+  group: report_group
+  individual_identity: not_recorded
+  attested_by: project_owner
+  attestation_basis: project_owner_confirmed_report_group_internal_knowledge_source_feedback
+candidate_identity:
+  kind: content_bundle_sha256
+  value: a933680ffa8f4d80605e338e73399d28302b34d52c1ad43c876c8e07fd684aae
+scope:
+  panels: [crc_358_msi]
+  includes:
+    - current_crc358_runtime_knowledge_bundle
+    - all_boundaries_approved_by_report_group_crc358_domain_presentation_20260724
+    - internal_curated_domain_column_as_authoritative_source
+    - sanitized_internal_workbook_fallback_when_curated_column_is_empty
+    - fixed_domain_and_first_variant_narrative_merge
+  excludes:
+    - crc_301_msi_medical_release
+    - new_medical_knowledge_rows
+    - pending_part2_rows_without_report_group_approval
+    - pending_part3_rows_without_report_group_approval
+    - real_case_uat
+    - production_deployment
+    - production_linux_renderer_acceptance
+notes:
+  - 本凭据继承且替代 report_group_crc358_domain_presentation_20260724 作为 CRC358 当前发布登记；旧凭据保持原文件字节不变。
+  - 依据报告组问题反馈文档“问题_20260724.docx”（SHA256 841a2a430e3377c22cfae7756a319d8e315477aa93dafe4343ad608f64d394d0）及项目负责人本轮确认，CRC358 固定结构域以内部工作簿人工策展列为权威来源。
+  - 内部策展列为空时，仅从同一内部工作簿或既有结构域目录补缺，并程序性剔除 Disordered、Interaction、结合位点及 tandem-repeat 等非 domain feature；公共 overlay 不得覆盖已有内部策展字段。
+  - 本次批准不新增医学知识行，不改变药物方向、证据等级、癌种或变异事件适用边界。
+  - 未记录个人审核人姓名，因此仅声明报告组级审批，不虚构个人签名。
+  - 仍处于 pending/needs_review 的知识行继续 fail closed；本凭据不替代病例 UAT、生产部署或生产同款 Linux LibreOffice 验收。
+  - 任一 artifact 的 SHA256 变化都会使发布门禁中的本凭据失效。
+artifacts:
+  - path: panels/crc_358_msi/golden_cases/crc358_reviewed_case_a.yaml
+    sha256: ea04022989dd5add5f042ffee9cd9619c2500654202f5094564bc096c83d1f50
+  - path: panels/crc_358_msi/panel.yaml
+    sha256: fb7e5b6613b996af48c23f6700a5da5030581d2ce621b9b4a4dd79ad53490988
+  - path: panels/crc_358_msi/rules/crc.yaml
+    sha256: 4ca135d350eff4e82a3bcf921091363c0215c78594bc5cd4c8805635d81f7671
+  - path: panels/crc_358_msi/rules/drugs.yaml
+    sha256: b483565f56f7235c455280d57012ee9cced21bfbc9ebac84acc1f221694660d8
+  - path: panels/crc_358_msi/rules/style.yaml
+    sha256: e7cb51c5eeabe99a3bc0e1d9a77600fec4db57dcb76c757606f9e93cf04f80f8
+  - path: panels/crc_358_msi/rules/reviewed_part3_corrections_20260720.yaml
+    sha256: a46f39eb540336b52990aeed110d755d01ffa6c8dcfa4ecbb4c8194bdb81cc02
+  - path: panels/crc_358_msi/rules/reviewed_part3_crc358_reviewed_case_a.yaml
+    sha256: 9eacdf5a11534861c1351971e87c7a5a3e5e2389f873feaa48f3cfe3aa80ac15
+  - path: panels/crc_358_msi/rules/reviewed_part3_crc_important_fallbacks_20260721.yaml
+    sha256: d399193a9bc16b7da1febb5d6bc09ddb1adf3817be30f67ad9e589e74e82e9c5
+  - path: panels/crc_358_msi/rules/reviewed_part3_domain_catalog.yaml
+    sha256: bfb65167c0b5a7e8413d108d3dcc1b6200d6f520de7b7a1092fea040c31558cd
+  - path: panels/crc_358_msi/rules/reviewed_part3_domain_overlay_20260720.yaml
+    sha256: a6f0e76e44725b13ce51c527784a1c43cd150c6a54c4cce97d78f6a3e92f5c85
+  - path: panels/crc_358_msi/rules/reviewed_part3_drug_candidate_fallbacks_p2a_20260721.yaml
+    sha256: f467ce912dbe325068af2382f98856152f245007ac377ae1d2805dd22fa01aa8
+  - path: panels/crc_358_msi/rules/reviewed_part3_drug_candidate_fallbacks_p2b_20260721.yaml
+    sha256: 3d8ec4c4cc985dc1c76957e7c0bcd505c82b30be5393478bd83a6376997aedc8
+  - path: panels/crc_358_msi/rules/reviewed_part3_drug_candidate_fallbacks_p2c_20260721.yaml
+    sha256: 04889a4e399386558f71200b0fd6c6480633faec15ed0da390963766d2d8fb02
+  - path: panels/crc_358_msi/rules/reviewed_part3_drug_contracts_20260721.yaml
+    sha256: a6ff2f29eeeee2af64815c1f39019cf7969e562c4580e4f55843847e65d576d3
+  - path: panels/crc_358_msi/rules/reviewed_part3_gene_fallbacks_20260721.yaml
+    sha256: 85617453cc2fb91f60f550bc9727907b7b816815c171c99ce842206aa5670b7d
+  - path: panels/crc_358_msi/rules/reviewed_part3_knowledge.yaml
+    sha256: 99831ef027acb84d37afccea333b9d18e7f8a1c900cf0c07cb8a17d96def0d0e
+  - path: panels/crc_358_msi/rules/reviewed_part3_medical_corrections_20260722.yaml
+    sha256: bcd2b4ce378db55378f7e1d348322e373a39505fd9f018bec65c5544b0fa463e
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3a_dna_hereditary_fallbacks_20260721.yaml
+    sha256: 544d67658291d8d53d273410e4e038a3288c89d3a35617c18db8095ebf5d6973
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3a_legacy_exact_corrections_20260721.yaml
+    sha256: 11de34cfcacd96e4b472ad5fb607a1f5d99fdb16823f237a41f579ed041e68ea
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3b_immune_fallbacks_20260721.yaml
+    sha256: 5a47588cdcedb95c64ed3d019db37c85519febe91269aa21ab8ffd36160923ef
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3c_chromatin_transcription_fallbacks_20260721.yaml
+    sha256: 75467b4c8dad7ac80b8e13558f551fca6b32d9c9593c1fd6e38b4acf6b48ae57
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3c_legacy_exact_corrections_20260721.yaml
+    sha256: 80d7ac86c14d5f7188d98e7245dc17a621245423818b1add8da338e5a444bf67
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3d_histone_fallbacks_20260721.yaml
+    sha256: 2563fc3bde354b5d57d2732048b268486f7a74d74dce23fd140859a50d1cab09
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3e_legacy_exact_corrections_20260721.yaml
+    sha256: 94bd2ce378b13e29c76538424696acac7eeea93720f28561f9fae2e9cbabf2d9
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3e_shared_residual_fallbacks_20260721.yaml
+    sha256: 41a06b79674e260863c2355ebf503235be9997a4d44829ef0bf692911dfcd178
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3f1_legacy_exact_corrections_20260721.yaml
+    sha256: b3ad52b55cfa48edf34eb9a07897badb727a95b4e49444b76f603dc974e50b2d
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3f1_signaling_fallbacks_20260721.yaml
+    sha256: f2ba281044f0892d0e7f23f061d7823d4b8e0e1fcaf9db18d0f126efa49d68bb
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3f2_chromatin_fallbacks_20260721.yaml
+    sha256: 3ea653f4afa7c1313eb67df6f24804a84cef5bee42c54b9a7d8c8ab6f473fba1
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3f2_legacy_exact_corrections_20260721.yaml
+    sha256: 5b2c5d17e5cc58a60419e2b271ff10b9b72d7b1afd4147f2b775726931237882
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3f3_legacy_exact_corrections_20260721.yaml
+    sha256: 5c4aea88e120e47f0753e456661911c772df575136091f2ce7a1a8ae80d37b2f
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3f3_lineage_transcription_fallbacks_20260721.yaml
+    sha256: 657a9bf7e0142ed125a8cc87cecd7ff4437f8b83faa32a3d27c51bdbb1aeec2c
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3f4_legacy_exact_corrections_20260721.yaml
+    sha256: 4cc11ca7c881ccd1c0d2c4bba7cc2c7c56304419a6d697217f07eac1ed0c59d2
+  - path: panels/crc_358_msi/rules/reviewed_part3_p3f4_structural_residual_fallbacks_20260721.yaml
+    sha256: 4f5a8448cfa88fd49833ef4ad0a92a49002c97942bd6c57e491db8703de47bb2

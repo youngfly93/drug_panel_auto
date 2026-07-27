@@ -10,7 +10,7 @@ source:
   reference_docx_sha256: a2dc7e1fee96ae6b5e2c49a864c18853516edf85edeea8c796c65b9ad6c33931
   review_binding: historical_final_plus_reviewed_limited_release_domain_presentation
   secondary_review_status: report_group_approved
-  secondary_review_receipt_id: report_group_crc358_domain_presentation_20260724
+  secondary_review_receipt_id: report_group_crc358_internal_domain_source_20260726
 medical_uat:
   status: blocked
   blockers:
@@ -105,9 +105,9 @@ expectations:
       - ATR|C.1291DEL|P.R431GFS*8
     required_gene_sections:
       - key: KRAS|C.34G>T|P.G12C
-        normalized_text_sha256: 700a643dc435280bdc06029cb75d94b2814f63c6f8ae478350b9f1a1e3914881
+        normalized_text_sha256: e208a91d5625ff764bfbfd9dac4e28a5d87dfd7a4e3ba827d99fdc8ca7e792d5
       - key: TP53|C.499C>T|P.Q167*
-        normalized_text_sha256: e2913f8a36a5529eec7477e8e61ddac686edb4434bb2750b56c330c5900d027b
+        normalized_text_sha256: 55413a28b466e04e07599eb57150f137724613d4a6e7f019e172d62a07949708
       - key: FLT3|C.2537G>A|P.G846D
         normalized_text_sha256: 1e89f7205c595d18c71af4db519dd97dfa50f02feae8d97897405e4bb4095cd7
       - key: ATR|C.1291DEL|P.R431GFS*8
@@ -188,9 +188,9 @@ intentional_deviations:
     approval_status: report_group_approved
 approved_reference_deviation:
   policy: exact_normalized_report_diff_v1
-  normalized_report_diff_sha256: 602ac173347c121bb041d340a94785b342170234d6a94198785fba9d70148629
+  normalized_report_diff_sha256: cc77080cf9f0bd5563f049266060738b56cfe31d3e598a5ca574e065b97caf95
   approval_status: report_group_approved
-  approval_receipt_id: report_group_crc358_domain_presentation_20260724
+  approval_receipt_id: report_group_crc358_internal_domain_source_20260726
   supersedes: report_group_crc358_regression_restore_20260723_reference_deviation
   reasons:
     - restore_reviewed_exact_brca1_q169star_and_pms2_s425lfs23_rules
@@ -201,3 +201,4 @@ approved_reference_deviation:
     - reviewed_gene_domain_and_variant_narrative_updates
     - reviewed_dynamic_approved_drug_and_immune_wording_contracts
     - report_group_domain_label_and_first_narrative_merge_20260724
+    - report_group_internal_curated_domain_source_authority_20260726
