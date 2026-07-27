@@ -877,7 +877,9 @@ def test_failed_release_restores_previous_release(tmp_path: Path) -> None:
         "STORAGE_DIR": str(storage),
         "VENV_DIR": str(venv),
         "PORT": port,
-        "HEALTH_TIMEOUT_SECONDS": "2",
+        # Two consecutive health/cwd observations are required. Leave enough
+        # time for the synthetic Python process to exec on a loaded CI runner.
+        "HEALTH_TIMEOUT_SECONDS": "5",
         "REPORTGEN_REQUIRE_RENDER_STACK": "0",
     }
     script = ROOT / "scripts/iyun62_start_reportgen.sh"
