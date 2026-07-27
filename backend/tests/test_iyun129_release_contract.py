@@ -39,7 +39,7 @@ def test_release_checklist_uses_real_iyun129_topology() -> None:
 def test_iyun129_wrapper_pins_production_coordinates() -> None:
     wrapper = _read("scripts/iyun129_deploy_clean.sh")
     limited_release_panels = (
-        "crc_301_msi,lung_588_pdl1,lung_methylation,"
+        "crc_301_msi,lung_methylation,"
         "lung_13,lung_62,lung_62_pdl1"
     )
 
@@ -161,12 +161,12 @@ def test_production_scope_gate_rejects_methylation_override(tmp_path: Path) -> N
         "--target",
         "iyun129",
         "--web-disabled",
-        "crc_301_msi,lung_588_pdl1,lung_13,lung_62,lung_62_pdl1",
+        "crc_301_msi,lung_13,lung_62,lung_62_pdl1",
         "--core-disabled",
-        "crc_301_msi,lung_588_pdl1,lung_methylation,"
+        "crc_301_msi,lung_methylation,"
         "lung_13,lung_62,lung_62_pdl1",
         "--frontend-disabled",
-        "crc_301_msi,lung_588_pdl1,lung_methylation,"
+        "crc_301_msi,lung_methylation,"
         "lung_13,lung_62,lung_62_pdl1",
         "--output-json",
         str(tmp_path / "blocked.json"),
@@ -177,9 +177,9 @@ def test_production_scope_gate_rejects_methylation_override(tmp_path: Path) -> N
     assert payload["status"] == "FAIL"
     assert any("missing from web disabled scope" in row for row in payload["issues"])
 
-    web_scope = "crc_301_msi,lung_588_pdl1,lung_13,lung_62,lung_62_pdl1"
+    web_scope = "crc_301_msi,lung_13,lung_62,lung_62_pdl1"
     command[command.index(web_scope)] = (
-        "crc_301_msi,lung_588_pdl1,lung_methylation,"
+        "crc_301_msi,lung_methylation,"
         "lung_13,lung_62,lung_62_pdl1"
     )
     command[-1] = str(tmp_path / "closed.json")
@@ -192,7 +192,7 @@ def test_production_scope_gate_rejects_methylation_override(tmp_path: Path) -> N
 def test_iyun129_switch_enables_only_promoted_or_controlled_pilot_panels() -> None:
     release = _read("scripts/iyun129_release.sh")
     limited_release_panels = (
-        "crc_301_msi,lung_588_pdl1,lung_methylation,"
+        "crc_301_msi,lung_methylation,"
         "lung_13,lung_62,lung_62_pdl1"
     )
 
@@ -203,6 +203,7 @@ def test_iyun129_switch_enables_only_promoted_or_controlled_pilot_panels() -> No
         'resolved_target="$(resolve_remote "$TARGET")"'
     )
     assert "lung_329_pdl1" not in limited_release_panels
+    assert "lung_588_pdl1" not in limited_release_panels
     assert (
         'REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-'
         '$RG_WEB_DISABLED_PROJECT_TYPES}"'
@@ -216,14 +217,14 @@ def test_iyun129_switch_rejects_blocked_panel_scope_before_ssh() -> None:
         env={
             **os.environ,
             "RG_WEB_DISABLED_PROJECT_TYPES": (
-                "crc_301_msi,lung_588_pdl1,lung_13,lung_62,lung_62_pdl1"
+                "crc_301_msi,lung_13,lung_62,lung_62_pdl1"
             ),
             "REPORTGEN_DISABLED_PROJECT_TYPES": (
-                "crc_301_msi,lung_588_pdl1,lung_methylation,"
+                "crc_301_msi,lung_methylation,"
                 "lung_13,lung_62,lung_62_pdl1"
             ),
             "VITE_DISABLED_PROJECT_TYPES": (
-                "crc_301_msi,lung_588_pdl1,lung_methylation,"
+                "crc_301_msi,lung_methylation,"
                 "lung_13,lung_62,lung_62_pdl1"
             ),
         },

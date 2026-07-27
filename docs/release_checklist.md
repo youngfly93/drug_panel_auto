@@ -154,22 +154,24 @@ cached PAGEREF directory construction and can produce an empty TOC even when
 HTTP health is green. The runtime start script checks them before stopping the
 known-good process and refuses the switch when any is truthy.
 
-### CRC358 + lung329 controlled-pilot release
+### CRC358 + lung329/lung588 controlled-pilot release
 
-The lung329 product is exposed only for single-case controlled generation:
-PD-L1 values and source identity are mandatory per case, shared batch
-generation is disabled, and download requires report-group review. CRC301,
-lung588 and lung methylation remain disabled in all three scope guards:
+The lung329 and lung588 products are exposed only for single-case controlled
+generation: PD-L1 values and source identity are mandatory per case, shared
+batch generation is disabled, and download requires report-group review.
+CRC301, lung methylation and the unbuilt small panels remain disabled in all
+three scope guards:
 
 ```text
-REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1
-RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1
-VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_588_pdl1,lung_methylation,lung_13,lung_62,lung_62_pdl1
+REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1
+RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1
+VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1
 ```
 
-The first guard blocks direct/core generation, the second blocks Web API and
-batch entry points, and the third removes the three unpromoted products from
-the production generation selector. The list also reserves `lung_13`,
+The first guard blocks direct/core generation, the second blocks Web API entry
+points, and the third removes unpromoted products from the production
+generation selector. Batch generation remains independently disabled by each
+lung pilot's committed Panel contract. The list also reserves `lung_13`,
 `lung_62`, and `lung_62_pdl1`, which have product-intake records but no Panel
 package or matching source Excel.
 The iyun129 deployment wrapper supplies these values by default. The backend
