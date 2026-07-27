@@ -10,7 +10,7 @@ reviewer:
   attestation_basis: project_owner_confirmed_report_group_internal_knowledge_source_feedback
 candidate_identity:
   kind: content_bundle_sha256
-  value: e1cf3ac88181a1cf9ab5ecfba8f5856c2d136b4a2837774fd72329d0039bc59f
+  value: a933680ffa8f4d80605e338e73399d28302b34d52c1ad43c876c8e07fd684aae
 scope:
   panels: [crc_358_msi]
   includes:
@@ -37,7 +37,7 @@ notes:
   - 任一 artifact 的 SHA256 变化都会使发布门禁中的本凭据失效。
 artifacts:
   - path: panels/crc_358_msi/golden_cases/crc358_reviewed_case_a.yaml
-    sha256: 8afa5b2b2b3ec126fe7f98386cd246d9ae5aef274e4b6ba7e94f69a0ecb23918
+    sha256: ea04022989dd5add5f042ffee9cd9619c2500654202f5094564bc096c83d1f50
   - path: panels/crc_358_msi/panel.yaml
     sha256: fb7e5b6613b996af48c23f6700a5da5030581d2ce621b9b4a4dd79ad53490988
   - path: panels/crc_358_msi/rules/crc.yaml
