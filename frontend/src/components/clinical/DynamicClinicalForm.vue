@@ -2,7 +2,12 @@
   <div v-if="loading" class="loading-container">
     <el-skeleton :rows="6" animated />
   </div>
-  <el-form v-else-if="schema" label-width="120px" label-position="right">
+  <el-form
+    v-else-if="schema"
+    :model="formData"
+    label-width="120px"
+    label-position="right"
+  >
     <template v-for="group in visibleGroups" :key="group.id">
       <el-divider content-position="left">{{ group.label }}</el-divider>
       <el-row :gutter="16">

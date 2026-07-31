@@ -26,6 +26,18 @@ project_detector_rules:
         - "588基因+PD-L1"
         - "588基因+pd-l1"
       weight: 1
+  structural_fingerprints:
+    - id: "lung588_result_workbook_v1"
+      confidence: 1.0
+      required_tables:
+        Variations:
+          required_columns:
+            - "ExistIn552"
+            - "ExistInsmall588"
+        Hereditary_tumor:
+          required_columns:
+            - "ExistInsmall588"
+            - "ExistIn178"
 
 batch_generation:
   enabled: false

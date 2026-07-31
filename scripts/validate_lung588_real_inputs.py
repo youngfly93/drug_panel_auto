@@ -421,7 +421,8 @@ def _build_uat_readiness(
     )
     aliases = [str(row.get("alias") or "").strip() for row in rows]
     ngs_structure_pass_count = sum(
-        not row["auto_detection"]["detected"]
+        row["auto_detection"]["detected"]
+        and row["auto_detection"]["project_type"] == "lung_588_pdl1"
         and row["targeted_drug_count"] == 0
         and row["biomarker_contract_status"] == "PASS"
         and row["context_contract"]["status"] in {"PASS", "NOT_APPLICABLE"}
@@ -652,8 +653,13 @@ def validate_inputs(
 
     failures: list[str] = []
     for row in rows:
-        if row["auto_detection"]["detected"]:
-            failures.append(f"{row['alias']}: untrusted filename auto-detected")
+        if (
+            not row["auto_detection"]["detected"]
+            or row["auto_detection"]["project_type"] != "lung_588_pdl1"
+        ):
+            failures.append(
+                f"{row['alias']}: lung588 structural identity was not detected"
+            )
         if row["targeted_drug_count"] != 0:
             failures.append(f"{row['alias']}: disabled drug rules produced rows")
         if row["biomarker_contract_status"] != "PASS":

@@ -370,7 +370,7 @@
         :form-data="form.formData"
         :errors="form.errors.value"
         :loading="form.loading.value"
-        @update-field="(key, value) => { form.formData[key] = value }"
+        @update-field="form.setValue"
       />
       <el-alert
         v-if="enrichmentMessage"
@@ -401,7 +401,13 @@
       >
         金标准验收（未命中基准即阻断）
       </el-checkbox>
-      <el-button type="primary" size="large" :loading="generating" @click="handleGenerate">
+      <el-button
+        type="primary"
+        size="large"
+        :loading="generating"
+        :disabled="!canGenerate"
+        @click="handleGenerate"
+      >
         {{ generating ? '提交中' : '生成报告' }}
       </el-button>
 
@@ -505,7 +511,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useExcelStore } from '@/stores/excel'
 import { useAuthStore } from '@/stores/auth'
-import { useDynamicForm } from '@/composables/useDynamicForm'
+import { projectDisplayName, useDynamicForm } from '@/composables/useDynamicForm'
 import {
   reportApi,
   type BatchResultItem,
@@ -899,6 +905,8 @@ watch(
     } else if (type) {
       projectType.value = null
       ElMessage.warning('当前生产版本暂未开放该项目类型，请完成病例级 UAT 后再使用。')
+    } else {
+      projectType.value = null
     }
   },
 )
@@ -942,6 +950,15 @@ watch(
 
 // Dynamic form driven by project type
 const form = useDynamicForm(projectType)
+const canGenerate = computed(
+  () => Boolean(
+    excelStore.upload
+    && excelStore.sourceFile
+    && projectType.value
+    && form.ready.value
+    && !generating.value,
+  ),
+)
 
 // Auto-merge Excel values when upload completes
 watch(
@@ -970,13 +987,18 @@ onUnmounted(() => {
 async function handleFileChange(uploadFile: any) {
   const file = uploadFile.raw || uploadFile
   if (!file) return
+  projectType.value = null
+  templateName.value = null
+  form.reset()
+  excelStore.reset()
   result.value = null
   singleTask.value = null
   stopSinglePolling()
   uploadError.value = ''
   selectedFileName.value = file.name || ''
   try {
-    await excelStore.uploadFile(file)
+    const applied = await excelStore.uploadFile(file)
+    if (!applied) return
     ElMessage.success('Excel 上传成功')
   } catch (err: any) {
     uploadError.value = err.response?.data?.detail || err.message || 'Excel 上传失败'
@@ -1181,6 +1203,10 @@ async function retryFailedBatch() {
 
 async function handleGenerate() {
   if (!excelStore.upload) return
+  if (!form.ready.value) {
+    ElMessage.warning('请先选择项目类型，并等待临床信息表单加载完成')
+    return
+  }
   if (!form.validate()) {
     ElMessage.warning('请填写必填字段')
     return
@@ -1194,7 +1220,7 @@ async function handleGenerate() {
     const payload: Omit<GenerateRequest, 'upload_id'> = {
       clinical_info: form.getCleanValues(),
       project_type: projectType.value,
-      project_name: excelStore.upload.detected_project_name,
+      project_name: projectDisplayName(projectType.value),
       template_name: templateName.value,
       reference_gate_mode: singleReferenceGateRequired.value ? 'required' : 'available',
     }

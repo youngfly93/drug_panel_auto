@@ -59,11 +59,12 @@ from app.services.file_manager import (
     save_upload_with_digest,
 )
 from app.services.generation_preflight import (
-    required_dates_error_message,
-    validate_required_dates,
+    required_inputs_error_message,
+    validate_required_inputs,
 )
 from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
+from app.services.project_identity import resolve_project_identity
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_manager import submit_batch_task
 from app.time_utils import utc_now_naive
@@ -124,19 +125,6 @@ def _json_dict(value: Optional[str]) -> dict:
     except Exception:
         return {}
     return parsed if isinstance(parsed, dict) else {}
-
-
-def _infer_project_type_from_name(
-    bridge: ReportGenBridge,
-    project_type: Optional[str],
-    project_name: Optional[str],
-) -> tuple[Optional[str], Optional[str]]:
-    if project_type or not project_name:
-        return project_type, project_name
-    inferred = bridge.infer_project_type_from_text(project_name)
-    if inferred.get("detected"):
-        return inferred.get("project_type"), project_name or inferred.get("project_name")
-    return project_type, project_name
 
 
 def _raise_if_project_type_disabled(
@@ -390,20 +378,20 @@ def _prepare_item_clinical_payload(
     project_name: Optional[str],
 ) -> tuple[dict, Optional[str], Optional[str], object]:
     excel_data = bridge.read_excel(stored_path)
-    detected_project_type = project_type
-    detected_project_name = project_name
-    if not detected_project_type:
-        detect = bridge.detect_project_type(
-            str(Path(stored_path).parent / (original_filename or "upload.xlsx")),
-            excel_data=excel_data,
-        )
-        detected_project_type = detect.get("project_type")
-        detected_project_name = detected_project_name or detect.get("project_name")
-    detected_project_type, detected_project_name = _infer_project_type_from_name(
+    identity = resolve_project_identity(
         bridge,
-        detected_project_type,
-        detected_project_name or shared_clinical_info.get("project_name"),
+        excel_path=str(Path(stored_path).parent / (original_filename or "upload.xlsx")),
+        excel_data=excel_data,
+        requested_project_type=project_type,
+        requested_project_name=project_name,
+        clinical_project_name=(
+            shared_clinical_info.get("project_name")
+            or shared_clinical_info.get("项目名称")
+            or shared_clinical_info.get("检测项目")
+        ),
     )
+    detected_project_type = identity.project_type
+    detected_project_name = identity.project_name
     _raise_if_project_type_disabled(bridge, detected_project_type)
     batch_policy_error = _batch_generation_policy_error(detected_project_type)
     if batch_policy_error:
@@ -411,17 +399,17 @@ def _prepare_item_clinical_payload(
 
     clinical_payload = bridge.get_mapped_clinical_fields(excel_data)
     clinical_payload.update(
-        {
-            key: value
-            for key, value in shared_clinical_info.items()
-            if value not in (None, "")
-        }
+        {key: value for key, value in shared_clinical_info.items() if value not in (None, "")}
     )
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
         lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
     )
+    clinical_payload.pop("项目名称", None)
+    clinical_payload.pop("检测项目", None)
+    if detected_project_name:
+        clinical_payload["project_name"] = detected_project_name
     return clinical_payload, detected_project_type, detected_project_name, excel_data
 
 
@@ -439,18 +427,16 @@ def _preflight_item_payload(
         detected_project_type,
         detected_project_name,
         excel_data,
-    ) = (
-        _prepare_item_clinical_payload(
-            stored_path=stored_path,
-            original_filename=original_filename,
-            bridge=bridge,
-            shared_clinical_info=shared_clinical_info,
-            project_type=project_type,
-            project_name=project_name,
-        )
+    ) = _prepare_item_clinical_payload(
+        stored_path=stored_path,
+        original_filename=original_filename,
+        bridge=bridge,
+        shared_clinical_info=shared_clinical_info,
+        project_type=project_type,
+        project_name=project_name,
     )
 
-    preflight = validate_required_dates(
+    preflight = validate_required_inputs(
         bridge,
         excel_path=stored_path,
         clinical_info=clinical_payload,
@@ -460,7 +446,7 @@ def _preflight_item_payload(
     )
     missing = list(preflight.get("missing") or [])
     if missing:
-        raise ValueError(required_dates_error_message(missing))
+        raise ValueError(required_inputs_error_message(missing))
     return {
         "clinical_payload": clinical_payload,
         "project_type": detected_project_type,
@@ -490,12 +476,7 @@ def _refresh_batch_counts(db: Session, task: Task, *, started_at: datetime) -> N
 
 def _load_batch_task_fresh(db: Session, task_id: str) -> Task | None:
     """Reload task state so cancellation from another session is observable."""
-    return (
-        db.query(Task)
-        .populate_existing()
-        .filter(Task.id == task_id)
-        .first()
-    )
+    return db.query(Task).populate_existing().filter(Task.id == task_id).first()
 
 
 def _build_item_payload(
@@ -522,9 +503,7 @@ def _build_item_payload(
         project_name=detected_project_name,
         strict_mode=False,
         template_contract_mode=template_contract_mode,
-        qa_visual_render=(
-            "all" if diff_svc.reference_is_required(reference_gate_mode) else None
-        ),
+        qa_visual_render=("all" if diff_svc.reference_is_required(reference_gate_mode) else None),
         qa_visual_render_required=(
             True if diff_svc.reference_is_required(reference_gate_mode) else None
         ),
@@ -682,9 +661,7 @@ def _complete_batch_files_task(
                     Task.status: "generating",
                     Task.completed_files: completed_files,
                     Task.failed_files: failed_files,
-                    Task.duration_seconds: (
-                        utc_now_naive() - started_at
-                    ).total_seconds(),
+                    Task.duration_seconds: (utc_now_naive() - started_at).total_seconds(),
                 },
                 synchronize_session=False,
             )
@@ -771,9 +748,7 @@ def _complete_batch_files_task(
                     Task.status: "qa",
                     Task.completed_files: completed_files,
                     Task.failed_files: failed_files,
-                    Task.duration_seconds: (
-                        utc_now_naive() - started_at
-                    ).total_seconds(),
+                    Task.duration_seconds: (utc_now_naive() - started_at).total_seconds(),
                 },
                 synchronize_session=False,
             )
@@ -796,9 +771,7 @@ def _complete_batch_files_task(
                     batch_report,
                     fail_on="fail",
                     max_samples=50,
-                    require_reference=diff_svc.reference_is_required(
-                        reference_gate_mode
-                    ),
+                    require_reference=diff_svc.reference_is_required(reference_gate_mode),
                 )
                 summary = diff_payload.get("summary") or {}
                 warnings.append(
@@ -862,9 +835,7 @@ def _complete_batch_files_task(
                         Task.status: "failed",
                         Task.errors: json.dumps([str(exc)], ensure_ascii=False),
                         Task.completed_at: completed_at,
-                        Task.duration_seconds: (
-                            completed_at - effective_started
-                        ).total_seconds(),
+                        Task.duration_seconds: (completed_at - effective_started).total_seconds(),
                     },
                     synchronize_session=False,
                 )
@@ -1024,11 +995,13 @@ async def batch_generate(
         )
     )
 
-    return ApiResponse(data={
-        "task_id": task_id,
-        "status": "running",
-        "total_files": total_files,
-    })
+    return ApiResponse(
+        data={
+            "task_id": task_id,
+            "status": "running",
+            "total_files": total_files,
+        }
+    )
 
 
 @router.post("/batch-files", response_model=ApiResponse)
@@ -1158,9 +1131,7 @@ def batch_generate_from_files(
         completed_files=0,
         failed_files=0,
         clinical_info_snapshot=(
-            json.dumps(shared_clinical_info, ensure_ascii=False)
-            if shared_clinical_info
-            else None
+            json.dumps(shared_clinical_info, ensure_ascii=False) if shared_clinical_info else None
         ),
     )
     submission = BatchSubmission(

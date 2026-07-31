@@ -73,11 +73,15 @@ from app.services.file_manager import (
     write_upload_stream,
 )
 from app.services.generation_preflight import (
-    required_dates_error_message,
-    validate_required_dates,
+    required_inputs_error_message,
+    validate_required_inputs,
 )
 from app.services.generation_process import run_generate_report_with_timeout
 from app.services.generation_queue import submit_generation_job
+from app.services.project_identity import (
+    ProjectIdentityConflictError,
+    resolve_project_identity,
+)
 from app.services.reportgen_bridge import ReportGenBridge
 from app.services.task_recovery import write_single_generation_request
 from app.time_utils import utc_now_naive
@@ -145,26 +149,28 @@ def upload_report_feedback(
 DOWNLOAD_SLOW_WARN_SECONDS = float(os.environ.get("RG_WEB_DOWNLOAD_SLOW_WARN_SECONDS", "10"))
 
 
-def _raise_required_dates_if_missing(
+def _raise_required_inputs_if_missing(
     bridge: ReportGenBridge,
     *,
     excel_path: str | Path,
     clinical_payload: dict,
     project_type: Optional[str],
     project_name: Optional[str],
+    excel_data: object | None = None,
 ) -> None:
-    preflight = validate_required_dates(
+    preflight = validate_required_inputs(
         bridge,
         excel_path=excel_path,
         clinical_info=clinical_payload,
         project_type=project_type,
         project_name=project_name,
+        excel_data=excel_data,
     )
     missing = list(preflight.get("missing") or [])
     if missing:
         raise HTTPException(
-            status_code=400,
-            detail=required_dates_error_message(missing),
+            status_code=422,
+            detail=required_inputs_error_message(missing),
         )
 
 
@@ -981,20 +987,6 @@ def _render_error_payload(exc: Exception) -> dict:
     return payload
 
 
-def _infer_project_type_from_name(
-    bridge: ReportGenBridge,
-    project_type: Optional[str],
-    project_name: Optional[str],
-) -> tuple[Optional[str], Optional[str]]:
-    """Use trusted form/display project_name as a fallback project selector."""
-    if project_type or not project_name:
-        return project_type, project_name
-    inferred = bridge.infer_project_type_from_text(project_name)
-    if inferred.get("detected"):
-        return inferred.get("project_type"), project_name or inferred.get("project_name")
-    return project_type, project_name
-
-
 def _raise_if_project_type_disabled(
     bridge: ReportGenBridge,
     project_type: Optional[str],
@@ -1156,10 +1148,7 @@ def _generate_response_from_result(
 ) -> GenerateResponse:
     output_filename = None
     output_file_base64 = None
-    controlled_pilot = (
-        str(project_type or "").strip().lower()
-        in CONTROLLED_PILOT_PROJECT_TYPES
-    )
+    controlled_pilot = str(project_type or "").strip().lower() in CONTROLLED_PILOT_PROJECT_TYPES
     if include_inline_file and not controlled_pilot and result.get("success", False):
         _physical_filename, output_file_base64 = _inline_docx_payload(result.get("output_file"))
         output_filename = _business_report_filename(
@@ -1217,31 +1206,45 @@ def generate_report(
     upload = db.query(Upload).filter(Upload.id == req.upload_id).first()
     if not upload or not user_can_access_upload(current_user, upload):
         raise HTTPException(status_code=404, detail="上传记录不存在")
+    _raise_if_project_type_disabled(bridge, req.project_type)
 
     task_id = str(uuid.uuid4())
     output_dir = ensure_report_dir(task_id)
-    effective_project_name = (
-        req.project_name
-        or upload.detected_project_name
-        or (req.clinical_info or {}).get("project_name")
-    )
-    effective_project_type, effective_project_name = _infer_project_type_from_name(
-        bridge,
-        req.project_type or upload.detected_project_type,
-        effective_project_name,
-    )
+    try:
+        excel_data = bridge.read_excel(upload.stored_path)
+        identity = resolve_project_identity(
+            bridge,
+            excel_path=upload.stored_path,
+            excel_data=excel_data,
+            requested_project_type=req.project_type or upload.detected_project_type,
+            requested_project_name=req.project_name or upload.detected_project_name,
+            clinical_project_name=(
+                (req.clinical_info or {}).get("project_name")
+                or (req.clinical_info or {}).get("项目名称")
+                or (req.clinical_info or {}).get("检测项目")
+            ),
+        )
+    except ProjectIdentityConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    effective_project_type = identity.project_type
+    effective_project_name = identity.project_name
     _raise_if_project_type_disabled(bridge, effective_project_type)
     clinical_payload = _enrich_clinical_payload(
         req.clinical_info,
         effective_project_type,
         lookup_sample_id=clinical_svc.project_code_from_filename(upload.original_filename),
     )
-    _raise_required_dates_if_missing(
+    clinical_payload.pop("项目名称", None)
+    clinical_payload.pop("检测项目", None)
+    if effective_project_name:
+        clinical_payload["project_name"] = effective_project_name
+    _raise_required_inputs_if_missing(
         bridge,
         excel_path=upload.stored_path,
         clinical_payload=clinical_payload,
         project_type=effective_project_type,
         project_name=effective_project_name,
+        excel_data=excel_data,
     )
 
     # Create task record
@@ -1385,38 +1388,44 @@ def generate_report_from_file(
         raise HTTPException(status_code=400, detail=f"临床信息不是合法 JSON: {exc}") from exc
     if not isinstance(clinical_payload, dict):
         raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
+    _raise_if_project_type_disabled(bridge, project_type)
 
     _upload_id, stored_path, _file_size = save_upload(file)
-    detected_project_type = project_type
-    detected_project_name = project_name
-    if not detected_project_type:
-        try:
-            excel_data = bridge.read_excel(str(stored_path))
-            detect = bridge.detect_project_type(
-                str(Path(stored_path).parent / original_filename),
-                excel_data=excel_data,
-            )
-            detected_project_type = detect.get("project_type")
-            detected_project_name = detected_project_name or detect.get("project_name")
-        except Exception:
-            detected_project_type = project_type
-    detected_project_type, detected_project_name = _infer_project_type_from_name(
-        bridge,
-        detected_project_type,
-        detected_project_name or clinical_payload.get("project_name"),
-    )
+    excel_data = bridge.read_excel(str(stored_path))
+    try:
+        identity = resolve_project_identity(
+            bridge,
+            excel_path=str(Path(stored_path).parent / original_filename),
+            excel_data=excel_data,
+            requested_project_type=project_type,
+            requested_project_name=project_name,
+            clinical_project_name=(
+                clinical_payload.get("project_name")
+                or clinical_payload.get("项目名称")
+                or clinical_payload.get("检测项目")
+            ),
+        )
+    except ProjectIdentityConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    detected_project_type = identity.project_type
+    detected_project_name = identity.project_name
     _raise_if_project_type_disabled(bridge, detected_project_type)
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
         lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
     )
-    _raise_required_dates_if_missing(
+    clinical_payload.pop("项目名称", None)
+    clinical_payload.pop("检测项目", None)
+    if detected_project_name:
+        clinical_payload["project_name"] = detected_project_name
+    _raise_required_inputs_if_missing(
         bridge,
         excel_path=str(stored_path),
         clinical_payload=clinical_payload,
         project_type=detected_project_type,
         project_name=detected_project_name,
+        excel_data=excel_data,
     )
 
     task_id = str(uuid.uuid4())
@@ -1561,38 +1570,44 @@ def generate_report_from_file_async(
         raise HTTPException(status_code=400, detail=f"临床信息不是合法 JSON: {exc}") from exc
     if not isinstance(clinical_payload, dict):
         raise HTTPException(status_code=400, detail="临床信息必须是 JSON 对象")
+    _raise_if_project_type_disabled(bridge, project_type)
 
     upload_id, stored_path, _file_size = save_upload(file)
-    detected_project_type = project_type
-    detected_project_name = project_name
-    if not detected_project_type:
-        try:
-            excel_data = bridge.read_excel(str(stored_path))
-            detect = bridge.detect_project_type(
-                str(Path(stored_path).parent / original_filename),
-                excel_data=excel_data,
-            )
-            detected_project_type = detect.get("project_type")
-            detected_project_name = detected_project_name or detect.get("project_name")
-        except Exception:
-            detected_project_type = project_type
-    detected_project_type, detected_project_name = _infer_project_type_from_name(
-        bridge,
-        detected_project_type,
-        detected_project_name or clinical_payload.get("project_name"),
-    )
+    excel_data = bridge.read_excel(str(stored_path))
+    try:
+        identity = resolve_project_identity(
+            bridge,
+            excel_path=str(Path(stored_path).parent / original_filename),
+            excel_data=excel_data,
+            requested_project_type=project_type,
+            requested_project_name=project_name,
+            clinical_project_name=(
+                clinical_payload.get("project_name")
+                or clinical_payload.get("项目名称")
+                or clinical_payload.get("检测项目")
+            ),
+        )
+    except ProjectIdentityConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    detected_project_type = identity.project_type
+    detected_project_name = identity.project_name
     _raise_if_project_type_disabled(bridge, detected_project_type)
     clinical_payload = _enrich_clinical_payload(
         clinical_payload,
         detected_project_type,
         lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
     )
-    _raise_required_dates_if_missing(
+    clinical_payload.pop("项目名称", None)
+    clinical_payload.pop("检测项目", None)
+    if detected_project_name:
+        clinical_payload["project_name"] = detected_project_name
+    _raise_required_inputs_if_missing(
         bridge,
         excel_path=str(stored_path),
         clinical_payload=clinical_payload,
         project_type=detected_project_type,
         project_name=detected_project_name,
+        excel_data=excel_data,
     )
 
     task_id = str(uuid.uuid4())
@@ -2166,9 +2181,7 @@ def download_audit_package(
     ):
         raise HTTPException(
             status_code=409,
-            detail=(
-                "该肺癌Panel处于受控试运行，未审核报告的审计包仅供复核人或管理员下载。"
-            ),
+            detail=("该肺癌Panel处于受控试运行，未审核报告的审计包仅供复核人或管理员下载。"),
         )
     zip_path = output_root / (
         f"{task_id}_audit_package.zip" if include_failed else f"{task_id}_passed_audit_package.zip"
@@ -2627,10 +2640,13 @@ def _download_report_response(
         )
     if str(task.project_type or "").strip().lower() in CONTROLLED_PILOT_PROJECT_TYPES:
         review_state = _load_review_state(task)
-        if _controlled_pilot_review_required(
-            task.project_type,
-            review_state.get("status"),
-        ) and not override_gate:
+        if (
+            _controlled_pilot_review_required(
+                task.project_type,
+                review_state.get("status"),
+            )
+            and not override_gate
+        ):
             raise HTTPException(
                 status_code=409,
                 detail=(

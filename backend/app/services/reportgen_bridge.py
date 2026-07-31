@@ -87,25 +87,19 @@ class ReportGenBridge:
     @property
     def excel_reader(self) -> ExcelReader:
         if self._excel_reader is None:
-            self._excel_reader = ExcelReader(
-                config_dir=self.config_dir, log_level="WARNING"
-            )
+            self._excel_reader = ExcelReader(config_dir=self.config_dir, log_level="WARNING")
         return self._excel_reader
 
     @property
     def detector(self) -> ProjectDetector:
         if self._detector is None:
-            self._detector = ProjectDetector(
-                config_dir=self.config_dir, log_level="WARNING"
-            )
+            self._detector = ProjectDetector(config_dir=self.config_dir, log_level="WARNING")
         return self._detector
 
     @property
     def field_mapper(self) -> FieldMapper:
         if self._field_mapper is None:
-            self._field_mapper = FieldMapper(
-                config_dir=self.config_dir, log_level="WARNING"
-            )
+            self._field_mapper = FieldMapper(config_dir=self.config_dir, log_level="WARNING")
         return self._field_mapper
 
     @property
@@ -389,6 +383,7 @@ class ReportGenBridge:
                     "project_name": result.get("project_name"),
                     "confidence": result.get("confidence"),
                     "detected": result.get("detected", False),
+                    "identity_conflicts": list(result.get("identity_conflicts") or []),
                 }
                 if detected["detected"]:
                     return detected
@@ -667,6 +662,10 @@ class ReportGenBridge:
                 return entry.get("name")
         return None
 
+    def project_name_for_type(self, project_type: Optional[str]) -> Optional[str]:
+        """Return the canonical display name for a registered project type."""
+        return self._project_name_for_type(project_type)
+
     def _resolve_template_path(
         self,
         template_name: Optional[str],
@@ -694,9 +693,7 @@ class ReportGenBridge:
         if template_name:
             return str(Path(self.template_dir) / template_name)
 
-        return str(
-            Path(self.template_dir) / "aligned_template_with_cnv_fusion_hla_FIXED.docx"
-        )
+        return str(Path(self.template_dir) / "aligned_template_with_cnv_fusion_hla_FIXED.docx")
 
     def _insert_signature_image(self, docx_path: str, signature_path: str) -> None:
         """Replace __SIG_IMG__ marker in the generated docx with an inline image."""
