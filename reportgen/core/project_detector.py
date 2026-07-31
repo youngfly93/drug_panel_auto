@@ -91,6 +91,11 @@ class ProjectDetector:
                     "keyword_groups": list(
                         rules.get("keyword_groups") or entry.get("keyword_groups") or []
                     ),
+                    "structural_fingerprints": list(
+                        rules.get("structural_fingerprints")
+                        or entry.get("structural_fingerprints")
+                        or []
+                    ),
                     "template": template_file,
                     "priority": rules.get("priority", entry.get("priority", 10)),
                     "description": package.raw.get("description")
@@ -133,7 +138,10 @@ class ProjectDetector:
 
         for ptype in self.project_types:
             score, details = self._calculate_match_score(
-                ptype, filename, detection_text
+                ptype,
+                filename,
+                detection_text,
+                excel_data=excel_data,
             )
             priority = float(ptype.get("priority", 0) or 0)
             match_details.append(
@@ -152,6 +160,24 @@ class ProjectDetector:
                 best_match = ptype
 
         threshold = self.default_config.get("match_threshold", 0.6)
+        structural_types = {
+            str(match.get("type") or "").strip()
+            for match in match_details
+            if any(
+                str(detail).startswith("结构指纹匹配:")
+                for detail in match.get("details") or []
+            )
+        }
+        high_confidence_types = {
+            str(match.get("type") or "").strip()
+            for match in match_details
+            if float(match.get("score") or 0) >= threshold
+        }
+        identity_conflicts = sorted(
+            item for item in structural_types | high_confidence_types if item
+        )
+        if not structural_types or len(identity_conflicts) < 2:
+            identity_conflicts = []
 
         if best_match and best_score >= threshold:
             result = {
@@ -161,6 +187,7 @@ class ProjectDetector:
                 "template": best_match.get("template"),
                 "confidence": best_score,
                 "match_details": match_details,
+                "identity_conflicts": identity_conflicts,
             }
             self.logger.info(
                 "项目类型检测成功",
@@ -175,6 +202,7 @@ class ProjectDetector:
                 "template": self.default_config.get("template"),
                 "confidence": best_score,
                 "match_details": match_details,
+                "identity_conflicts": identity_conflicts,
             }
             self.logger.warning(
                 "项目类型检测失败，使用默认模板",
@@ -232,6 +260,7 @@ class ProjectDetector:
         project_type: Dict[str, Any],
         filename: str,
         detection_text: Optional[str],
+        excel_data: Optional[Any] = None,
     ) -> tuple[float, List[str]]:
         """
         计算项目类型匹配分数
@@ -244,16 +273,24 @@ class ProjectDetector:
         Returns:
             (匹配分数, 匹配详情列表)
         """
+        structural_score, structural_details = (
+            self._calculate_structural_fingerprint_score(project_type, excel_data)
+        )
         keyword_groups = project_type.get("keyword_groups")
         if keyword_groups:
-            return self._calculate_group_match_score(
+            text_score, text_details = self._calculate_group_match_score(
                 project_type, filename, detection_text
             )
+            if structural_score > text_score:
+                return structural_score, structural_details
+            if structural_score == text_score and structural_score > 0:
+                return structural_score, [*text_details, *structural_details]
+            return text_score, text_details
 
         # 兼容旧配置：keywords 为简单字符串列表（按“命中数/总数”计算）
         keywords = project_type.get("keywords", [])
         if not keywords:
-            return 0.0, []
+            return structural_score, structural_details
 
         case_sensitive = self.default_config.get("case_sensitive", False)
         matched_in_filename = set()
@@ -280,8 +317,97 @@ class ProjectDetector:
             matched |= set(content_matches)
             details.extend(content_details)
 
-        score = len(matched) / len(keywords) if keywords else 0.0
-        return score, details
+        text_score = len(matched) / len(keywords) if keywords else 0.0
+        if structural_score > text_score:
+            return structural_score, structural_details
+        if structural_score == text_score and structural_score > 0:
+            return structural_score, [*details, *structural_details]
+        return text_score, details
+
+    def _calculate_structural_fingerprint_score(
+        self,
+        project_type: Dict[str, Any],
+        excel_data: Optional[Any],
+    ) -> tuple[float, List[str]]:
+        """Match allowlisted table/column fingerprints declared by a Panel.
+
+        Only table names and column headers participate. Cell values are
+        intentionally excluded so generic numbers such as ``358`` or ``588``
+        cannot route a case to the wrong cancer product.
+        """
+        fingerprints = project_type.get("structural_fingerprints") or []
+        if excel_data is None or not isinstance(fingerprints, list):
+            return 0.0, []
+
+        table_data = getattr(excel_data, "table_data", None)
+        if table_data is None and isinstance(excel_data, dict):
+            table_data = excel_data.get("table_data")
+        if not isinstance(table_data, dict):
+            return 0.0, []
+
+        best_score = 0.0
+        best_id = ""
+        for index, fingerprint in enumerate(fingerprints, start=1):
+            if not isinstance(fingerprint, dict):
+                continue
+            required_tables = fingerprint.get("required_tables")
+            if not isinstance(required_tables, dict) or not required_tables:
+                continue
+
+            matched = True
+            for table_name, table_contract in required_tables.items():
+                rows = table_data.get(str(table_name))
+                columns = self._table_columns(rows)
+                if not columns:
+                    matched = False
+                    break
+                if isinstance(table_contract, dict):
+                    required_columns = table_contract.get("required_columns") or []
+                elif isinstance(table_contract, list):
+                    required_columns = table_contract
+                else:
+                    matched = False
+                    break
+                normalized_required = {
+                    str(column).strip().lower()
+                    for column in required_columns
+                    if str(column or "").strip()
+                }
+                if not normalized_required or not normalized_required.issubset(columns):
+                    matched = False
+                    break
+
+            if not matched:
+                continue
+            confidence = float(fingerprint.get("confidence", 1.0) or 1.0)
+            confidence = min(1.0, max(0.0, confidence))
+            if confidence > best_score:
+                best_score = confidence
+                best_id = str(
+                    fingerprint.get("id") or f"structural_fingerprint_{index}"
+                ).strip()
+
+        if not best_score:
+            return 0.0, []
+        return best_score, [f"结构指纹匹配: {best_id}"]
+
+    @staticmethod
+    def _table_columns(rows: Any) -> set[str]:
+        """Return normalized column names without exposing row values."""
+        raw_columns: set[Any] = set()
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict):
+                    raw_columns.update(row.keys())
+        else:
+            columns = getattr(rows, "columns", None)
+            if columns is not None:
+                raw_columns.update(columns)
+        return {
+            str(column).strip().lower()
+            for column in raw_columns
+            if str(column or "").strip()
+        }
 
     def _calculate_group_match_score(
         self,

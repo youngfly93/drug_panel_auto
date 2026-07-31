@@ -693,8 +693,8 @@ def test_real_input_validator_separates_ngs_pre_uat_from_formal_uat():
         {
             "alias": f"CASE-LUNG-{alias}",
             "auto_detection": {
-                "detected": False,
-                "project_type": None,
+                "detected": True,
+                "project_type": "lung_588_pdl1",
             },
             "targeted_drug_count": 0,
             "biomarker_contract_status": "PASS",
@@ -732,8 +732,8 @@ def test_real_input_validator_can_pass_three_cases_without_fixed_denominator():
         {
             "alias": f"CASE-LUNG-{alias}",
             "auto_detection": {
-                "detected": False,
-                "project_type": None,
+                "detected": True,
+                "project_type": "lung_588_pdl1",
             },
             "targeted_drug_count": 0,
             "biomarker_contract_status": "PASS",
@@ -780,13 +780,49 @@ def test_real_input_validator_blocks_empty_real_case_set():
     }
 
 
-def test_real_input_validator_keeps_failure_and_p0_as_release_blockers():
+def test_real_input_validator_requires_lung588_structural_identity():
     rows = [
         {
             "alias": "CASE-LUNG-A",
             "auto_detection": {
                 "detected": False,
                 "project_type": None,
+            },
+            "targeted_drug_count": 0,
+            "biomarker_contract_status": "PASS",
+            "pdl1_product_contract_status": "PASS",
+            "pdl1_input_provenance": "case_specific_verified_ihc_source",
+            "context_contract": {"status": "PASS"},
+        }
+    ]
+    decisions = {
+        "CASE-LUNG-A": {
+            "decision": "pass",
+            "reviewer": "报告组审核人",
+            "reviewed_at": "2026-07-31",
+            "p0_count": 0,
+        }
+    }
+
+    readiness = validate_lung588_real_inputs._build_uat_readiness(
+        rows,
+        report_group_decisions=decisions,
+    )
+
+    assert readiness["ngs_structure_status"] == "FAIL"
+    assert readiness["formal_uat_status"] == "BLOCKED"
+    assert {blocker["code"] for blocker in readiness["blockers"]} == {
+        "NGS_STRUCTURE_INCOMPLETE"
+    }
+
+
+def test_real_input_validator_keeps_failure_and_p0_as_release_blockers():
+    rows = [
+        {
+            "alias": "CASE-LUNG-A",
+            "auto_detection": {
+                "detected": True,
+                "project_type": "lung_588_pdl1",
             },
             "targeted_drug_count": 0,
             "biomarker_contract_status": "PASS",

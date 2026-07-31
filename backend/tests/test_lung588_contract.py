@@ -96,23 +96,17 @@ def test_lung588_package_is_independent_and_valid():
     assert "肺癌专属知识当前未启用" in (package.raw["part3_knowledge"]["disabled_notice"])
     assert package.raw["release_governance"] == {
         "uat_policy": "uat/lung588_risk_based_release_policy.yaml",
-        "report_group_uat_decisions": (
-            "uat/lung588_report_group_uat_decisions.yaml"
-        ),
+        "report_group_uat_decisions": ("uat/lung588_report_group_uat_decisions.yaml"),
     }
     assert package.resolve_template_file() == TEMPLATE.resolve()
 
 
 def test_lung588_current_uat_policy_has_no_fixed_case_denominator():
     policy = yaml.safe_load(
-        (PANEL_DIR / "uat" / "lung588_risk_based_release_policy.yaml").read_text(
-            encoding="utf-8"
-        )
+        (PANEL_DIR / "uat" / "lung588_risk_based_release_policy.yaml").read_text(encoding="utf-8")
     )
     decisions = yaml.safe_load(
-        (PANEL_DIR / "uat" / "lung588_report_group_uat_decisions.yaml").read_text(
-            encoding="utf-8"
-        )
+        (PANEL_DIR / "uat" / "lung588_report_group_uat_decisions.yaml").read_text(encoding="utf-8")
     )
 
     assert policy["status"] == "active_policy"
@@ -348,6 +342,109 @@ def test_lung588_project_detection_requires_trusted_product_text():
     assert detected["project_type"] == "lung_588_pdl1"
     assert unknown["detected"] is False
     assert unknown["project_type"] is None
+
+
+def test_lung588_project_detection_accepts_reviewed_structural_fingerprint(tmp_path):
+    path = tmp_path / "CASE-LUNG-B.xlsx"
+    path.write_bytes(b"synthetic")
+    excel_data = ExcelDataSource(
+        file_path=str(path),
+        table_data={
+            "Variations": [
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "ExistInsmall588": "Ⅱ类",
+                    "Gene_Symbol": "TP53",
+                    "cHGVS": "c.1A>T",
+                }
+            ],
+            "Hereditary_tumor": [
+                {
+                    "ExistInsmall588": "否",
+                    "ExistIn178": "否",
+                    "Gene": "TP53",
+                }
+            ],
+        },
+        sheet_names=["Variations", "Hereditary_tumor"],
+    )
+
+    result = ProjectDetector(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).detect(str(path), excel_data=excel_data)
+
+    assert result["detected"] is True
+    assert result["project_type"] == "lung_588_pdl1"
+    assert result["confidence"] == 1.0
+    assert any(
+        "lung588_result_workbook_v1" in detail
+        for match in result["match_details"]
+        if match["type"] == "lung_588_pdl1"
+        for detail in match["details"]
+    )
+
+
+def test_lung588_project_detection_rejects_partial_generic_panel_column(tmp_path):
+    path = tmp_path / "CASE-UNKNOWN.xlsx"
+    path.write_bytes(b"synthetic")
+    excel_data = ExcelDataSource(
+        file_path=str(path),
+        table_data={
+            "Variations": [
+                {
+                    "ExistInsmall588": "Ⅱ类",
+                    "Gene_Symbol": "TP53",
+                    "cHGVS": "c.1A>T",
+                }
+            ],
+        },
+        sheet_names=["Variations"],
+    )
+
+    result = ProjectDetector(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).detect(str(path), excel_data=excel_data)
+
+    assert result["detected"] is False
+    assert result["project_type"] is None
+
+
+def test_lung588_structural_fingerprint_exposes_conflicting_trusted_filename(tmp_path):
+    path = tmp_path / "CASE-结直肠癌358基因+MSI.xlsx"
+    path.write_bytes(b"synthetic")
+    excel_data = ExcelDataSource(
+        file_path=str(path),
+        table_data={
+            "Variations": [
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "ExistInsmall588": "Ⅱ类",
+                    "Gene_Symbol": "TP53",
+                    "cHGVS": "c.1A>T",
+                }
+            ],
+            "Hereditary_tumor": [
+                {
+                    "ExistInsmall588": "否",
+                    "ExistIn178": "否",
+                    "Gene": "TP53",
+                }
+            ],
+        },
+        sheet_names=["Variations", "Hereditary_tumor"],
+    )
+
+    result = ProjectDetector(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).detect(str(path), excel_data=excel_data)
+
+    assert set(result["identity_conflicts"]) == {
+        "crc_358_msi",
+        "lung_588_pdl1",
+    }
 
 
 def test_lung588_explicit_classes_drive_variant_filter(tmp_path):

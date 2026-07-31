@@ -3,7 +3,6 @@
     :label="field.label"
     :required="field.required"
     :error="error"
-    :prop="field.key"
   >
     <!-- String input -->
     <el-input

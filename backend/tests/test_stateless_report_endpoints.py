@@ -161,15 +161,15 @@ class FakeBridge:
             "sample_id": "CASE001",
             "receive_date": "2026-05-20",
             "report_date": "2026-05-31",
+            "msi_status": "MSS",
+            "tmb_value": 6.5,
         }
 
     def generate_report(self, **kwargs):
         self.last_generate_kwargs = kwargs
         output_dir = Path(kwargs["output_dir"])
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = (
-            output_dir / f"{Path(kwargs.get('excel_path') or 'fake_report').stem}.docx"
-        )
+        output_file = output_dir / f"{Path(kwargs.get('excel_path') or 'fake_report').stem}.docx"
         output_file.write_bytes(b"PK\x03\x04fake-docx")
         summary_file = output_file.with_suffix(".summary.json")
         summary_file.write_text(
@@ -229,7 +229,12 @@ class FailOnceBridge(FakeBridge):
 
 class MissingDateBridge(FakeBridge):
     def get_mapped_clinical_fields(self, _excel_data):
-        return {"patient_name": "测试患者", "sample_id": "CASE001"}
+        return {
+            "patient_name": "测试患者",
+            "sample_id": "CASE001",
+            "msi_status": "MSS",
+            "tmb_value": 6.5,
+        }
 
 
 class SlowBridge(FakeBridge):
@@ -362,9 +367,7 @@ def test_report_group_feedback_upload_is_archived_with_metadata(
     feedback_dir = tmp_path / "feedback" / task_id
     stored = feedback_dir / payload["filename"]
     assert stored.read_bytes() == b"PK\x03\x04synthetic-feedback"
-    metadata = json.loads(
-        stored.with_name(stored.name + ".meta.json").read_text(encoding="utf-8")
-    )
+    metadata = json.loads(stored.with_name(stored.name + ".meta.json").read_text(encoding="utf-8"))
     assert metadata["sample_id"] == task_id
     assert metadata["task_id"] == task_id
     assert metadata["note"] == "synthetic regression feedback"
@@ -474,9 +477,7 @@ def test_patient_enrichment_marvelbio_posts_encrypted_sample(monkeypatch):
         "patient_enrichment_url",
         "https://webapi.example.test/ngsapi/getNgsSample",
     )
-    monkeypatch.setattr(
-        settings, "patient_enrichment_aes_key", "0123456789abcdef0123456789abcdef"
-    )
+    monkeypatch.setattr(settings, "patient_enrichment_aes_key", "0123456789abcdef0123456789abcdef")
     monkeypatch.setattr(settings, "patient_enrichment_encrypt_flag", "fixed-flag")
     monkeypatch.setattr(settings, "patient_enrichment_timeout_seconds", 5.0)
 
@@ -608,8 +609,7 @@ def test_generate_file_returns_inline_docx_payload(tmp_path, monkeypatch):
     data = response.json()["data"]
     assert data["success"] is True
     assert (
-        data["output_filename"]
-        == "测试患者-癌种未填-结直肠癌358基因+msi-mljy-case001-修改版.docx"
+        data["output_filename"] == "测试患者-癌种未填-结直肠癌358基因+msi-mljy-case001-修改版.docx"
     )
     assert data["output_file_base64"].startswith("UEsD")
     assert data["qa_status"] == "PASS"
@@ -763,15 +763,10 @@ def test_generate_file_fills_missing_report_date(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["data"]["success"] is True
-    assert (
-        bridge.last_generate_kwargs["clinical_info"]["report_date"]
-        == date.today().isoformat()
-    )
+    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == date.today().isoformat()
 
 
-def test_generate_file_infers_project_type_from_form_project_name(
-    tmp_path, monkeypatch
-):
+def test_generate_file_infers_project_type_from_form_project_name(tmp_path, monkeypatch):
     bridge = FakeBridge()
     bridge.detect_result = {
         "project_type": None,
@@ -803,6 +798,153 @@ def test_generate_file_infers_project_type_from_form_project_name(
     assert data["success"] is True
     assert bridge.last_generate_kwargs["project_type"] == "crc_358_msi"
     assert bridge.last_generate_kwargs["project_name"] == "结直肠癌358基因+MSI"
+
+
+def test_generate_file_async_blocks_excel_and_selected_project_conflict_before_queue(
+    tmp_path,
+    monkeypatch,
+):
+    bridge = FakeBridge()
+    bridge.detect_result = {
+        "project_type": "lung_588_pdl1",
+        "project_name": "肺癌588基因+PD-L1",
+        "confidence": 1.0,
+        "detected": True,
+    }
+    queued_jobs = []
+    monkeypatch.setattr(
+        report_api,
+        "submit_generation_job",
+        lambda *args, **kwargs: queued_jobs.append((args, kwargs)),
+    )
+
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file-async",
+            files={"file": ("CASE-LUNG-B.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": (
+                    '{"patient_name":"测试患者","sample_id":"CASE-LUNG-B",'
+                    '"project_name":"结直肠癌358基因+MSI"}'
+                ),
+                "project_type": "crc_358_msi",
+                "project_name": "结直肠癌358基因+MSI",
+            },
+        )
+
+    assert response.status_code == 409
+    assert "项目身份冲突" in response.json()["detail"]
+    assert "lung_588_pdl1" in response.json()["detail"]
+    assert "crc_358_msi" in response.json()["detail"]
+    assert queued_jobs == []
+    db = report_api.SessionLocal()
+    try:
+        assert db.query(Task).count() == 0
+    finally:
+        db.close()
+
+
+def test_generate_file_async_blocks_missing_lung588_pdl1_fields_before_queue(
+    tmp_path,
+    monkeypatch,
+):
+    bridge = FakeBridge()
+    bridge.detect_result = {
+        "project_type": "lung_588_pdl1",
+        "project_name": "肺癌588基因+PD-L1",
+        "confidence": 1.0,
+        "detected": True,
+    }
+    queued_jobs = []
+    monkeypatch.setattr(
+        report_api,
+        "submit_generation_job",
+        lambda *args, **kwargs: queued_jobs.append((args, kwargs)),
+    )
+
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file-async",
+            files={"file": ("CASE-LUNG-A.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": (
+                    '{"patient_name":"测试患者","sample_id":"CASE-LUNG-A",'
+                    '"report_date":"2026-07-31"}'
+                ),
+                "project_type": "lung_588_pdl1",
+                "project_name": "肺癌588基因+PD-L1",
+            },
+        )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "生成前缺少必填信息" in detail
+    assert "PD-L1 TPS" in detail
+    assert "PD-L1 CPS" in detail
+    assert "PD-L1检测方案" in detail
+    assert "PD-L1原始记录编号" in detail
+    assert queued_jobs == []
+    db = report_api.SessionLocal()
+    try:
+        assert db.query(Task).count() == 0
+    finally:
+        db.close()
+
+
+def test_generate_file_async_accepts_complete_lung588_pdl1_preflight(
+    tmp_path,
+    monkeypatch,
+):
+    bridge = FakeBridge()
+    bridge.detect_result = {
+        "project_type": "lung_588_pdl1",
+        "project_name": "肺癌588基因+PD-L1",
+        "confidence": 1.0,
+        "detected": True,
+    }
+    queued_jobs = []
+    monkeypatch.setattr(
+        report_api,
+        "submit_generation_job",
+        lambda *args, **kwargs: queued_jobs.append((args, kwargs)),
+    )
+    clinical_info = {
+        "patient_name": "测试患者",
+        "sample_id": "CASE-LUNG-C",
+        "report_date": "2026-07-31",
+        "pdl1_tps": 50,
+        "pdl1_cps": 50,
+        "pdl1_result": "阳性（高表达）",
+        "pdl1_assay_profile_id": "legacy_unspecified_ihc_transcription_v1",
+        "pdl1_source_record_id": "SYN-PDL1-001",
+        "pdl1_source_record_date": "2026-07-30",
+        "pdl1_specimen_id": "SYN-SPECIMEN-001",
+        "pdl1_image_disposition": "无病例专属图像（报告不展示）",
+    }
+
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        response = client.post(
+            "/api/v1/reports/generate-file-async",
+            files={"file": ("CASE-LUNG-C.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": json.dumps(clinical_info, ensure_ascii=False),
+                "project_type": "lung_588_pdl1",
+                "project_name": "肺癌588基因+PD-L1",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["success"] is True
+    assert len(queued_jobs) == 1
+    db = report_api.SessionLocal()
+    try:
+        task = db.query(Task).one()
+        assert task.project_type == "lung_588_pdl1"
+        snapshot = json.loads(task.clinical_info_snapshot)
+        assert snapshot["project_name"] == "肺癌588基因+PD-L1"
+        assert snapshot["pdl1_source_record_id"] == "SYN-PDL1-001"
+    finally:
+        db.close()
 
 
 def test_generate_file_async_returns_task_and_completes(tmp_path, monkeypatch):
@@ -918,17 +1060,13 @@ def test_batch_files_returns_progress_rows_and_zip(tmp_path, monkeypatch):
     assert item_response.headers["x-reportgen-download-kind"] == "batch_item_docx"
     assert item_response.headers["x-reportgen-task-id"] == task_id
     assert item_response.headers["x-reportgen-download-retryable"] == "true"
-    assert int(item_response.headers["x-reportgen-download-bytes"]) == len(
-        item_response.content
-    )
+    assert int(item_response.headers["x-reportgen-download-bytes"]) == len(item_response.content)
     assert zip_response.status_code == 200
     assert zip_response.headers["content-type"].startswith("application/zip")
     assert zip_response.headers["x-reportgen-download-kind"] == "batch_zip"
     assert zip_response.headers["x-reportgen-task-id"] == task_id
     assert zip_response.headers["x-reportgen-download-retryable"] == "true"
-    assert int(zip_response.headers["x-reportgen-download-bytes"]) == len(
-        zip_response.content
-    )
+    assert int(zip_response.headers["x-reportgen-download-bytes"]) == len(zip_response.content)
     assert zip_response.headers["cache-control"] == "private, no-store"
     assert "x-reportgen-prepare-duration-ms" in zip_response.headers
     with zipfile.ZipFile(io.BytesIO(zip_response.content)) as zf:
@@ -994,10 +1132,7 @@ def test_batch_files_fill_missing_report_date(tmp_path, monkeypatch):
 
     assert status_response.status_code == 200
     assert status_response.json()["data"]["status"] == "completed"
-    assert (
-        bridge.last_generate_kwargs["clinical_info"]["report_date"]
-        == date.today().isoformat()
-    )
+    assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == date.today().isoformat()
 
 
 def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkeypatch):
@@ -1136,8 +1271,7 @@ def test_batch_files_idempotency_contract_and_concurrent_double_click(
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = [
-                executor.submit(submit, client, "batch-idempotent-race-0003")
-                for _ in range(2)
+                executor.submit(submit, client, "batch-idempotent-race-0003") for _ in range(2)
             ]
             concurrent = [future.result() for future in futures]
 
@@ -1150,10 +1284,7 @@ def test_batch_files_idempotency_contract_and_concurrent_double_click(
     assert new_key.json()["data"]["task_id"] != first.json()["data"]["task_id"]
     assert [response.status_code for response in concurrent] == [200, 200]
     assert len({response.json()["data"]["task_id"] for response in concurrent}) == 1
-    assert sum(
-        not response.json()["data"]["idempotent_replay"]
-        for response in concurrent
-    ) == 1
+    assert sum(not response.json()["data"]["idempotent_replay"] for response in concurrent) == 1
     assert len(queued_jobs) == 3
 
 
@@ -1437,9 +1568,7 @@ def test_task_list_supports_production_filters_and_review_state(tmp_path, monkey
         assert stats["delivered"] == 1
 
 
-def test_task_list_attention_filter_surfaces_partial_failed_batch(
-    tmp_path, monkeypatch
-):
+def test_task_list_attention_filter_surfaces_partial_failed_batch(tmp_path, monkeypatch):
     with _client(tmp_path, monkeypatch, bridge=FailOnceBridge()) as client:
         response = client.post(
             "/api/v1/reports/batch-files",
@@ -1629,9 +1758,7 @@ def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):
     docx.write_text("fake")
     qa = tmp_path / "r.qa.json"
 
-    task = SimpleNamespace(
-        output_path=str(docx), project_type="crc_358_msi", status="completed"
-    )
+    task = SimpleNamespace(output_path=str(docx), project_type="crc_358_msi", status="completed")
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = task
 
@@ -1641,12 +1768,10 @@ def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):
                 qa.unlink()
         else:
             qa.write_text(json.dumps({"status": qa_status, "issues": []}))
-        with patch.object(
-            report_api, "_observed_file_response", return_value="OK"
-        ), patch.object(
-            report_api, "_clinical_snapshot", return_value={}
-        ), patch.object(
-            report_api, "_business_report_filename", return_value="x.docx"
+        with (
+            patch.object(report_api, "_observed_file_response", return_value="OK"),
+            patch.object(report_api, "_clinical_snapshot", return_value={}),
+            patch.object(report_api, "_business_report_filename", return_value="x.docx"),
         ):
             try:
                 report_api._download_report_response(
@@ -1692,22 +1817,27 @@ def test_lung588_controlled_pilot_download_requires_manual_review(tmp_path):
         )
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = task
-        with patch.object(
-            report_api,
-            "_load_review_state",
-            return_value={"status": review_status},
-        ), patch.object(
-            report_api,
-            "_observed_file_response",
-            return_value="OK",
-        ), patch.object(
-            report_api,
-            "_clinical_snapshot",
-            return_value={},
-        ), patch.object(
-            report_api,
-            "_business_report_filename",
-            return_value="x.docx",
+        with (
+            patch.object(
+                report_api,
+                "_load_review_state",
+                return_value={"status": review_status},
+            ),
+            patch.object(
+                report_api,
+                "_observed_file_response",
+                return_value="OK",
+            ),
+            patch.object(
+                report_api,
+                "_clinical_snapshot",
+                return_value={},
+            ),
+            patch.object(
+                report_api,
+                "_business_report_filename",
+                return_value="x.docx",
+            ),
         ):
             try:
                 report_api._download_report_response(
@@ -1772,9 +1902,7 @@ def test_controlled_pilot_audit_package_requires_review_or_privileged_user(
     assert "仅供复核人或管理员下载" in blocked.json()["detail"]
 
     with _client(tmp_path, monkeypatch, role="reviewer") as reviewer_client:
-        reviewer_download = reviewer_client.get(
-            f"/api/v1/reports/{task_id}/audit-package"
-        )
+        reviewer_download = reviewer_client.get(f"/api/v1/reports/{task_id}/audit-package")
         reviewed = reviewer_client.post(
             f"/api/v1/reports/{task_id}/review-state",
             json={"status": "reviewed", "operator": "Synthetic Reviewer"},
@@ -1785,9 +1913,7 @@ def test_controlled_pilot_audit_package_requires_review_or_privileged_user(
     assert reviewed.status_code == 200
 
     with _client(tmp_path, monkeypatch, role="operator") as operator_client:
-        reviewed_download = operator_client.get(
-            f"/api/v1/reports/{task_id}/audit-package"
-        )
+        reviewed_download = operator_client.get(f"/api/v1/reports/{task_id}/audit-package")
 
     assert reviewed_download.status_code == 200
     assert reviewed_download.headers["content-type"].startswith("application/zip")
@@ -1807,9 +1933,7 @@ def test_batch_item_download_blocks_qa_fail(tmp_path):
         row = SimpleNamespace(
             output_path=str(docx),
             excel_filename="case01.xlsx",
-            validation_summary=(
-                json.dumps({"qa_status": qa_status}) if qa_status else "{}"
-            ),
+            validation_summary=(json.dumps({"qa_status": qa_status}) if qa_status else "{}"),
         )
         task = SimpleNamespace(task_type="batch")
         db = MagicMock()
