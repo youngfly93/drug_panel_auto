@@ -316,11 +316,13 @@ def _validate_candidate_evidence_contract(
 ) -> None:
     governance = contract.get("governance") or {}
     required_governance = {
-        "secondary_review_status": "pending_report_group_review",
+        "secondary_review_status": "case_level_report_group_review_required",
         "runtime_rule_source": False,
-        "runtime_eligible": False,
-        "report_text_allowed": False,
-        "promotion_blocked": True,
+        "runtime_eligible_candidate_count": 3,
+        "report_text_allowed_candidate_count": 3,
+        "held_candidate_count": 1,
+        "promotion_blocked": False,
+        "case_delivery_gate_required": True,
     }
     for field, expected in required_governance.items():
         if governance.get(field) != expected:
@@ -357,18 +359,29 @@ def _validate_candidate_evidence_contract(
                     "Candidate evidence therapy mismatch: "
                     f"{candidate_id}:{field}"
                 )
-        if (
-            review.get("runtime_eligible") is not False
-            or review.get("report_text_allowed") is not False
-            or (
-                (review.get("secondary_review") or {}).get("status")
-                != "pending_report_group_review"
-            )
-        ):
+        promoted = candidate.get("runtime_eligible") is True
+        if review.get("runtime_eligible") is not promoted:
+            raise ValueError(f"Candidate runtime disposition mismatch: {candidate_id}")
+        if review.get("report_text_allowed") is not promoted:
+            raise ValueError(f"Candidate report disposition mismatch: {candidate_id}")
+        secondary_status = (review.get("secondary_review") or {}).get("status")
+        expected_secondary = (
+            "case_level_report_group_review_required"
+            if promoted
+            else "pending_report_group_review"
+        )
+        if secondary_status != expected_secondary:
             raise ValueError(
-                "Candidate evidence review is not fail-closed: "
-                f"{candidate_id}"
+                "Candidate evidence review gate mismatch: "
+                f"{candidate_id}:{secondary_status!r}"
             )
+        display = _clean(
+            (review.get("scope_assessment") or {}).get("patient_report_display")
+        )
+        if promoted and display != "allowed_after_context_match_and_case_review":
+            raise ValueError(f"Promoted candidate lacks case delivery gate: {candidate_id}")
+        if not promoted and not display.startswith("prohibited_"):
+            raise ValueError(f"Held candidate is not fail-closed: {candidate_id}")
         source_reviews = review.get("source_claim_reviews") or []
         if not source_reviews or any(
             not isinstance(source, dict)
@@ -467,9 +480,15 @@ def _variant_units(
         identifiers = extract_reference_identifiers(
             (intro, analysis, fixed_domain)
         )
+        candidate_rows = candidates_by_event.get(key, [])
         candidate_ids = [
             _clean(row.get("candidate_id"))
-            for row in candidates_by_event.get(key, [])
+            for row in candidate_rows
+        ]
+        promoted_candidate_ids = [
+            _clean(row.get("candidate_id"))
+            for row in candidate_rows
+            if row.get("runtime_eligible") is True
         ]
         narrative_candidate = narrative_candidates_by_event.get(key) or {}
         candidate_narrative_review = (
@@ -518,6 +537,9 @@ def _variant_units(
                 "retain_detected_variant_and_prohibit_broader_drug_rule_inheritance"
             )
             question = "确认该精确事件仅进入检测结果，不继承同基因其他位点药物规则"
+        elif promoted_candidate_ids:
+            decision = "allow_exact_treatment_rule_only_after_context_and_case_review"
+            question = "核对本病例适应证上下文、药物方向和当前标签后决定是否交付"
         elif candidate_ids:
             decision = (
                 "retain_detected_variant_and_keep_treatment_candidates_hidden"
@@ -560,6 +582,7 @@ def _variant_units(
                     }
                 ),
                 "candidate_ids": candidate_ids,
+                "promoted_candidate_ids": promoted_candidate_ids,
                 "explicit_non_promotion": key in non_promotions,
                 "current_content_status": (
                     "missing"
@@ -578,8 +601,10 @@ def _variant_units(
                 "candidate_narrative_review": candidate_narrative_review,
                 "patient_visible_part2_result_allowed": True,
                 "patient_visible_part3_interpretation_allowed": False,
-                "patient_visible_drug_conclusion_allowed": False,
-                "runtime_eligible": False,
+                "patient_visible_drug_conclusion_allowed": bool(
+                    promoted_candidate_ids
+                ),
+                "runtime_eligible": bool(promoted_candidate_ids),
                 "primary_review": {
                     "status": "completed_ai_assisted_triage",
                     "decision": decision,
@@ -588,8 +613,16 @@ def _variant_units(
                     "reviewed_at": reviewed_at,
                 },
                 "secondary_review": {
-                    "status": "pending_report_group_review",
-                    "decision": "",
+                    "status": (
+                        "case_level_report_group_review_required"
+                        if promoted_candidate_ids
+                        else "pending_report_group_review"
+                    ),
+                    "decision": (
+                        "review every generated report before download"
+                        if promoted_candidate_ids
+                        else ""
+                    ),
                     "reviewer": "",
                     "reviewed_at": "",
                 },
@@ -612,6 +645,7 @@ def _candidate_units(
         therapy = row.get("therapy") or {}
         source_scope_review = evidence_reviews_by_id.get(candidate_id) or {}
         scoped_primary_review = source_scope_review.get("primary_review") or {}
+        promoted = row.get("runtime_eligible") is True
         units.append(
             {
                 "review_unit_id": candidate_id,
@@ -635,8 +669,8 @@ def _candidate_units(
                 "source_scope_review": source_scope_review,
                 "patient_visible_part2_result_allowed": False,
                 "patient_visible_part3_interpretation_allowed": False,
-                "patient_visible_drug_conclusion_allowed": False,
-                "runtime_eligible": False,
+                "patient_visible_drug_conclusion_allowed": promoted,
+                "runtime_eligible": promoted,
                 "primary_review": {
                     "status": "completed_ai_assisted_triage",
                     "decision": (
@@ -648,14 +682,24 @@ def _candidate_units(
                     "reviewed_at": reviewed_at,
                 },
                 "secondary_review": {
-                    "status": "pending_report_group_review",
-                    "decision": "",
+                    "status": (
+                        "case_level_report_group_review_required"
+                        if promoted
+                        else "pending_report_group_review"
+                    ),
+                    "decision": (
+                        "review every generated report before download"
+                        if promoted
+                        else ""
+                    ),
                     "reviewer": "",
                     "reviewed_at": "",
                 },
                 "medical_review_question": (
                     "确认精确位点、肺癌亚型、疾病范围、既往治疗、伴随诊断、"
-                    "药物方向和当前标签后决定是否晋级"
+                    "药物方向和当前标签后决定是否交付"
+                    if promoted
+                    else "确认补充证据后是否晋级"
                 ),
             }
         )
@@ -840,7 +884,7 @@ def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
         "panel_id": PANEL_ID,
         "git_head": _git_head(root),
         "reviewed_at": reviewed_at,
-        "status": "primary_review_complete_secondary_review_pending",
+        "status": "controlled_pilot_partial_promotion_case_review_required",
         "privacy": {
             "contains_phi": False,
             "case_identity": "CASE aliases and exact structured events only",
@@ -877,9 +921,14 @@ def build_packet(root: Path, reviewed_at: str) -> dict[str, Any]:
                 row["candidate_narrative_review"]["runtime_eligible"]
                 for row in narrative_candidate_units
             ),
+            "targeted_candidate_runtime_eligible_count": sum(
+                row["runtime_eligible"]
+                for row in units
+                if row["unit_type"] == "targeted_drug_candidate"
+            ),
         },
         "promotion_requirements": [
-            "report_group_event_level_secondary_review",
+            "case_level_report_group_review_before_download",
             "source_supports_exact_claim",
             "lung_cancer_and_variant_scope_confirmed",
             "positive_and_negative_rule_tests",

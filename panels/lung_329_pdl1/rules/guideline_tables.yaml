@@ -61,6 +61,7 @@ guideline_tables:
         display: "NTRK1/2/3"
         match: "融合"
   chemotherapy:
+    enabled: false
     output_table: "chemotherapy"
     row_source: "drugs.yaml:approved_drug_rows"
     required_columns:

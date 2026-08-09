@@ -6,6 +6,11 @@ from reportgen.panels.loader import (
     PanelTemplate,
     load_panel_package,
 )
+from reportgen.panels.input_contract import (
+    describe_input_contract_failure,
+    input_contract_failures_as_missing,
+    validate_excel_input_contract,
+)
 from reportgen.panels.registry import (
     PanelRegistration,
     PanelRegistry,
@@ -31,6 +36,9 @@ __all__ = [
     "PanelValidationReport",
     "UnknownPanelError",
     "load_panel_package",
+    "describe_input_contract_failure",
+    "input_contract_failures_as_missing",
+    "validate_excel_input_contract",
     "validate_panel_package",
     "validate_panel_package_path",
     "validate_panel_registry",

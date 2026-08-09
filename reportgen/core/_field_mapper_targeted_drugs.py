@@ -1038,9 +1038,16 @@ class TargetedDrugMixin:
             return []
 
         overrides = self._get_targeted_drug_overrides(targeted_drug_rules)
-        self._load_targeted_drug_db()
+        base_db_enabled = targeted_drug_rules is None or bool(
+            targeted_drug_rules.get("base_db_enabled", False)
+        )
+        if base_db_enabled:
+            self._load_targeted_drug_db()
         has_kb = self._targeted_drug_db is not None
-        allow_ctdrug_fallback = not has_kb
+        # CtDrug is a legacy, gene-level fallback. An explicit Panel package is
+        # governed even when its optional base database is unavailable, so it
+        # must fail closed instead of silently reopening historical rows.
+        allow_ctdrug_fallback = targeted_drug_rules is None and not has_kb
 
         # 2) 按位点逐行决策来源：override > KB > CtDrug 回退。
         #    生产配置中 KB 正常加载时，禁止再用 CtDrug 兜底。CtDrug 可能包含
@@ -1136,8 +1143,11 @@ class TargetedDrugMixin:
                     c = ov.get("caution_drugs", "--")
                     source = "override"
 
-                # 优先级 2: KB 数据库（位点级匹配）
-                elif drug_rule_eligible and has_kb:
+                # 优先级 2: Panel精确审核规则 / KB数据库（位点级匹配）。
+                # 显式Panel即使禁用或缺失base DB，也必须执行精确规则查询。
+                elif drug_rule_eligible and (
+                    targeted_drug_rules is not None or has_kb
+                ):
                     kb_b, kb_c, score = self._lookup_targeted_drugs_for_variant(
                         gene,
                         c_point=s["c"],
@@ -1152,7 +1162,7 @@ class TargetedDrugMixin:
                         c = kb_c or "--"
                         source = "kb"
 
-                # 优先级 3: CtDrug 表回退（仅 KB 不可用时启用）
+                # 优先级 3: CtDrug 表回退（仅旧无Panel调用且KB不可用时启用）
                 if drug_rule_eligible and allow_ctdrug_fallback and (
                     source == "none"
                     or (b == "--" and c == "--" and source != "override")

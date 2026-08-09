@@ -22,7 +22,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from reportgen.core.field_mapper import FieldMapper
-from reportgen.core.template_bridge_358 import _variant_override_matches
+from reportgen.core.template_bridge_358 import (
+    _variant_override_matches,
+    build_immune_variants,
+    load_panel_config,
+)
 from reportgen.knowledge.quality import (
     build_panel_gene_provider,
     is_generic_mutation_analysis,
@@ -33,6 +37,7 @@ from reportgen.knowledge.redactions import (
     load_panel_knowledge_redactions,
 )
 from reportgen.panels.loader import load_panel_package
+from reportgen.models.excel_data import ExcelDataSource
 from reportgen.rules.targeted_drugs import (
     evaluate_required_clinical_context,
     load_targeted_drug_rule_context,
@@ -165,22 +170,22 @@ def _synthetic_historical_report(path: Path) -> None:
     document.save(path)
 
 
-def test_lung588_medical_candidates_are_registered_but_fail_closed():
+def test_lung588_medical_candidates_are_partially_promoted_with_exact_gates():
     package = load_panel_package("lung_588_pdl1", project_root=ROOT)
     candidate_path = package.resolve_rule_file("medical_candidates")
     candidates = yaml.safe_load(candidate_path.read_text(encoding="utf-8"))
     runtime = yaml.safe_load(package.resolve_rule_file("drugs").read_text(encoding="utf-8"))
 
-    assert candidates["status"] == "draft"
+    assert candidates["status"] == "controlled_pilot_partial_promotion"
     governance = candidates["governance"]
-    assert governance["runtime_policy"]["enabled"] is False
+    assert governance["runtime_policy"]["enabled"] is True
     assert governance["runtime_policy"]["runtime_rule_source"] is False
-    assert governance["runtime_policy"]["report_text_allowed"] is False
+    assert governance["runtime_policy"]["promoted_rules_mirrored_to"] == "rules/drugs.yaml"
     context_contract = governance["promotion_context_contract"]
-    assert context_contract["status"] == "exposed_optional_in_engineering_draft"
+    assert context_contract["status"] == "implemented_required_for_controlled_pilot"
     assert context_contract["contract_rule"] == "clinical_context"
     assert context_contract["runtime_enforcement"] == "implemented_fail_closed"
-    assert context_contract["promotion_blocked"] is True
+    assert context_contract["promotion_blocked"] is False
     assert context_contract["missing_or_uncertain_policy"] == "keep_candidate_hidden"
     runtime_context = yaml.safe_load(
         package.resolve_rule_file("clinical_context").read_text(encoding="utf-8")
@@ -197,12 +202,14 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
         "targeted_drug_claim_count": 169,
         "historical_level_counts": {"A": 9, "B": 0, "C": 146, "D": 14},
         "selected_candidate_claim_count": 4,
+        "promoted_candidate_claim_count": 3,
         "not_migrated_claim_count": 165,
         "disposition": (
             "Historical report text is evidence of an old display contract, "
             "not current medical truth. Only the four exact-event candidates "
-            "below were retained for secondary review; all other claims remain "
-            "outside runtime.\n"
+            "below were retained for review. Three evidence-bounded candidates "
+            "are available in the controlled pilot; the fourth and all other "
+            "claims remain outside runtime.\n"
         ),
     }
 
@@ -212,10 +219,17 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     assert all(rule["selector"]["c_hgvs"].startswith("c.") for rule in rules)
     assert all(rule["selector"]["p_hgvs"].startswith("p.") for rule in rules)
     assert all(rule["selector"]["transcript"].startswith("NM_") for rule in rules)
-    assert all(rule["runtime_eligible"] is False for rule in rules)
-    assert all(rule["report_text_allowed"] is False for rule in rules)
-    assert all(rule["review_status"] == "needs_review" for rule in rules)
-    assert all(rule["secondary_review_status"] == "pending_report_group_review" for rule in rules)
+    promoted = [rule for rule in rules if rule["runtime_eligible"]]
+    held = [rule for rule in rules if not rule["runtime_eligible"]]
+    assert len(promoted) == 3
+    assert len(held) == 1
+    assert all(rule["report_text_allowed"] is True for rule in promoted)
+    assert all(rule["review_status"] == "provisional_runtime" for rule in promoted)
+    assert all(
+        rule["secondary_review_status"] == "case_level_report_group_review_required"
+        for rule in promoted
+    )
+    assert held[0]["therapy"]["generic_name_zh"] == "瑞康曲妥珠单抗"
     assert all(rule["source_refs"] for rule in rules)
     for rule in rules:
         required_context = set(rule["required_context_fields"])
@@ -240,14 +254,14 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
     candidate_drugs = {rule["therapy"]["generic_name_zh"] for rule in rules}
     assert not {"宗艾替尼", "恩美曲妥珠单抗", "吡咯替尼"} & candidate_drugs
 
-    assert runtime["targeted_drug_rules"]["enabled"] is False
+    assert runtime["targeted_drug_rules"]["enabled"] is True
     assert runtime["targeted_drug_rules"]["base_db_enabled"] is False
     assert runtime["targeted_drug_rules"]["allowed_source_dbs"] == []
     assert runtime["targeted_drug_rules"]["clinical_context_rule"] == "clinical_context"
     assert runtime["approved_drug_rows"] == []
     assert runtime["governance"]["schema_version"] == "1.0"
     assert runtime["governance"]["defaults"]["targeted_drug"]["runtime_eligible"] is False
-    assert candidates["non_target_domains"]["immune_gene_associations"]["enabled"] is False
+    assert candidates["non_target_domains"]["immune_gene_associations"]["enabled"] is True
     assert candidates["non_target_domains"]["chemotherapy_pharmacogenomics"]["enabled"] is False
 
     if runtime["targeted_drug_rules"]["enabled"]:
@@ -255,7 +269,7 @@ def test_lung588_medical_candidates_are_registered_but_fail_closed():
         assert context_contract["promotion_blocked"] is False
 
 
-def test_lung588_candidate_evidence_review_matches_exact_nonruntime_queue():
+def test_lung588_candidate_evidence_review_matches_partial_runtime_catalog():
     package = load_panel_package("lung_588_pdl1", project_root=ROOT)
     candidates = yaml.safe_load(
         package.resolve_rule_file("medical_candidates").read_text(encoding="utf-8")
@@ -265,13 +279,15 @@ def test_lung588_candidate_evidence_review_matches_exact_nonruntime_queue():
     )
 
     governance = contract["governance"]
-    assert contract["status"] == "draft"
+    assert contract["status"] == "controlled_pilot_partial_promotion"
     assert governance["primary_review_status"] == ("completed_non_authoritative_scope_review")
-    assert governance["secondary_review_status"] == ("pending_report_group_review")
+    assert governance["secondary_review_status"] == (
+        "case_level_report_group_review_required"
+    )
     assert governance["runtime_rule_source"] is False
-    assert governance["runtime_eligible"] is False
-    assert governance["report_text_allowed"] is False
-    assert governance["promotion_blocked"] is True
+    assert governance["runtime_eligible_candidate_count"] == 3
+    assert governance["held_candidate_count"] == 1
+    assert governance["promotion_blocked"] is False
 
     candidate_by_id = {row["candidate_id"]: row for row in candidates["candidate_rules"]}
     review_by_id = {row["candidate_id"]: row for row in contract["reviews"]}
@@ -290,10 +306,22 @@ def test_lung588_candidate_evidence_review_matches_exact_nonruntime_queue():
             for source in review["source_claim_reviews"]
         )
         assert review["primary_review"]["status"] == ("completed_non_authoritative_scope_review")
-        assert review["secondary_review"]["status"] == ("pending_report_group_review")
-        assert review["runtime_eligible"] is False
-        assert review["report_text_allowed"] is False
-        assert review["scope_assessment"]["patient_report_display"].startswith("prohibited_")
+        if candidate["runtime_eligible"]:
+            assert review["secondary_review"]["status"] == (
+                "case_level_report_group_review_required"
+            )
+            assert review["runtime_eligible"] is True
+            assert review["report_text_allowed"] is True
+            assert review["scope_assessment"]["patient_report_display"] == (
+                "allowed_after_context_match_and_case_review"
+            )
+        else:
+            assert review["secondary_review"]["status"] == "pending_report_group_review"
+            assert review["runtime_eligible"] is False
+            assert review["report_text_allowed"] is False
+            assert review["scope_assessment"]["patient_report_display"].startswith(
+                "prohibited_"
+            )
 
     for candidate_id in (
         "lung588_braf_v600e_dabrafenib_trametinib",
@@ -399,6 +427,129 @@ def test_lung588_candidate_context_evaluator_rejects_missing_uncertain_and_out_o
         clinical_context=not_previously_treated,
         contract=contract,
     ).reasons == ("CONTEXT_OUT_OF_SCOPE:prior_systemic_therapy",)
+
+
+def test_lung588_runtime_exact_drug_rules_require_event_transcript_and_context():
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    context = {
+        "lung_histology": "非小细胞肺癌",
+        "disease_extent": "转移性",
+        "prior_systemic_therapy": "已接受",
+        "companion_diagnostic_status": "已确认符合",
+    }
+    rules = load_targeted_drug_rule_context(
+        package,
+        clinical_context=context,
+    )
+    assert rules is not None
+    assert rules["enabled"] is True
+    assert len(rules["reviewed_variant_overrides"]) == 2
+    assert rules["blocked_reviewed_variant_overrides"] == []
+
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        "Ⅰ类",
+        "NM_004333.6",
+        targeted_drug_rules=rules,
+    ) == (
+        "达拉非尼+曲美替尼（A）\n康奈非尼+贝美替尼（A）",
+        "--",
+    )
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "ERBB2",
+        "c.1979G>A",
+        "p.G660D",
+        "Ⅰ类",
+        "NM_004448.4",
+        targeted_drug_rules=rules,
+    ) == ("德曲妥珠单抗（A）", "--")
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "BRAF",
+        "c.1781A>G",
+        "p.D594G",
+        "Ⅱ类",
+        "NM_004333.6",
+        targeted_drug_rules=rules,
+    ) is None
+    assert mapper._lookup_reviewed_variant_override_drugs(
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        "Ⅰ类",
+        "NM_004333.5",
+        targeted_drug_rules=rules,
+    ) is None
+
+    blocked = load_targeted_drug_rule_context(
+        package,
+        clinical_context={**context, "companion_diagnostic_status": "待确认"},
+    )
+    assert blocked is not None
+    assert blocked["reviewed_variant_overrides"] == []
+    assert len(blocked["blocked_reviewed_variant_overrides"]) == 2
+
+
+def test_lung588_immune_display_rules_are_hgvs_and_transcript_exact(tmp_path):
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    config = load_panel_config(panel_package=package)
+    source = tmp_path / "synthetic-lung588-immune.xlsx"
+    source.write_bytes(b"synthetic")
+    excel = ExcelDataSource(
+        file_path=str(source),
+        table_data={
+            "Variations": [
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "ATM",
+                    "Transcript": "NM_000051.4",
+                    "cHGVS": "c.1236-2A>T",
+                    "pHGVS_S": "",
+                    "Freq(%)": 1.2,
+                },
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "ATM",
+                    "Transcript": "NM_000051.3",
+                    "cHGVS": "c.1236-2A>T",
+                    "pHGVS_S": "",
+                    "Freq(%)": 1.1,
+                },
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "PTEN",
+                    "Transcript": "NM_000314.8",
+                    "cHGVS": "c.802-2A>T",
+                    "pHGVS_S": "",
+                    "Freq(%)": 0.8,
+                },
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "PTEN",
+                    "Transcript": "NM_000314.8",
+                    "cHGVS": "c.801A>T",
+                    "pHGVS_S": "p.K267N",
+                    "Freq(%)": 0.7,
+                },
+            ]
+        },
+        sheet_names=["Variations"],
+    )
+
+    result = build_immune_variants(
+        excel,
+        filter_column="ExistIn552",
+        panel_config=config,
+    )
+    assert [(row["gene"], row["transcript"]) for row in result["positive"]] == [
+        ("ATM", "NM_000051.4")
+    ]
+    assert [(row["gene"], row["transcript"]) for row in result["negative"]] == [
+        ("PTEN", "NM_000314.8")
+    ]
+    assert result["hyperprogression"] == []
 
 
 def test_runtime_loader_moves_context_ineligible_exact_rule_to_blocked_set(tmp_path):
@@ -1126,7 +1277,7 @@ def test_lung588_medical_knowledge_queue_is_complete_and_deidentified(tmp_path):
     assert "patient_name" not in emitted
 
 
-def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
+def test_lung588_p0_event_review_packet_is_event_scoped_and_case_gated(
     tmp_path,
 ):
     completed = subprocess.run(
@@ -1148,7 +1299,9 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
 
     assert completed.returncode == 0, completed.stderr
     packet = json.loads((tmp_path / "p0_event_review.json").read_text(encoding="utf-8"))
-    assert packet["status"] == ("primary_review_complete_secondary_review_pending")
+    assert packet["status"] == (
+        "controlled_pilot_partial_promotion_case_review_required"
+    )
     assert packet["summary"]["review_unit_count"] == 28
     assert packet["summary"]["unit_type_counts"] == {
         "citation_source_mismatch": 1,
@@ -1157,23 +1310,27 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
     }
     assert packet["summary"]["secondary_review_completed_count"] == 0
     assert packet["summary"]["patient_visible_part3_allowed_count"] == 0
-    assert packet["summary"]["patient_visible_drug_allowed_count"] == 0
+    assert packet["summary"]["patient_visible_drug_allowed_count"] == 5
     assert packet["summary"]["event_narrative_candidate_count"] == 23
     assert packet["summary"]["event_narrative_candidate_gene_count"] == 19
     assert packet["summary"]["event_narrative_candidate_runtime_eligible_count"] == 0
+    assert packet["summary"]["targeted_candidate_runtime_eligible_count"] == 3
     assert packet["scope"]["event_narrative_candidates_are_runtime_content"] is False
     assert packet["scope"]["case_aliases"] == [
         "CASE-LUNG-A",
         "CASE-LUNG-B",
         "CASE-LUNG-C",
     ]
-    assert all(unit["runtime_eligible"] is False for unit in packet["units"])
+    runtime_units = [unit for unit in packet["units"] if unit["runtime_eligible"]]
+    assert len(runtime_units) == 5
+    assert {unit["gene"] for unit in runtime_units} == {"BRAF", "ERBB2"}
     assert all(
         unit["primary_review"]["status"] == "completed_ai_assisted_triage"
         for unit in packet["units"]
     )
     assert all(
-        unit["secondary_review"]["status"] == "pending_report_group_review"
+        unit["secondary_review"]["status"]
+        in {"pending_report_group_review", "case_level_report_group_review_required"}
         for unit in packet["units"]
     )
     candidates = [
@@ -1189,10 +1346,19 @@ def test_lung588_p0_event_review_packet_is_event_scoped_and_fail_closed(
         ("eligible_to_remain_candidate_with_indirect_exact_event_chain_pending_secondary_review"),
         "hold_pending_official_china_label_and_secondary_review",
     }
+    assert sum(unit["source_scope_review"]["runtime_eligible"] for unit in candidates) == 3
+    assert sum(unit["source_scope_review"]["report_text_allowed"] for unit in candidates) == 3
+    promoted = [unit for unit in candidates if unit["runtime_eligible"]]
+    held = [unit for unit in candidates if not unit["runtime_eligible"]]
+    assert len(promoted) == 3
+    assert len(held) == 1
     assert all(
-        unit["source_scope_review"]["runtime_eligible"] is False
-        and unit["source_scope_review"]["report_text_allowed"] is False
-        for unit in candidates
+        unit["secondary_review"]["status"]
+        == "case_level_report_group_review_required"
+        for unit in promoted
+    )
+    assert held[0]["review_unit_id"] == (
+        "lung588_erbb2_g660d_trastuzumab_rezetecan"
     )
 
     variants = [unit for unit in packet["units"] if unit["unit_type"] == "variant_narrative"]

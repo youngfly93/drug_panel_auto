@@ -303,6 +303,14 @@ def validate_pdl1_product_contract(
                 "value": image_disposition,
             }
         )
+    image_path = _clean(report_data.get_field("pdl1_image_path"))
+    if "报告展示" in image_disposition and not image_path:
+        failures.append(
+            {
+                "field": "pdl1_image_path",
+                "reason": "case_specific_image_missing",
+            }
+        )
     return failures
 
 

@@ -5,6 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import sys
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "backend"
@@ -17,6 +19,8 @@ from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.report_generator import ReportGenerator
 from reportgen.core.template_bridge_358 import load_panel_config
 from reportgen.knowledge.gene_knowledge import GeneKnowledgeProvider
+from reportgen.models.excel_data import ExcelDataSource
+from reportgen.models.report_data import ReportData
 from reportgen.panels.loader import load_panel_package
 from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 
@@ -63,7 +67,23 @@ def test_targeted_drug_rule_context_matrix():
         for row in crc301["reviewed_variant_overrides"]
     )
 
-    for context in (lung, endometrial):
+    assert lung["enabled"] is True
+    assert lung["source_panel_id"] == "lung_588_pdl1"
+    assert lung["shared"] is True
+    assert lung["base_db_enabled"] is False
+    assert lung["allowed_source_dbs"] == []
+    assert lung["allow_internal_rows"] is False
+    assert lung["approved_drug_rows_enabled"] is False
+    assert lung["reviewed_variant_overrides"] == []
+    assert len(lung["blocked_reviewed_variant_overrides"]) == 2
+    assert all(
+        row.get("_clinical_context_block_reasons")
+        for row in lung["blocked_reviewed_variant_overrides"]
+    )
+    assert lung["applicability_rules"] == []
+    assert lung["overrides"] == {}
+
+    for context in (endometrial,):
         assert context["enabled"] is False
         assert context["base_db_enabled"] is False
         assert context["allowed_source_dbs"] == []
@@ -239,3 +259,70 @@ def test_real_targeted_db_and_fixed_table_are_disabled_for_non_crc_panels():
         for lookup, approved_count in observed[panel_id]:
             assert lookup == ("--", "--", 0.0)
             assert approved_count == 0
+
+
+@pytest.mark.parametrize("panel_id", ["lung_329_pdl1", "lung_588_pdl1"])
+def test_explicit_lung_policy_never_reopens_ctdrug_when_base_db_is_unavailable(
+    panel_id,
+    tmp_path,
+    monkeypatch,
+):
+    source = tmp_path / f"{panel_id}.xlsx"
+    source.write_bytes(b"synthetic")
+    excel_data = ExcelDataSource(
+        file_path=str(source),
+        sheet_names=["Variations", "CtDrug"],
+        table_data={
+            "Variations": [
+                {
+                    "Gene_Symbol": "BRAF",
+                    "Transcript": "NM_004333.6",
+                    "cHGVS": "c.1799T>A",
+                    "pHGVS_S": "p.V600E",
+                    "ExistIn552": "Ⅱ类",
+                },
+                {
+                    "Gene_Symbol": "BRAF",
+                    "Transcript": "NM_004333.6",
+                    "cHGVS": "c.1781A>G",
+                    "pHGVS_S": "p.D594G",
+                    "ExistIn552": "Ⅱ类",
+                },
+            ],
+            "CtDrug": [
+                {
+                    "检测基因": "BRAF",
+                    "药物": "SENTINEL-GENE-FALLBACK",
+                    "证据等级": "D",
+                    "用药提示（仅供参考）": "敏感",
+                }
+            ],
+        },
+    )
+    clinical_context = {
+        "lung_histology": "非小细胞肺癌",
+        "disease_extent": "转移性",
+        "prior_systemic_therapy": "已接受",
+        "companion_diagnostic_status": "已确认符合",
+    }
+    rules = load_targeted_drug_rule_context(
+        _package(panel_id),
+        clinical_context=clinical_context,
+    )
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    mapper._targeted_drug_db = None
+    monkeypatch.setattr(mapper, "_load_targeted_drug_db", lambda: None)
+    report_data = ReportData()
+    report_data.set_field("cancer_type", "肺癌")
+
+    rows = mapper._build_targeted_drug_tips(
+        excel_data,
+        report_data,
+        targeted_drug_rules=rules,
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["gene"] == "BRAF"
+    assert "p.V600E" in rows[0]["variant_site"]
+    assert "达拉非尼+曲美替尼" in rows[0]["benefit_drugs"]
+    assert "SENTINEL-GENE-FALLBACK" not in str(rows)

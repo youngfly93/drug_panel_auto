@@ -1,5 +1,6 @@
 """File upload and storage management."""
 
+import fcntl
 import hashlib
 import json
 import os
@@ -10,12 +11,15 @@ from pathlib import Path
 from typing import BinaryIO
 
 from fastapi import HTTPException, UploadFile, status
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.config import settings
 
 ALLOWED_SIGNATURE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+ALLOWED_PDL1_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_FEEDBACK_EXTENSIONS = {".docx", ".doc", ".pdf", ".txt", ".md"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
+MAX_PDL1_IMAGE_PIXELS = 40_000_000
 
 
 class UploadLimitExceeded(HTTPException):
@@ -166,6 +170,149 @@ def save_signature_upload(file: UploadFile) -> tuple[Path, int]:
         raise
 
     return dest_path, size
+
+
+def save_pdl1_image_upload(
+    file: UploadFile,
+    *,
+    owner_user_id: int,
+) -> dict[str, object]:
+    """Validate, sanitize and persist one case-specific PD-L1 IHC image.
+
+    Browser filenames and image metadata are deliberately not retained.  The
+    image is decoded and re-encoded as PNG so EXIF/embedded metadata cannot be
+    copied into a patient report.  A digest-bound sidecar is later used to
+    reject forged or moved paths during generation.
+    """
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_PDL1_IMAGE_EXTENSIONS:
+        raise ValueError("PD-L1图片仅支持 PNG/JPG/JPEG/WEBP 格式")
+
+    image_id = uuid.uuid4().hex
+    today = date.today().isoformat()
+    dest_dir = settings.pdl1_image_dir / today
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = dest_dir / f".{image_id}.upload"
+    dest_path = dest_dir / f"{image_id}.png"
+    sidecar_path = dest_path.with_suffix(".json")
+
+    try:
+        write_upload_stream(file.file, raw_path)
+        try:
+            with Image.open(raw_path) as source:
+                width, height = source.size
+                if width <= 0 or height <= 0 or width * height > MAX_PDL1_IMAGE_PIXELS:
+                    raise ValueError("PD-L1图片像素尺寸无效或过大")
+                source.load()
+                normalized = ImageOps.exif_transpose(source)
+                if normalized.mode not in {"RGB", "RGBA"}:
+                    normalized = normalized.convert("RGB")
+                elif normalized.mode == "RGBA":
+                    # Preserve transparent annotations while still stripping
+                    # all source metadata during the PNG re-encode.
+                    normalized = normalized.copy()
+                normalized.save(dest_path, format="PNG", optimize=True)
+                width, height = normalized.size
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+            raise ValueError("PD-L1图片内容损坏或不是有效图片") from exc
+
+        payload = dest_path.read_bytes()
+        digest = hashlib.sha256(payload).hexdigest()
+        uploaded_at = datetime.now().astimezone().isoformat(timespec="seconds")
+        stored_ref = f"{today}/{dest_path.name}"
+        metadata: dict[str, object] = {
+            "schema_version": "1.0",
+            "image_id": image_id,
+            # Only an opaque storage-relative receipt leaves the API.  The
+            # absolute host path remains an implementation detail.
+            "stored_path": stored_ref,
+            "owner_user_id": int(owner_user_id),
+            "bound_sample_id": "",
+            "uploaded_at": uploaded_at,
+            "sha256": digest,
+            "file_size_bytes": len(payload),
+            "width": width,
+            "height": height,
+        }
+        sidecar_path.write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return metadata
+    except Exception:
+        dest_path.unlink(missing_ok=True)
+        sidecar_path.unlink(missing_ok=True)
+        raise
+    finally:
+        raw_path.unlink(missing_ok=True)
+
+
+def resolve_pdl1_image_metadata(
+    stored_path: str,
+    *,
+    owner_user_id: int,
+    sample_id: str,
+) -> dict[str, object]:
+    """Resolve and bind a digest receipt to one account and one sample."""
+
+    root = settings.pdl1_image_dir.resolve()
+    receipt = Path(str(stored_path or "").strip())
+    if receipt.is_absolute():
+        raise ValueError("PD-L1图片凭据格式无效")
+    path = (root / receipt).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("PD-L1图片路径不在受控存储目录内") from exc
+    if path.suffix.lower() != ".png" or not path.is_file():
+        raise ValueError("PD-L1图片不存在或格式无效")
+
+    sidecar = path.with_suffix(".json")
+    if not sidecar.is_file():
+        raise ValueError("PD-L1图片缺少上传校验记录")
+    normalized_sample_id = str(sample_id or "").strip()
+    if not normalized_sample_id:
+        raise ValueError("PD-L1图片绑定前缺少样本编号")
+
+    try:
+        with sidecar.open("r+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                metadata = json.load(handle)
+                if not isinstance(metadata, dict):
+                    raise ValueError("PD-L1图片上传校验记录格式无效")
+                if str(metadata.get("stored_path") or "") != receipt.as_posix():
+                    raise ValueError("PD-L1图片凭据与上传校验记录不一致")
+                if int(metadata.get("owner_user_id") or -1) != int(owner_user_id):
+                    raise ValueError("PD-L1图片不属于当前账号")
+
+                bound_sample_id = str(metadata.get("bound_sample_id") or "").strip()
+                if bound_sample_id and bound_sample_id != normalized_sample_id:
+                    raise ValueError("PD-L1图片已绑定其他样本，请重新上传")
+                actual_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                if actual_digest != str(metadata.get("sha256") or ""):
+                    raise ValueError("PD-L1图片内容校验失败，请重新上传")
+
+                if not bound_sample_id:
+                    metadata["bound_sample_id"] = normalized_sample_id
+                    handle.seek(0)
+                    json.dump(metadata, handle, ensure_ascii=False, indent=2)
+                    handle.truncate()
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                resolved_metadata = dict(metadata)
+                # This internal-only value is never returned by the upload
+                # endpoint.  Generation needs the canonical host path after
+                # the opaque receipt has passed owner/sample/digest checks.
+                resolved_metadata["resolved_path"] = str(path)
+                return resolved_metadata
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    except json.JSONDecodeError as exc:
+        raise ValueError("PD-L1图片上传校验记录损坏") from exc
+    except OSError as exc:
+        raise ValueError("PD-L1图片上传校验记录无法读取") from exc
 
 
 def _safe_dir_id(value: str) -> str:

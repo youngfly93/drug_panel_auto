@@ -115,6 +115,9 @@ def build_report_summary(
                 "status": _safe_text(_first_nonempty(context, ("msi_status", "MSI状态"))),
             },
             "immune": {
+                "status": _safe_text(
+                    _first_nonempty(context, ("immune_module_status",))
+                ),
                 "positive": _safe_text(
                     _first_nonempty(context, ("immune_positive_result",))
                 ),
@@ -148,8 +151,14 @@ def build_report_summary(
             # table. Keep the medical count tied to rows with an actual drug
             # conclusion and expose the display count separately.
             "targeted_count": _count_drug_related_rows(targeted_drugs),
+            "targeted_status": _safe_text(
+                _first_nonempty(context, ("targeted_drug_module_status",))
+            ),
             "displayed_variant_count": len(targeted_drugs),
             "chemotherapy_count": len(chemotherapy),
+            "chemotherapy_status": _safe_text(
+                _first_nonempty(context, ("chemotherapy_module_status",))
+            ),
             "approved_display_policy": _safe_text(
                 context.get("approved_drug_rows_display_mode")
             ),

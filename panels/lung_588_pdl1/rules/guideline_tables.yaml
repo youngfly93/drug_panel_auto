@@ -13,6 +13,7 @@ guideline_tables:
     required_columns: ["检测基因", "检测内容", "检测结果"]
     rows: []
   chemotherapy:
+    enabled: false
     output_table: "chemotherapy"
     row_source: "disabled"
     required_columns: ["药物名称", "相关基因", "药物适应情况"]

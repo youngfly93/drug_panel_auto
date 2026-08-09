@@ -381,6 +381,8 @@ class PanelConfig:
     # Preserve the distinction between an omitted category (legacy defaults)
     # and a panel that explicitly declares an empty category to disable it.
     declared_immune_categories: Set[str] = field(default_factory=set)
+    immune_module_enabled: bool = True
+    chemotherapy_module_enabled: bool = True
     panel_display_genes: List[Dict[str, str]] = field(
         default_factory=lambda: [dict(x) for x in _DEFAULT_PANEL_DISPLAY_GENES]
     )
@@ -631,6 +633,8 @@ def _normalize_immune_rows(tables: Dict[str, Any], category: str) -> List[Dict[s
     for row in rows:
         if not isinstance(row, dict):
             continue
+        if row.get("runtime_eligible") is False:
+            continue
         key = str(row.get("key") or "").strip()
         genes = _as_upper_gene_list(row.get("genes"))
         if not key or not genes:
@@ -646,6 +650,18 @@ def _normalize_immune_rows(tables: Dict[str, Any], category: str) -> List[Dict[s
             item["interpretation"] = str(row.get("interpretation") or "").strip()
         if row.get("match") is not None:
             item["match"] = str(row.get("match") or "").strip()
+        for selector_key in (
+            "transcript",
+            "c_hgvs",
+            "p_hgvs",
+            "variant_level",
+            "review_status",
+            "secondary_review_status",
+            "review_basis",
+        ):
+            if row.get(selector_key) is not None:
+                item[selector_key] = row.get(selector_key)
+        item["runtime_eligible"] = row.get("runtime_eligible", True)
         patterns = row.get("patterns")
         if isinstance(patterns, str):
             patterns = [patterns]
@@ -885,6 +901,10 @@ def load_panel_config(
         else {}
     )
     nccn_rule_declared = isinstance(guideline_tables.get("nccn_results"), dict)
+    chemotherapy_rule = guideline_tables.get("chemotherapy")
+    chemotherapy_module_enabled = True
+    if isinstance(chemotherapy_rule, dict) and "enabled" in chemotherapy_rule:
+        chemotherapy_module_enabled = bool(chemotherapy_rule.get("enabled"))
 
     pc = PanelConfig(
         class_i_genes=as_gene_set("class_i_genes", set(_DEFAULT_CLASS_I_GENES)),
@@ -932,6 +952,8 @@ def load_panel_config(
             else [dict(x) for x in _DEFAULT_IMMUNE_HYPERPROGRESSION_ROWS]
         ),
         declared_immune_categories=set(declared_immune_categories),
+        immune_module_enabled=bool(immune_tables.get("enabled", True)),
+        chemotherapy_module_enabled=chemotherapy_module_enabled,
         reviewed_variant_overrides=reviewed_variant_overrides,
         blocked_reviewed_variant_overrides=blocked_reviewed_variant_overrides,
         drug_display_max_items=(
@@ -1902,6 +1924,7 @@ def build_immune_variants(
             mode = str(row.get("mode") or "direct").strip()
             if mode in {
                 "variant_pattern",
+                "exact_variant",
                 "cnv_amp",
                 "confirmed_functional_loss",
                 "non_sequence_biomarker",
@@ -1950,6 +1973,36 @@ def build_immune_variants(
                 if not _is_immune_eligible(variant):
                     continue
                 if _variant_matches_patterns(variant, patterns):
+                    _append_unique(group, _prepare_immune_variant(variant))
+
+    def _add_exact_variant_rows(
+        group: str,
+        rows: List[Dict[str, Any]],
+        variants: List[Dict[str, str]],
+    ) -> None:
+        """Add only transcript/HGVS-bounded immune associations.
+
+        Lung-panel historical display contracts are not safe as gene-level
+        rules.  ``exact_variant`` keeps the reviewed event identity intact so
+        another variant in ATM, PTEN or another listed gene cannot inherit the
+        same immune direction.
+        """
+
+        for row in rows:
+            if str(row.get("mode") or "direct").strip() != "exact_variant":
+                continue
+            for variant in variants:
+                if not _is_immune_eligible(variant):
+                    continue
+                if _variant_override_matches(
+                    row,
+                    str(variant.get("gene") or ""),
+                    str(variant.get("cHGVS") or ""),
+                    str(variant.get("pHGVS") or ""),
+                    str(variant.get("locus") or variant.get("variant_site") or ""),
+                    gene_class=str(variant.get("gene_class") or ""),
+                    transcript=str(variant.get("transcript") or ""),
+                ):
                     _append_unique(group, _prepare_immune_variant(variant))
 
     def _add_cnv_amp_rows(group: str, rows: List[Dict[str, Any]]) -> None:
@@ -2022,6 +2075,21 @@ def build_immune_variants(
         all_variants,
     )
     _add_variant_pattern_rows(
+        "hyperprogression",
+        panel_config.immune_hyperprogression_rows,
+        all_variants,
+    )
+    _add_exact_variant_rows(
+        "positive",
+        panel_config.immune_positive_rows,
+        all_variants,
+    )
+    _add_exact_variant_rows(
+        "negative",
+        panel_config.immune_negative_rows,
+        all_variants,
+    )
+    _add_exact_variant_rows(
         "hyperprogression",
         panel_config.immune_hyperprogression_rows,
         all_variants,
@@ -2341,6 +2409,7 @@ def _build_nccn_and_immune_fields(
                 "gene": g, "cHGVS": c, "pHGVS": p or "",
                 "exon": _norm_text(r.get("ExIn_ID")),
                 "gene_class": gene_class,
+                "transcript": _norm_text(r.get("Transcript")),
             })
 
     # 合并 CNV 数据（NCCN 表需要检测 ERBB2 扩增等）
@@ -2546,6 +2615,28 @@ def _build_nccn_and_immune_fields(
 
         if mode == "gene_group":
             return _format_gene_prefixed_variants(_immune_variants_for_genes(genes))
+
+        if mode == "exact_variant":
+            matched = []
+            for gene in genes:
+                for variant in _immune_eligible_variants(gene):
+                    if _variant_override_matches(
+                        row,
+                        str(variant.get("gene") or gene),
+                        str(variant.get("cHGVS") or ""),
+                        str(variant.get("pHGVS") or ""),
+                        str(
+                            variant.get("locus")
+                            or variant.get("variant_site")
+                            or ""
+                        ),
+                        gene_class=str(variant.get("gene_class") or ""),
+                        transcript=str(variant.get("transcript") or ""),
+                    ):
+                        matched.append(variant)
+            return _format_gene_prefixed_variants(
+                _sort_variants_by_grouped_vaf(matched)
+            )
 
         if mode == "variant_pattern":
             patterns = [str(x) for x in row.get("patterns") or [] if str(x)]
@@ -3120,6 +3211,23 @@ def enhance_report_data(
         panel_package,
         clinical_context=report_data.context,
     )
+    targeted_status = "已启用"
+    if targeted_drug_rules is not None and not targeted_drug_rules.get("enabled"):
+        targeted_status = "未启用（待医学审核）"
+    elif targeted_drug_rules and any(
+        row.get("_clinical_context_block_reasons")
+        for row in targeted_drug_rules.get("blocked_reviewed_variant_overrides", [])
+    ):
+        targeted_status = "已启用；部分规则待补全治疗上下文"
+    report_data.set_field("targeted_drug_module_status", targeted_status)
+    report_data.set_field(
+        "chemotherapy_module_status",
+        "已启用" if pc.chemotherapy_module_enabled else "未启用（待医学审核）",
+    )
+    report_data.set_field(
+        "immune_module_status",
+        "已启用" if pc.immune_module_enabled else "未启用（待医学审核）",
+    )
     report_cancer_type = _norm_text(report_data.get_field("cancer_type"))
     if field_mapper is not None:
         try:
@@ -3193,6 +3301,34 @@ def enhance_report_data(
         panel_config=pc,
     )
     report_data.set_table("all_variants", all_variants)
+
+    # Refine the early module-level status against variants actually detected
+    # in this case.  A context-blocked rule must not make every lung report look
+    # incomplete; conversely, an exact event such as BRAF V600E must not be
+    # shown as a bare zero while its required treatment context is still
+    # missing or uncertain.
+    if targeted_drug_rules and targeted_drug_rules.get("enabled"):
+        blocked_detected = [
+            row
+            for row in targeted_drug_rules.get(
+                "blocked_reviewed_variant_overrides", []
+            )
+            if _override_has_detected_variant(row, report_data)
+        ]
+        report_data.set_field(
+            "targeted_drug_context_blocked_count",
+            len(blocked_detected),
+        )
+        if blocked_detected:
+            report_data.set_field(
+                "targeted_drug_module_status",
+                (
+                    f"已识别{len(blocked_detected)}个精确用药候选；"
+                    "请补齐肺癌治疗适应证上下文"
+                ),
+            )
+        else:
+            report_data.set_field("targeted_drug_module_status", "已启用")
 
     # Build summary variants (批注#19: Ⅲ类加"意义未明突变"标注)
     summary_variants = build_summary_variants(all_variants)
@@ -3275,6 +3411,25 @@ def enhance_report_data(
         excel_data,
         panel_config=pc,
     )
+    if not pc.immune_module_enabled:
+        disabled_notice = "未启用（待医学审核）"
+        for table_name in (
+            "immune_positive_variants",
+            "immune_negative_variants",
+            "immune_hyperprogression_variants",
+            "immune_positive_results",
+            "immune_negative_results",
+            "immune_hyperprogression_results",
+        ):
+            report_data.set_table(table_name, [])
+        report_data.set_field("immune_positive_count", 0)
+        report_data.set_field("immune_positive_result", disabled_notice)
+        report_data.set_field("immune_negative_result", disabled_notice)
+        report_data.set_field("immune_hyperprogression_result", disabled_notice)
+        report_data.set_field("immune_positive_genes", "")
+        report_data.set_field("immuno_positive_genes", disabled_notice)
+        report_data.set_field("immuno_negative_genes", disabled_notice)
+        report_data.set_field("immuno_hyperprogression_genes", disabled_notice)
 
     # 2.1/摘要表中的人工复核变异覆盖口径由 panel YAML 配置驱动。
     _patch_reviewed_variant_override_rows(report_data, pc)

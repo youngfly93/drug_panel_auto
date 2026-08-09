@@ -66,11 +66,11 @@
 
     <!-- File upload -->
     <div
-      v-else-if="field.ui.component === 'file-upload'"
+      v-else-if="field.ui.component === 'file-upload' || field.ui.component === 'pdl1-image-upload'"
       style="display: flex; gap: 8px; width: 100%; align-items: center"
     >
       <el-input
-        :model-value="model || ''"
+        :model-value="uploadDisplayValue"
         :placeholder="field.ui.placeholder || ''"
         readonly
         style="flex: 1"
@@ -119,14 +119,26 @@ const model = computed({
   set: (val) => emit('update:modelValue', val),
 })
 
+const uploadDisplayValue = computed(() => {
+  if (!model.value) return ''
+  if (props.field.ui.component === 'pdl1-image-upload') {
+    return '已上传并校验病例专属PD-L1图片'
+  }
+  return String(model.value)
+})
+
 async function handleFileUpload(options: UploadRequestOptions) {
+  const isPdl1Image = props.field.ui.component === 'pdl1-image-upload'
   try {
-    const result = await clinicalApi.uploadSignature(options.file as File)
+    const result = isPdl1Image
+      ? await clinicalApi.uploadPdl1Image(options.file as File)
+      : await clinicalApi.uploadSignature(options.file as File)
     model.value = result.stored_path
-    ElMessage.success(`签名图片已上传：${result.original_filename}`)
+    ElMessage.success(isPdl1Image ? 'PD-L1病例图片已上传并完成校验' : '签名图片已上传')
     options.onSuccess?.(result)
   } catch (error: any) {
-    const message = error?.response?.data?.detail || '签名图片上传失败'
+    const message = error?.response?.data?.detail
+      || (isPdl1Image ? 'PD-L1病例图片上传失败' : '签名图片上传失败')
     ElMessage.error(message)
     options.onError?.(error)
   }

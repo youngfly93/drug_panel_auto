@@ -44,6 +44,8 @@ PANEL_SCOPED_CRITICAL_DOCX_PROCESSOR_NAMES: Mapping[str, frozenset[str]] = {
     "crc_301_msi": frozenset({"final_refresh_cleanup", "underlines_and_styles"}),
     "crc_358": frozenset({"final_refresh_cleanup", "underlines_and_styles"}),
     "crc_358_msi": frozenset({"final_refresh_cleanup", "underlines_and_styles"}),
+    "lung_329_pdl1": frozenset({"pdl1_case_image"}),
+    "lung_588_pdl1": frozenset({"pdl1_case_image"}),
 }
 
 

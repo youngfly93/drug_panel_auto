@@ -12,10 +12,15 @@
           v-if="task?.status === 'completed' && task.task_type === 'single'"
           type="primary"
           :icon="Download"
+          :disabled="!lungDownloadReady"
           :loading="reportDownloading"
           @click="downloadReport"
         >
-          {{ reportDownloading ? '正在下载' : '下载报告' }}
+          {{ reportDownloading
+            ? '正在下载'
+            : lungDownloadReady
+              ? '下载报告'
+              : '请先标记已审核' }}
         </el-button>
       </div>
     </div>
@@ -58,7 +63,11 @@
 
       <section class="qa-panel production-gate section-gap">
         <div class="panel-title">
-          <span>生产门禁与审核</span>
+          <span>
+            {{ isControlledLungPanel
+              ? '生产门禁与审核（肺癌报告下载前在此标记）'
+              : '生产门禁与审核' }}
+          </span>
           <div class="stage-title-meta">
             <el-tag size="small" :type="qualityGate?.passed ? 'success' : 'danger'">
               {{ qualityGate?.status || '未检查' }}
@@ -69,6 +78,16 @@
           </div>
         </div>
         <div class="gate-content">
+          <el-alert
+            v-if="isControlledLungPanel"
+            :title="canReview
+              ? '下载步骤：确认QA与内容后，点击下方“标记已审核”，再点击页面右上角“下载报告”。'
+              : '该肺癌报告须由管理员或复核人标记“已审核”后才能下载；当前账号没有审核权限。'"
+            type="info"
+            show-icon
+            :closable="false"
+            class="stage-alert"
+          />
           <div class="gate-metrics">
             <div>
               <span>阻断项</span>
@@ -822,10 +841,17 @@ const downloadStatus = ref('')
 const auditLoading = ref(false)
 const auditTrail = ref<OperationAuditItem[]>([])
 const task = ref<TaskStatus | null>(null)
+const isControlledLungPanel = computed(() =>
+  ['lung_329_pdl1', 'lung_588_pdl1'].includes(task.value?.project_type || ''),
+)
 const qaReport = ref<Record<string, any> | null>(null)
 const reportSummary = ref<ReportSummary | null>(null)
 const qualityGate = ref<QualityGate | null>(null)
 const reviewState = ref<ReviewState | null>(null)
+const lungDownloadReady = computed(() =>
+  !isControlledLungPanel.value
+  || ['reviewed', 'delivered'].includes(reviewState.value?.status || ''),
+)
 const provenance = ref<Record<string, any> | null>(null)
 const stageReport = ref<Record<string, any> | null>(null)
 const batchResults = ref<BatchResults | null>(null)

@@ -1,12 +1,14 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "medical_candidates"
-version: "0.1.0"
-updated: "2026-07-23"
-status: "draft"
+version: "0.2.0"
+updated: "2026-08-09"
+status: "controlled_pilot_partial_promotion"
 description: >
-  Evidence-bounded, exact-event lung588 treatment candidates. This file is a
-  review queue and is intentionally not a runtime targeted-drug rule source.
+  Evidence-bounded, exact-event lung588 treatment catalog. Three candidates
+  are mirrored into rules/drugs.yaml for the controlled pilot under exact
+  selector, clinical-context and case-review gates; all other candidates and
+  historical claims remain non-runtime.
 
 governance:
   policy_id: "lung588_exact_event_candidate_review_v1"
@@ -14,11 +16,12 @@ governance:
     Preserve a traceable disposition of the historical display contract while
     preventing cross-cancer, gene-only, or unreviewed claims from entering a
     patient report.
-  evidence_as_of: "2026-07-23"
+  evidence_as_of: "2026-08-09"
   runtime_policy:
-    enabled: false
+    enabled: true
     runtime_rule_source: false
-    report_text_allowed: false
+    promoted_rules_mirrored_to: "rules/drugs.yaml"
+    report_text_allowed: "only_for_promoted_exact_rules_after_context_match"
     promotion_requires:
       - "report_group_event_level_secondary_review"
       - "exact_selector_and_cancer_scope_review"
@@ -26,15 +29,15 @@ governance:
       - "positive_and_negative_rule_tests"
       - "case_level_uat"
   promotion_context_contract:
-    status: "exposed_optional_in_engineering_draft"
+    status: "implemented_required_for_controlled_pilot"
     contract_rule: "clinical_context"
     runtime_enforcement: "implemented_fail_closed"
-    promotion_blocked: true
+    promotion_blocked: false
     missing_or_uncertain_policy: "keep_candidate_hidden"
     activation_requirement: >
-      Before any candidate becomes a runtime rule, the matching request must
-      provide every event-specific clinical context field below with a
-      label-compatible, non-uncertain value.
+      Every promoted rule requires all event-specific clinical context fields
+      with label-compatible, non-uncertain values; download still requires a
+      case-level report-group review record.
   historical_inventory:
     source: "two de-identified repaired historical lung588 final reports"
     exact_targeted_event_count: 15
@@ -45,15 +48,18 @@ governance:
       C: 146
       D: 14
     selected_candidate_claim_count: 4
+    promoted_candidate_claim_count: 3
     not_migrated_claim_count: 165
     disposition: >
       Historical report text is evidence of an old display contract, not
       current medical truth. Only the four exact-event candidates below were
-      retained for secondary review; all other claims remain outside runtime.
+      retained for review. Three evidence-bounded candidates are available in
+      the controlled pilot; the fourth and all other claims remain outside
+      runtime.
   default_review:
     review_status: "needs_review"
     runtime_eligible: false
-    secondary_review_status: "pending_report_group_review"
+    secondary_review_status: "case_level_report_group_review_required"
     reviewer: "codex"
     reviewer_type: "ai_assisted_evidence_triage"
     risk_level: "high"
@@ -89,10 +95,10 @@ candidate_rules:
       FDA labeling and a lung-cancer phase II study support the combination in
       metastatic NSCLC with BRAF V600E. This candidate does not cover another
       BRAF variant, another cancer type, or either component as monotherapy.
-    review_status: "needs_review"
-    runtime_eligible: false
-    secondary_review_status: "pending_report_group_review"
-    report_text_allowed: false
+    review_status: "provisional_runtime"
+    runtime_eligible: true
+    secondary_review_status: "case_level_report_group_review_required"
+    report_text_allowed: true
     source_refs:
       - type: "regulatory_label"
         authority: "FDA"
@@ -132,10 +138,10 @@ candidate_rules:
       FDA approval is restricted to metastatic NSCLC with BRAF V600E detected
       by an FDA-approved test. It does not establish activity for BRAF D594G or
       other non-V600 events.
-    review_status: "needs_review"
-    runtime_eligible: false
-    secondary_review_status: "pending_report_group_review"
-    report_text_allowed: false
+    review_status: "provisional_runtime"
+    runtime_eligible: true
+    secondary_review_status: "case_level_report_group_review_required"
+    report_text_allowed: true
     source_refs:
       - type: "regulatory_approval"
         authority: "FDA"
@@ -184,10 +190,10 @@ candidate_rules:
       conditional on unresectable/metastatic NSCLC, prior systemic therapy, and
       an activating HER2 mutation; exact assay/label eligibility remains a
       required review item and is not inferred automatically.
-    review_status: "needs_review"
-    runtime_eligible: false
-    secondary_review_status: "pending_report_group_review"
-    report_text_allowed: false
+    review_status: "provisional_runtime"
+    runtime_eligible: true
+    secondary_review_status: "case_level_report_group_review_required"
+    report_text_allowed: true
     source_refs:
       - type: "pubmed"
         id: "PMID:30449325"
@@ -302,13 +308,14 @@ explicit_non_promotions:
 
 non_target_domains:
   immune_gene_associations:
-    enabled: false
-    disposition: "historical_observations_only"
-    review_status: "needs_review"
-    runtime_eligible: false
+    enabled: true
+    disposition: "exact_historical_event_display_only"
+    review_status: "provisional_runtime"
+    runtime_eligible: true
     reason: >
-      Historical positive/negative/hyperprogression labels were broad
-      gene-level associations and are unsafe to generalize to arbitrary events.
+      Only transcript- and HGVS-exact rows registered in biomarkers.yaml are
+      displayed. Broad gene-level inheritance remains prohibited and every
+      report still requires case-level report-group review before download.
   chemotherapy_pharmacogenomics:
     enabled: false
     disposition: "historical_observations_only"

@@ -1,10 +1,12 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 rule_id: "drugs"
-version: "0.4.0"
-updated: "2026-07-25"
+version: "0.5.0"
+updated: "2026-08-09"
 status: "pilot"
-description: "Fail-closed lung329 treatment policy pending event-level medical review."
+description: >
+  Lung329 inherits only the exact-event, context-bounded pilot rules from the
+  lung588 knowledge source. Broad historical and cross-cancer rows stay closed.
 
 drug_rules:
   approved_drug_rows_source: "none"
@@ -13,11 +15,9 @@ drug_rules:
   evidence_levels:
     allowed: ["A", "B", "C", "D"]
 
-# Lung-specific drug decisions have not completed review. Fail closed: neither
-# global candidate rows, internal CRC rows, CtDrug fallback, nor fixed CRC 2.2
-# rows may enter a lung report through the reused compatibility enhancer.
 targeted_drug_rules:
-  enabled: false
+  enabled: true
+  source_panel_id: "lung_588_pdl1"
   base_db_enabled: false
   allowed_source_dbs: []
   allow_internal_rows: false

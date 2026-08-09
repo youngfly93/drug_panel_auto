@@ -252,6 +252,77 @@ class TemplateRenderer:
 
         return obj
 
+    def _render_pdl1_case_image(self, file_path: str, context: dict) -> None:
+        """Replace the lung-panel image marker with one verified case image."""
+
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Emu
+        from PIL import Image
+
+        marker = "__PDL1_CASE_IMAGE__"
+        drawing_name = "ReportGenPDL1CaseImage"
+        image_path = str(context.get("pdl1_image_path") or "").strip()
+        if not image_path:
+            raise ValueError("肺癌报告缺少病例专属PD-L1图片")
+        image = Path(image_path).expanduser().resolve()
+        if not image.is_file():
+            raise ValueError("病例专属PD-L1图片不存在")
+
+        doc = Document(file_path)
+        matches = [p for p in doc.paragraphs if (p.text or "").strip() == marker]
+        existing = doc._element.xpath(
+            f'.//wp:docPr[@name="{drawing_name}"]'
+        )
+        if not matches and len(existing) == 1:
+            # The same processor chain may be replayed by QA/idempotency gates.
+            # A tagged case image is the completed state, so leave the package
+            # byte-for-byte unchanged instead of appending a duplicate drawing.
+            return
+        if len(matches) != 1:
+            raise ValueError(
+                f"PD-L1图片标记数量异常：期望1个，实际{len(matches)}个"
+            )
+        if existing:
+            raise ValueError(
+                f"PD-L1病例图片数量异常：期望0个，实际{len(existing)}个"
+            )
+        paragraph = matches[0]
+        for child in list(paragraph._element):
+            if child.tag.endswith("}pPr"):
+                continue
+            paragraph._element.remove(child)
+
+        with Image.open(image) as source:
+            width_px, height_px = source.size
+        if width_px <= 0 or height_px <= 0:
+            raise ValueError("PD-L1图片尺寸无效")
+        max_width = 4_600_000
+        max_height = 3_200_000
+        ratio = width_px / height_px
+        width = min(max_width, int(max_height * ratio))
+        height = int(width / ratio)
+        if height > max_height:
+            height = max_height
+            width = int(height * ratio)
+
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paragraph.paragraph_format.keep_with_next = True
+        paragraph.paragraph_format.space_before = 0
+        paragraph.paragraph_format.space_after = 0
+        shape = paragraph.add_run().add_picture(
+            str(image),
+            width=Emu(width),
+            height=Emu(height),
+        )
+        shape._inline.docPr.set("name", drawing_name)
+        shape._inline.docPr.set("descr", "Case-specific PD-L1 image")
+        doc.save(file_path)
+        self.logger.debug(
+            "已渲染病例专属PD-L1图片",
+            width_px=width_px,
+            height_px=height_px,
+        )
+
     @staticmethod
     def _truthy(value) -> bool:
         if isinstance(value, bool):

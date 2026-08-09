@@ -1,13 +1,14 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 display_name: "肺癌329基因+PD-L1"
-version: "0.3.0"
+version: "0.4.0"
 status: "pilot"
 description: >
   Lung 329-gene + PD-L1 controlled-pilot package. It reports structured
-  molecular findings and transcribes a case-specific PD-L1 source record.
-  Patient-level targeted-drug, immune-association, chemotherapy-PGx and Part-3
-  knowledge conclusions remain fail-closed.
+  molecular findings, transcribes one case-specific PD-L1 image, and exposes
+  only context-bounded exact-event targeted rules plus exact historical immune
+  display contracts. Broad treatment/immune, chemotherapy-PGx and Part-3
+  knowledge remain fail-closed.
 
 aliases:
   - "lung_329"
@@ -55,18 +56,19 @@ default_template: "lung_329_pdl1_golden_template_v2"
 templates:
   - id: "lung_329_pdl1_golden_template_v2"
     file: "templates/lung_329_pdl1_golden_template_v2.docx"
-    version: "0.2.0"
+    version: "0.3.0"
     status: "pilot"
     description: >
       Hardened fail-closed template. Legacy migration inputs are not registered
       or shipped because they contained historical case media. This template
       removes fixed historical patient genotypes and unreviewed treatment prose,
-      uses dynamic variant/event tables, displays case-specific PD-L1 source
-      provenance, and keeps unreviewed clinical modules visibly blocked.
+      uses dynamic variant/event tables, displays one validated case-specific
+      PD-L1 image, and keeps unreviewed clinical modules visibly blocked.
     processors:
       - "part3_formatted_sections"
       - "rebuild_references"
       - "signature_placeholder"
+      - "pdl1_case_image"
       - "immune_table_notes"
       - "bullet_lists"
       - "signature_layout"
@@ -114,16 +116,26 @@ input_contract:
     - "pdl1_tps"
     - "pdl1_cps"
     - "pdl1_result"
+    - "pdl1_image_path"
     - "pdl1_assay_profile_id"
     - "pdl1_source_record_id"
     - "pdl1_source_record_date"
     - "pdl1_specimen_id"
     - "pdl1_image_disposition"
+    - "lung_histology"
+    - "disease_extent"
+    - "prior_systemic_therapy"
+    - "companion_diagnostic_status"
   required_columns:
     Variations:
       - "Gene_Symbol"
       - "cHGVS"
       - "ExistIn552"
+      - "Transcript"
+  required_any_columns:
+    Variations:
+      - "pHGVS_S"
+      - "pHGVS_A"
   biomarkers:
     tmb_value:
       required: true
@@ -147,6 +159,9 @@ input_contract:
       required: true
       allowed_values: ["阳性（高表达）", "阳性（低表达）", "阴性"]
       source_priority: ["form"]
+    pdl1_image_path:
+      required: true
+      source_priority: ["form"]
     pdl1_assay_profile_id:
       required: true
       source_priority: ["form"]
@@ -161,7 +176,7 @@ input_contract:
       source_priority: ["form"]
     pdl1_image_disposition:
       required: true
-      allowed_values: ["无病例专属图像（报告不展示）"]
+      allowed_values: ["病例专属图像（报告展示）"]
       source_priority: ["form"]
 
 template_contract:
@@ -171,20 +186,20 @@ template_contract:
     - "pdl1_tps"
     - "pdl1_cps"
     - "pdl1_result"
-    - "pdl1_assay_provenance"
-    - "pdl1_source_provenance"
   required_lists:
     - "targeted_drug_tips"
     - "variants_2_1"
     - "nccn_results"
   required_markers:
     - "__PART3_MARKER__"
+    - "__PDL1_CASE_IMAGE__"
 
 processors:
   - "empty_table_rows"
   - "part3_formatted_sections"
   - "signature_placeholder"
   - "report_content"
+  - "pdl1_case_image"
   - "bullet_lists"
   - "signature_layout"
   - "cover_artifacts"

@@ -33,6 +33,7 @@ from app.schemas.clinical_info import (
     PatientInfo,
     ProjectInfo,
 )
+from app.services.file_manager import resolve_pdl1_image_metadata
 
 # File lock for concurrent YAML writes
 _yaml_lock = threading.Lock()
@@ -50,7 +51,7 @@ FIELD_GROUPS = {
         ],
     },
     "treatment_context": {
-        "label": "肺癌治疗适应证上下文",
+        "label": "靶向用药适应证上下文（不属于PD-L1检测字段）",
         "fields": [
             "lung_histology",
             "disease_extent",
@@ -100,6 +101,7 @@ FIELD_GROUPS = {
             "pdl1_tps",
             "pdl1_cps",
             "pdl1_result",
+            "pdl1_image_path",
             "pdl1_assay_profile_id",
             "pdl1_source_record_id",
             "pdl1_source_record_date",
@@ -196,11 +198,7 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
             "pdl1_tps",
             "pdl1_cps",
             "pdl1_result",
-            "pdl1_assay_profile_id",
-            "pdl1_source_record_id",
-            "pdl1_source_record_date",
-            "pdl1_specimen_id",
-            "pdl1_image_disposition",
+            "pdl1_image_path",
             "lung_histology",
             "disease_extent",
             "prior_systemic_therapy",
@@ -211,11 +209,11 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
             "pdl1_tps",
             "pdl1_cps",
             "pdl1_result",
-            "pdl1_assay_profile_id",
-            "pdl1_source_record_id",
-            "pdl1_source_record_date",
-            "pdl1_specimen_id",
-            "pdl1_image_disposition",
+            "pdl1_image_path",
+            "lung_histology",
+            "disease_extent",
+            "prior_systemic_therapy",
+            "companion_diagnostic_status",
         ],
     },
     "lung_588_pdl1": {
@@ -223,11 +221,7 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
             "pdl1_tps",
             "pdl1_cps",
             "pdl1_result",
-            "pdl1_assay_profile_id",
-            "pdl1_source_record_id",
-            "pdl1_source_record_date",
-            "pdl1_specimen_id",
-            "pdl1_image_disposition",
+            "pdl1_image_path",
             "lung_histology",
             "disease_extent",
             "prior_systemic_therapy",
@@ -238,11 +232,11 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
             "pdl1_tps",
             "pdl1_cps",
             "pdl1_result",
-            "pdl1_assay_profile_id",
-            "pdl1_source_record_id",
-            "pdl1_source_record_date",
-            "pdl1_specimen_id",
-            "pdl1_image_disposition",
+            "pdl1_image_path",
+            "lung_histology",
+            "disease_extent",
+            "prior_systemic_therapy",
+            "companion_diagnostic_status",
         ],
     },
     "mlf_result": {"hide": ALWAYS_HIDE},
@@ -252,6 +246,7 @@ PROJECT_ONLY_FIELDS = {
     "pdl1_tps",
     "pdl1_cps",
     "pdl1_result",
+    "pdl1_image_path",
     "pdl1_assay_profile_id",
     "pdl1_source_record_id",
     "pdl1_source_record_date",
@@ -278,7 +273,10 @@ CONTROLLED_FIELD_OPTIONS = {
         "待确认",
         "不符合",
     ],
-    "pdl1_image_disposition": ["无病例专属图像（报告不展示）"],
+    "pdl1_image_disposition": [
+        "病例专属图像（报告展示）",
+        "无病例专属图像（报告不展示）",
+    ],
 }
 
 # UI component mapping by field type
@@ -337,6 +335,13 @@ def _build_ui_hints(
     project_type: Optional[str] = None,
 ) -> FieldUiHints:
     """Build UI hints for a field."""
+    if key == "pdl1_image_path":
+        return FieldUiHints(
+            component="pdl1-image-upload",
+            placeholder="请选择本病例PD-L1免疫组化图片",
+            span=24,
+            accept=".png,.jpg,.jpeg,.webp",
+        )
     if key == "signature_image_path" or key.endswith("_signature_image_path"):
         placeholder = "请选择或上传签名图片"
         if key in {"detector_signature_image_path", "reviewer_signature_image_path"}:
@@ -624,6 +629,54 @@ def fill_missing_report_date(values: dict[str, Any]) -> dict[str, Any]:
     if _is_missing_value(filled.get("report_date")):
         filled["report_date"] = date.today().isoformat()
     return filled
+
+
+PDL1_IMAGE_PROJECT_TYPES = {"lung_329_pdl1", "lung_588_pdl1"}
+PDL1_CONTROLLED_PROFILE_ID = "legacy_unspecified_ihc_transcription_v1"
+
+
+def apply_pdl1_image_metadata(
+    values: dict[str, Any],
+    project_type: Optional[str],
+    *,
+    owner_user_id: int,
+) -> dict[str, Any]:
+    """Derive hidden PD-L1 provenance from a verified case-image upload.
+
+    The browser only supplies TPS, CPS, result and the receipt path.  Source
+    identity fields are rebuilt server-side so a client cannot pair another
+    image's provenance with the current report.
+    """
+
+    normalized = dict(values or {})
+    panel_id = str(project_type or "").strip().lower()
+    if panel_id not in PDL1_IMAGE_PROJECT_TYPES:
+        return normalized
+
+    stored_path = str(normalized.get("pdl1_image_path") or "").strip()
+    if not stored_path:
+        return normalized
+    sample_id = str(normalized.get("sample_id") or "").strip()
+    metadata = resolve_pdl1_image_metadata(
+        stored_path,
+        owner_user_id=owner_user_id,
+        sample_id=sample_id,
+    )
+    uploaded_at = str(metadata.get("uploaded_at") or "").strip()
+    uploaded_date = uploaded_at.split("T", 1)[0] if uploaded_at else ""
+    image_id = str(metadata.get("image_id") or "").strip()
+    digest = str(metadata.get("sha256") or "").strip()
+    normalized.update(
+        {
+            "pdl1_image_path": str(metadata["resolved_path"]),
+            "pdl1_assay_profile_id": PDL1_CONTROLLED_PROFILE_ID,
+            "pdl1_source_record_id": f"PDL1-IMG-{image_id}-{digest[:12]}",
+            "pdl1_source_record_date": uploaded_date,
+            "pdl1_specimen_id": sample_id,
+            "pdl1_image_disposition": "病例专属图像（报告展示）",
+        }
+    )
+    return normalized
 
 
 def _patient_fields_from_local_registry(sample_id: str) -> dict[str, Any]:

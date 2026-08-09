@@ -74,6 +74,17 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
             ),
         ),
         FunctionProcessor(
+            "pdl1_case_image",
+            "PD-L1病例图片渲染失败",
+            lambda c: c.renderer._render_pdl1_case_image(
+                c.output_path, c.template_context
+            ),
+            enabled_predicate=lambda c: str(
+                c.template_context.get("project_type") or ""
+            ).strip().lower()
+            in {"lung_329_pdl1", "lung_588_pdl1"},
+        ),
+        FunctionProcessor(
             "targeted_drug_brand_summary",
             "靶向药物商品名汇总失败",
             lambda c: c.renderer._apply_targeted_drug_brand_summary(

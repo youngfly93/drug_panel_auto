@@ -22,6 +22,7 @@ from typing import Any
 
 import yaml
 from docx import Document
+from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,9 @@ KNOWN_INPUTS = {
         "pdl1_tps": 1.0,
         "pdl1_cps": 1.0,
         "pdl1_result": "阳性（低表达）",
+        "expected_targeted_drug_count": 0,
+        "expected_immune_positive_count": 0,
+        "expected_immune_negative_count": 0,
     },
     "623c96cee1eb7b16cacb62cababba3b790e82007a00a59d0f159efbe025db000": {
         "alias": "CASE-LUNG-B",
@@ -39,6 +43,9 @@ KNOWN_INPUTS = {
         "pdl1_tps": 50.0,
         "pdl1_cps": 52.0,
         "pdl1_result": "阳性（高表达）",
+        "expected_targeted_drug_count": 0,
+        "expected_immune_positive_count": 5,
+        "expected_immune_negative_count": 0,
     },
     "7b39431044c4a9298f7663c97a47c4df83b5b1e0875d88a64b3e24c05bfa498a": {
         "alias": "CASE-LUNG-C",
@@ -46,6 +53,9 @@ KNOWN_INPUTS = {
         "pdl1_tps": 5.0,
         "pdl1_cps": 6.0,
         "pdl1_result": "阳性（低表达）",
+        "expected_targeted_drug_count": 2,
+        "expected_immune_positive_count": 2,
+        "expected_immune_negative_count": 1,
     },
 }
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -71,6 +81,26 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _write_synthetic_pdl1_image(path: Path, alias: str) -> None:
+    """Create a deterministic non-clinical image used only for render QA."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGB", (960, 640), "white")
+    draw = ImageDraw.Draw(image)
+    digest = hashlib.sha256(alias.encode("utf-8")).digest()
+    for index in range(80):
+        x = (digest[index % len(digest)] * 37 + index * 61) % 920
+        y = (digest[(index + 7) % len(digest)] * 29 + index * 43) % 600
+        radius = 8 + digest[(index + 13) % len(digest)] % 18
+        shade = 75 + digest[(index + 17) % len(digest)] % 120
+        draw.ellipse(
+            (x, y, x + radius, y + radius),
+            fill=(shade, 70, min(220, shade + 35)),
+        )
+    draw.rectangle((10, 10, 949, 629), outline=(80, 80, 80), width=3)
+    image.save(path, format="PNG", optimize=True)
 
 
 def _source_revision() -> str:
@@ -203,11 +233,16 @@ def _clinical_info(case: dict[str, Any]) -> dict[str, Any]:
         "pdl1_tps": case["pdl1_tps"],
         "pdl1_cps": case["pdl1_cps"],
         "pdl1_result": case["pdl1_result"],
+        "pdl1_image_path": str(case["pdl1_image_path"]),
         "pdl1_assay_profile_id": ("legacy_unspecified_ihc_transcription_v1"),
         "pdl1_source_record_id": (f"SYNTHETIC-VISUAL-QA-IHC-{case['alias']}"),
         "pdl1_source_record_date": "2026-07-23",
         "pdl1_specimen_id": (f"SYNTHETIC-VISUAL-QA-SPECIMEN-{case['alias']}"),
-        "pdl1_image_disposition": "无病例专属图像（报告不展示）",
+        "pdl1_image_disposition": "病例专属图像（报告展示）",
+        "lung_histology": "非小细胞肺癌",
+        "disease_extent": "转移性",
+        "prior_systemic_therapy": "已接受",
+        "companion_diagnostic_status": "已确认符合",
     }
 
 
@@ -218,6 +253,7 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
     )
     from reportgen.core.enhancer_registry import get_enhancer, get_panel_registry
     from reportgen.core.report_generator import validate_panel_biomarker_contracts
+    from reportgen.core.report_summary import build_report_summary
     from reportgen.models.excel_data import ExcelDataSource
     from reportgen.rules.pdl1 import (
         apply_pdl1_product_display_fields,
@@ -267,6 +303,11 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
         pdl1_product_contract,
     )
     context = report_data.get_template_context()
+    web_summary = build_report_summary(
+        report_data=report_data,
+        project_type="lung_588_pdl1",
+        project_name="肺癌588基因+PD-L1",
+    )
     contract_report = None
     contract_id = case.get("contract_id")
     if contract_id:
@@ -283,6 +324,12 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
         "targeted_drug_count": len(
             list(report_data.get_table("targeted_drug_tips") or [])
         ),
+        "immune_positive_count": len(
+            list(report_data.get_table("immune_positive_variants") or [])
+        ),
+        "immune_negative_count": len(
+            list(report_data.get_table("immune_negative_variants") or [])
+        ),
         "biomarkers": {
             "tmb_value": report_data.get_field("tmb_value"),
             "tmb_status": report_data.get_field("tmb_status"),
@@ -298,6 +345,12 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
         ),
         "pdl1_product_failures": pdl1_product_failures,
         "pdl1_input_provenance": "synthetic_visual_qa_only",
+        "web_preview": {
+            "drug_related_variant_count": web_summary["variants"]["drug_related"],
+            "targeted_drug_count": web_summary["drugs"]["targeted_count"],
+            "targeted_module_status": web_summary["drugs"]["targeted_status"],
+            "immune": web_summary["biomarkers"]["immune"],
+        },
         "context_contract": {
             "contract_id": contract_id,
             "status": contract_report["status"]
@@ -352,10 +405,13 @@ def _render_case(
         required_texts = (
             "Gene List for MLseq (n=588)",
             "肺癌专属知识当前未启用",
-            "本病例未提供可追溯的PD-L1免疫组化图像",
+            "图1. 免疫组化：PD-L1",
         )
         forbidden_texts = (
             "__PART3_MARKER__",
+            "__PDL1_CASE_IMAGE__",
+            "原始记录未提供抗体克隆",
+            "不据此推导检测方案等效性",
             "n=329",
             "{{",
             "{%",
@@ -423,7 +479,12 @@ def _build_uat_readiness(
     ngs_structure_pass_count = sum(
         row["auto_detection"]["detected"]
         and row["auto_detection"]["project_type"] == "lung_588_pdl1"
-        and row["targeted_drug_count"] == 0
+        and row.get("targeted_drug_count", 0)
+        == row.get("expected_targeted_drug_count", 0)
+        and row.get("immune_positive_count", 0)
+        == row.get("expected_immune_positive_count", 0)
+        and row.get("immune_negative_count", 0)
+        == row.get("expected_immune_negative_count", 0)
         and row["biomarker_contract_status"] == "PASS"
         and row["context_contract"]["status"] in {"PASS", "NOT_APPLICABLE"}
         for row in rows
@@ -610,11 +671,20 @@ def validate_inputs(
         )
 
     rows: list[dict[str, Any]] = []
+    synthetic_image_dir = (
+        render_output_dir
+        if render_output_dir is not None
+        else ROOT / ".work" / "lung588_real_input_audit"
+    ) / "synthetic_pdl1_images"
     for digest, case in sorted(
         KNOWN_INPUTS.items(),
         key=lambda item: item[1]["alias"],
     ):
         excel_path = located[digest]
+        runtime_case = dict(case)
+        image_path = synthetic_image_dir / f"{case['alias']}.png"
+        _write_synthetic_pdl1_image(image_path, str(case["alias"]))
+        runtime_case["pdl1_image_path"] = image_path
         # Upstream loggers may mention real filenames/sample IDs. Capture both
         # streams so this validation emits only the de-identified payload below.
         with (
@@ -625,12 +695,12 @@ def validate_inputs(
             detected = bridge.detect_project_type(
                 str(excel_path), excel_data=excel_data
             )
-            result = _enhance_case(bridge, excel_data, case)
+            result = _enhance_case(bridge, excel_data, runtime_case)
             report_generation = (
                 _render_case(
                     bridge,
                     excel_path,
-                    case,
+                    runtime_case,
                     render_output_dir,
                     dpi=render_dpi,
                 )
@@ -641,6 +711,15 @@ def validate_inputs(
             {
                 "alias": case["alias"],
                 "source_sha256": digest,
+                "expected_targeted_drug_count": case[
+                    "expected_targeted_drug_count"
+                ],
+                "expected_immune_positive_count": case[
+                    "expected_immune_positive_count"
+                ],
+                "expected_immune_negative_count": case[
+                    "expected_immune_negative_count"
+                ],
                 "sheet_count": len(excel_data.sheet_names or []),
                 "auto_detection": {
                     "detected": bool(detected.get("detected")),
@@ -660,8 +739,43 @@ def validate_inputs(
             failures.append(
                 f"{row['alias']}: lung588 structural identity was not detected"
             )
-        if row["targeted_drug_count"] != 0:
-            failures.append(f"{row['alias']}: disabled drug rules produced rows")
+        if row["targeted_drug_count"] != row["expected_targeted_drug_count"]:
+            failures.append(
+                f"{row['alias']}: targeted drug rows differ from the exact-event contract"
+            )
+        if row["immune_positive_count"] != row["expected_immune_positive_count"]:
+            failures.append(
+                f"{row['alias']}: positive immune rows differ from the exact-event contract"
+            )
+        if row["immune_negative_count"] != row["expected_immune_negative_count"]:
+            failures.append(
+                f"{row['alias']}: negative immune rows differ from the exact-event contract"
+            )
+        preview = row["web_preview"]
+        if preview["targeted_drug_count"] != row["expected_targeted_drug_count"]:
+            failures.append(
+                f"{row['alias']}: web preview targeted-drug count is inconsistent"
+            )
+        if preview["drug_related_variant_count"] != row[
+            "expected_targeted_drug_count"
+        ]:
+            failures.append(
+                f"{row['alias']}: web preview drug-related variant count is inconsistent"
+            )
+        positive_result = str(preview["immune"].get("positive") or "")
+        negative_result = str(preview["immune"].get("negative") or "")
+        if row["expected_immune_positive_count"] and not positive_result.startswith(
+            "检出（"
+        ):
+            failures.append(f"{row['alias']}: web preview lost positive immune hits")
+        if not row["expected_immune_positive_count"] and positive_result != "未检出":
+            failures.append(f"{row['alias']}: web preview positive immune zero is wrong")
+        if row["expected_immune_negative_count"] and not negative_result.startswith(
+            "检出（"
+        ):
+            failures.append(f"{row['alias']}: web preview lost negative immune hits")
+        if not row["expected_immune_negative_count"] and negative_result != "未检出":
+            failures.append(f"{row['alias']}: web preview negative immune zero is wrong")
         if row["biomarker_contract_status"] != "PASS":
             failures.append(f"{row['alias']}: biomarker contract failed")
         if row["pdl1_product_contract_status"] != "PASS":

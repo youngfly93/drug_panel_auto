@@ -119,28 +119,28 @@ single_values:
     default_value: "-"
     description: "报告基本信息区展示的临床诊断；不直接参与药物知识库过滤"
 
-  # 肺588靶向药物适应证上下文。工程草案仅采集和留痕，运行时药物规则仍关闭；
-  # 晋级时必须由精确事件规则逐字段校验，缺失/未明确一律不输出患者级药物结论。
+  # 肺癌精确靶向药物适应证上下文。仅用于事件级受控规则；
+  # 缺失、未明确或超出适应证时一律不输出患者级药物结论。
   lung_histology:
     synonyms: ["肺癌病理类型", "Lung Histology"]
     type: string
     required: false
     default_value: "未明确"
-    description: "肺癌病理类型（用于未来精确药物适应证校验）"
+    description: "肺癌病理类型（用于精确药物适应证校验）"
 
   disease_extent:
     synonyms: ["疾病范围", "Disease Extent"]
     type: string
     required: false
     default_value: "未明确"
-    description: "可切除性及局部晚期/转移状态（用于未来适应证校验）"
+    description: "可切除性及局部晚期/转移状态（用于精确适应证校验）"
 
   prior_systemic_therapy:
     synonyms: ["既往系统治疗", "Prior Systemic Therapy"]
     type: string
     required: false
     default_value: "未明确"
-    description: "是否已接受系统治疗（用于未来治疗线次条件校验）"
+    description: "是否已接受系统治疗（用于治疗线次条件校验）"
 
   companion_diagnostic_status:
     synonyms: ["伴随诊断适配状态", "Companion Diagnostic Status"]
@@ -257,6 +257,13 @@ single_values:
     default_value: ""
     description: "PD-L1结果分层"
 
+  pdl1_image_path:
+    synonyms: ["PD-L1病例图片"]
+    type: string
+    required: false
+    default_value: ""
+    description: "本病例PD-L1免疫组化图片；上传后自动生成可追溯记录"
+
   pdl1_assay_profile_id:
     synonyms: ["PD-L1检测方案"]
     type: string
@@ -291,7 +298,7 @@ single_values:
     type: string
     required: false
     default_value: ""
-    description: "当前仅允许无病例专属图像且报告不展示；禁止复用模板静态图"
+    description: "病例专属PD-L1图片的受控展示状态；禁止复用模板静态图或跨病例图片"
 
   # 终版展示字段（由程序计算，不直接来自Excel）
   tmb_summary:

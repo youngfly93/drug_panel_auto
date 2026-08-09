@@ -14,6 +14,7 @@ const PROJECT_SCOPED_FIELDS = new Set([
   'pdl1_tps',
   'pdl1_cps',
   'pdl1_result',
+  'pdl1_image_path',
   'pdl1_assay_profile_id',
   'pdl1_source_record_id',
   'pdl1_source_record_date',

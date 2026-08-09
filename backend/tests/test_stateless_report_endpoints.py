@@ -15,6 +15,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
+from PIL import Image
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -27,6 +28,7 @@ for import_path in (str(ROOT), str(BACKEND)):
 from reportgen.models.excel_data import ExcelDataSource  # noqa: E402
 
 from app.api import batch as batch_api  # noqa: E402
+from app.api import clinical_info as clinical_info_api  # noqa: E402
 from app.api import excel as excel_api  # noqa: E402
 from app.api import report as report_api  # noqa: E402
 from app.api import task as task_api  # noqa: E402
@@ -58,6 +60,12 @@ def _synthetic_xlsx_bytes(sample_id: str = "LZ000001") -> bytes:
     sheet.append(["样本编号", sample_id])
     buffer = io.BytesIO()
     workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def _synthetic_png_bytes() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (80, 50), color=(225, 215, 200)).save(buffer, format="PNG")
     return buffer.getvalue()
 
 
@@ -97,7 +105,32 @@ class FakeBridge:
         self.last_generate_kwargs = None
 
     def read_excel(self, excel_path):
-        return SimpleNamespace(path=excel_path)
+        variation_columns = [
+            "Gene_Symbol",
+            "cHGVS",
+            "ExistIn552",
+            "ExistInsmall358",
+            "Transcript",
+            "pHGVS_S",
+        ]
+        return SimpleNamespace(
+            path=excel_path,
+            file_path=excel_path,
+            sheet_names=["Meta", "Variations", "TMB", "Msisensor"],
+            table_data={
+                "Variations": [
+                    {
+                        "Gene_Symbol": "KRAS",
+                        "cHGVS": "c.35G>A",
+                        "ExistIn552": "Ⅱ类",
+                        "ExistInsmall358": 1,
+                        "Transcript": "NM_004985.5",
+                        "pHGVS_S": "p.G12D",
+                    }
+                ]
+            },
+            metadata={"table_columns": {"Variations": variation_columns}},
+        )
 
     def ensure_project_type_enabled(self, project_type):
         from reportgen.panels.release_scope import ensure_project_type_enabled
@@ -237,6 +270,24 @@ class MissingDateBridge(FakeBridge):
         }
 
 
+class MissingLungSelectorBridge(FakeBridge):
+    def read_excel(self, excel_path):
+        excel_data = super().read_excel(excel_path)
+        excel_data.table_data["Variations"] = [
+            {
+                "Gene_Symbol": "BRAF",
+                "cHGVS": "c.1799T>A",
+                "ExistIn552": "Ⅱ类",
+            }
+        ]
+        excel_data.metadata["table_columns"]["Variations"] = [
+            "Gene_Symbol",
+            "cHGVS",
+            "ExistIn552",
+        ]
+        return excel_data
+
+
 class SlowBridge(FakeBridge):
     def generate_report(self, **kwargs):
         time.sleep(0.2)
@@ -311,6 +362,7 @@ def _client(tmp_path, monkeypatch, bridge=None, *, role="reviewer"):
 
     app = FastAPI()
     app.include_router(excel_api.router, prefix="/api/v1")
+    app.include_router(clinical_info_api.router, prefix="/api/v1")
     app.include_router(report_api.router, prefix="/api/v1")
     app.include_router(batch_api.router, prefix="/api/v1")
     app.include_router(task_api.router, prefix="/api/v1")
@@ -881,8 +933,9 @@ def test_generate_file_async_blocks_missing_lung588_pdl1_fields_before_queue(
     assert "生成前缺少必填信息" in detail
     assert "PD-L1 TPS" in detail
     assert "PD-L1 CPS" in detail
-    assert "PD-L1检测方案" in detail
-    assert "PD-L1原始记录编号" in detail
+    assert "PD-L1病例图片" in detail
+    assert "肺癌病理类型" in detail
+    assert "疾病范围" in detail
     assert queued_jobs == []
     db = report_api.SessionLocal()
     try:
@@ -908,21 +961,26 @@ def test_generate_file_async_accepts_complete_lung588_pdl1_preflight(
         "submit_generation_job",
         lambda *args, **kwargs: queued_jobs.append((args, kwargs)),
     )
-    clinical_info = {
-        "patient_name": "测试患者",
-        "sample_id": "CASE-LUNG-C",
-        "report_date": "2026-07-31",
-        "pdl1_tps": 50,
-        "pdl1_cps": 50,
-        "pdl1_result": "阳性（高表达）",
-        "pdl1_assay_profile_id": "legacy_unspecified_ihc_transcription_v1",
-        "pdl1_source_record_id": "SYN-PDL1-001",
-        "pdl1_source_record_date": "2026-07-30",
-        "pdl1_specimen_id": "SYN-SPECIMEN-001",
-        "pdl1_image_disposition": "无病例专属图像（报告不展示）",
-    }
-
     with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        image_response = client.post(
+            "/api/v1/pdl1-images",
+            files={"file": ("case.png", _synthetic_png_bytes(), "image/png")},
+        )
+        assert image_response.status_code == 200
+        image_ref = image_response.json()["data"]["stored_path"]
+        clinical_info = {
+            "patient_name": "测试患者",
+            "sample_id": "CASE-LUNG-C",
+            "report_date": "2026-07-31",
+            "pdl1_tps": 50,
+            "pdl1_cps": 50,
+            "pdl1_result": "阳性（高表达）",
+            "pdl1_image_path": image_ref,
+            "lung_histology": "非小细胞肺癌",
+            "disease_extent": "转移性",
+            "prior_systemic_therapy": "已接受",
+            "companion_diagnostic_status": "已确认符合",
+        }
         response = client.post(
             "/api/v1/reports/generate-file-async",
             files={"file": ("CASE-LUNG-C.xlsx", b"placeholder", "application/vnd.ms-excel")},
@@ -942,7 +1000,81 @@ def test_generate_file_async_accepts_complete_lung588_pdl1_preflight(
         assert task.project_type == "lung_588_pdl1"
         snapshot = json.loads(task.clinical_info_snapshot)
         assert snapshot["project_name"] == "肺癌588基因+PD-L1"
-        assert snapshot["pdl1_source_record_id"] == "SYN-PDL1-001"
+        assert snapshot["pdl1_source_record_id"].startswith("PDL1-IMG-")
+        assert snapshot["pdl1_image_disposition"] == "病例专属图像（报告展示）"
+        assert snapshot["pdl1_specimen_id"] == "CASE-LUNG-C"
+        resolved_image = Path(snapshot["pdl1_image_path"])
+        assert resolved_image.is_absolute()
+        assert resolved_image.is_file()
+        assert resolved_image.is_relative_to(report_api.settings.storage_root.resolve())
+    finally:
+        db.close()
+
+
+def test_generate_file_async_blocks_missing_lung_selector_columns(
+    tmp_path,
+    monkeypatch,
+):
+    bridge = MissingLungSelectorBridge()
+    bridge.detect_result = {
+        "project_type": "lung_588_pdl1",
+        "project_name": "肺癌588基因+PD-L1",
+        "confidence": 1.0,
+        "detected": True,
+    }
+    queued_jobs = []
+    monkeypatch.setattr(
+        report_api,
+        "submit_generation_job",
+        lambda *args, **kwargs: queued_jobs.append((args, kwargs)),
+    )
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        image_response = client.post(
+            "/api/v1/pdl1-images",
+            files={"file": ("case.png", _synthetic_png_bytes(), "image/png")},
+        )
+        assert image_response.status_code == 200
+        response = client.post(
+            "/api/v1/reports/generate-file-async",
+            files={
+                "file": (
+                    "CASE-LUNG-SELECTOR.xlsx",
+                    b"placeholder",
+                    "application/vnd.ms-excel",
+                )
+            },
+            data={
+                "clinical_info": json.dumps(
+                    {
+                        "patient_name": "测试患者",
+                        "sample_id": "CASE-LUNG-SELECTOR",
+                        "report_date": "2026-08-09",
+                        "pdl1_tps": 50,
+                        "pdl1_cps": 50,
+                        "pdl1_result": "阳性（高表达）",
+                        "pdl1_image_path": image_response.json()["data"][
+                            "stored_path"
+                        ],
+                        "lung_histology": "非小细胞肺癌",
+                        "disease_extent": "转移性",
+                        "prior_systemic_therapy": "已接受",
+                        "companion_diagnostic_status": "已确认符合",
+                    },
+                    ensure_ascii=False,
+                ),
+                "project_type": "lung_588_pdl1",
+                "project_name": "肺癌588基因+PD-L1",
+            },
+        )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "Transcript" in detail
+    assert "pHGVS_S / pHGVS_A" in detail
+    assert queued_jobs == []
+    db = report_api.SessionLocal()
+    try:
+        assert db.query(Task).count() == 0
     finally:
         db.close()
 

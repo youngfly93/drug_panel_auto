@@ -1016,6 +1016,24 @@ def _enrich_clinical_payload(
     return clinical_svc.fill_missing_report_date(payload)
 
 
+def _apply_pdl1_upload_receipt(
+    clinical_payload: dict,
+    project_type: Optional[str],
+    *,
+    owner_user_id: int,
+) -> dict:
+    """Normalize trusted PD-L1 image provenance before input preflight."""
+
+    try:
+        return clinical_svc.apply_pdl1_image_metadata(
+            clinical_payload,
+            project_type,
+            owner_user_id=owner_user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 def _compact_filename_part(value: object, fallback: str) -> str:
     text = "" if value is None else str(value).strip()
     text = re.sub(r"\s+", "", text)
@@ -1234,6 +1252,11 @@ def generate_report(
         effective_project_type,
         lookup_sample_id=clinical_svc.project_code_from_filename(upload.original_filename),
     )
+    clinical_payload = _apply_pdl1_upload_receipt(
+        clinical_payload,
+        effective_project_type,
+        owner_user_id=current_user.id,
+    )
     clinical_payload.pop("项目名称", None)
     clinical_payload.pop("检测项目", None)
     if effective_project_name:
@@ -1414,6 +1437,11 @@ def generate_report_from_file(
         clinical_payload,
         detected_project_type,
         lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
+    )
+    clinical_payload = _apply_pdl1_upload_receipt(
+        clinical_payload,
+        detected_project_type,
+        owner_user_id=current_user.id,
     )
     clinical_payload.pop("项目名称", None)
     clinical_payload.pop("检测项目", None)
@@ -1596,6 +1624,11 @@ def generate_report_from_file_async(
         clinical_payload,
         detected_project_type,
         lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
+    )
+    clinical_payload = _apply_pdl1_upload_receipt(
+        clinical_payload,
+        detected_project_type,
+        owner_user_id=current_user.id,
     )
     clinical_payload.pop("项目名称", None)
     clinical_payload.pop("检测项目", None)

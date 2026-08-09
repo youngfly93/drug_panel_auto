@@ -44,6 +44,10 @@ from reportgen.core.signature_library import resolve_signature_path
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
+from reportgen.panels.input_contract import (
+    describe_input_contract_failure,
+    validate_excel_input_contract,
+)
 from reportgen.panels.validation import validate_panel_package_path
 from reportgen.panels.release_scope import ensure_project_type_enabled
 from reportgen.rules import (
@@ -273,6 +277,7 @@ class _GenerationState:
     panel_registration: Any = None
     panel_package: Any = None
     panel_package_validation: Optional[dict[str, Any]] = None
+    input_contract_validation: Optional[dict[str, Any]] = None
     report_data: Optional[ReportData] = None
     report_content: dict[str, Any] = dc_field(default_factory=dict)
     output_path: Optional[str] = None
@@ -1024,6 +1029,49 @@ class ReportGenerator:
             if state.panel_package is not None
             else {}
         )
+        structural_failures = validate_excel_input_contract(
+            state.excel_data,
+            panel_contract,
+        )
+        state.input_contract_validation = {
+            "status": "FAIL" if structural_failures else "PASS",
+            "ok": not structural_failures,
+            "failures": structural_failures,
+        }
+        stage.artifacts["input_contract_validation"] = dict(
+            state.input_contract_validation
+        )
+        stage.metrics.update(
+            {
+                "required_table_count": len(
+                    (panel_contract or {}).get("required_tables") or []
+                ),
+                "structural_failure_count": len(structural_failures),
+            }
+        )
+        if structural_failures:
+            duration = time.time() - start_time
+            details = "；".join(
+                describe_input_contract_failure(failure)
+                for failure in structural_failures
+            )
+            error_msg = f"Panel 输入 Excel 不满足必需工作表/列契约，阻断报告生成：{details}"
+            stage.fail(
+                "PANEL_INPUT_CONTRACT_FAILED",
+                error_msg,
+                details={"failures": structural_failures},
+            )
+            self.logger.error(error_msg, failures=structural_failures)
+            return {
+                "success": False,
+                "output_file": None,
+                "duration": duration,
+                "errors": [error_msg],
+                "warnings": state.report_data.validation_errors,
+                "panel_package_validation": state.panel_package_validation,
+                "input_contract_validation": state.input_contract_validation,
+            }
+
         biomarker_contracts = (
             panel_contract.get("biomarkers")
             if isinstance(panel_contract, dict)
@@ -1049,6 +1097,7 @@ class ReportGenerator:
                 "errors": [error_msg],
                 "warnings": state.report_data.validation_errors,
                 "panel_package_validation": state.panel_package_validation,
+                "input_contract_validation": state.input_contract_validation,
             }
 
         pdl1_contract = load_pdl1_product_contract(state.panel_package)
@@ -1075,6 +1124,7 @@ class ReportGenerator:
                 "errors": [error_msg],
                 "warnings": state.report_data.validation_errors,
                 "panel_package_validation": state.panel_package_validation,
+                "input_contract_validation": state.input_contract_validation,
             }
 
         if state.strict_mode:
@@ -1095,6 +1145,7 @@ class ReportGenerator:
                     "errors": [error_msg],
                     "warnings": state.report_data.validation_errors,
                     "panel_package_validation": state.panel_package_validation,
+                    "input_contract_validation": state.input_contract_validation,
                 }
 
             missing_important = self._check_important_fields(state.report_data)
@@ -1604,6 +1655,7 @@ class ReportGenerator:
             "errors": [],
             "warnings": state.report_data.validation_errors,
             "panel_package_validation": state.panel_package_validation,
+            "input_contract_validation": state.input_contract_validation,
             "rule_provenance": state.rule_provenance,
             "template_contract": state.template_contract_report,
             "field_provenance": state.field_provenance,

@@ -18,6 +18,7 @@ from docx.enum.table import WD_ROW_HEIGHT_RULE
 from docx.oxml.ns import qn
 from docxtpl import DocxTemplate
 from fastapi import HTTPException
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "backend"
@@ -80,6 +81,12 @@ def _excel(tmp_path: Path, rows: list[dict]) -> ExcelDataSource:
         table_data={"Variations": rows},
         sheet_names=["Variations"],
     )
+
+
+def _synthetic_pdl1_image(tmp_path: Path) -> Path:
+    path = tmp_path / "synthetic-pdl1.png"
+    Image.new("RGB", (160, 100), color=(220, 205, 185)).save(path)
+    return path
 
 
 def test_lung588_package_is_independent_and_valid():
@@ -209,10 +216,13 @@ def test_lung588_template_is_hardened_and_byte_reproducible(tmp_path):
     assert "肺癌329" not in visible
     assert "n=329" not in visible
     assert "__PART3_MARKER__" in visible
-    assert "肺癌专属治疗知识和事件级药物规则当前未启用" in visible
-    assert "本病例未提供可追溯的PD-L1免疫组化图像" in visible
-    assert "4、因肿瘤存在较大的异质性" in visible
-    assert "5、因肿瘤存在较大的异质性" not in visible
+    assert "__PDL1_CASE_IMAGE__" in visible
+    assert "经审核的肺癌精确事件规则" in visible
+    assert "泛基因、跨癌种及未审核规则不展示" in visible
+    assert "肺癌专属治疗知识和事件级药物规则当前未启用" not in visible
+    assert "本病例未提供可追溯的PD-L1免疫组化图像" not in visible
+    assert "原始记录未提供抗体克隆" not in visible
+    assert visible.count("肿瘤具有异质性") == 1
 
     template = DocxTemplate(str(TEMPLATE))
     context = {
@@ -221,8 +231,6 @@ def test_lung588_template_is_hardened_and_byte_reproducible(tmp_path):
         "pdl1_tps": "50",
         "pdl1_cps": "52",
         "pdl1_result": "阳性（高表达）",
-        "pdl1_assay_provenance": "SYNTHETIC_ASSAY_PROVENANCE",
-        "pdl1_source_provenance": "SYNTHETIC_SOURCE_PROVENANCE",
         "variants_2_1": [],
         "targeted_drug_tips": [],
         "nccn_results": [],
@@ -238,8 +246,7 @@ def test_lung588_template_is_hardened_and_byte_reproducible(tmp_path):
     rendered = re.sub(r"<[^>]+>", "", xml)
     assert "SYNTHETIC_PATIENT" in rendered
     assert "阳性（高表达）" in rendered
-    assert "SYNTHETIC_ASSAY_PROVENANCE" in rendered
-    assert "SYNTHETIC_SOURCE_PROVENANCE" in rendered
+    assert "__PDL1_CASE_IMAGE__" in rendered
 
     styled = tmp_path / "styled-lung588.docx"
     shutil.copy2(TEMPLATE, styled)
@@ -304,6 +311,40 @@ def test_lung588_template_does_not_reuse_scaffold_pdl1_image():
             )
         }
     assert media_parts == relationship_targets
+
+
+def test_pdl1_case_image_processor_is_idempotent(tmp_path):
+    output = tmp_path / "pdl1-image-idempotent.docx"
+    document = Document()
+    document.add_paragraph("__PDL1_CASE_IMAGE__")
+    document.save(output)
+    image_path = _synthetic_pdl1_image(tmp_path)
+    context = {
+        "project_type": "lung_588_pdl1",
+        "pdl1_image_path": str(image_path),
+    }
+    renderer = TemplateRenderer(log_level="ERROR")
+
+    renderer._run_post_render_processors(
+        str(output),
+        context,
+        str(output),
+        processor_names=["pdl1_case_image"],
+    )
+    assert renderer.last_processor_report[0]["status"] == "OK"
+    first_digest = hashlib.sha256(output.read_bytes()).hexdigest()
+
+    renderer._run_post_render_processors(
+        str(output),
+        context,
+        str(output),
+        processor_names=["pdl1_case_image"],
+    )
+    assert renderer.last_processor_report[0]["status"] == "OK"
+    assert hashlib.sha256(output.read_bytes()).hexdigest() == first_digest
+    rendered = Document(output)
+    assert len(rendered.inline_shapes) == 1
+    assert not any("__PDL1_CASE_IMAGE__" in p.text for p in rendered.paragraphs)
 
 
 def test_part3_disabled_policy_renders_notice_without_shared_knowledge(tmp_path):
@@ -524,6 +565,9 @@ def test_lung588_pdl1_form_is_project_scoped_and_required():
         "pdl1_tps",
         "pdl1_cps",
         "pdl1_result",
+        "pdl1_image_path",
+    }
+    hidden_derived = {
         "pdl1_assay_profile_id",
         "pdl1_source_record_id",
         "pdl1_source_record_date",
@@ -537,11 +581,8 @@ def test_lung588_pdl1_form_is_project_scoped_and_required():
         "阳性（低表达）",
         "阴性",
     ]
-    assert lung_fields["pdl1_assay_profile_id"].ui.options == [
-        "legacy_unspecified_ihc_transcription_v1"
-    ]
-    assert lung_fields["pdl1_assay_profile_id"].ui.placeholder == "请选择PD-L1检测/转录方案"
-    assert lung_fields["pdl1_image_disposition"].ui.options == ["无病例专属图像（报告不展示）"]
+    assert not hidden_derived & set(lung_fields)
+    assert lung_fields["pdl1_image_path"].ui.component == "pdl1-image-upload"
     assert not pdl1_fields & crc_fields
 
     treatment_context = {
@@ -566,10 +607,10 @@ def test_lung588_pdl1_form_is_project_scoped_and_required():
     }
     assert (
         next(group.label for group in lung.groups if group.id == "treatment_context")
-        == "肺癌治疗适应证上下文"
+        == "靶向用药适应证上下文（不属于PD-L1检测字段）"
     )
     for key, options in treatment_context.items():
-        assert lung_fields[key].required is False
+        assert lung_fields[key].required is True
         assert lung_fields[key].ui.component == "select"
         assert lung_fields[key].ui.options == options
     assert not set(treatment_context) & crc_fields
@@ -621,6 +662,7 @@ def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification(
         "pdl1_source_record_date",
         "pdl1_specimen_id",
         "pdl1_image_disposition",
+        "pdl1_image_path",
     }
 
     def add_pdl1_provenance(data: ReportData) -> None:
@@ -633,8 +675,9 @@ def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification(
         data.set_field("pdl1_specimen_id", "SYNTHETIC-SPECIMEN-001")
         data.set_field(
             "pdl1_image_disposition",
-            "无病例专属图像（报告不展示）",
+            "病例专属图像（报告展示）",
         )
+        data.set_field("pdl1_image_path", "2026-08-09/synthetic.png")
 
     invalid = ReportData()
     invalid.set_field("tmb_value", 7.5)
@@ -696,7 +739,10 @@ def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
     assert contract["runtime_profiles"] == ["legacy_unspecified_ihc_transcription_v1"]
     assert contract["input_provenance"]["ngs_excel_is_pdl1_source"] is False
     assert contract["image_policy"]["static_template_patient_image_allowed"] is False
-    assert contract["image_policy"]["case_specific_image_pipeline_implemented"] is False
+    assert contract["image_policy"]["case_specific_image_pipeline_implemented"] is True
+    assert contract["image_policy"]["allowed_runtime_dispositions"] == [
+        "病例专属图像（报告展示）"
+    ]
 
     profiles = contract["candidate_profiles"]
     assert len(profiles) == 2
@@ -732,8 +778,9 @@ def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
     data.set_field("pdl1_result", "阳性（低表达）")
     data.set_field(
         "pdl1_image_disposition",
-        "无病例专属图像（报告不展示）",
+        "病例专属图像（报告展示）",
     )
+    data.set_field("pdl1_image_path", "2026-08-09/synthetic.png")
     reasons = {failure["reason"] for failure in validate_pdl1_product_contract(data, contract)}
     assert reasons == {"assay_profile_not_runtime_approved"}
 
@@ -793,8 +840,9 @@ def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
     pilot_data.set_field("pdl1_result", "阳性（高表达）")
     pilot_data.set_field(
         "pdl1_image_disposition",
-        "无病例专属图像（报告不展示）",
+        "病例专属图像（报告展示）",
     )
+    pilot_data.set_field("pdl1_image_path", "2026-08-09/synthetic.png")
     assert validate_pdl1_product_contract(pilot_data, contract) == []
     apply_pdl1_product_display_fields(pilot_data, contract)
     provenance = pilot_data.get_field("pdl1_assay_provenance")
@@ -815,6 +863,7 @@ def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
 def test_lung588_generation_cannot_bypass_pending_pdl1_profile(tmp_path):
     xlsx_path = tmp_path / "SYNTHETIC-LUNG588.xlsx"
     xlsx_path.write_bytes(b"synthetic")
+    image_path = _synthetic_pdl1_image(tmp_path)
     excel_data = ExcelDataSource(
         file_path=str(xlsx_path),
         single_values={
@@ -829,20 +878,26 @@ def test_lung588_generation_cannot_bypass_pending_pdl1_profile(tmp_path):
             "PD-L1原始记录编号": "SYNTHETIC-IHC-001",
             "PD-L1原始记录日期": "2026-07-23",
             "PD-L1检测标本标识": "SYNTHETIC-SPECIMEN-001",
-            "PD-L1图像处置": "无病例专属图像（报告不展示）",
+            "PD-L1图像处置": "病例专属图像（报告展示）",
+            "PD-L1病例图片": str(image_path),
+            "肺癌病理类型": "非小细胞肺癌",
+            "疾病范围": "转移性",
+            "既往系统治疗": "已接受",
+            "伴随诊断适配状态": "已确认符合",
         },
         table_data={
             "Variations": [
                 {
                     "ExistIn552": "Ⅱ类",
                     "Gene_Symbol": "TP53",
+                    "Transcript": "NM_000546.6",
                     "cHGVS": "c.734G>A",
                     "pHGVS_S": "p.G245D",
                     "Freq(%)": 30,
                 }
             ]
         },
-        sheet_names=["Variations"],
+        sheet_names=["Variations", "TMB", "Msisensor"],
     )
     output_dir = tmp_path / "out"
 
@@ -872,6 +927,7 @@ def test_lung588_generation_allows_source_record_only_pilot_profile(
 ):
     xlsx_path = tmp_path / "SYNTHETIC-LUNG588-PILOT.xlsx"
     xlsx_path.write_bytes(b"synthetic")
+    image_path = _synthetic_pdl1_image(tmp_path)
     excel_data = ExcelDataSource(
         file_path=str(xlsx_path),
         single_values={
@@ -890,20 +946,26 @@ def test_lung588_generation_allows_source_record_only_pilot_profile(
             "PD-L1原始记录编号": "SYNTHETIC-IHC-PILOT-001",
             "PD-L1原始记录日期": "2026-07-24",
             "PD-L1检测标本标识": "SYNTHETIC-SPECIMEN-PILOT-001",
-            "PD-L1图像处置": "无病例专属图像（报告不展示）",
+            "PD-L1图像处置": "病例专属图像（报告展示）",
+            "PD-L1病例图片": str(image_path),
+            "肺癌病理类型": "非小细胞肺癌",
+            "疾病范围": "转移性",
+            "既往系统治疗": "已接受",
+            "伴随诊断适配状态": "已确认符合",
         },
         table_data={
             "Variations": [
                 {
                     "ExistIn552": "Ⅱ类",
                     "Gene_Symbol": "TP53",
+                    "Transcript": "NM_000546.6",
                     "cHGVS": "c.734G>A",
                     "pHGVS_S": "p.G245D",
                     "Freq(%)": 30,
                 }
             ]
         },
-        sheet_names=["Variations"],
+        sheet_names=["Variations", "TMB", "Msisensor"],
     )
     output_dir = tmp_path / "out"
 
@@ -932,6 +994,7 @@ def test_lung588_generation_allows_source_record_only_pilot_profile(
             ),
         ]
     )
-    assert "原始记录未提供" in visible
-    assert "不据此推导" in visible
+    assert "__PDL1_CASE_IMAGE__" not in visible
+    with ZipFile(output) as archive:
+        assert any(name.startswith("word/media/") for name in archive.namelist())
     assert "22C3" not in visible

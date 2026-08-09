@@ -2,19 +2,26 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
+from app.dependencies import require_user
+from app.models.user import User
 from app.schemas.clinical_info import (
     ClinicalFormSchema,
     PatientDefaults,
     PatientEnrichment,
     PatientInfo,
+    Pdl1ImageUploadResponse,
     ProjectInfo,
     SignatureUploadResponse,
 )
 from app.schemas.common import ApiResponse
 from app.services import clinical_info_service as svc
-from app.services.file_manager import safe_client_filename, save_signature_upload
+from app.services.file_manager import (
+    safe_client_filename,
+    save_pdl1_image_upload,
+    save_signature_upload,
+)
 
 router = APIRouter(tags=["clinical-info"])
 
@@ -53,6 +60,24 @@ def upload_signature_image(file: UploadFile = File(...)):
             file_size_bytes=file_size,
         )
     )
+
+
+@router.post("/pdl1-images", response_model=ApiResponse[Pdl1ImageUploadResponse])
+def upload_pdl1_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_user),
+):
+    """Upload one case-specific PD-L1 IHC image for the current report."""
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="缺少PD-L1图片文件名")
+    if file.content_type and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="PD-L1文件必须是图片格式")
+    try:
+        receipt = save_pdl1_image_upload(file, owner_user_id=current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ApiResponse(data=Pdl1ImageUploadResponse(**receipt))
 
 
 @router.get("/patients/defaults", response_model=ApiResponse[PatientDefaults])

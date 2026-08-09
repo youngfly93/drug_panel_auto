@@ -210,7 +210,9 @@ export interface ReportSummary {
   }
   drugs?: {
     targeted_count?: number | null
+    targeted_status?: string | null
     chemotherapy_count?: number | null
+    chemotherapy_status?: string | null
     targeted_rows?: Array<Record<string, any>>
     chemotherapy_rows?: Array<Record<string, any>>
   }
@@ -568,6 +570,7 @@ async function downloadBlobWithResume(
       lastError = error?.name === 'AbortError'
         ? new Error('下载连接长时间无进展，正在重试')
         : error
+      ;(lastError as any).attempts = attempt
       if (error?.name === 'AbortError') {
         ;(lastError as any).retryable = true
       }
@@ -813,7 +816,8 @@ export const reportApi = {
       }
     } catch (error: any) {
       const message = await buildApiErrorMessage(error, '报告下载失败')
-      const suffix = retries > 1 ? `（已重试 ${retries} 次）` : ''
+      const attempts = Math.max(1, Number(error?.attempts || 1))
+      const suffix = attempts > 1 ? `（共尝试 ${attempts} 次）` : ''
       throw new Error(`${message}${suffix}`, { cause: error })
     }
   },

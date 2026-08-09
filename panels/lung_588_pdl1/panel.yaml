@@ -1,13 +1,14 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 display_name: "肺癌588基因+PD-L1"
-version: "0.2.0"
+version: "0.3.0"
 status: "pilot"
 description: >
   Independent lung 588-gene + PD-L1 package. The controlled pilot supports
-  reviewed I/II/III variant extraction and source-record PD-L1 transcription.
-  Targeted-drug, immune-association and chemotherapy-PGx conclusions remain
-  fail-closed until event-level medical review and case UAT are complete.
+  reviewed I/II/III variant extraction, case-image PD-L1 transcription,
+  context-bounded exact-event targeted rules, and exact historical immune
+  display contracts. Broad drug, immune and chemotherapy-PGx rules remain
+  fail-closed.
 
 aliases:
   - "lung_588"
@@ -73,16 +74,18 @@ default_template: "lung_588_pdl1_golden_template_v0"
 templates:
   - id: "lung_588_pdl1_golden_template_v0"
     file: "templates/lung_588_pdl1_golden_template_v0.docx"
-    version: "0.2.0"
+    version: "0.3.0"
     status: "pilot"
     description: >
       Deterministic engineering template derived from the de-identified lung329
       scaffold, relabelled for the independent 588 product and hardened so
-      unreviewed treatment/PGx content fails closed.
+      unreviewed treatment/PGx content fails closed and PD-L1 media is supplied
+      only through the case-specific upload pipeline.
     processors:
       - "part3_formatted_sections"
       - "rebuild_references"
       - "signature_placeholder"
+      - "pdl1_case_image"
       - "immune_table_notes"
       - "bullet_lists"
       - "signature_layout"
@@ -134,16 +137,26 @@ input_contract:
     - "pdl1_tps"
     - "pdl1_cps"
     - "pdl1_result"
+    - "pdl1_image_path"
     - "pdl1_assay_profile_id"
     - "pdl1_source_record_id"
     - "pdl1_source_record_date"
     - "pdl1_specimen_id"
     - "pdl1_image_disposition"
+    - "lung_histology"
+    - "disease_extent"
+    - "prior_systemic_therapy"
+    - "companion_diagnostic_status"
   required_columns:
     Variations:
       - "Gene_Symbol"
       - "cHGVS"
       - "ExistIn552"
+      - "Transcript"
+  required_any_columns:
+    Variations:
+      - "pHGVS_S"
+      - "pHGVS_A"
   biomarkers:
     tmb_value:
       required: true
@@ -167,6 +180,9 @@ input_contract:
       required: true
       allowed_values: ["阳性（高表达）", "阳性（低表达）", "阴性"]
       source_priority: ["form"]
+    pdl1_image_path:
+      required: true
+      source_priority: ["form"]
     pdl1_assay_profile_id:
       required: true
       source_priority: ["form"]
@@ -181,7 +197,7 @@ input_contract:
       source_priority: ["form"]
     pdl1_image_disposition:
       required: true
-      allowed_values: ["无病例专属图像（报告不展示）"]
+      allowed_values: ["病例专属图像（报告展示）"]
       source_priority: ["form"]
 
 template_contract:
@@ -191,8 +207,6 @@ template_contract:
     - "pdl1_tps"
     - "pdl1_cps"
     - "pdl1_result"
-    - "pdl1_assay_provenance"
-    - "pdl1_source_provenance"
   required_lists:
     - "variants_2_1"
     - "targeted_drug_tips"
@@ -202,6 +216,7 @@ template_contract:
     - "immune_hyperprogression_results"
   required_markers:
     - "__PART3_MARKER__"
+    - "__PDL1_CASE_IMAGE__"
 
 context_contracts:
   case_lung_a: "context_contracts/case_lung_a.yaml"
@@ -213,6 +228,7 @@ processors:
   - "part3_formatted_sections"
   - "signature_placeholder"
   - "report_content"
+  - "pdl1_case_image"
   - "bullet_lists"
   - "signature_layout"
   - "cover_artifacts"

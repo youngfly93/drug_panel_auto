@@ -165,7 +165,7 @@ def test_lung329_template_renders_with_scalars():
     assert "SENTINEL_pdl1_result_VAL" in visible
 
 
-def test_lung329_pdl1_form_requires_case_specific_provenance():
+def test_lung329_pdl1_form_requires_case_image_and_treatment_context():
     from app.services.clinical_info_service import get_clinical_form_schema
 
     schema = get_clinical_form_schema("lung_329_pdl1")
@@ -174,6 +174,13 @@ def test_lung329_pdl1_form_requires_case_specific_provenance():
         "pdl1_tps",
         "pdl1_cps",
         "pdl1_result",
+        "pdl1_image_path",
+        "lung_histology",
+        "disease_extent",
+        "prior_systemic_therapy",
+        "companion_diagnostic_status",
+    }
+    hidden_derived = {
         "pdl1_assay_profile_id",
         "pdl1_source_record_id",
         "pdl1_source_record_date",
@@ -183,12 +190,9 @@ def test_lung329_pdl1_form_requires_case_specific_provenance():
 
     assert required <= set(fields)
     assert all(fields[key].required for key in required)
-    assert fields["pdl1_assay_profile_id"].ui.options == [
-        "legacy_unspecified_ihc_transcription_v1"
-    ]
-    assert fields["pdl1_image_disposition"].ui.options == [
-        "无病例专属图像（报告不展示）"
-    ]
+    assert not hidden_derived & set(fields)
+    assert fields["pdl1_image_path"].ui.component == "pdl1-image-upload"
+    assert fields["pdl1_image_path"].ui.accept == ".png,.jpg,.jpeg,.webp"
 
 
 def test_lung329_shared_batch_is_blocked():
@@ -200,7 +204,7 @@ def test_lung329_shared_batch_is_blocked():
     assert "串用" in error
 
 
-def test_lung329_explicit_empty_immune_categories_do_not_fall_back(tmp_path):
+def test_lung329_exact_immune_rows_do_not_fall_back_without_variants(tmp_path):
     from reportgen.core.template_bridge_358 import (
         _build_nccn_and_immune_fields,
         load_panel_config,
@@ -228,6 +232,14 @@ def test_lung329_explicit_empty_immune_categories_do_not_fall_back(tmp_path):
         "negative",
         "hyperprogression",
     }
-    assert report_data.get_table("immune_positive_results") == []
-    assert report_data.get_table("immune_negative_results") == []
-    assert report_data.get_table("immune_hyperprogression_results") == []
+    assert report_data.get_table("immune_positive_variants") == []
+    assert report_data.get_table("immune_negative_variants") == []
+    assert report_data.get_table("immune_hyperprogression_variants") == []
+    assert all(
+        not str(row.get("content") or "").strip()
+        for row in report_data.get_table("immune_positive_results")
+    )
+    assert all(
+        not str(row.get("content") or "").strip()
+        for row in report_data.get_table("immune_negative_results")
+    )

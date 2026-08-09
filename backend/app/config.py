@@ -129,6 +129,11 @@ class Settings(BaseSettings):
         return self.storage_root / "signatures"
 
     @property
+    def pdl1_image_dir(self) -> Path:
+        """Case-specific PD-L1 IHC images, isolated from reusable signatures."""
+        return self.storage_root / "pdl1-images"
+
+    @property
     def reference_report_dir(self) -> Path:
         return self.storage_root / "reference_reports"
 

@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from reportgen.core.enhancer_registry import normalize_project_type
+from reportgen.panels.input_contract import (
+    input_contract_failures_as_missing,
+    validate_excel_input_contract,
+)
 from reportgen.panels.loader import PanelPackageLoader
 
 from app.config import settings
@@ -27,6 +31,11 @@ FALLBACK_FIELD_LABELS = {
     "pdl1_source_record_date": "PD-L1原始记录日期",
     "pdl1_specimen_id": "PD-L1检测标本标识",
     "pdl1_image_disposition": "PD-L1图像处置",
+    "pdl1_image_path": "PD-L1病例图片",
+    "lung_histology": "肺癌组织学类型",
+    "disease_extent": "疾病范围/分期",
+    "prior_systemic_therapy": "既往系统治疗情况",
+    "companion_diagnostic_status": "伴随诊断符合状态",
     "tmb_value": "TMB",
     "msi_status": "MSI",
 }
@@ -80,6 +89,17 @@ def required_input_fields(project_type: str | None) -> list[str]:
             seen.add(field)
             ordered.append(field)
     return ordered
+
+
+def _input_contract(project_type: str | None) -> dict[str, Any]:
+    if not project_type:
+        return {}
+    try:
+        canonical = normalize_project_type(project_type) or project_type
+        package = PanelPackageLoader(project_root=settings.upstream_root).load(canonical)
+    except Exception:
+        return {}
+    return dict(package.input_contract or {})
 
 
 def _field_labels(project_type: str | None) -> dict[str, str]:
@@ -191,11 +211,17 @@ def validate_required_inputs(
         for field in required_input_fields(effective_project_type)
         if is_missing_value(mapped_fields.get(field))
     ]
+    structural_failures = validate_excel_input_contract(
+        excel_data,
+        _input_contract(effective_project_type),
+    )
+    missing.extend(input_contract_failures_as_missing(structural_failures))
     return {
         "ok": not missing,
         "project_type": effective_project_type,
         "project_name": effective_project_name,
         "missing": missing,
+        "input_contract_failures": structural_failures,
     }
 
 

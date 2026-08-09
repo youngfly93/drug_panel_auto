@@ -918,6 +918,16 @@ class ExcelReader:
             df: DataFrame
             data_source: 数据源对象
         """
+        # Preserve the parsed header even when a valid sheet has no data rows.
+        # Runtime input-contract validation must distinguish "empty table with
+        # the declared schema" from "required selector column is absent".
+        table_columns = data_source.metadata.setdefault("table_columns", {})
+        table_columns[sheet_name] = [
+            str(column).strip()
+            for column in df.columns
+            if str(column or "").strip()
+        ]
+
         if df.empty:
             return
 

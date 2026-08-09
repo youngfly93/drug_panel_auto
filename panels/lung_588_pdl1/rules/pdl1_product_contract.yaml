@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "pdl1_product_contract"
-version: "0.2.0"
-updated: "2026-07-24"
+version: "0.3.0"
+updated: "2026-08-09"
 status: "pilot"
 description: >
   Product and provenance contract for per-case PD-L1 IHC results. The lung NGS
@@ -25,10 +25,12 @@ governance:
   treatment_inference_allowed: false
   blocking_reason: >
     Active production promotion remains blocked because the historical
-    reports do not identify the assay clone or staining platform and only
-    three real NGS cases are available. The pilot profile transcribes explicit
-    source-record values and displays the missing method facts; it does not
-    validate assay interchangeability or infer treatment eligibility.
+    reports do not identify the assay clone or staining platform, and the
+    available cases still lack verified case-specific IHC provenance and
+    completed report-group UAT. The pilot profile transcribes explicit
+    source-record values while retaining missing-method facts in the internal
+    audit context; it does not print that provenance block, validate assay
+    interchangeability, or infer treatment eligibility.
 
 input_provenance:
   ngs_excel_is_pdl1_source: false
@@ -39,21 +41,22 @@ input_provenance:
     - "pdl1_source_record_date"
     - "pdl1_specimen_id"
     - "pdl1_image_disposition"
+    - "pdl1_image_path"
   source_identity_policy: >
     The source record and specimen identity must be captured per case. Shared
     batch values and values inferred from the NGS workbook are prohibited.
 
 image_policy:
   static_template_patient_image_allowed: false
-  case_specific_image_pipeline_implemented: false
+  case_specific_image_pipeline_implemented: true
   allowed_runtime_dispositions:
-    - "无病例专属图像（报告不展示）"
+    - "病例专属图像（报告展示）"
   prohibited_dispositions:
     - "复用模板静态图像"
     - "未校验病例身份的上传图像"
   current_notice: >
-    本病例未提供可追溯的PD-L1免疫组化图像，故不展示；TPS、CPS及结果判定
-    须与原始检测记录核对。
+    病例专属PD-L1图片须经受控上传、去除元数据并完成内容摘要校验后方可进入报告；
+    禁止复用模板静态图片或使用未绑定上传凭据的文件路径。
 
 runtime_profiles:
   - "legacy_unspecified_ihc_transcription_v1"
@@ -101,7 +104,7 @@ candidate_profiles:
           interchangeability, cutoff validation or drug eligibility.
     unresolved_requirements:
       - "actual_assay_name_clone_and_platform_for_active_release"
-      - "ten_real_case_uat_for_active_release"
+      - "all_available_real_cases_reviewed_at_active_release_freeze"
       - "report_group_method_contract_confirmation"
 
   - profile_id: "nsclc_22c3_pharmdx_tps_v1"

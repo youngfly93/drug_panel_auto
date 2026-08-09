@@ -426,7 +426,9 @@
           :status="singleTask.status === 'failed' ? 'exception' : singleTask.status === 'completed' ? 'success' : undefined"
         />
         <div class="single-actions">
-          <el-button @click="$router.push(`/tasks/${singleTask.id}`)">查看任务详情</el-button>
+          <el-button @click="$router.push(`/tasks/${singleTask.id}`)">
+            {{ requiresReviewBeforeDownload ? '进入任务详情审核' : '查看任务详情' }}
+          </el-button>
           <el-popconfirm
             v-if="singleTask.status === 'running' || singleTask.status === 'pending'"
             title="确认取消当前报告生成任务？"
@@ -448,7 +450,7 @@
         >
           <template #extra>
             <el-button
-              v-if="result.success && result.task_id"
+              v-if="result.success && result.task_id && !requiresReviewBeforeDownload"
               type="primary"
               :loading="singleDownloading"
               @click="downloadGenerated(result)"
@@ -457,15 +459,24 @@
             </el-button>
             <el-button
               v-if="result.task_id"
+              :type="requiresReviewBeforeDownload ? 'primary' : undefined"
               @click="$router.push(`/tasks/${result.task_id}`)"
             >
-              查看质控详情
+              {{ requiresReviewBeforeDownload ? '进入任务详情并标记已审核' : '查看质控详情' }}
             </el-button>
           </template>
         </el-result>
         <div v-if="singleDownloadStatus" class="download-status">
           {{ singleDownloadStatus }}
         </div>
+        <el-alert
+          v-if="result.success && requiresReviewBeforeDownload"
+          title="肺癌受控试运行报告：请进入任务详情，在“生产门禁与审核”中由管理员或复核人点击“标记已审核”，随后即可下载。"
+          type="warning"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 8px"
+        />
         <el-alert
           v-if="result.qa_status"
           :title="`QA 状态：${result.qa_status}`"
@@ -553,6 +564,9 @@ const singleReferenceGateRequired = ref(false)
 const batchReferenceGateRequired = ref(false)
 const canUseGoldenMode = computed(
   () => authStore.user?.role === 'admin' || authStore.user?.role === 'reviewer',
+)
+const requiresReviewBeforeDownload = computed(() =>
+  ['lung_329_pdl1', 'lung_588_pdl1'].includes(projectType.value || ''),
 )
 const disabledProjectTypes = new Set(
   String(import.meta.env.VITE_DISABLED_PROJECT_TYPES || '')
@@ -671,9 +685,18 @@ const requiredClinicalFields = computed(() => {
 })
 
 const missingRequiredClinicalFields = computed(() => {
+  const uncertainRequiredValues: Record<string, string[]> = {
+    lung_histology: ['未明确'],
+    disease_extent: ['未明确'],
+    prior_systemic_therapy: ['未明确'],
+    companion_diagnostic_status: ['待确认'],
+  }
   return requiredClinicalFields.value.filter((field) => {
     const value = form.formData[field.key]
-    return value === null || value === undefined || value === ''
+    return value === null
+      || value === undefined
+      || value === ''
+      || (uncertainRequiredValues[field.key] || []).includes(String(value))
   })
 })
 
@@ -710,8 +733,14 @@ const productionCheckCards = computed(() => {
     },
     {
       label: '用药提示',
-      value: `${stringifyValue(drugs.targeted_count)} 条靶向`,
-      detail: `${stringifyValue(drugs.chemotherapy_count)} 条化疗；${stringifyValue(variants.drug_related)} 个药物相关变异`,
+      value: drugs.targeted_status && drugs.targeted_status !== '已启用'
+        ? stringifyValue(drugs.targeted_status)
+        : `${stringifyValue(drugs.targeted_count)} 条靶向`,
+      detail: drugs.targeted_status && String(drugs.targeted_status).includes('精确用药候选')
+        ? stringifyValue(drugs.targeted_status)
+        : drugs.chemotherapy_status && drugs.chemotherapy_status !== '已启用'
+        ? `化疗：${stringifyValue(drugs.chemotherapy_status)}`
+        : `${stringifyValue(drugs.chemotherapy_count)} 条化疗；${stringifyValue(variants.drug_related)} 个药物相关变异`,
     },
     {
       label: '临床字段',
@@ -812,10 +841,25 @@ const previewMetricCards = computed(() => {
   const drugs = summary?.drugs || {}
   return [
     { label: '检出变异', value: stringifyValue(variants.total) },
-    { label: '药物相关', value: stringifyValue(variants.drug_related) },
+    {
+      label: '药物相关',
+      value: drugs.targeted_status && String(drugs.targeted_status).includes('精确用药候选')
+        ? stringifyValue(drugs.targeted_status)
+        : stringifyValue(variants.drug_related),
+    },
     { label: '小结变异', value: stringifyValue(variants.summary_count) },
-    { label: '靶向提示', value: stringifyValue(drugs.targeted_count) },
-    { label: '化疗提示', value: stringifyValue(drugs.chemotherapy_count) },
+    {
+      label: '靶向提示',
+      value: drugs.targeted_status && drugs.targeted_status !== '已启用'
+        ? stringifyValue(drugs.targeted_status)
+        : stringifyValue(drugs.targeted_count),
+    },
+    {
+      label: '化疗提示',
+      value: drugs.chemotherapy_status && drugs.chemotherapy_status !== '已启用'
+        ? stringifyValue(drugs.chemotherapy_status)
+        : stringifyValue(drugs.chemotherapy_count),
+    },
   ]
 })
 
@@ -824,6 +868,7 @@ const previewBiomarkerCards = computed(() => {
   const tmb = biomarkers.tmb || {}
   const msi = biomarkers.msi || {}
   const immune = biomarkers.immune || {}
+  const immuneUnavailable = immune.status && immune.status !== '已启用'
   return [
     {
       label: 'TMB',
@@ -837,17 +882,17 @@ const previewBiomarkerCards = computed(() => {
     },
     {
       label: '免疫正相关',
-      value: stringifyValue(immune.positive),
+      value: stringifyValue(immuneUnavailable ? immune.status : immune.positive),
       detail: '正相关基因检测结果',
     },
     {
       label: '免疫负相关',
-      value: stringifyValue(immune.negative),
+      value: stringifyValue(immuneUnavailable ? immune.status : immune.negative),
       detail: '负相关基因检测结果',
     },
     {
       label: '超进展相关',
-      value: stringifyValue(immune.hyperprogression),
+      value: stringifyValue(immuneUnavailable ? immune.status : immune.hyperprogression),
       detail: '超进展相关基因检测结果',
     },
   ]

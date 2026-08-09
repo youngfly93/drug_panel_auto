@@ -82,3 +82,14 @@ class SignatureUploadResponse(BaseModel):
     stored_path: str
     original_filename: str
     file_size_bytes: int
+
+
+class Pdl1ImageUploadResponse(BaseModel):
+    """Sanitized, case-specific PD-L1 image upload receipt."""
+
+    stored_path: str
+    image_id: str
+    uploaded_at: str
+    file_size_bytes: int
+    width: int
+    height: int

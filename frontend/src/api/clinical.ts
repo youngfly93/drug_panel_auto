@@ -51,6 +51,15 @@ export interface SignatureUploadResponse {
   file_size_bytes: number
 }
 
+export interface Pdl1ImageUploadResponse {
+  stored_path: string
+  image_id: string
+  uploaded_at: string
+  file_size_bytes: number
+  width: number
+  height: number
+}
+
 export const clinicalApi = {
   async getSchema(projectType?: string | null): Promise<ClinicalFormSchema> {
     const params = projectType ? { project_type: projectType } : {}
@@ -86,6 +95,15 @@ export const clinicalApi = {
     const form = new FormData()
     form.append('file', file)
     const { data } = await client.post('/signature-images', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data.data
+  },
+
+  async uploadPdl1Image(file: File): Promise<Pdl1ImageUploadResponse> {
+    const form = new FormData()
+    form.append('file', file)
+    const { data } = await client.post('/pdl1-images', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     return data.data

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from docx import Document
+from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +63,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阴性",
         "tmb": 0,
         "msi": "MSS",
+        "expected_targeted_drug_count": 0,
         "variants": [
             _variant(
                 "TP53",
@@ -82,6 +84,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（低表达）",
         "tmb": 5,
         "msi": "MSS",
+        "expected_targeted_drug_count": 1,
         "variants": [
             _variant(
                 "BRAF",
@@ -102,6 +105,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（低表达）",
         "tmb": 9.9,
         "msi": "MSS",
+        "expected_targeted_drug_count": 0,
         "variants": [
             _variant(
                 "BRAF",
@@ -122,6 +126,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（高表达）",
         "tmb": 10,
         "msi": "MSS",
+        "expected_targeted_drug_count": 1,
         "variants": [
             _variant(
                 "ERBB2",
@@ -142,6 +147,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（高表达）",
         "tmb": 20,
         "msi": "MSS",
+        "expected_targeted_drug_count": 0,
         "variants": [
             _variant(
                 "EGFR",
@@ -162,6 +168,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（低表达）",
         "tmb": 30,
         "msi": "MSI-H",
+        "expected_targeted_drug_count": 0,
         "variants": [
             _variant(
                 "KRAS",
@@ -182,6 +189,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（低表达）",
         "tmb": 6.3,
         "msi": "MSS",
+        "expected_targeted_drug_count": 0,
         "variants": [
             _variant(
                 "TP53",
@@ -243,6 +251,24 @@ def _visible_text(path: Path) -> str:
     )
 
 
+def _write_synthetic_pdl1_image(path: Path, case_id: str) -> None:
+    """Write a deterministic, non-clinical image for the image pipeline gate."""
+
+    image = Image.new("RGB", (960, 640), "white")
+    draw = ImageDraw.Draw(image)
+    digest = hashlib.sha256(case_id.encode("utf-8")).digest()
+    for index in range(72):
+        x = (digest[index % len(digest)] * 31 + index * 53) % 920
+        y = (digest[(index + 9) % len(digest)] * 23 + index * 47) % 600
+        diameter = 12 + digest[(index + 15) % len(digest)] % 22
+        draw.ellipse(
+            (x, y, x + diameter, y + diameter),
+            fill=(110, 75, 145 + digest[(index + 3) % len(digest)] % 70),
+        )
+    draw.rectangle((10, 10, 949, 629), outline=(75, 75, 75), width=3)
+    image.save(path, format="PNG", optimize=True)
+
+
 def _build_excel_data(
     scenario: dict[str, Any],
     xlsx_path: Path,
@@ -250,6 +276,23 @@ def _build_excel_data(
     from reportgen.models.excel_data import ExcelDataSource
 
     case_id = scenario["id"]
+    image_path = xlsx_path.with_suffix(".pdl1.png")
+    _write_synthetic_pdl1_image(image_path, case_id)
+    form_fields = (
+        "pdl1_tps",
+        "pdl1_cps",
+        "pdl1_result",
+        "pdl1_image_path",
+        "pdl1_assay_profile_id",
+        "pdl1_source_record_id",
+        "pdl1_source_record_date",
+        "pdl1_specimen_id",
+        "pdl1_image_disposition",
+        "lung_histology",
+        "disease_extent",
+        "prior_systemic_therapy",
+        "companion_diagnostic_status",
+    )
     return ExcelDataSource(
         file_path=str(xlsx_path),
         single_values={
@@ -266,14 +309,33 @@ def _build_excel_data(
             "PD-L1 TPS": scenario["tps"],
             "PD-L1 CPS": scenario["cps"],
             "PD-L1结果": scenario["result"],
+            "PD-L1病例图片": str(image_path),
             "PD-L1检测方案": PROFILE_ID,
             "PD-L1原始记录编号": f"SYNTHETIC-IHC-{case_id}",
             "PD-L1原始记录日期": "2026-07-24",
             "PD-L1检测标本标识": f"SYNTHETIC-SPECIMEN-{case_id}",
-            "PD-L1图像处置": "无病例专属图像（报告不展示）",
+            "PD-L1图像处置": "病例专属图像（报告展示）",
+            "肺癌病理类型": "非小细胞肺癌",
+            "疾病范围": "转移性",
+            "既往系统治疗": "已接受",
+            "伴随诊断适配状态": "已确认符合",
         },
-        table_data={"Variations": scenario["variants"]},
-        sheet_names=["Variations"],
+        table_data={
+            "Variations": scenario["variants"],
+            "TMB": [],
+            "Msisensor": [],
+        },
+        sheet_names=["Variations", "TMB", "Msisensor"],
+        metadata={
+            "field_source_overrides": {
+                field: {
+                    "source": "form",
+                    "source_key": field,
+                    "source_detail": "synthetic_controlled_pilot_form",
+                }
+                for field in form_fields
+            }
+        },
     )
 
 
@@ -322,10 +384,14 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
             visible = ""
         else:
             visible = _visible_text(output_path)
-            if "原始记录未提供" not in visible:
-                failures.append("missing_unknown_method_notice")
-            if "不据此推导" not in visible:
-                failures.append("missing_no_inference_notice")
+            if "__PDL1_CASE_IMAGE__" in visible:
+                failures.append("pdl1_image_marker_not_replaced")
+            if "图1. 免疫组化：PD-L1" not in visible:
+                failures.append("missing_pdl1_image_caption")
+            if "原始记录未提供抗体克隆" in visible:
+                failures.append("obsolete_method_provenance_visible")
+            if "不据此推导检测方案等效性" in visible:
+                failures.append("obsolete_no_inference_notice_visible")
             if "22C3" in visible:
                 failures.append("invented_22c3_method")
             if "肺癌专属知识当前未启用" not in visible:
@@ -334,8 +400,9 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
                 if other_id in visible:
                     failures.append(f"cross_case_leak:{other_id}")
         context = result.get("context") or {}
-        if context.get("targeted_drug_tips"):
-            failures.append("unreviewed_targeted_drug_rows_visible")
+        targeted_count = len(context.get("targeted_drug_tips") or [])
+        if targeted_count != scenario["expected_targeted_drug_count"]:
+            failures.append("exact_targeted_drug_count_mismatch")
         if context.get("gene_knowledge_sections"):
             failures.append("unreviewed_part3_sections_visible")
 
@@ -353,9 +420,10 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
                 "tmb_value": scenario["tmb"],
                 "msi_status": scenario["msi"],
                 "input_variant_count": len(scenario["variants"]),
-                "runtime_targeted_drug_count": len(
-                    context.get("targeted_drug_tips") or []
-                ),
+                "expected_targeted_drug_count": scenario[
+                    "expected_targeted_drug_count"
+                ],
+                "runtime_targeted_drug_count": targeted_count,
                 "runtime_part3_section_count": len(
                     context.get("gene_knowledge_sections") or []
                 ),
@@ -385,8 +453,10 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
         "release_boundary": {
             "counts_as_real_case_uat": False,
             "counts_as_engineering_boundary_coverage": True,
-            "active_release_still_requires_ten_real_cases": True,
-            "treatment_inference_allowed": False,
+            "fixed_minimum_real_case_count": None,
+            "treatment_inference_allowed": (
+                "reviewed exact events only after context match and case review"
+            ),
         },
     }
     receipt = output_dir / "validation.json"

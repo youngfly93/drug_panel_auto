@@ -6,7 +6,7 @@ source:
   type: "hardened_controlled_pilot_template"
   template_id: "lung_329_pdl1_golden_template_v2"
   template_path: "panels/lung_329_pdl1/templates/lung_329_pdl1_golden_template_v2.docx"
-  template_sha256: "13d935be3f904d7400d0410ca8267a3d021806e21b708a58fa2f36eaee95e98a"
+  template_sha256: "f3d7ad62a455a5da41de3d440f091d6b7319cbbe7081d6935ac8984ec3906e88"
   extraction_anchor: "Gene List for MLseq"
   verified_gene_count: 329
 contract:

@@ -650,6 +650,32 @@ class PanelPackageValidator:
                     panel_id=package.panel_id,
                     path=package.root_dir / "panel.yaml",
                 )
+            for key in ("required_columns", "required_any_columns"):
+                table_columns = input_contract.get(key)
+                if table_columns is None:
+                    continue
+                if not isinstance(table_columns, Mapping):
+                    report.add(
+                        "ERROR",
+                        "INPUT_COLUMN_CONTRACT_INVALID",
+                        f"input_contract.{key} must be a table-to-columns mapping",
+                        panel_id=package.panel_id,
+                        path=package.root_dir / "panel.yaml",
+                    )
+                    continue
+                for table, columns in table_columns.items():
+                    if not str(table or "").strip() or not (
+                        isinstance(columns, list)
+                        and columns
+                        and all(str(column or "").strip() for column in columns)
+                    ):
+                        report.add(
+                            "ERROR",
+                            "INPUT_COLUMN_CONTRACT_INVALID",
+                            f"input_contract.{key}.{table} must be a non-empty list of column names",
+                            panel_id=package.panel_id,
+                            path=package.root_dir / "panel.yaml",
+                        )
 
         template_contract = raw.get("template_contract") or {}
         required_markers = (

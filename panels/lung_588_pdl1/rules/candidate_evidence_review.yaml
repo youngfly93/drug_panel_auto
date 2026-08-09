@@ -1,25 +1,27 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "candidate_evidence_review"
-version: "0.1.0"
-updated: "2026-07-23"
-status: "draft"
+version: "0.2.0"
+updated: "2026-08-09"
+status: "controlled_pilot_partial_promotion"
 description: >
-  Primary-source scope review for the four non-runtime lung588 targeted-drug
-  candidates. This file records what each source does and does not support; it
-  is not a runtime rule source and cannot authorize patient-report text.
+  Primary-source scope review for four lung588 targeted-drug candidates. Three
+  are mirrored into the controlled-pilot runtime rule file; this catalog is
+  not itself a runtime source and the fourth candidate remains held.
 
 governance:
   review_id: "lung588_candidate_evidence_scope_review_20260723"
-  evidence_as_of: "2026-07-23"
+  evidence_as_of: "2026-08-09"
   reviewer: "codex"
   reviewer_type: "ai_assisted_primary_source_scope_review"
   primary_review_status: "completed_non_authoritative_scope_review"
-  secondary_review_status: "pending_report_group_review"
+  secondary_review_status: "case_level_report_group_review_required"
   runtime_rule_source: false
-  runtime_eligible: false
-  report_text_allowed: false
-  promotion_blocked: true
+  runtime_eligible_candidate_count: 3
+  report_text_allowed_candidate_count: 3
+  held_candidate_count: 1
+  promotion_blocked: false
+  case_delivery_gate_required: true
   review_dimensions:
     - "source_identity"
     - "lung_cancer_scope"
@@ -80,7 +82,7 @@ reviews:
         selector.
       assay_scope: "FDA_approved_test_required"
       direct_exact_drug_event_clinical_outcome: "identified"
-      patient_report_display: "prohibited_pending_secondary_review"
+      patient_report_display: "allowed_after_context_match_and_case_review"
     primary_review:
       status: "completed_non_authoritative_scope_review"
       decision: "eligible_to_remain_candidate_pending_secondary_review"
@@ -88,17 +90,17 @@ reviews:
       reviewer: "codex"
       reviewer_type: "ai_assisted_primary_source_scope_review"
     secondary_review:
-      status: "pending_report_group_review"
-      decision: ""
+      status: "case_level_report_group_review_required"
+      decision: "not_preapproved; review every generated report before download"
       reviewer: ""
       reviewed_at: ""
     unresolved_requirements:
-      - "report_group_event_level_secondary_review"
+      - "case_level_report_group_review_before_download"
       - "current_label_version_recheck_at_promotion"
       - "positive_and_negative_rule_tests"
       - "case_level_uat"
-    runtime_eligible: false
-    report_text_allowed: false
+    runtime_eligible: true
+    report_text_allowed: true
 
   - candidate_id: "lung588_braf_v600e_encorafenib_binimetinib"
     gene: "BRAF"
@@ -141,7 +143,7 @@ reviews:
         selector.
       assay_scope: "FDA_approved_test_required"
       direct_exact_drug_event_clinical_outcome: "identified"
-      patient_report_display: "prohibited_pending_secondary_review"
+      patient_report_display: "allowed_after_context_match_and_case_review"
     primary_review:
       status: "completed_non_authoritative_scope_review"
       decision: "eligible_to_remain_candidate_pending_secondary_review"
@@ -149,17 +151,17 @@ reviews:
       reviewer: "codex"
       reviewer_type: "ai_assisted_primary_source_scope_review"
     secondary_review:
-      status: "pending_report_group_review"
-      decision: ""
+      status: "case_level_report_group_review_required"
+      decision: "not_preapproved; review every generated report before download"
       reviewer: ""
       reviewed_at: ""
     unresolved_requirements:
-      - "report_group_event_level_secondary_review"
+      - "case_level_report_group_review_before_download"
       - "current_label_version_recheck_at_promotion"
       - "positive_and_negative_rule_tests"
       - "case_level_uat"
-    runtime_eligible: false
-    report_text_allowed: false
+    runtime_eligible: true
+    report_text_allowed: true
 
   - candidate_id: "lung588_erbb2_g660d_trastuzumab_deruxtecan"
     gene: "ERBB2"
@@ -228,7 +230,7 @@ reviews:
         Exact-event functional activation plus exact-event assay
         reportability plus a biomarker-class regulatory indication; this is
         not the same as a direct G660D treatment-outcome subgroup.
-      patient_report_display: "prohibited_pending_secondary_review"
+      patient_report_display: "allowed_after_context_match_and_case_review"
     primary_review:
       status: "completed_non_authoritative_scope_review"
       decision: "eligible_to_remain_candidate_with_indirect_exact_event_chain_pending_secondary_review"
@@ -236,18 +238,18 @@ reviews:
       reviewer: "codex"
       reviewer_type: "ai_assisted_primary_source_scope_review"
     secondary_review:
-      status: "pending_report_group_review"
-      decision: ""
+      status: "case_level_report_group_review_required"
+      decision: "not_preapproved; review every generated report before download"
       reviewer: ""
       reviewed_at: ""
     unresolved_requirements:
-      - "report_group_event_level_secondary_review"
+      - "case_level_report_group_review_before_download"
       - "confirm_current_label_and_assay_eligibility_at_promotion"
       - "acknowledge_no_direct_g660d_drug_outcome_subgroup_identified"
       - "positive_and_negative_rule_tests"
       - "case_level_uat"
-    runtime_eligible: false
-    report_text_allowed: false
+    runtime_eligible: true
+    report_text_allowed: true
 
   - candidate_id: "lung588_erbb2_g660d_trastuzumab_rezetecan"
     gene: "ERBB2"

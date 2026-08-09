@@ -36,11 +36,14 @@ synthetic_boundary_policy:
     - "cross-case leak protection"
     - "fail-closed treatment and Part-3 modules"
 
-unchanged_release_boundaries:
+current_release_boundaries:
   batch_generation_enabled: false
   part3_knowledge_enabled: false
-  targeted_drug_rules_enabled: false
+  targeted_drug_rules_enabled: true
+  targeted_drug_scope: "inherits three context-bounded exact lung588 candidates"
   immune_gene_claims_enabled: false
+  immune_gene_scope: "staged exact historical rows pending panel-specific review"
+  chemotherapy_pharmacogenomics_enabled: false
   external_delivery_without_manual_review: false
   pdl1_treatment_inference_allowed: false
 

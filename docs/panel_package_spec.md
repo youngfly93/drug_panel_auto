@@ -73,6 +73,27 @@ be used as a global synonym table: symbol history can be assay-specific or
 ambiguous (for example, `TCF4` and the historical `TCF7L2` alias). Keys and
 values must be non-empty strings; self-maps and cycles are invalid.
 
+### Input table and column contract
+
+`input_contract.required_tables` and `required_columns` are enforced twice:
+by the Web preflight before a task is created, and again by
+`ReportGenerator.generate()` for direct/CLI callers. Use
+`required_any_columns` when the upstream workbook may provide one of several
+equivalent headers:
+
+```yaml
+input_contract:
+  required_tables: [Variations]
+  required_columns:
+    Variations: [Gene_Symbol, cHGVS, Transcript]
+  required_any_columns:
+    Variations: [pHGVS_S, pHGVS_A]
+```
+
+Here the `Variations` sheet and every `required_columns` header are mandatory,
+while either protein-HGVS header is sufficient. Structural validation reports
+only configured sheet/column names and never includes patient values.
+
 ## `qa.yaml` Minimum Fields
 
 Every panel package must include a QA profile:
@@ -160,6 +181,7 @@ The validator checks:
 - enhancer imports are resolvable when declared.
 - processor names exist in the DOCX processor registry and are not duplicated.
 - input/template contracts are non-empty.
+- required-column and alternative-column declarations are well formed.
 - `qa.yaml` exists, matches `panel_id`, and uses valid legacy reference rule
   severities.
 - golden case ids are unique and runnable.

@@ -3606,6 +3606,24 @@ def test_report_generator_fails_bad_panel_template_before_rendering(tmp_path):
     doc.add_paragraph("患者：{{ patient_name }}")
     doc.save(template_path)
     output_dir = tmp_path / "out"
+    excel_data = _excel(
+        tmp_path,
+        single_values={
+            "患者姓名": "张三",
+            "样本编号": "LZ000001",
+            "报告日期": "2026.05.17",
+            "MSI状态": "MSS",
+        },
+        variations=[],
+    )
+    excel_data.metadata["table_columns"] = {
+        "Variations": [
+            "Gene_Symbol",
+            "cHGVS",
+            "ExistInsmall358",
+            "ExistIn552",
+        ]
+    }
 
     result = ReportGenerator(
         config_dir=str(ROOT / "config"),
@@ -3615,16 +3633,7 @@ def test_report_generator_fails_bad_panel_template_before_rendering(tmp_path):
         template_file=str(template_path),
         output_dir=str(output_dir),
         output_filename="should_not_render.docx",
-        excel_data=_excel(
-            tmp_path,
-            single_values={
-                "患者姓名": "张三",
-                "样本编号": "LZ000001",
-                "报告日期": "2026.05.17",
-                "MSI状态": "MSS",
-            },
-            variations=[],
-        ),
+        excel_data=excel_data,
         project_type="crc_358_msi",
         template_contract_mode="fail",
     )
@@ -3646,6 +3655,24 @@ def test_report_generator_blocks_missing_part3_marker_even_in_warn_mode(tmp_path
     doc.add_paragraph("患者：{{ patient_name }}")
     doc.save(template_path)
     output_dir = tmp_path / "out"
+    excel_data = _excel(
+        tmp_path,
+        single_values={
+            "患者姓名": "测试患者",
+            "样本编号": "TEST-PART3",
+            "报告日期": "2026.07.10",
+            "MSI状态": "MSS",
+        },
+        variations=[],
+    )
+    excel_data.metadata["table_columns"] = {
+        "Variations": [
+            "Gene_Symbol",
+            "cHGVS",
+            "ExistInsmall358",
+            "ExistIn552",
+        ]
+    }
 
     result = ReportGenerator(
         config_dir=str(ROOT / "config"),
@@ -3655,16 +3682,7 @@ def test_report_generator_blocks_missing_part3_marker_even_in_warn_mode(tmp_path
         template_file=str(template_path),
         output_dir=str(output_dir),
         output_filename="must_not_render.docx",
-        excel_data=_excel(
-            tmp_path,
-            single_values={
-                "患者姓名": "测试患者",
-                "样本编号": "TEST-PART3",
-                "报告日期": "2026.07.10",
-                "MSI状态": "MSS",
-            },
-            variations=[],
-        ),
+        excel_data=excel_data,
         project_type="crc_358_msi",
         template_contract_mode="warn",
     )
