@@ -1,16 +1,43 @@
 # HANDOFF —— 基因组 Panel 自动化报告系统（Web 平台）
 
 > 当前状态快照。更新就改这个文件，别新建 `_v2`。
-> 最近更新：**2026-07-14**（CRC358 历史金标准、批量生命周期与发布门禁加固）。
+> 最近更新：**2026-08-09**（肺癌 329/588 两项 P1 收口、冻结与 Linux 验收）。
 
 ---
 
 ## 一、一句话现状
 
-结直肠癌 358/301 报告线由 iyun129 的 immutable release 体系提供服务。CRC358
-历史终版迁移、批量生命周期、MSI 回归、统一筛选排序、Word 资源链路及历史 Diff
-发布门禁已形成工程发布候选；生产是否已切换必须以 `current_release`、`REVISION`、
-进程 cwd 和健康检查四项实时证据为准，不能由本文档静态推断。
+结直肠癌 358/301 报告线由 iyun129 的 immutable release 体系提供服务；肺癌
+329/588 的报告组反馈工程候选已冻结并通过独立 Linux 验收，但 Windows Word/WPS、
+病例级 PD-L1 来源和报告组 UAT 尚未签署，未部署。任何生产状态仍必须以
+`current_release`、`REVISION`、进程 cwd 和健康检查四项实时证据为准，不能由本文档
+静态推断。
+
+## 0.3 2026-08-09 肺癌 329/588 反馈冻结候选
+
+- 冻结工程提交：`fd3c98154e031832c8db9d698ddfddd2ad000008`，分支
+  `codex/lung-feedback-20260809`；本轮只关闭两个 P1 工程缺口，没有继续扩大医学规则。
+- P1-1：显式肺癌 Panel 在公共 KB 不可用时仍只走 Panel 精确事件，不能回退并继承
+  基因级 `CtDrug`；无 Panel legacy 回退保持兼容。
+- P1-2：`required_tables`、必需列和 protein-HGVS 二选一列现在由中央校验器强制，
+  Web 在建任务前阻断，`ReportGenerator` 对直接/CLI 调用再次阻断。
+- 冻结回归：后端整库 `755 passed, 4 skipped, 0 failed`；修改文件 Ruff、前端
+  typecheck/build/ESLint、两套 Panel package validator 均通过。
+- iyun129 隔离 Linux：329/588 合成边界各 7/7 PASS，3 份受控真实输入 3/3
+  完整 Word QA PASS；三份 receipt 和 17 份 QA 均绑定冻结 SHA，17/17 renderer
+  fingerprint 与 runtime profile/mapping hash 一致。
+- Linux 证据：`.work/linux_lung_feedback_fd3c981/`；同一批 Linux DOCX 的 Windows/
+  报告组交接：`.work/windows_uat_fd3c981/`。受限真实报告不得离开授权环境。
+- 当前正式 UAT 仍为 `BLOCKED`：病例级 PD-L1 来源 0/3，报告组审核/通过 0/3；
+  Windows Word/WPS 尚无人工签署。不得把机器 QA 或 Linux PASS 写成医学 UAT PASS。
+- 2026-08-09 只读核对时，iyun129 当前 release/REVISION/process cwd 仍一致指向
+  `fad5c87775e1f217fbe13c8181165045841c27ec`，本地/公网 health 均 HTTP 200；候选
+  `fd3c981...` 未部署、未切换。
+- 审计观察层：`audit/lung-feedback-20260809.codex.md` 与
+  `audit/report-group-system-uat.codex.md`；独立审计 P0/P1/P2/P3=`0/1/1/0`，其中
+  P1 为外部签署/发布阻断，P2 为“两个事件、三个治疗组合”的旧措辞歧义。
+- `audit_reconcile.py` 对账未发现 identity 缺失/不一致，但当前肺癌模块只有 Codex
+  审计、缺少 Claude 对审；发布前继续以未关闭的人审 blocker 和共享审计覆盖缺口为准。
 
 ## 0.2 2026-07-14 CRC358 历史金标准发布候选
 

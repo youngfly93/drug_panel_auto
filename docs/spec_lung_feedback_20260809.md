@@ -4,9 +4,11 @@
 
 - 基线提交：`fad5c87`
 - 候选分支：`codex/lung-feedback-20260809`
+- 冻结工程提交：`fd3c98154e031832c8db9d698ddfddd2ad000008`
 - 覆盖 Panel：`lung_329_pdl1`、`lung_588_pdl1`
-- 本文记录候选内容与验收口径；确切冻结 SHA 由同模块独立审计凭证绑定，
-  生产实际运行身份只能由 iyun129 release/REVISION/进程/health 实时证据确认。
+- 本文记录候选内容与验收口径；冻结 SHA 由独立审计及 Linux receipt/QA
+  双重绑定，生产实际运行身份仍只能由 iyun129 release/REVISION/进程/health
+  实时证据确认。
 - 真实输入只在 `.work/` 中以 `CASE-LUNG-A/B/C` 处理，不进入 Git。
 
 ## 2. 反馈到根因与修复的映射
@@ -67,6 +69,24 @@
 - 3 份受控真实 NGS 输入：字段/Panel/事件语义 3/3 PASS。
 - 3 份完整 Word（macOS LibreOffice）：均为 26 页，QA PASS，空白页 0，异常低内容页 0；PD-L1 病例图片已实际嵌入。
 - 磁盘卫生：删除 9,110 个未跟踪且已忽略的 AppleDouble 文件及 3,562 个可再生 Python/pytest 缓存文件；源码、输入与验收凭证未删除。
+- 冻结 SHA 的 iyun129 隔离 Linux 复验：329 合成边界 7/7 PASS、588 合成边界
+  7/7 PASS、3 份受控真实输入 3/3 结构/映射/完整 Word QA PASS；真实输入报告
+  均为 26 页，空白页和异常低内容页均为 0。
+- 三份 Linux receipt 全部记录冻结 SHA；17 份 QA 同样绑定冻结 SHA，并全部记录
+  `source_dirty=false`。receipt 的病例输出哈希与 QA/DOCX 17/17 闭合；17/17
+  renderer fingerprint 与 iyun129 runtime 一致，profile 为
+  `reportgen-cjk-font-substitution-v2`，mapping SHA-256 为
+  `ac68dee9344ddedefc8a3e579ba75d28657331300c36cb182ca84962dff95afb`。
+- Linux 总清单 SHA-256：
+  `3c72e15d616d93cb887b34482bc216757202617688166e1622d27c21c18dc447`。
+- 只读生产核对显示当前 release/REVISION/进程 cwd 仍一致指向基线
+  `fad5c87775e1f217fbe13c8181165045841c27ec`，本地和公网 health 均为 HTTP 200；
+  冻结候选未部署、未切换。
+- 独立审计最终为 P0/P1/P2/P3=`0/1/1/0`：P1 是 Windows、病例来源、报告组
+  UAT 与生产晋级尚未完成的合并发布阻断；P2 是冻结规则说明中“两个精确事件/三个
+  治疗组合”的措辞歧义，不是新增运行时事件。
+- 共享审计机器对账未发现 identity 缺失或不一致；当前肺癌模块只有 Codex 审计，
+  缺少 Claude 对审，因此不得表述为 Claude/Codex 双审完成。
 
 验证凭据：
 
@@ -78,15 +98,24 @@
 - `.work/lung329_p1_acceptance_20260809/validation.json`
 - `.work/lung588_p1_acceptance_20260809_run2/validation.json`
 - `.work/lung588_p1_real_inputs_20260809/validation.json`
+- `.work/linux_lung_feedback_fd3c981/linux_acceptance_manifest_fd3c981.json`
+- `.work/linux_lung_feedback_fd3c981/receipts/`
+- `.work/linux_lung_feedback_fd3c981/qa/`
+- `.work/windows_uat_fd3c981/WINDOWS_WORD_WPS_AND_REPORT_GROUP_UAT.md`
+- `audit/lung-feedback-20260809.codex.md`
+- `audit/report-group-system-uat.codex.md`
 
 ## 6. 尚未满足的发布条件
 
 - 当前 3 例的 PD-L1 值和图片只用于机器/视觉 QA，不是经核验的病例级 IHC 来源。
 - 报告组尚未在本候选身份上登记 3 例逐病例 UAT 结论、审核人和日期。
-- 冻结身份仍需完成独立审计、iyun129 隔离 Linux/LibreOffice 复验和 Windows Word/WPS 人工验收；本候选不因 macOS QA PASS 自动获得生产等价资格。
+- 冻结身份的独立审计与 iyun129 隔离 Linux/LibreOffice 复验已经完成；Windows
+  Word/WPS 人工验收仍未执行。待验的同一批 Linux DOCX、逐文件哈希、检查项和签署栏
+  已整理在 `.work/windows_uat_fd3c981/`，但交接包不能替代 Windows 人工结论。
 - 生产切换和部署后网站验收是后续独立发布动作；不得在正式 UAT 与发布总闸未通过时把本候选描述为 `active` 或“已上线”。
 
 ## 7. 本轮验收结论
 
-- 工程候选验收：**PASS**。
-- 医学/生产发布验收：**尚未通过**；必须完成第 6 节的来源核验、逐病例 UAT、冻结提交独立审计、跨平台验收及发布总闸。
+- 冻结工程候选及 Linux 生产等价渲染验收：**PASS**。
+- Windows 跨引擎、医学 UAT 与生产发布验收：**尚未通过**；必须完成第 6 节的
+  病例来源核验、逐病例报告组 UAT、Windows Word/WPS 签署及后续发布总闸。
