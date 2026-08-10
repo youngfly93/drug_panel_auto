@@ -347,6 +347,40 @@ def test_pdl1_case_image_processor_is_idempotent(tmp_path):
     assert not any("__PDL1_CASE_IMAGE__" in p.text for p in rendered.paragraphs)
 
 
+def test_pdl1_case_image_processor_renders_idempotent_draft_notice(tmp_path):
+    output = tmp_path / "pdl1-image-missing.docx"
+    document = Document()
+    document.add_paragraph("__PDL1_CASE_IMAGE__")
+    document.save(output)
+    context = {
+        "project_type": "lung_588_pdl1",
+        "pdl1_image_missing_notice": "未提供合成病例PD-L1图片；待报告组审核。",
+    }
+    renderer = TemplateRenderer(log_level="ERROR")
+
+    renderer._run_post_render_processors(
+        str(output),
+        context,
+        str(output),
+        processor_names=["pdl1_case_image"],
+    )
+    first_digest = hashlib.sha256(output.read_bytes()).hexdigest()
+    renderer._run_post_render_processors(
+        str(output),
+        context,
+        str(output),
+        processor_names=["pdl1_case_image"],
+    )
+
+    assert renderer.last_processor_report[0]["status"] == "OK"
+    assert hashlib.sha256(output.read_bytes()).hexdigest() == first_digest
+    rendered = Document(output)
+    assert len(rendered.inline_shapes) == 0
+    assert [p.text for p in rendered.paragraphs] == [
+        "未提供合成病例PD-L1图片；待报告组审核。"
+    ]
+
+
 def test_part3_disabled_policy_renders_notice_without_shared_knowledge(tmp_path):
     output = tmp_path / "part3-disabled.docx"
     document = Document()
@@ -555,7 +589,7 @@ def test_lung588_explicit_classes_drive_variant_filter(tmp_path):
     assert config.immune_hyperprogression_genes == set()
 
 
-def test_lung588_pdl1_form_is_project_scoped_and_required():
+def test_lung588_pdl1_form_is_project_scoped_and_optional_for_draft():
     lung = get_clinical_form_schema("lung_588_pdl1")
     crc = get_clinical_form_schema("crc_358_msi")
     lung_fields = {field.key: field for group in lung.groups for field in group.fields}
@@ -575,7 +609,7 @@ def test_lung588_pdl1_form_is_project_scoped_and_required():
         "pdl1_image_disposition",
     }
     assert pdl1_fields <= set(lung_fields)
-    assert all(lung_fields[key].required for key in pdl1_fields)
+    assert all(not lung_fields[key].required for key in pdl1_fields)
     assert lung_fields["pdl1_result"].ui.options == [
         "阳性（高表达）",
         "阳性（低表达）",
@@ -610,7 +644,7 @@ def test_lung588_pdl1_form_is_project_scoped_and_required():
         == "靶向用药适应证上下文（不属于PD-L1检测字段）"
     )
     for key, options in treatment_context.items():
-        assert lung_fields[key].required is True
+        assert lung_fields[key].required is False
         assert lung_fields[key].ui.component == "select"
         assert lung_fields[key].ui.options == options
     assert not set(treatment_context) & crc_fields
@@ -654,16 +688,10 @@ def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification(
     } == {
         "tmb_value",
         "msi_status",
-        "pdl1_tps",
-        "pdl1_cps",
-        "pdl1_result",
-        "pdl1_assay_profile_id",
-        "pdl1_source_record_id",
-        "pdl1_source_record_date",
-        "pdl1_specimen_id",
-        "pdl1_image_disposition",
-        "pdl1_image_path",
     }
+
+    apply_pdl1_display_fields(missing)
+    assert "先生成NGS报告草稿" in missing.get_field("pdl1_table_interpretation")
 
     def add_pdl1_provenance(data: ReportData) -> None:
         data.set_field(
@@ -860,7 +888,7 @@ def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
     } == {"source_record_classification_not_allowed"}
 
 
-def test_lung588_generation_cannot_bypass_pending_pdl1_profile(tmp_path):
+def test_lung588_generation_surfaces_pending_pdl1_profile_in_draft(tmp_path):
     xlsx_path = tmp_path / "SYNTHETIC-LUNG588.xlsx"
     xlsx_path.write_bytes(b"synthetic")
     image_path = _synthetic_pdl1_image(tmp_path)
@@ -912,14 +940,87 @@ def test_lung588_generation_cannot_bypass_pending_pdl1_profile(tmp_path):
         project_type="lung_588_pdl1",
     )
 
-    assert result["success"] is False
-    assert any("PD-L1检测方案或逐病例来源" in error for error in result["errors"])
+    assert result["success"] is True, result["errors"]
+    assert result["qa_status"] == "WARN"
     assert any(
-        issue["code"] == "PANEL_PDL1_PRODUCT_CONTRACT_BLOCKED"
+        issue["code"] == "PANEL_PDL1_PRODUCT_CONTRACT_WARNING"
         for stage in result["stage_results"]
         for issue in stage.get("issues") or []
     )
-    assert not list(output_dir.glob("*.docx"))
+    assert Path(result["output_file"]).is_file()
+
+
+def test_lung588_generation_without_pdl1_or_image_creates_review_draft(tmp_path):
+    xlsx_path = tmp_path / "SYNTHETIC-LUNG588-NGS-ONLY.xlsx"
+    xlsx_path.write_bytes(b"synthetic")
+    excel_data = ExcelDataSource(
+        file_path=str(xlsx_path),
+        single_values={
+            "患者姓名": "SYNTHETIC_PATIENT",
+            "样本编号": "SYNTHETIC_NGS_ONLY",
+            "检测项目": "肺癌588基因+PD-L1",
+            "报告日期": "2026-08-10",
+            "TMB": 5,
+            "MSI状态": "MSS",
+        },
+        table_data={
+            "Variations": [
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "TP53",
+                    "Transcript": "NM_000546.6",
+                    "cHGVS": "c.734G>A",
+                    "pHGVS_S": "p.G245D",
+                    "Freq(%)": 30,
+                }
+            ]
+        },
+        sheet_names=["Variations", "TMB", "Msisensor"],
+    )
+
+    result = ReportGenerator(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).generate(
+        excel_file=str(xlsx_path),
+        excel_data=excel_data,
+        template_file=str(TEMPLATE),
+        output_dir=str(tmp_path / "out"),
+        project_type="lung_588_pdl1",
+    )
+
+    assert result["success"] is True, result["errors"]
+    assert result["qa_status"] == "WARN"
+    assert any("PD-L1逐病例结果" in warning for warning in result["warnings"])
+    assert any(
+        issue["code"] == "PANEL_PDL1_PRODUCT_CONTRACT_WARNING"
+        for stage in result["stage_results"]
+        for issue in stage.get("issues") or []
+    )
+    output = Path(result["output_file"])
+    rendered = Document(output)
+    visible = "\n".join(
+        [
+            *(paragraph.text for paragraph in rendered.paragraphs),
+            *(
+                cell.text
+                for table in rendered.tables
+                for row in table.rows
+                for cell in row.cells
+            ),
+        ]
+    )
+    assert "先生成NGS报告草稿供报告解读组审核" in visible
+    assert "未提供本病例PD-L1免疫组化图片" in visible
+    assert "__PDL1_CASE_IMAGE__" not in visible
+    assert len(rendered.inline_shapes) == 0
+    pdl1_rows = [
+        [cell.text.strip() for cell in row.cells]
+        for table in rendered.tables
+        for row in table.rows
+        if row.cells and "PD-L1蛋白表达" in row.cells[0].text
+    ]
+    assert any(row[2:5] == ["待补充", "待补充", "待补充"] for row in pdl1_rows)
 
 
 def test_lung588_generation_allows_source_record_only_pilot_profile(

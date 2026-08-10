@@ -896,7 +896,7 @@ def test_generate_file_async_blocks_excel_and_selected_project_conflict_before_q
         db.close()
 
 
-def test_generate_file_async_blocks_missing_lung588_pdl1_fields_before_queue(
+def test_generate_file_async_queues_lung588_draft_without_pdl1_fields(
     tmp_path,
     monkeypatch,
 ):
@@ -928,18 +928,17 @@ def test_generate_file_async_blocks_missing_lung588_pdl1_fields_before_queue(
             },
         )
 
-    assert response.status_code == 422
-    detail = response.json()["detail"]
-    assert "生成前缺少必填信息" in detail
-    assert "PD-L1 TPS" in detail
-    assert "PD-L1 CPS" in detail
-    assert "PD-L1病例图片" in detail
-    assert "肺癌病理类型" in detail
-    assert "疾病范围" in detail
-    assert queued_jobs == []
+    assert response.status_code == 200
+    assert response.json()["data"]["success"] is True
+    assert len(queued_jobs) == 1
     db = report_api.SessionLocal()
     try:
-        assert db.query(Task).count() == 0
+        task = db.query(Task).one()
+        snapshot = json.loads(task.clinical_info_snapshot)
+        assert snapshot["project_name"] == "肺癌588基因+PD-L1"
+        assert "pdl1_tps" not in snapshot
+        assert "pdl1_image_path" not in snapshot
+        assert "lung_histology" not in snapshot
     finally:
         db.close()
 
@@ -1925,11 +1924,8 @@ def test_download_blocks_qa_fail_but_not_warn_or_missing(tmp_path, monkeypatch):
     assert attempt(None) == 200  # 无 QA 记录的历史任务不误伤
 
 
-def test_lung588_controlled_pilot_download_requires_manual_review(tmp_path):
-    """肺癌588受控试运行即使 QA=PASS，也必须完成人工复核后才能下载。
-
-    该门禁仅作用于肺癌588，不得误伤现有肠癌生产线。
-    """
+def test_controlled_lung_draft_download_is_available_before_manual_review(tmp_path):
+    """报告组必须先下载草稿，才能据此完成人工复核。"""
     from unittest.mock import MagicMock, patch
 
     from fastapi import HTTPException
@@ -1983,12 +1979,12 @@ def test_lung588_controlled_pilot_download_requires_manual_review(tmp_path):
             except HTTPException as exc:
                 return exc.status_code
 
-    assert attempt("lung_588_pdl1", "draft") == 409
+    assert attempt("lung_588_pdl1", "draft") == 200
     assert attempt("lung_588_pdl1", "reviewed") == 200
     assert attempt("lung_588_pdl1", "delivered") == 200
     assert attempt("lung_588_pdl1", "draft", override=True) == 403
     assert attempt("lung_588_pdl1", "draft", override=True, role="reviewer") == 200
-    assert attempt("lung_329_pdl1", "draft") == 409
+    assert attempt("lung_329_pdl1", "draft") == 200
     assert attempt("lung_329_pdl1", "reviewed") == 200
     assert attempt("lung_329_pdl1", "delivered") == 200
     assert attempt("lung_329_pdl1", "draft", override=True) == 403

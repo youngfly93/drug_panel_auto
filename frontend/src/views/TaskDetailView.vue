@@ -12,15 +12,14 @@
           v-if="task?.status === 'completed' && task.task_type === 'single'"
           type="primary"
           :icon="Download"
-          :disabled="!lungDownloadReady"
           :loading="reportDownloading"
           @click="downloadReport"
         >
           {{ reportDownloading
             ? '正在下载'
-            : lungDownloadReady
-              ? '下载报告'
-              : '请先标记已审核' }}
+            : isControlledLungPanel && !lungReportReviewed
+              ? '下载报告草稿'
+              : '下载报告' }}
         </el-button>
       </div>
     </div>
@@ -65,7 +64,7 @@
         <div class="panel-title">
           <span>
             {{ isControlledLungPanel
-              ? '生产门禁与审核（肺癌报告下载前在此标记）'
+              ? '生产门禁与审核（草稿可先下载，正式交付前在此标记）'
               : '生产门禁与审核' }}
           </span>
           <div class="stage-title-meta">
@@ -848,9 +847,8 @@ const qaReport = ref<Record<string, any> | null>(null)
 const reportSummary = ref<ReportSummary | null>(null)
 const qualityGate = ref<QualityGate | null>(null)
 const reviewState = ref<ReviewState | null>(null)
-const lungDownloadReady = computed(() =>
-  !isControlledLungPanel.value
-  || ['reviewed', 'delivered'].includes(reviewState.value?.status || ''),
+const lungReportReviewed = computed(() =>
+  ['reviewed', 'delivered'].includes(reviewState.value?.status || ''),
 )
 const provenance = ref<Record<string, any> | null>(null)
 const stageReport = ref<Record<string, any> | null>(null)

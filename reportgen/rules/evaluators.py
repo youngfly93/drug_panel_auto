@@ -79,6 +79,15 @@ def apply_report_text_rules(
         report_data.set_field(field, msi_fields[field])
         applied[field] = field
 
+    # These strings are layout-facing placeholders rather than medical rules.
+    # Keeping them in report_text.yaml lets each Panel own the wording shown in
+    # a review draft when optional source material has not yet been supplied.
+    for field in ("pdl1_image_missing_notice",):
+        value = _text_rule(text_rules, field, "")
+        if value:
+            report_data.set_field(field, value)
+            applied[field] = field
+
     return applied
 
 

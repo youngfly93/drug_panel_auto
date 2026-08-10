@@ -205,16 +205,6 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
             "companion_diagnostic_status",
         ],
         "hide": ALWAYS_HIDE,
-        "require": [
-            "pdl1_tps",
-            "pdl1_cps",
-            "pdl1_result",
-            "pdl1_image_path",
-            "lung_histology",
-            "disease_extent",
-            "prior_systemic_therapy",
-            "companion_diagnostic_status",
-        ],
     },
     "lung_588_pdl1": {
         "show": [
@@ -228,16 +218,6 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
             "companion_diagnostic_status",
         ],
         "hide": ALWAYS_HIDE,
-        "require": [
-            "pdl1_tps",
-            "pdl1_cps",
-            "pdl1_result",
-            "pdl1_image_path",
-            "lung_histology",
-            "disease_extent",
-            "prior_systemic_therapy",
-            "companion_diagnostic_status",
-        ],
     },
     "mlf_result": {"hide": ALWAYS_HIDE},
 }

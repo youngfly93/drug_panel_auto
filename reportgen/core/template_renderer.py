@@ -253,7 +253,7 @@ class TemplateRenderer:
         return obj
 
     def _render_pdl1_case_image(self, file_path: str, context: dict) -> None:
-        """Replace the lung-panel image marker with one verified case image."""
+        """Replace the lung-panel marker with an image or review-draft notice."""
 
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         from docx.shared import Emu
@@ -262,17 +262,41 @@ class TemplateRenderer:
         marker = "__PDL1_CASE_IMAGE__"
         drawing_name = "ReportGenPDL1CaseImage"
         image_path = str(context.get("pdl1_image_path") or "").strip()
-        if not image_path:
-            raise ValueError("肺癌报告缺少病例专属PD-L1图片")
-        image = Path(image_path).expanduser().resolve()
-        if not image.is_file():
-            raise ValueError("病例专属PD-L1图片不存在")
-
+        missing_notice = str(
+            context.get("pdl1_image_missing_notice")
+            or "未提供本病例PD-L1免疫组化图片；当前报告为待审核草稿。"
+        ).strip()
         doc = Document(file_path)
+        draft_fields = (
+            (2, "pdl1_tps"),
+            (3, "pdl1_cps"),
+            (4, "pdl1_result"),
+        )
+        for table in doc.tables:
+            for row in table.rows:
+                cells = row.cells
+                if len(cells) < 5 or "PD-L1蛋白表达" not in (cells[0].text or ""):
+                    continue
+                for cell_index, field_name in draft_fields:
+                    if str(context.get(field_name) or "").strip():
+                        continue
+                    paragraph = cells[cell_index].paragraphs[0]
+                    if paragraph.runs:
+                        paragraph.runs[0].text = "待补充"
+                        for extra_run in paragraph.runs[1:]:
+                            extra_run.text = ""
+                    else:
+                        paragraph.add_run("待补充")
         matches = [p for p in doc.paragraphs if (p.text or "").strip() == marker]
+        notice_matches = [
+            p for p in doc.paragraphs if (p.text or "").strip() == missing_notice
+        ]
         existing = doc._element.xpath(
             f'.//wp:docPr[@name="{drawing_name}"]'
         )
+        if not image_path and not matches and len(notice_matches) == 1 and not existing:
+            # A missing-image review notice is also a completed processor state.
+            return
         if not matches and len(existing) == 1:
             # The same processor chain may be replayed by QA/idempotency gates.
             # A tagged case image is the completed state, so leave the package
@@ -291,6 +315,20 @@ class TemplateRenderer:
             if child.tag.endswith("}pPr"):
                 continue
             paragraph._element.remove(child)
+
+        if not image_path:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            paragraph.paragraph_format.keep_with_next = True
+            paragraph.paragraph_format.space_before = 0
+            paragraph.paragraph_format.space_after = 0
+            paragraph.add_run(missing_notice)
+            doc.save(file_path)
+            self.logger.warning("未提供病例专属PD-L1图片，已渲染草稿提示")
+            return
+
+        image = Path(image_path).expanduser().resolve()
+        if not image.is_file():
+            raise ValueError("病例专属PD-L1图片不存在")
 
         with Image.open(image) as source:
             width_px, height_px = source.size

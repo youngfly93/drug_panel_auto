@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 rule_id: "report_text"
-version: "0.4.0"
-updated: "2026-07-25"
+version: "0.4.1"
+updated: "2026-08-10"
 status: "pilot"
 description: "Neutral lung329 pilot wording without patient-level treatment claims."
 
@@ -31,6 +31,14 @@ texts:
     purpose: "PD-L1 source-record transcription boundary."
     source: "pdl1_product_contract"
     text: "TPS、CPS及结果判定按逐病例原始记录转录；本报告不据此自动推导患者级用药资格。"
+  pdl1_missing_interpretation:
+    purpose: "Draft notice when the report group has not yet supplied PD-L1 values."
+    source: "report_review_workflow"
+    text: "本次未提供PD-L1免疫组化TPS、CPS及结果判定；当前先生成NGS报告草稿供报告解读组审核，相关内容待核对后补充。"
+  pdl1_image_missing_notice:
+    purpose: "Draft placeholder when no case-specific PD-L1 image was uploaded."
+    source: "report_review_workflow"
+    text: "未提供本病例PD-L1免疫组化图片；当前报告为待审核草稿。"
   patient_letter_project_label:
     purpose: "Patient letter panel name."
     source: "panel_display_name"

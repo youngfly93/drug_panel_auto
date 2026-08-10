@@ -233,7 +233,10 @@ def validate_panel_biomarker_contracts(
     return failures
 
 
-def apply_pdl1_display_fields(report_data: ReportData) -> None:
+def apply_pdl1_display_fields(
+    report_data: ReportData,
+    text_rules: Optional[dict[str, str]] = None,
+) -> None:
     """Build neutral report text from controlled PD-L1 form values.
 
     This function deliberately reports the supplied IHC values without
@@ -243,6 +246,12 @@ def apply_pdl1_display_fields(report_data: ReportData) -> None:
     cps = report_data.get_field("pdl1_cps")
     result = str(report_data.get_field("pdl1_result") or "").strip()
     if tps in (None, "") and cps in (None, "") and not result:
+        missing_notice = str(
+            (text_rules or {}).get("pdl1_missing_interpretation")
+            or "本次未提供PD-L1免疫组化TPS、CPS及结果判定；"
+            "当前先生成NGS报告草稿供报告解读组审核，相关内容待核对后补充。"
+        ).strip()
+        report_data.set_field("pdl1_table_interpretation", missing_notice)
         return
 
     def display(value: Any) -> str:
@@ -955,7 +964,10 @@ class ReportGenerator:
             state.report_data,
             pdl1_product_contract,
         )
-        apply_pdl1_display_fields(state.report_data)
+        apply_pdl1_display_fields(
+            state.report_data,
+            state.report_text_rules,
+        )
         self._apply_clinical_diagnosis_for_display(state.report_data)
         self.logger.log_event(
             "template_enhancement_completed",
@@ -1106,26 +1118,50 @@ class ReportGenerator:
             pdl1_contract,
         )
         if pdl1_failures:
-            duration = time.time() - start_time
-            error_msg = (
-                "PD-L1检测方案或逐病例来源尚未满足产品合同，"
-                "阻断报告生成"
-            )
-            stage.fail(
-                "PANEL_PDL1_PRODUCT_CONTRACT_BLOCKED",
-                error_msg,
-                details={"failures": pdl1_failures},
-            )
-            self.logger.error(error_msg, failures=pdl1_failures)
-            return {
-                "success": False,
-                "output_file": None,
-                "duration": duration,
-                "errors": [error_msg],
-                "warnings": state.report_data.validation_errors,
-                "panel_package_validation": state.panel_package_validation,
-                "input_contract_validation": state.input_contract_validation,
-            }
+            governance = (
+                pdl1_contract.get("governance")
+                if isinstance(pdl1_contract, dict)
+                else {}
+            ) or {}
+            validation_mode = str(
+                governance.get("generation_validation_mode") or "fail"
+            ).strip().lower()
+            if validation_mode == "warn":
+                warning_msg = (
+                    "PD-L1逐病例结果、来源或图片尚未完整；已生成待审核草稿，"
+                    "缺失内容不会用于患者级用药结论。"
+                )
+                state.report_data.add_validation_error(warning_msg)
+                stage.warn(
+                    "PANEL_PDL1_PRODUCT_CONTRACT_WARNING",
+                    warning_msg,
+                    details={"failures": pdl1_failures},
+                )
+                self.logger.warning(
+                    warning_msg,
+                    failures=pdl1_failures,
+                )
+            else:
+                duration = time.time() - start_time
+                error_msg = (
+                    "PD-L1检测方案或逐病例来源尚未满足产品合同，"
+                    "阻断报告生成"
+                )
+                stage.fail(
+                    "PANEL_PDL1_PRODUCT_CONTRACT_BLOCKED",
+                    error_msg,
+                    details={"failures": pdl1_failures},
+                )
+                self.logger.error(error_msg, failures=pdl1_failures)
+                return {
+                    "success": False,
+                    "output_file": None,
+                    "duration": duration,
+                    "errors": [error_msg],
+                    "warnings": state.report_data.validation_errors,
+                    "panel_package_validation": state.panel_package_validation,
+                    "input_contract_validation": state.input_contract_validation,
+                }
 
         if state.strict_mode:
             missing_critical = self._check_critical_fields(state.report_data)

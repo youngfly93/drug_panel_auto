@@ -126,28 +126,28 @@ single_values:
     type: string
     required: false
     default_value: "未明确"
-    description: "肺癌病理类型（用于精确药物适应证校验）"
+    description: "可选；用于精确药物适应证校验。缺失时仍生成报告草稿，但不命中依赖该字段的药物规则"
 
   disease_extent:
     synonyms: ["疾病范围", "Disease Extent"]
     type: string
     required: false
     default_value: "未明确"
-    description: "可切除性及局部晚期/转移状态（用于精确适应证校验）"
+    description: "可选；用于精确适应证校验。缺失时仍生成报告草稿，但不命中依赖该字段的药物规则"
 
   prior_systemic_therapy:
     synonyms: ["既往系统治疗", "Prior Systemic Therapy"]
     type: string
     required: false
     default_value: "未明确"
-    description: "是否已接受系统治疗（用于治疗线次条件校验）"
+    description: "可选；用于治疗线次条件校验。缺失时仍生成报告草稿，但不命中依赖该字段的药物规则"
 
   companion_diagnostic_status:
     synonyms: ["伴随诊断适配状态", "Companion Diagnostic Status"]
     type: string
     required: false
     default_value: "待确认"
-    description: "具体变异是否符合当前药物标签或伴随诊断要求"
+    description: "可选；用于精确药物规则校验。缺失时仍生成报告草稿，但不命中依赖该字段的药物规则"
   
   panel_name:
     synonyms: ["Panel名称", "Panel", "基因组"]
@@ -240,7 +240,7 @@ single_values:
     required: false
     default_value: null
     format_template: "{:.1f}"
-    description: "PD-L1肿瘤细胞阳性比例评分TPS（0-100）"
+    description: "可选；PD-L1肿瘤细胞阳性比例评分TPS（0-100）。未填写时仍可生成报告草稿"
 
   pdl1_cps:
     synonyms: ["PD-L1 CPS", "CPS"]
@@ -248,21 +248,21 @@ single_values:
     required: false
     default_value: null
     format_template: "{:.1f}"
-    description: "PD-L1联合阳性评分CPS（0-100）"
+    description: "可选；PD-L1联合阳性评分CPS（0-100）。未填写时仍可生成报告草稿"
 
   pdl1_result:
     synonyms: ["PD-L1结果", "PD-L1 Result"]
     type: string
     required: false
     default_value: ""
-    description: "PD-L1结果分层"
+    description: "可选；PD-L1结果分层。未填写时仍可生成报告草稿"
 
   pdl1_image_path:
     synonyms: ["PD-L1病例图片"]
     type: string
     required: false
     default_value: ""
-    description: "本病例PD-L1免疫组化图片；上传后自动生成可追溯记录"
+    description: "可选；本病例PD-L1免疫组化图片。未上传时报告以待补提示代替图片"
 
   pdl1_assay_profile_id:
     synonyms: ["PD-L1检测方案"]

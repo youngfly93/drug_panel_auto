@@ -8,6 +8,9 @@ current_output:
     total_variants_count: warn
     drug_related_count: warn
     msi_status: warn
+    pdl1_tps: warn
+    pdl1_cps: warn
+    pdl1_result: warn
   required_sections:
     variant_summary: warn
     biomarkers: warn

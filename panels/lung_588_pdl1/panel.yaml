@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 display_name: "肺癌588基因+PD-L1"
-version: "0.3.0"
+version: "0.3.1"
 status: "pilot"
 description: >
   Independent lung 588-gene + PD-L1 package. The controlled pilot supports
@@ -134,19 +134,6 @@ input_contract:
     - "sample_id"
     - "project_name"
     - "report_date"
-    - "pdl1_tps"
-    - "pdl1_cps"
-    - "pdl1_result"
-    - "pdl1_image_path"
-    - "pdl1_assay_profile_id"
-    - "pdl1_source_record_id"
-    - "pdl1_source_record_date"
-    - "pdl1_specimen_id"
-    - "pdl1_image_disposition"
-    - "lung_histology"
-    - "disease_extent"
-    - "prior_systemic_therapy"
-    - "companion_diagnostic_status"
   required_columns:
     Variations:
       - "Gene_Symbol"
@@ -167,36 +154,36 @@ input_contract:
       allowed_values: ["MSS", "MSI-L", "MSI-H"]
       source_priority: ["excel"]
     pdl1_tps:
-      required: true
+      required: false
       minimum: 0
       maximum: 100
       source_priority: ["form"]
     pdl1_cps:
-      required: true
+      required: false
       minimum: 0
       maximum: 100
       source_priority: ["form"]
     pdl1_result:
-      required: true
+      required: false
       allowed_values: ["阳性（高表达）", "阳性（低表达）", "阴性"]
       source_priority: ["form"]
     pdl1_image_path:
-      required: true
+      required: false
       source_priority: ["form"]
     pdl1_assay_profile_id:
-      required: true
+      required: false
       source_priority: ["form"]
     pdl1_source_record_id:
-      required: true
+      required: false
       source_priority: ["form"]
     pdl1_source_record_date:
-      required: true
+      required: false
       source_priority: ["form"]
     pdl1_specimen_id:
-      required: true
+      required: false
       source_priority: ["form"]
     pdl1_image_disposition:
-      required: true
+      required: false
       allowed_values: ["病例专属图像（报告展示）"]
       source_priority: ["form"]
 

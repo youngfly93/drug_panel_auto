@@ -157,8 +157,12 @@ known-good process and refuses the switch when any is truthy.
 ### CRC358 + lung329/lung588 controlled-pilot release
 
 The lung329 and lung588 products are exposed only for single-case controlled
-generation: PD-L1 values and source identity are mandatory per case, shared
-batch generation is disabled, and download requires report-group review.
+generation. A report-review draft may be generated and downloaded when PD-L1
+values, source identity, the case image, or treatment context are not yet
+available; those omissions must remain visible as WARN/not-provided text and
+must not produce context-dependent drug matches. Shared batch generation stays
+disabled because one shared form must never be copied across patients. Review
+state governs formal review/delivery records, not access to the draft Word file.
 CRC301, lung methylation and the unbuilt small panels remain disabled in all
 three scope guards:
 

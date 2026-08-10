@@ -2671,22 +2671,9 @@ def _download_report_response(
                 "确需交付可由复核人显式 override（下载时加 override_gate=1）。"
             ),
         )
-    if str(task.project_type or "").strip().lower() in CONTROLLED_PILOT_PROJECT_TYPES:
-        review_state = _load_review_state(task)
-        if (
-            _controlled_pilot_review_required(
-                task.project_type,
-                review_state.get("status"),
-            )
-            and not override_gate
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "该肺癌Panel处于受控试运行，报告须先由复核人在任务详情中"
-                    "标记“已审核”后才能下载交付。"
-                ),
-            )
+    # A reviewer must be able to see the generated Word file before deciding
+    # whether it passes. Review state therefore governs formal delivery/audit
+    # status, not access to the authenticated draft artifact itself.
 
     clinical_info = _clinical_snapshot(task)
     download_filename = _business_report_filename(

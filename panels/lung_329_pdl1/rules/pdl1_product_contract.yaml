@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 rule_id: "pdl1_product_contract"
-version: "0.4.0"
-updated: "2026-08-09"
+version: "0.4.1"
+updated: "2026-08-10"
 status: "pilot"
 description: >
   Product and provenance contract for per-case PD-L1 IHC results. The lung NGS
@@ -23,6 +23,11 @@ governance:
   report_text_allowed: true
   promotion_blocked: true
   treatment_inference_allowed: false
+  generation_validation_mode: "warn"
+  generation_policy: >
+    Missing per-case PD-L1 values, provenance or image must remain visible as a
+    draft warning, but must not prevent generation of a Word report for report-
+    group review. Supplied values remain subject to range and vocabulary checks.
   blocking_reason: >
     Active production promotion remains blocked because the historical
     reports do not identify the assay clone or staining platform. The pilot

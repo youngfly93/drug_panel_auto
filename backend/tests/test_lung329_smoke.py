@@ -1,8 +1,8 @@
 # ruff: noqa: E402, I001
 """肺癌329+PD-L1 受控试运行冒烟与安全边界。
 
-默认模板必须无病例硬编码、可渲染；PD-L1 必须逐病例提供来源，
-批量生成和未经人工复核的下载必须保持 fail-closed。
+默认模板必须无病例硬编码、可渲染；缺少PD-L1时允许先生成待审核草稿，
+批量生成仍不得把一份病例信息串用到其他病例。
 """
 
 import io
@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 import yaml
+from docx import Document
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -165,7 +166,7 @@ def test_lung329_template_renders_with_scalars():
     assert "SENTINEL_pdl1_result_VAL" in visible
 
 
-def test_lung329_pdl1_form_requires_case_image_and_treatment_context():
+def test_lung329_pdl1_form_keeps_case_fields_visible_but_optional_for_draft():
     from app.services.clinical_info_service import get_clinical_form_schema
 
     schema = get_clinical_form_schema("lung_329_pdl1")
@@ -189,10 +190,80 @@ def test_lung329_pdl1_form_requires_case_image_and_treatment_context():
     }
 
     assert required <= set(fields)
-    assert all(fields[key].required for key in required)
+    assert all(not fields[key].required for key in required)
     assert not hidden_derived & set(fields)
     assert fields["pdl1_image_path"].ui.component == "pdl1-image-upload"
     assert fields["pdl1_image_path"].ui.accept == ".png,.jpg,.jpeg,.webp"
+
+
+def test_lung329_generation_without_pdl1_or_image_creates_review_draft(tmp_path):
+    from reportgen.core.report_generator import ReportGenerator
+    from reportgen.models.excel_data import ExcelDataSource
+
+    xlsx_path = tmp_path / "SYNTHETIC-LUNG329-NGS-ONLY.xlsx"
+    xlsx_path.write_bytes(b"synthetic")
+    excel_data = ExcelDataSource(
+        file_path=str(xlsx_path),
+        single_values={
+            "患者姓名": "SYNTHETIC_PATIENT",
+            "样本编号": "SYNTHETIC_L329_NGS_ONLY",
+            "检测项目": "肺癌329基因+PD-L1",
+            "报告日期": "2026-08-10",
+            "TMB": 5,
+            "MSI状态": "MSS",
+        },
+        table_data={
+            "Variations": [
+                {
+                    "ExistIn552": "Ⅱ类",
+                    "Gene_Symbol": "TP53",
+                    "Transcript": "NM_000546.6",
+                    "cHGVS": "c.734G>A",
+                    "pHGVS_S": "p.G245D",
+                    "Freq(%)": 30,
+                }
+            ]
+        },
+        sheet_names=["Variations", "TMB", "Msisensor"],
+    )
+
+    result = ReportGenerator(
+        config_dir=str(ROOT / "config"),
+        log_level="ERROR",
+    ).generate(
+        excel_file=str(xlsx_path),
+        excel_data=excel_data,
+        template_file=str(TEMPLATE),
+        output_dir=str(tmp_path / "out"),
+        project_type="lung_329_pdl1",
+    )
+
+    assert result["success"] is True, result["errors"]
+    assert result["qa_status"] == "WARN"
+    output = Path(result["output_file"])
+    rendered = Document(output)
+    visible = "\n".join(
+        [
+            *(paragraph.text for paragraph in rendered.paragraphs),
+            *(
+                cell.text
+                for table in rendered.tables
+                for row in table.rows
+                for cell in row.cells
+            ),
+        ]
+    )
+    assert "先生成NGS报告草稿供报告解读组审核" in visible
+    assert "未提供本病例PD-L1免疫组化图片" in visible
+    assert "__PDL1_CASE_IMAGE__" not in visible
+    assert len(rendered.inline_shapes) == 0
+    pdl1_rows = [
+        [cell.text.strip() for cell in row.cells]
+        for table in rendered.tables
+        for row in table.rows
+        if row.cells and "PD-L1蛋白表达" in row.cells[0].text
+    ]
+    assert any(row[2:5] == ["待补充", "待补充", "待补充"] for row in pdl1_rows)
 
 
 def test_lung329_shared_batch_is_blocked():
