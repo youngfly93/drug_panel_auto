@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "candidate_evidence_review"
-version: "0.2.0"
-updated: "2026-08-09"
+version: "0.2.1"
+updated: "2026-08-10"
 status: "controlled_pilot_partial_promotion"
 description: >
   Primary-source scope review for four lung588 targeted-drug candidates. Three
@@ -91,11 +91,11 @@ reviews:
       reviewer_type: "ai_assisted_primary_source_scope_review"
     secondary_review:
       status: "case_level_report_group_review_required"
-      decision: "not_preapproved; review every generated report before download"
+      decision: "not_preapproved; review every generated report before formal external delivery"
       reviewer: ""
       reviewed_at: ""
     unresolved_requirements:
-      - "case_level_report_group_review_before_download"
+      - "case_level_report_group_review_before_formal_delivery"
       - "current_label_version_recheck_at_promotion"
       - "positive_and_negative_rule_tests"
       - "case_level_uat"
@@ -152,11 +152,11 @@ reviews:
       reviewer_type: "ai_assisted_primary_source_scope_review"
     secondary_review:
       status: "case_level_report_group_review_required"
-      decision: "not_preapproved; review every generated report before download"
+      decision: "not_preapproved; review every generated report before formal external delivery"
       reviewer: ""
       reviewed_at: ""
     unresolved_requirements:
-      - "case_level_report_group_review_before_download"
+      - "case_level_report_group_review_before_formal_delivery"
       - "current_label_version_recheck_at_promotion"
       - "positive_and_negative_rule_tests"
       - "case_level_uat"
@@ -239,11 +239,11 @@ reviews:
       reviewer_type: "ai_assisted_primary_source_scope_review"
     secondary_review:
       status: "case_level_report_group_review_required"
-      decision: "not_preapproved; review every generated report before download"
+      decision: "not_preapproved; review every generated report before formal external delivery"
       reviewer: ""
       reviewed_at: ""
     unresolved_requirements:
-      - "case_level_report_group_review_before_download"
+      - "case_level_report_group_review_before_formal_delivery"
       - "confirm_current_label_and_assay_eligibility_at_promotion"
       - "acknowledge_no_direct_g660d_drug_outcome_subgroup_identified"
       - "positive_and_negative_rule_tests"

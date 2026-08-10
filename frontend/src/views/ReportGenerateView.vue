@@ -427,7 +427,7 @@
         />
         <div class="single-actions">
           <el-button @click="$router.push(`/tasks/${singleTask.id}`)">
-            {{ requiresReviewBeforeDownload ? '进入任务详情审核' : '查看任务详情' }}
+            {{ isControlledLungProject ? '查看草稿与审核状态' : '查看任务详情' }}
           </el-button>
           <el-popconfirm
             v-if="singleTask.status === 'running' || singleTask.status === 'pending'"
@@ -450,19 +450,22 @@
         >
           <template #extra>
             <el-button
-              v-if="result.success && result.task_id && !requiresReviewBeforeDownload"
+              v-if="result.success && result.task_id"
               type="primary"
               :loading="singleDownloading"
               @click="downloadGenerated(result)"
             >
-              {{ singleDownloading ? '正在下载' : '下载报告' }}
+              {{ singleDownloading
+                ? '正在下载'
+                : isControlledLungProject
+                  ? '下载报告草稿'
+                  : '下载报告' }}
             </el-button>
             <el-button
               v-if="result.task_id"
-              :type="requiresReviewBeforeDownload ? 'primary' : undefined"
               @click="$router.push(`/tasks/${result.task_id}`)"
             >
-              {{ requiresReviewBeforeDownload ? '进入任务详情并标记已审核' : '查看质控详情' }}
+              {{ isControlledLungProject ? '查看质控与审核状态' : '查看质控详情' }}
             </el-button>
           </template>
         </el-result>
@@ -470,9 +473,9 @@
           {{ singleDownloadStatus }}
         </div>
         <el-alert
-          v-if="result.success && requiresReviewBeforeDownload"
-          title="肺癌受控试运行报告：请进入任务详情，在“生产门禁与审核”中由管理员或复核人点击“标记已审核”，随后即可下载。"
-          type="warning"
+          v-if="result.success && isControlledLungProject"
+          title="肺癌待审草稿已生成，可先下载查看 Word；核对完成后可在任务详情记录审核状态。"
+          type="info"
           show-icon
           :closable="false"
           style="margin-bottom: 8px"
@@ -565,7 +568,7 @@ const batchReferenceGateRequired = ref(false)
 const canUseGoldenMode = computed(
   () => authStore.user?.role === 'admin' || authStore.user?.role === 'reviewer',
 )
-const requiresReviewBeforeDownload = computed(() =>
+const isControlledLungProject = computed(() =>
   ['lung_329_pdl1', 'lung_588_pdl1'].includes(projectType.value || ''),
 )
 const disabledProjectTypes = new Set(

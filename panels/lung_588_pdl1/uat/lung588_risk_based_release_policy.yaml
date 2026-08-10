@@ -44,7 +44,7 @@ current_release_boundaries:
   batch_generation_enabled: false
   part3_knowledge_enabled: false
   targeted_drug_rules_enabled: true
-  targeted_drug_scope: "three context-bounded exact candidates only"
+  targeted_drug_scope: "two context-bounded exact events yielding three treatment combinations"
   immune_gene_claims_enabled: true
   immune_gene_scope: "registered transcript-and-HGVS-exact historical display rows only"
   chemotherapy_pharmacogenomics_enabled: false

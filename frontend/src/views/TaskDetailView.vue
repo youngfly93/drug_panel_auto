@@ -64,7 +64,7 @@
         <div class="panel-title">
           <span>
             {{ isControlledLungPanel
-              ? '生产门禁与审核（草稿可先下载，正式交付前在此标记）'
+              ? '报告审核与交付状态（草稿可先下载）'
               : '生产门禁与审核' }}
           </span>
           <div class="stage-title-meta">
@@ -80,8 +80,8 @@
           <el-alert
             v-if="isControlledLungPanel"
             :title="canReview
-              ? '下载步骤：确认QA与内容后，点击下方“标记已审核”，再点击页面右上角“下载报告”。'
-              : '该肺癌报告须由管理员或复核人标记“已审核”后才能下载；当前账号没有审核权限。'"
+              ? '可先点击右上角“下载报告草稿”查看 Word；核对完成后，再在下方记录“已审核”。'
+              : '可先点击右上角“下载报告草稿”查看 Word；当前账号不能登记审核状态。'"
             type="info"
             show-icon
             :closable="false"

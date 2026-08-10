@@ -1,14 +1,14 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "medical_candidates"
-version: "0.2.0"
-updated: "2026-08-09"
+version: "0.2.1"
+updated: "2026-08-10"
 status: "controlled_pilot_partial_promotion"
 description: >
-  Evidence-bounded, exact-event lung588 treatment catalog. Three candidates
-  are mirrored into rules/drugs.yaml for the controlled pilot under exact
-  selector, clinical-context and case-review gates; all other candidates and
-  historical claims remain non-runtime.
+  Evidence-bounded, exact-event lung588 treatment catalog. Three treatment
+  candidates across two exact events are mirrored into rules/drugs.yaml for the
+  controlled pilot under exact selector and clinical-context checks; all other
+  candidates and historical claims remain non-runtime.
 
 governance:
   policy_id: "lung588_exact_event_candidate_review_v1"
@@ -315,7 +315,8 @@ non_target_domains:
     reason: >
       Only transcript- and HGVS-exact rows registered in biomarkers.yaml are
       displayed. Broad gene-level inheritance remains prohibited and every
-      report still requires case-level report-group review before download.
+      formal external delivery still requires case-level report-group review;
+      the clearly marked Word draft may be downloaded first for that review.
   chemotherapy_pharmacogenomics:
     enabled: false
     disposition: "historical_observations_only"

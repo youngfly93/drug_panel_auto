@@ -1,13 +1,13 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "drugs"
-version: "0.2.0"
-updated: "2026-08-09"
+version: "0.2.1"
+updated: "2026-08-10"
 status: "pilot"
 description: >
-  Exact-event lung treatment policy. Only three evidence-bounded conclusions
-  are available during the controlled pilot; broad historical and cross-cancer
-  rows remain disabled.
+  Exact-event lung treatment policy. Two exact events yield three evidence-
+  bounded treatment combinations during the controlled pilot; broad historical
+  and cross-cancer rows remain disabled.
 
 governance:
   schema_version: "1.0"
