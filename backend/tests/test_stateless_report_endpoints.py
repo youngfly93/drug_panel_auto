@@ -1945,6 +1945,7 @@ def test_controlled_lung_draft_download_is_available_before_manual_review(tmp_pa
         )
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = task
+        filename_builder = MagicMock(return_value="x.docx")
         with (
             patch.object(
                 report_api,
@@ -1964,7 +1965,7 @@ def test_controlled_lung_draft_download_is_available_before_manual_review(tmp_pa
             patch.object(
                 report_api,
                 "_business_report_filename",
-                return_value="x.docx",
+                filename_builder,
             ),
         ):
             try:
@@ -1975,21 +1976,33 @@ def test_controlled_lung_draft_download_is_available_before_manual_review(tmp_pa
                     SimpleNamespace(id=1, role=role),
                     override_gate=override,
                 )
-                return 200
+                return 200, filename_builder.call_args.kwargs.get("revision_label")
             except HTTPException as exc:
-                return exc.status_code
+                return exc.status_code, None
 
-    assert attempt("lung_588_pdl1", "draft") == 200
-    assert attempt("lung_588_pdl1", "reviewed") == 200
-    assert attempt("lung_588_pdl1", "delivered") == 200
-    assert attempt("lung_588_pdl1", "draft", override=True) == 403
-    assert attempt("lung_588_pdl1", "draft", override=True, role="reviewer") == 200
-    assert attempt("lung_329_pdl1", "draft") == 200
-    assert attempt("lung_329_pdl1", "reviewed") == 200
-    assert attempt("lung_329_pdl1", "delivered") == 200
-    assert attempt("lung_329_pdl1", "draft", override=True) == 403
-    assert attempt("lung_329_pdl1", "draft", override=True, role="reviewer") == 200
-    assert attempt("crc_358_msi", "draft") == 200
+    assert attempt("lung_588_pdl1", "draft") == (200, "草稿")
+    assert attempt("lung_588_pdl1", "reviewed") == (200, None)
+    assert attempt("lung_588_pdl1", "delivered") == (200, None)
+    assert attempt("lung_588_pdl1", "draft", override=True) == (403, None)
+    assert attempt("lung_588_pdl1", "draft", override=True, role="reviewer") == (
+        200,
+        "草稿",
+    )
+    assert attempt("lung_329_pdl1", "draft") == (200, "草稿")
+    assert attempt("lung_329_pdl1", "reviewed") == (200, None)
+    assert attempt("lung_329_pdl1", "delivered") == (200, None)
+    assert attempt("lung_329_pdl1", "draft", override=True) == (403, None)
+    assert attempt("lung_329_pdl1", "draft", override=True, role="reviewer") == (
+        200,
+        "草稿",
+    )
+    assert attempt("crc_358_msi", "draft") == (200, None)
+    assert report_api._business_report_filename(
+        clinical_info={"patient_name": "SYNTHETIC", "sample_id": "LUNG-DRAFT"},
+        project_type="lung_588_pdl1",
+        project_name="肺癌588基因+PD-L1",
+        revision_label="草稿",
+    ).endswith("-草稿.docx")
 
 
 def test_controlled_pilot_audit_package_requires_review_or_privileged_user(

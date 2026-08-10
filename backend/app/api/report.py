@@ -1086,6 +1086,7 @@ def _business_report_filename(
     project_type: Optional[str],
     project_name: Optional[str],
     output_path: Optional[str] = None,
+    revision_label: Optional[str] = None,
 ) -> str:
     info = clinical_info or {}
     patient_name = info.get("patient_name") or info.get("患者姓名") or info.get("姓名")
@@ -1109,7 +1110,10 @@ def _business_report_filename(
     project_part = _normalize_project_filename_part(resolved_project_name, project_type)
     org_part = _compact_filename_part(settings.report_filename_org_code, "mljy")
     sample_part = _compact_filename_part(sample_id, "编号未填").lower()
-    revision_part = _compact_filename_part(settings.report_filename_revision_label, "修改版")
+    revision_part = _compact_filename_part(
+        revision_label or settings.report_filename_revision_label,
+        "修改版",
+    )
     return (
         f"{patient_part}-{cancer_part}-{project_part}-{org_part}-{sample_part}-{revision_part}.docx"
     )
@@ -2676,11 +2680,18 @@ def _download_report_response(
     # status, not access to the authenticated draft artifact itself.
 
     clinical_info = _clinical_snapshot(task)
+    project_type = str(task.project_type or "").strip().lower()
+    revision_label = None
+    if project_type in CONTROLLED_PILOT_PROJECT_TYPES:
+        review_status = str(_load_review_state(task).get("status") or "").strip().lower()
+        if review_status not in {"reviewed", "delivered"}:
+            revision_label = "草稿"
     download_filename = _business_report_filename(
         clinical_info=clinical_info,
         project_type=task.project_type,
         project_name=clinical_info.get("project_name") or clinical_info.get("项目名称"),
         output_path=task.output_path,
+        revision_label=revision_label,
     )
 
     return _observed_file_response(
