@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 display_name: "肺癌588基因+PD-L1"
-version: "0.4.0"
+version: "0.4.1"
 status: "pilot"
 description: >
   Independent lung 588-gene + PD-L1 package. The controlled pilot supports
@@ -99,7 +99,7 @@ templates:
       - "underlines_and_styles"
   - id: "lung_588_pdl1_historical_golden_v1"
     file: "templates/lung_588_pdl1_historical_golden_v1.docx"
-    version: "0.4.0-review.2"
+    version: "0.4.0-review.3"
     status: "pilot"
     description: >
       Full-layout report-group review candidate distilled in place from the

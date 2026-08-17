@@ -23,6 +23,10 @@ def _return_payload(value):
     return {"value": value}
 
 
+def _return_large_payload(size):
+    return {"blob": b"x" * size}
+
+
 def _sleep_payload(seconds):
     time.sleep(seconds)
     return {"done": True}
@@ -49,6 +53,16 @@ def test_run_callable_with_timeout_returns_child_payload():
     )
 
     assert result == {"value": "ok"}
+
+
+def test_run_callable_with_timeout_drains_large_child_payload_before_join():
+    result = run_callable_with_timeout(
+        _return_large_payload,
+        args=(4_000_000,),
+        timeout_seconds=5,
+    )
+
+    assert len(result["blob"]) == 4_000_000
 
 
 def test_run_callable_with_timeout_raises_on_child_error():

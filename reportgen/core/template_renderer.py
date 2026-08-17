@@ -3605,7 +3605,13 @@ class TemplateRenderer:
                 labels_kept=labels_kept,
             )
 
-    def _normalize_front_matter_spacing(self, file_path: str) -> None:
+    def _normalize_front_matter_spacing(
+        self,
+        file_path: str,
+        *,
+        guide_spacer_count: int = 30,
+        insert_page_break: bool = True,
+    ) -> None:
         """Restore the reviewed report-guide offset in front matter.
 
         The reviewed CRC golden source starts ``报告导读`` in the lower half of
@@ -3655,7 +3661,7 @@ class TemplateRenderer:
         w_line = f"{{{ns_w}}}line"
         w_line_rule = f"{{{ns_w}}}lineRule"
 
-        guide_spacer_count = 30
+        guide_spacer_count = max(0, int(guide_spacer_count))
 
         def para_text(elem) -> str:
             return "".join((node.text or "") for node in elem.iter(w_t)).strip()
@@ -3728,8 +3734,9 @@ class TemplateRenderer:
                     removed += 1
 
                 insert_at = list(parent).index(child)
-                parent.insert(insert_at, make_page_break_paragraph())
-                insert_at += 1
+                if insert_page_break:
+                    parent.insert(insert_at, make_page_break_paragraph())
+                    insert_at += 1
                 for _ in range(guide_spacer_count):
                     parent.insert(insert_at, make_guide_spacer_paragraph())
                     insert_at += 1
@@ -3760,6 +3767,94 @@ class TemplateRenderer:
             "已恢复报告导读前金标留白",
             removed=removed,
             inserted_spacers=guide_spacer_count,
+            inserted_page_break=insert_page_break,
+        )
+
+    def _remove_page_breaks_after_text_prefixes(
+        self,
+        file_path: str,
+        text_prefixes: tuple[str, ...],
+    ) -> None:
+        """Remove configured explicit page breaks from matching paragraphs.
+
+        This is a narrow layout control for reviewed templates whose source
+        paragraph ends in ``w:br type=page``.  It does not alter section breaks,
+        paragraph page-break-before settings, or unrelated template content.
+        """
+        import os
+        import shutil
+        import tempfile
+        import xml.etree.ElementTree as ET
+        from zipfile import ZIP_DEFLATED, ZipFile
+
+        prefixes = tuple(str(value).strip() for value in text_prefixes if str(value).strip())
+        if not prefixes:
+            return
+
+        ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        for prefix, uri in {
+            "w": ns_w,
+            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+            "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
+            "wps": "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+            "v": "urn:schemas-microsoft-com:vml",
+            "o": "urn:schemas-microsoft-com:office:office",
+            "w10": "urn:schemas-microsoft-com:office:word",
+            "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
+            "w15": "http://schemas.microsoft.com/office/word/2012/wordml",
+        }.items():
+            ET.register_namespace(prefix, uri)
+        w_p = f"{{{ns_w}}}p"
+        w_t = f"{{{ns_w}}}t"
+        w_r = f"{{{ns_w}}}r"
+        w_br = f"{{{ns_w}}}br"
+        w_type = f"{{{ns_w}}}type"
+
+        with ZipFile(file_path, "r") as zin:
+            document_xml = zin.read("word/document.xml")
+            other_entries = [
+                (info, zin.read(info.filename))
+                for info in zin.infolist()
+                if info.filename != "word/document.xml"
+            ]
+            document_info = zin.getinfo("word/document.xml")
+
+        root = ET.fromstring(document_xml)
+        removed = 0
+        for paragraph in root.iter(w_p):
+            text = "".join((node.text or "") for node in paragraph.iter(w_t)).strip()
+            if not any(text.startswith(prefix) for prefix in prefixes):
+                continue
+            for run in paragraph.iter(w_r):
+                for br in list(run.findall(w_br)):
+                    if br.attrib.get(w_type) == "page":
+                        run.remove(br)
+                        removed += 1
+
+        if not removed:
+            return
+
+        fd, tmp_name = tempfile.mkstemp(suffix=".docx")
+        os.close(fd)
+        try:
+            with ZipFile(tmp_name, "w", compression=ZIP_DEFLATED) as zout:
+                zout.writestr(
+                    document_info,
+                    ET.tostring(root, encoding="utf-8", xml_declaration=True),
+                )
+                for info, data in other_entries:
+                    zout.writestr(info, data)
+            shutil.move(tmp_name, file_path)
+        finally:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+
+        self.logger.debug(
+            "已移除配置段落末尾的显式分页符",
+            removed=removed,
+            prefixes=len(prefixes),
         )
 
     def _cleanup_section_spacing(

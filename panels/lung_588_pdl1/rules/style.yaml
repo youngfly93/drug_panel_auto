@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "style"
-version: "0.1.0"
-updated: "2026-07-23"
+version: "0.2.0"
+updated: "2026-08-17"
 status: "draft"
 description: "Lung588 DOCX style tokens."
 
@@ -50,3 +50,10 @@ style:
     item_font_size: 11
     item_bold: false
     content_top_padding_pt: 57
+  front_matter:
+    guide_spacer_count: 30
+    # The historical lung template already starts a next-page section here.
+    # A second explicit page break creates an empty page in LibreOffice/Linux.
+    insert_page_break: false
+    remove_page_break_after_text_prefixes:
+      - "本表仅展示当前面板已输出的精确事件结果"

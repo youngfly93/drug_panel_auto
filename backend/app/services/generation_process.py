@@ -111,34 +111,62 @@ def run_callable_with_timeout(
     )
     started = time.monotonic()
     process.start()
-    # Process startup is part of the caller's wall-clock budget.  Subtract it
-    # before waiting so a slow spawn cannot silently extend a 12s hard limit.
-    remaining = max(0.0, timeout - (time.monotonic() - started))
-    process.join(timeout=remaining)
+    deadline = started + timeout
+    payload = None
+    missing_payload_error: Empty | None = None
 
-    if process.is_alive():
-        _join_or_kill(process, grace_seconds=grace)
-        elapsed = time.monotonic() - started
+    # Drain the queue while the child is alive.  Joining first can deadlock for
+    # large results: multiprocessing.Queue's feeder thread waits for the parent
+    # to read the pipe, while the parent waits for the child to exit.
+    while payload is None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            payload = result_queue.get(timeout=min(0.1, remaining))
+        except Empty as exc:
+            missing_payload_error = exc
+            if not process.is_alive():
+                # Allow a short final hand-off window after process exit; queue
+                # visibility can lag the child state by a scheduling tick.
+                try:
+                    payload = result_queue.get(timeout=min(0.1, remaining))
+                except Empty as final_exc:
+                    missing_payload_error = final_exc
+                break
+
+    if payload is None:
+        if process.is_alive():
+            _join_or_kill(process, grace_seconds=grace)
+            elapsed = time.monotonic() - started
+            try:
+                result_queue.close()
+            except Exception:
+                pass
+            raise GenerationTimeoutError(
+                f"报告生成超过 {timeout:g} 秒，已终止生成子进程。"
+                f" elapsed={elapsed:.1f}s"
+            )
+
+        process.join(timeout=grace)
         try:
             result_queue.close()
         except Exception:
             pass
-        raise GenerationTimeoutError(
-            f"报告生成超过 {timeout:g} 秒，已终止生成子进程。"
-            f" elapsed={elapsed:.1f}s"
-        )
-
-    try:
-        payload = result_queue.get(timeout=1)
-    except Empty as exc:
         raise GenerationProcessError(
             f"报告生成子进程未返回结果，exitcode={process.exitcode}。"
-        ) from exc
-    finally:
-        try:
-            result_queue.close()
-        except Exception:
-            pass
+        ) from missing_payload_error
+
+    # Once the payload is drained the queue feeder can finish and the child
+    # should exit promptly.  Reap it so repeated report jobs do not leak
+    # processes; retain the existing hard-kill fallback for abnormal exits.
+    process.join(timeout=grace)
+    if process.is_alive():
+        _join_or_kill(process, grace_seconds=grace)
+    try:
+        result_queue.close()
+    except Exception:
+        pass
 
     if payload.get("ok"):
         return payload.get("result")

@@ -136,7 +136,7 @@ def test_lung588_review_candidate_contract_freezes_default_template(tmp_path):
     assert identity == {
         "panel_id": "lung_588_pdl1",
         "template_id": "lung_588_pdl1_historical_golden_v1",
-        "version": "0.4.0-review.2",
+        "version": "0.4.0-review.3",
         "status": "pilot",
         "filename": "lung_588_pdl1_historical_golden_v1.docx",
         "sha256": "4df4b5278226c9034e2a50c1a8b6a3dacd2666b2bd5db88e1c1d2a9e0ca3ade2",

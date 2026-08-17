@@ -74,7 +74,7 @@ REVIEW_CANDIDATE_CONTRACT = (
     / "review_baselines"
     / "lung588_historical_review_candidate_v1.yaml"
 )
-TEMPLATE_VERSION = "0.4.0-review.2"
+TEMPLATE_VERSION = "0.4.0-review.3"
 EXPECTED_REPAIRED_SOURCE_SHA256 = (
     "e9cde046db0a93a5b33f13961ff7be25fcce9644a6682b7c132ca9e3604dbb96"
 )

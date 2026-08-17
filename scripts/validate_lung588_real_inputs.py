@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# v0.4.0-review.2 keeps the body header on one line; the same complete report
+# v0.4.0-review.3 keeps the body header on one line; the same complete report
 # content therefore occupies 83 pages instead of the prior wrapped-header 84.
 KNOWN_INPUTS = {
     "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646": {

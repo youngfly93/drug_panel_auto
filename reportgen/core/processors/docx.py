@@ -121,7 +121,7 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
         FunctionProcessor(
             "front_matter_spacing",
             "首页导读页空白清理失败",
-            lambda c: c.renderer._normalize_front_matter_spacing(c.output_path),
+            _run_front_matter_spacing,
         ),
         FunctionProcessor(
             "page_layout",
@@ -172,6 +172,34 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
 def _run_bullet_lists(ctx: ProcessorContext) -> None:
     ctx.renderer._normalize_multiline_bullet_paragraphs(ctx.output_path)
     ctx.renderer._remove_empty_numbered_paragraphs(ctx.output_path)
+
+
+def _run_front_matter_spacing(ctx: ProcessorContext) -> None:
+    style = ctx.renderer._panel_style_config(ctx.template_context, "front_matter")
+    raw_spacer_count = style.get("guide_spacer_count", 30)
+    try:
+        guide_spacer_count = int(raw_spacer_count)
+    except (TypeError, ValueError):
+        guide_spacer_count = 30
+    insert_page_break = ctx.renderer._bool_config(
+        style.get("insert_page_break"),
+        True,
+    )
+    ctx.renderer._normalize_front_matter_spacing(
+        ctx.output_path,
+        guide_spacer_count=max(0, guide_spacer_count),
+        insert_page_break=insert_page_break,
+    )
+    prefixes = tuple(
+        str(value).strip()
+        for value in (style.get("remove_page_break_after_text_prefixes") or ())
+        if str(value).strip()
+    )
+    if prefixes:
+        ctx.renderer._remove_page_breaks_after_text_prefixes(
+            ctx.output_path,
+            prefixes,
+        )
 
 
 def _run_gene_list_and_qc(ctx: ProcessorContext) -> None:

@@ -57,6 +57,7 @@ from reportgen.core.processors import (
 )
 from reportgen.core.processors.docx import (
     _run_final_refresh_cleanup,
+    _run_front_matter_spacing,
     _run_underlines_and_styles,
 )
 from reportgen.core.qa_report import build_docx_qa_report, write_docx_qa_report
@@ -6593,6 +6594,71 @@ def test_front_matter_spacing_restores_report_guide_golden_offset(tmp_path):
     assert text(paragraphs[guide_idx - 32]) == "检测报告"
     assert all(text(elem) == "" for elem in paragraphs[guide_idx - 30 : guide_idx])
     assert not any(has_page_break(elem) for elem in paragraphs[guide_idx - 30 : guide_idx])
+
+
+def test_front_matter_spacing_honors_panel_page_flow_config(tmp_path):
+    docx_path = tmp_path / "front_matter_panel_flow.docx"
+    doc = Document()
+    doc.add_paragraph("检测报告")
+    page_break = doc.add_paragraph("")
+    page_break.add_run().add_break(WD_BREAK.PAGE)
+    for _ in range(6):
+        doc.add_paragraph("")
+    doc.add_paragraph("报告导读")
+    notice = doc.add_paragraph("本表仅展示当前面板已输出的精确事件结果；评审用。")
+    notice.add_run().add_break(WD_BREAK.PAGE)
+    unrelated = doc.add_paragraph("其它段落")
+    unrelated.add_run().add_break(WD_BREAK.PAGE)
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    _run_front_matter_spacing(
+        ProcessorContext(
+            renderer=renderer,
+            output_path=str(docx_path),
+            template_path=str(docx_path),
+            template_context={
+                "panel_style": {
+                    "front_matter": {
+                        "guide_spacer_count": 30,
+                        "insert_page_break": False,
+                        "remove_page_break_after_text_prefixes": [
+                            "本表仅展示当前面板已输出的精确事件结果"
+                        ],
+                    }
+                }
+            },
+            logger=SimpleNamespace(),
+        )
+    )
+
+    import xml.etree.ElementTree as ET
+
+    ns_w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    w_p = f"{{{ns_w}}}p"
+    w_t = f"{{{ns_w}}}t"
+    w_br = f"{{{ns_w}}}br"
+    w_type = f"{{{ns_w}}}type"
+    with ZipFile(docx_path) as zin:
+        root = ET.fromstring(zin.read("word/document.xml"))
+    paragraphs = [elem for elem in root.iter(w_p)]
+
+    def text(elem):
+        return "".join((node.text or "") for node in elem.iter(w_t)).strip()
+
+    def has_page_break(elem):
+        return any(node.attrib.get(w_type) == "page" for node in elem.iter(w_br))
+
+    guide_idx = next(idx for idx, elem in enumerate(paragraphs) if text(elem) == "报告导读")
+    assert text(paragraphs[guide_idx - 31]) == "检测报告"
+    assert not any(has_page_break(elem) for elem in paragraphs[: guide_idx + 1])
+    assert all(text(elem) == "" for elem in paragraphs[guide_idx - 30 : guide_idx])
+    rendered_notice = next(
+        elem for elem in paragraphs if text(elem).startswith("本表仅展示当前面板")
+    )
+    rendered_unrelated = next(elem for elem in paragraphs if text(elem) == "其它段落")
+    assert has_page_break(rendered_notice) is False
+    assert has_page_break(rendered_unrelated) is True
 
 
 def test_template_renderer_can_build_panel_declared_processors_only():
