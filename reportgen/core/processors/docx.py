@@ -190,10 +190,23 @@ def _run_front_matter_spacing(ctx: ProcessorContext) -> None:
         guide_spacer_count=max(0, guide_spacer_count),
         insert_page_break=insert_page_break,
     )
+    _remove_configured_page_breaks(ctx, style=style)
+
+
+def _remove_configured_page_breaks(
+    ctx: ProcessorContext,
+    *,
+    style: dict | None = None,
+) -> None:
+    resolved_style = style or ctx.renderer._panel_style_config(
+        ctx.template_context,
+        "front_matter",
+    )
+    raw_prefixes = resolved_style.get("remove_page_break_after_text_prefixes") or ()
+    if isinstance(raw_prefixes, str):
+        raw_prefixes = (raw_prefixes,)
     prefixes = tuple(
-        str(value).strip()
-        for value in (style.get("remove_page_break_after_text_prefixes") or ())
-        if str(value).strip()
+        str(value).strip() for value in raw_prefixes if str(value).strip()
     )
     if prefixes:
         ctx.renderer._remove_page_breaks_after_text_prefixes(
@@ -393,6 +406,10 @@ def _run_underlines_and_styles(ctx: ProcessorContext) -> None:
     normalize_back_cover = getattr(ctx.renderer, "_normalize_back_cover_artwork", None)
     if callable(normalize_back_cover):
         normalize_back_cover(ctx.output_path, ctx.template_context)
+    # LibreOffice can recreate source-template hard breaks during its TOC
+    # round-trip. Apply the panel's narrow flow cleanup once more after every
+    # document-rewriting normalizer and before the final pagination probe.
+    _remove_configured_page_breaks(ctx)
     # Pagination must be finalized only after every layout-affecting normalizer
     # above (notably forced section breaks and reference font normalization).
     # Otherwise the cached PAGEREF values describe a pre-final document and can

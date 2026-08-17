@@ -7324,6 +7324,11 @@ def test_underlines_and_styles_finalizes_toc_after_layout_normalizers(monkeypatc
     )
     monkeypatch.setattr(
         renderer,
+        "_remove_page_breaks_after_text_prefixes",
+        lambda *_args: sequence.append("page_flow"),
+    )
+    monkeypatch.setattr(
+        renderer,
         "_populate_static_toc_page_numbers",
         lambda *_args: sequence.append("toc"),
     )
@@ -7333,7 +7338,14 @@ def test_underlines_and_styles_finalizes_toc_after_layout_normalizers(monkeypatc
             renderer=renderer,
             output_path="report.docx",
             template_context={
-                "report_content": {"force_page_break_before_headings": ["5. 参考文献"]}
+                "report_content": {"force_page_break_before_headings": ["5. 参考文献"]},
+                "panel_style": {
+                    "front_matter": {
+                        "remove_page_break_after_text_prefixes": [
+                            "本表仅展示当前面板已输出的精确事件结果"
+                        ]
+                    }
+                },
             },
             logger=SimpleNamespace(warning=lambda *_args, **_kwargs: None),
         )
@@ -7345,6 +7357,7 @@ def test_underlines_and_styles_finalizes_toc_after_layout_normalizers(monkeypatc
         "legal_notice",
         "references",
         "back_cover",
+        "page_flow",
         "toc",
     ]
 
