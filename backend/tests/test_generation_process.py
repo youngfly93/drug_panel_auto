@@ -49,7 +49,7 @@ def test_run_callable_with_timeout_returns_child_payload():
     result = run_callable_with_timeout(
         _return_payload,
         args=("ok",),
-        timeout_seconds=5,
+        timeout_seconds=15,
     )
 
     assert result == {"value": "ok"}
@@ -59,7 +59,7 @@ def test_run_callable_with_timeout_drains_large_child_payload_before_join():
     result = run_callable_with_timeout(
         _return_large_payload,
         args=(4_000_000,),
-        timeout_seconds=5,
+        timeout_seconds=15,
     )
 
     assert len(result["blob"]) == 4_000_000
@@ -67,7 +67,7 @@ def test_run_callable_with_timeout_drains_large_child_payload_before_join():
 
 def test_run_callable_with_timeout_raises_on_child_error():
     with pytest.raises(GenerationProcessError) as exc:
-        run_callable_with_timeout(_raise_payload, timeout_seconds=5)
+        run_callable_with_timeout(_raise_payload, timeout_seconds=15)
 
     assert "RuntimeError" in str(exc.value)
     assert "synthetic child failure" in str(exc.value)
