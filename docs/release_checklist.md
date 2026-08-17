@@ -309,11 +309,11 @@ cat /media/desk16/iy12922/apps/reportgen-web-runtime/renderer_fingerprint.json
 
 The release evidence must include the exact Linux LibreOffice version and the
 DOCX/QA hashes. The runtime and candidate QA fingerprints must carry the same
-`reportgen-cjk-font-substitution-v2` profile and its 64-character mapping hash;
-the isolated profile pins Word-only fonts to installed Noto CJK fonts without
-changing the font names stored in the delivered DOCX. Final visual acceptance
-still requires Windows Word/WPS; a Mac LibreOffice PASS alone is not
-production-equivalent evidence.
+committed `reportgen-cjk-font-substitution-*` profile name and the same
+64-character mapping hash; the isolated profile pins Word-only fonts to
+installed Noto CJK fonts without changing the font names stored in the
+delivered DOCX. Final visual acceptance still requires Windows Word/WPS; a Mac
+LibreOffice PASS alone is not production-equivalent evidence.
 
 For a formal historical-Golden release, generate every candidate from the
 frozen commit on the production-equivalent Linux renderer with
