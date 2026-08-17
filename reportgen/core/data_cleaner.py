@@ -227,9 +227,13 @@ class DataCleaner:
         return sample_id
 
     # 已知日期字段（医疗报告中日期字段稳定且有限）
-    _KNOWN_DATE_FIELDS = frozenset([
-        "report_date", "collection_date", "receive_date",
-    ])
+    _KNOWN_DATE_FIELDS = frozenset(
+        [
+            "report_date",
+            "collection_date",
+            "receive_date",
+        ]
+    )
 
     _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
     _CHINESE_DATE_RE = re.compile(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?")
@@ -261,7 +265,10 @@ class DataCleaner:
                 normalized = f"{cn_match.group(1)}-{int(cn_match.group(2)):02d}-{int(cn_match.group(3)):02d}"
                 report_data.set_field(field_name, normalized)
                 self.logger.debug(
-                    "中文日期格式标准化", field=field_name, original=value, normalized=normalized
+                    "中文日期格式标准化",
+                    field=field_name,
+                    original=value,
+                    normalized=normalized,
                 )
                 continue
             # 尝试标准化
@@ -269,7 +276,10 @@ class DataCleaner:
             if normalized is not None:
                 report_data.set_field(field_name, normalized)
                 self.logger.debug(
-                    "日期格式标准化", field=field_name, original=value, normalized=normalized
+                    "日期格式标准化",
+                    field=field_name,
+                    original=value,
+                    normalized=normalized,
                 )
         self._set_date_display_aliases(report_data)
 
@@ -279,6 +289,12 @@ class DataCleaner:
             value = report_data.get_field(field_name)
             normalized = self.normalize_date(value) if value else None
             if not normalized:
+                # Date fields are optional for draft/report-group review.  Keep
+                # the canonical field absent, but always expose visible display
+                # aliases so a template can say "未提供" without turning an
+                # incomplete optional date into a template-contract failure.
+                report_data.set_field(f"{field_name}_compact", "未提供")
+                report_data.set_field(f"{field_name}_dot", "未提供")
                 continue
             report_data.set_field(f"{field_name}_compact", normalized.replace("-", ""))
             report_data.set_field(f"{field_name}_dot", normalized.replace("-", "."))

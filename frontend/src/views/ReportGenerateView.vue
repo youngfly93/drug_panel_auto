@@ -592,6 +592,14 @@ let batchPollTimer: number | null = null
 let singlePollTimer: number | null = null
 
 function panelTemplateOptions(type?: string | null) {
+  if (type === 'lung_588_pdl1') {
+    return [
+      {
+        label: '肺癌588历史终版金标候选（报告组评审）',
+        value: 'lung_588_pdl1_historical_golden_v1',
+      },
+    ]
+  }
   if (type === 'crc_358_msi') {
     return [
       {

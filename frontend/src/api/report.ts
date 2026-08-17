@@ -27,6 +27,7 @@ export interface GenerateResult {
   qa_status?: string | null
   qa_issues?: Array<Record<string, any>>
   visual_render?: Record<string, any> | null
+  template_identity?: Record<string, any> | null
   generation_id?: string | null
   stage_results?: Array<Record<string, any>>
   stage_results_file?: string | null
@@ -193,6 +194,14 @@ export interface ReportSummary {
   panel?: {
     status?: string | null
     template_status?: string | null
+  }
+  template?: {
+    id?: string | null
+    version?: string | null
+    status?: string | null
+    filename?: string | null
+    sha256?: string | null
+    is_default?: boolean
   }
   patient?: Record<string, any>
   biomarkers?: {

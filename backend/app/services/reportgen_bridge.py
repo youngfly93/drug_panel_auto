@@ -257,6 +257,10 @@ class ReportGenBridge:
             project_name=project_name,
             panel_status=self.generator._panel_status(panel_package),
             template_status=self.generator._template_status(panel_package, None),
+            template_identity=self.generator._template_identity(
+                panel_package,
+                str(panel_package.resolve_template_file()) if panel_package is not None else None,
+            ),
             generation_id=Path(working.file_path).stem,
             output_file=None,
             qa_report=None,

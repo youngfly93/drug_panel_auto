@@ -169,6 +169,16 @@ def test_data_cleaner_exposes_date_display_aliases():
     assert report_data.get_field("report_date_dot") == "2025.12.04"
 
 
+def test_data_cleaner_exposes_visible_aliases_for_missing_optional_dates():
+    report_data = ReportData()
+
+    DataCleaner(log_level="ERROR").validate_and_clean(report_data)
+
+    assert report_data.get_field("receive_date") is None
+    assert report_data.get_field("receive_date_compact") == "未提供"
+    assert report_data.get_field("receive_date_dot") == "未提供"
+
+
 def test_field_mapper_derives_report_number_from_sample_id(tmp_path):
     excel_data = _excel(tmp_path)
     excel_data.metadata["sample_id_from_filename"] = "lz258792"
@@ -484,18 +494,14 @@ def test_crc_drug_rule_contains_active_approved_rows():
     assert "瑞戈非尼" in rows[0]["drug"]
     assert rows[0]["enabled"] is True
     assert rule["drug_rules"]["approved_drug_rows_source"] == ("drugs.yaml:approved_drug_rows")
-    assert rule["drug_rules"]["approved_drug_rows_display_mode"] == (
-        "exclude_if_listed_in_part2"
-    )
+    assert rule["drug_rules"]["approved_drug_rows_display_mode"] == ("exclude_if_listed_in_part2")
     transition = rule["drug_rules"]["approved_drug_rows_contract_transition"]
     assert transition == {
         "proposed_contract_id": "crc358_dynamic_7_drug_differencing_20260720",
         "prior_contract_id": "crc358_reviewed_historical_table_contract",
         "transition_status": "report_group_approved_supersession",
         "approved_at": "2026-07-22",
-        "approval_receipt_id": (
-            "report_group_crc358_domain_presentation_20260724"
-        ),
+        "approval_receipt_id": ("report_group_crc358_domain_presentation_20260724"),
         "source_ref": {
             "type": "report_group_feedback",
             "id": "feedback_20260720_crc_approved_drug_dynamic_display",
@@ -513,9 +519,7 @@ def test_load_panel_config_prefers_drugs_yaml_approved_rows():
 
     assert len(panel_config.approved_drug_rows) == 7
     assert "瑞戈非尼" in panel_config.approved_drug_rows[0]["drug"]
-    assert panel_config.approved_drug_rows_display_mode == (
-        "exclude_if_listed_in_part2"
-    )
+    assert panel_config.approved_drug_rows_display_mode == ("exclude_if_listed_in_part2")
 
 
 def test_crc_biomarker_rule_contains_active_immune_tables():
@@ -2257,9 +2261,7 @@ def test_report_group_approved_gene_rows_keep_reviewed_conservative_wording():
         )
         assert len(sections) == 1
         assert sections[0]["intro"] == expected[gene]["intro"]
-        assert sections[0]["mutation_analysis"].endswith(
-            expected[gene]["mutation_analysis"]
-        )
+        assert sections[0]["mutation_analysis"].endswith(expected[gene]["mutation_analysis"])
         assert sections[0]["mutation_analysis"].count("编码的蛋白全长") == 1
 
 
@@ -4991,6 +4993,39 @@ def test_static_toc_page_numbers_keep_reviewed_toc_style(tmp_path):
     assert content_target == "检测内容"
 
 
+def test_lung588_disabled_part3_toc_is_explicit_and_drops_active_analysis_rows(
+    tmp_path,
+):
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    template_path = package.resolve_template_file()
+    docx_path = tmp_path / "lung588_disabled_part3_toc.docx"
+    shutil.copy2(template_path, docx_path)
+
+    ok = TemplateRenderer(log_level="ERROR")._write_static_toc_page_numbers(
+        str(docx_path),
+        {
+            "本部分未启用": 47,
+            "阅读说明": 47,
+            "参考文献": 79,
+        },
+        {
+            "part3_knowledge_status": "disabled",
+            "panel_style": {"toc": {}},
+        },
+    )
+
+    assert ok is True
+    toc_xml = _toc_sdt_xml(docx_path)
+    assert "本部分未启用" in toc_xml
+    assert "基因变异解析" not in toc_xml
+    assert "靶向药物/免疫用药提示解析" not in toc_xml
+    visible_numbers = TemplateRenderer(log_level="ERROR")._read_static_toc_page_numbers(
+        str(docx_path)
+    )
+    assert visible_numbers["本部分未启用"] == 47
+    assert visible_numbers["阅读说明"] == 47
+
+
 def test_toc_uses_valid_reportgen_bookmarks_and_cached_page_numbers(tmp_path):
     import re
 
@@ -6975,6 +7010,66 @@ def test_exact_section_headings_use_idempotent_page_break_before(tmp_path):
     )
 
 
+def test_collapsed_reference_notice_and_qc_share_the_page(tmp_path):
+    docx_path = tmp_path / "collapsed-reference-qc.docx"
+    doc = Document()
+    notice = doc.add_paragraph("本报告未生成患者级动态参考文献；历史病例固定参考文献已移除。")
+    notice.paragraph_format.page_break_before = True
+    notice.add_run().add_break(WD_BREAK.PAGE)
+    qc = doc.add_paragraph("本次检测质控结果")
+    qc.paragraph_format.page_break_before = True
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._enforce_page_break_before_headings(
+        str(docx_path),
+        ("本次检测质控结果",),
+    )
+    renderer._enforce_page_break_before_headings(
+        str(docx_path),
+        ("本次检测质控结果",),
+    )
+
+    rendered = Document(docx_path)
+    rendered_notice, rendered_qc = rendered.paragraphs[:2]
+    assert rendered_notice.paragraph_format.page_break_before is False
+    assert rendered_qc.paragraph_format.page_break_before is False
+    assert rendered_qc.paragraph_format.keep_with_next is True
+    assert 'w:type="page"' not in rendered_notice._p.xml
+    assert "w:lastRenderedPageBreak" not in rendered_notice._p.xml
+
+
+def test_disabled_lung_part3_notice_and_reading_guide_share_the_page(tmp_path):
+    docx_path = tmp_path / "disabled-part3-reading-guide.docx"
+    doc = Document()
+    doc.add_paragraph("第三部分：基因变异及相应靶向/免疫药物解析")
+    notice = doc.add_paragraph(
+        "本项目肺癌专属知识当前未启用，暂不提供第三部分的患者级基因解释和药物解析。"
+    )
+    notice.add_run().add_break(WD_BREAK.PAGE)
+    reading = doc.add_paragraph("3. 阅读说明")
+    reading.paragraph_format.page_break_before = True
+    doc.save(docx_path)
+
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._enforce_page_break_before_headings(
+        str(docx_path),
+        ("3. 阅读说明",),
+    )
+    renderer._enforce_page_break_before_headings(
+        str(docx_path),
+        ("3. 阅读说明",),
+    )
+
+    rendered = Document(docx_path)
+    rendered_heading, rendered_notice, rendered_reading = rendered.paragraphs[:3]
+    assert rendered_heading.paragraph_format.keep_with_next is True
+    assert rendered_notice.paragraph_format.page_break_before is False
+    assert rendered_reading.paragraph_format.page_break_before is False
+    assert rendered_reading.paragraph_format.keep_with_next is True
+    assert 'w:type="page"' not in rendered_notice._p.xml
+
+
 def test_drug_brand_summary_bolds_only_square_bracket_fragments(tmp_path):
     docx_path = tmp_path / "brand_brackets.docx"
     marker = "上表涉及的已上市的药物名称及对应的商品名称"
@@ -7588,6 +7683,9 @@ def test_static_toc_page_numbers_fail_when_final_layout_never_converges(tmp_path
             {"参考文献": 68},
             {"参考文献": 69},
             {"参考文献": 70},
+            {"参考文献": 71},
+            {"参考文献": 72},
+            {"参考文献": 73},
         ]
     )
     visible = {}
@@ -9277,6 +9375,52 @@ def test_rebuild_reference_section_covers_cited_pmids(tmp_path):
     assert "stale ref one" not in blob  # 静态条目被替换
     assert "99999999" not in blob  # “如编号”示例被排除
     assert blob.index("20664172") < blob.index("24579064")  # PMID 升序
+
+
+def test_rebuild_reference_section_removes_uncited_historical_case_list(tmp_path):
+    docx_path = tmp_path / "uncited_refs.docx"
+    doc = Document()
+    doc.add_paragraph("正文没有患者级文献引用。")
+    doc.add_paragraph("5. 参考文献")
+    stale = doc.add_paragraph("PMID:0000001 historical case ref")
+    stale.paragraph_format.page_break_before = True
+    stale.add_run().add_break(WD_BREAK.PAGE)
+    doc.add_paragraph("PMID:0000002 another historical case ref")
+    qc_heading = doc.add_paragraph("本次检测质控结果")
+    qc_heading.paragraph_format.page_break_before = True
+    doc.save(docx_path)
+
+    TemplateRenderer(log_level="ERROR")._rebuild_reference_section(
+        str(docx_path),
+        {
+            "reference_lookup": {"pmid": {}, "trial": {}, "other": []},
+            "report_content": {
+                "reference_style": {
+                    "font_name": "Calibri",
+                    "east_asia_font_name": "微软雅黑",
+                    "font_size_pt": 10.5,
+                }
+            },
+        },
+    )
+
+    rendered = Document(docx_path)
+    blob = "\n".join(paragraph.text for paragraph in rendered.paragraphs)
+    assert "historical case ref" not in blob
+    assert "本报告未生成患者级动态参考文献" in blob
+    assert "本次检测质控结果" in blob
+    notice = next(
+        paragraph
+        for paragraph in rendered.paragraphs
+        if "本报告未生成患者级动态参考文献" in paragraph.text
+    )
+    assert notice.paragraph_format.page_break_before is False
+    assert not [node for node in notice._p.iter(qn("w:br")) if node.get(qn("w:type")) == "page"]
+    assert notice.runs[0]._r.rPr.rFonts.get(qn("w:eastAsia")) == "微软雅黑"
+    rendered_qc = next(
+        paragraph for paragraph in rendered.paragraphs if paragraph.text == "本次检测质控结果"
+    )
+    assert rendered_qc.paragraph_format.page_break_before is False
 
 
 def test_rebuild_reference_section_applies_configured_entry_font_only(tmp_path):

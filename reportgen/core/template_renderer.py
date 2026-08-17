@@ -28,7 +28,10 @@ from reportgen.docx_sections import (
     inspect_structural_marker,
 )
 from reportgen.models.report_data import ReportData
-from reportgen.utils.libreoffice_profile import initialize_libreoffice_profile
+from reportgen.utils.libreoffice_profile import (
+    initialize_libreoffice_profile,
+    stabilize_docx_fonts_for_libreoffice_render,
+)
 from reportgen.utils.logger import get_logger
 from reportgen.utils.process_lock import exclusive_file_lock
 from reportgen.utils.validators import validate_docx_file
@@ -291,9 +294,7 @@ class TemplateRenderer:
         notice_matches = [
             p for p in doc.paragraphs if (p.text or "").strip() == missing_notice
         ]
-        existing = doc._element.xpath(
-            f'.//wp:docPr[@name="{drawing_name}"]'
-        )
+        existing = doc._element.xpath(f'.//wp:docPr[@name="{drawing_name}"]')
         if not image_path and not matches and len(notice_matches) == 1 and not existing:
             # A missing-image review notice is also a completed processor state.
             return
@@ -303,13 +304,9 @@ class TemplateRenderer:
             # byte-for-byte unchanged instead of appending a duplicate drawing.
             return
         if len(matches) != 1:
-            raise ValueError(
-                f"PD-L1图片标记数量异常：期望1个，实际{len(matches)}个"
-            )
+            raise ValueError(f"PD-L1图片标记数量异常：期望1个，实际{len(matches)}个")
         if existing:
-            raise ValueError(
-                f"PD-L1病例图片数量异常：期望0个，实际{len(existing)}个"
-            )
+            raise ValueError(f"PD-L1病例图片数量异常：期望0个，实际{len(existing)}个")
         paragraph = matches[0]
         for child in list(paragraph._element):
             if child.tag.endswith("}pPr"):
@@ -1006,9 +1003,7 @@ class TemplateRenderer:
             "临床试验/研究性方案解析",
         }
         variant_header_re = re.compile(r"^u\s+[^：]{1,20}：.+[；;]\s*\d")
-        drug_variant_re = re.compile(
-            r"^[A-Za-z0-9_-]+：.+突变相应.*(?:药物|方案)$"
-        )
+        drug_variant_re = re.compile(r"^[A-Za-z0-9_-]+：.+突变相应.*(?:药物|方案)$")
         summary_prefix = "在本次检测范围内，检出体细胞变异"
         context_drug_names = {
             line.strip()
@@ -3335,14 +3330,10 @@ class TemplateRenderer:
         w_br = qn("w:br")
         w_type = qn("w:type")
         w_last_rendered_page_break = qn("w:lastRenderedPageBreak")
-        for paragraph in doc.paragraphs:
-            if (paragraph.text or "").strip() not in target_headings:
-                continue
-            # A few legacy templates put an explicit page-break run inside the
-            # heading itself. Keeping that run together with pageBreakBefore
-            # creates two independent pagination instructions and can yield a
-            # blank page after a LibreOffice field refresh. The paragraph
-            # property below is the single source of truth.
+        paragraphs = doc.paragraphs
+
+        def clear_rendered_breaks(paragraph) -> None:
+            nonlocal changed
             for node in list(paragraph._p.iter()):
                 if node.tag == w_br and node.get(w_type) == "page":
                     parent = node.getparent()
@@ -3354,6 +3345,78 @@ class TemplateRenderer:
                     if parent is not None:
                         parent.remove(node)
                         changed = True
+
+        for paragraph_index, paragraph in enumerate(paragraphs):
+            heading_text = (paragraph.text or "").strip()
+            if heading_text not in target_headings:
+                continue
+            previous_nonempty = next(
+                (
+                    candidate
+                    for candidate in reversed(paragraphs[:paragraph_index])
+                    if (candidate.text or "").strip()
+                ),
+                None,
+            )
+            collapsed_reference_notice = bool(
+                heading_text == "本次检测质控结果"
+                and previous_nonempty is not None
+                and (previous_nonempty.text or "")
+                .strip()
+                .startswith("本报告未生成患者级动态参考文献")
+            )
+            disabled_part3_notice = bool(
+                heading_text == "3. 阅读说明"
+                and previous_nonempty is not None
+                and (previous_nonempty.text or "")
+                .strip()
+                .startswith("本项目肺癌专属知识当前未启用")
+            )
+            if collapsed_reference_notice or disabled_part3_notice:
+                # The regular report layout starts QC on a new page.  When a
+                # historical case-specific reference list has been reduced to
+                # one review notice, or Part 3 has been reduced to its explicit
+                # disabled notice, that rule would create a nearly empty page.
+                # Override only these explicit states and repeat the cleanup
+                # after LibreOffice refreshes.
+                clear_rendered_breaks(previous_nonempty)
+                clear_rendered_breaks(paragraph)
+                if previous_nonempty.paragraph_format.page_break_before is not False:
+                    previous_nonempty.paragraph_format.page_break_before = False
+                    changed = True
+                if paragraph.paragraph_format.page_break_before is not False:
+                    paragraph.paragraph_format.page_break_before = False
+                    changed = True
+                if paragraph.paragraph_format.keep_with_next is not True:
+                    paragraph.paragraph_format.keep_with_next = True
+                    changed = True
+                if disabled_part3_notice:
+                    previous_notice_index = paragraphs.index(previous_nonempty)
+                    previous_heading = next(
+                        (
+                            candidate
+                            for candidate in reversed(
+                                paragraphs[:previous_notice_index]
+                            )
+                            if (candidate.text or "").strip()
+                        ),
+                        None,
+                    )
+                    if (
+                        previous_heading is not None
+                        and (previous_heading.text or "").strip()
+                        == "第三部分：基因变异及相应靶向/免疫药物解析"
+                        and previous_heading.paragraph_format.keep_with_next is not True
+                    ):
+                        previous_heading.paragraph_format.keep_with_next = True
+                        changed = True
+                continue
+            # A few legacy templates put an explicit page-break run inside the
+            # heading itself. Keeping that run together with pageBreakBefore
+            # creates two independent pagination instructions and can yield a
+            # blank page after a LibreOffice field refresh. The paragraph
+            # property below is the single source of truth.
+            clear_rendered_breaks(paragraph)
             if paragraph.paragraph_format.page_break_before is not True:
                 paragraph.paragraph_format.page_break_before = True
                 changed = True
@@ -3369,9 +3432,7 @@ class TemplateRenderer:
         import re
 
         marker = "上表涉及的已上市的药物名称及对应的商品名称"
-        bracket_re = re.compile(
-            r"((?:\[[^\[\]\r\n]+\])|(?:［[^［］\r\n]+］))"
-        )
+        bracket_re = re.compile(r"((?:\[[^\[\]\r\n]+\])|(?:［[^［］\r\n]+］))")
         doc = Document(file_path)
         changed = False
 
@@ -3862,9 +3923,7 @@ class TemplateRenderer:
             return default_label, analysis
 
         fixed_label = str(style.get("fixed_domain_label") or default_label)
-        if not cls._truthy(
-            style.get("merge_fixed_domain_with_first_narrative")
-        ):
+        if not cls._truthy(style.get("merge_fixed_domain_with_first_narrative")):
             return fixed_label, analysis
 
         narrative = str(section.get("mutation_narrative") or "").strip()
@@ -3883,28 +3942,20 @@ class TemplateRenderer:
             narrative = narrative[len(fixed_domain) :].lstrip()
 
         fixed_lines = [
-            line.strip()
-            for line in fixed_domain.splitlines()
-            if line.strip()
+            line.strip() for line in fixed_domain.splitlines() if line.strip()
         ]
         fixed_paragraph = "".join(
-            line
-            if line.endswith(("。", "！", "？", ".", "!", "?"))
-            else f"{line}。"
+            line if line.endswith(("。", "！", "？", ".", "!", "?")) else f"{line}。"
             for line in fixed_lines
         )
         narrative_paragraphs = [
-            line.strip()
-            for line in narrative.splitlines()
-            if line.strip()
+            line.strip() for line in narrative.splitlines() if line.strip()
         ]
         if not narrative_paragraphs:
             return fixed_label, fixed_paragraph
 
         first_paragraph = f"{fixed_paragraph}{narrative_paragraphs[0]}"
-        return fixed_label, "\n".join(
-            [first_paragraph, *narrative_paragraphs[1:]]
-        )
+        return fixed_label, "\n".join([first_paragraph, *narrative_paragraphs[1:]])
 
     def _render_part3_formatted(self, file_path: str, context: dict) -> None:
         """Replace ``__PART3_MARKER__`` with data-driven Part 3 sections.
@@ -4152,9 +4203,7 @@ class TemplateRenderer:
             )
             if amino_table_element is not None:
                 current.addnext(amino_table_element)
-            placeholder_para._element.getparent().remove(
-                placeholder_para._element
-            )
+            placeholder_para._element.getparent().remove(placeholder_para._element)
             doc.save(file_path)
             self.logger.info(
                 "Part 3 医学知识按 Panel 门禁关闭",
@@ -4569,6 +4618,8 @@ class TemplateRenderer:
         1.3-line spacing cannot strand the final references on a sparse page.
         Heading and following QC/method/company sections are untouched.
         """
+        import re
+
         from docx.oxml.ns import qn
         from docx.shared import Pt
         from docx.text.run import Run
@@ -4579,6 +4630,9 @@ class TemplateRenderer:
             return
 
         font_name = str(style_cfg.get("font_name") or "").strip()
+        east_asia_font_name = str(
+            style_cfg.get("east_asia_font_name") or font_name
+        ).strip()
         font_size_raw = style_cfg.get("font_size_pt")
         if not font_name or font_size_raw is None:
             return
@@ -4600,7 +4654,6 @@ class TemplateRenderer:
 
         changed_runs = 0
         changed_paragraphs = 0
-        font_attrs = tuple(qn(f"w:{name}") for name in ("ascii", "hAnsi", "eastAsia"))
         for paragraph in doc.paragraphs[start + 1 : end]:
             if not (paragraph.text or "").strip():
                 continue
@@ -4634,8 +4687,16 @@ class TemplateRenderer:
                 run = Run(run_element, paragraph)
                 r_pr = run._element.get_or_add_rPr()
                 r_fonts = r_pr.rFonts
-                font_matches = r_fonts is not None and all(
-                    r_fonts.get(attr) == font_name for attr in font_attrs
+                target_east_asia = (
+                    east_asia_font_name
+                    if re.search(r"[\u3400-\u9fff]", run.text or "")
+                    else font_name
+                )
+                font_matches = (
+                    r_fonts is not None
+                    and r_fonts.get(qn("w:ascii")) == font_name
+                    and r_fonts.get(qn("w:hAnsi")) == font_name
+                    and r_fonts.get(qn("w:eastAsia")) == target_east_asia
                 )
                 current_size = run.font.size
                 size_matches = (
@@ -4645,6 +4706,9 @@ class TemplateRenderer:
                 if font_matches and size_matches:
                     continue
                 self._set_run_font_name(run, font_name)
+                run._element.get_or_add_rPr().get_or_add_rFonts().set(
+                    qn("w:eastAsia"), target_east_asia
+                )
                 run.font.size = Pt(font_size_pt)
                 changed_runs += 1
 
@@ -4752,6 +4816,7 @@ class TemplateRenderer:
         import copy as _copy
         import re
 
+        from docx.oxml.ns import qn
         from docx.text.paragraph import Paragraph
 
         lookup = context.get("reference_lookup") or {}
@@ -4780,6 +4845,24 @@ class TemplateRenderer:
         existing = [
             p for p in paragraphs[ref_idx + 1 : ref_end_idx] if (p.text or "").strip()
         ]
+
+        def set_para_text(paragraph, text: str) -> None:
+            for run in list(paragraph.runs):
+                run._r.getparent().remove(run._r)
+            paragraph.add_run(text)
+
+        def remove_page_breaks(paragraph) -> None:
+            paragraph.paragraph_format.page_break_before = False
+            for node in list(paragraph._p.iter()):
+                if node.tag == qn("w:br") and node.get(qn("w:type")) == "page":
+                    parent = node.getparent()
+                    if parent is not None:
+                        parent.remove(node)
+                elif node.tag == qn("w:lastRenderedPageBreak"):
+                    parent = node.getparent()
+                    if parent is not None:
+                        parent.remove(node)
+
         for paragraph in existing:
             entry = (paragraph.text or "").strip()
             m_static = re.match(r"PMID[:\s]*0*(\d+)", entry, re.I)
@@ -4831,12 +4914,31 @@ class TemplateRenderer:
             refs.append(trial_map.get(key) or f"{key} https://clinicaltrials.gov.")
         refs.extend(cited_other)
         if not refs:
+            # A historical golden report's static reference list is commonly
+            # case-specific even when identifiers have been scrubbed.  Keeping
+            # it after Part 3 is disabled leaks the seed case's evidence trail
+            # into unrelated patients.  Preserve the reviewed section layout,
+            # but replace the stale list with one explicit review notice.
+            if existing:
+                set_para_text(
+                    existing[0],
+                    "本报告未生成患者级动态参考文献；历史病例固定参考文献已移除，"
+                    "待报告组根据最终启用的解释内容复核。",
+                )
+                remove_page_breaks(existing[0])
+                for paragraph in existing[1:]:
+                    paragraph._p.getparent().remove(paragraph._p)
+                if ref_end_idx < len(paragraphs):
+                    following = paragraphs[ref_end_idx]
+                    if (following.text or "").strip() == "本次检测质控结果":
+                        # Once the historical case-specific reference list has
+                        # collapsed to one notice, let QC use the remainder of
+                        # that page instead of leaving a nearly empty page.
+                        remove_page_breaks(following)
+                doc.save(file_path)
+                self._normalize_reference_section_style(file_path, context)
+                self.logger.info("已移除未被正文引用的历史固定参考文献")
             return
-
-        def set_para_text(paragraph, text: str) -> None:
-            for run in list(paragraph.runs):
-                run._r.getparent().remove(run._r)
-            paragraph.add_run(text)
 
         if not existing:
             raise ValueError(
@@ -6390,7 +6492,13 @@ class TemplateRenderer:
                 raise RuntimeError("生产 Panel 未能从最终 PDF 解析目录页码")
             return
 
-        max_passes = 3
+        # A legacy floating-TOC template may need one pass to promote its
+        # LibreOffice-demoted inline content control back to a valid block SDT.
+        # A dense case can then cross a page boundary once while the promoted
+        # TOC and ReportGen bookmarks settle, requiring a corrective write and
+        # one final verification. Six passes remain strictly bounded while
+        # covering that observed legacy-layout sequence.
+        max_passes = 6
         for pass_index in range(1, max_passes + 1):
             if not self._write_static_toc_page_numbers(
                 file_path, detected_numbers, context
@@ -6443,11 +6551,14 @@ class TemplateRenderer:
             "检测结果小结",
             "靶向药物相关检测结果",
             "免疫治疗疗效评估",
+            "化疗药物相关检测结果",
             "检测结果说明",
+            "本部分未启用",
             "基因变异解析",
             "靶向药物/免疫用药提示解析",
             "阅读说明",
             "常见问题解答",
+            "肺癌诊疗知识",
             "结直肠癌诊疗知识",
             "癌症相关信号通路",
             "基因检测列表",
@@ -6570,21 +6681,124 @@ class TemplateRenderer:
             root = etree.fromstring(document_xml)
 
             toc_sdt = None
+            historical_tagged_toc = False
             for sdt in root.xpath(".//w:sdt", namespaces=ns):
                 instr = "".join(sdt.xpath(".//w:instrText/text()", namespaces=ns))
                 text = "".join(sdt.xpath(".//w:t/text()", namespaces=ns))
-                if "TOC" in instr or (
-                    "第一部分" in text and "第四部分" in text and "参考文献" in text
+                tags = sdt.xpath("./w:sdtPr/w:tag/@w:val", namespaces=ns)
+                is_historical_tagged_toc = "ReportGenHistoricalLung588TOC" in tags
+                if (
+                    is_historical_tagged_toc
+                    or "TOC" in instr
+                    or (
+                        "第一部分" in text and "第四部分" in text and "参考文献" in text
+                    )
                 ):
                     toc_sdt = sdt
+                    historical_tagged_toc = is_historical_tagged_toc
                     break
             if toc_sdt is None:
                 return False
+
+            # LibreOffice can preserve the tagged SDT while unwrapping every
+            # seed paragraph after its first one.  Remove only the exact seed
+            # siblings before target-bookmark discovery; otherwise those TOC
+            # labels can be mistaken for body headings and PAGEREF links point
+            # back to the TOC itself.  The following section-break paragraph is
+            # deliberately left outside the SDT so python-docx and Word retain
+            # the historical five-section document geometry.
+            has_external_section_break = False
+            if historical_tagged_toc:
+                # Some python-docx/LibreOffice round-trips demote this custom
+                # block control into an inline SDT inside a paragraph and move
+                # the remaining seed rows to following body paragraphs.  Lift
+                # it back to block level before inserting paragraph children;
+                # paragraph children inside an inline SDT are invalid and are
+                # otherwise discarded by LibreOffice's PDF renderer.
+                inline_container = toc_sdt.getparent()
+                if (
+                    inline_container is not None
+                    and inline_container.tag == qn("p")
+                    and inline_container.getparent() is not None
+                    and inline_container.getparent().tag == qn("body")
+                ):
+                    body = inline_container.getparent()
+                    insert_at = body.index(inline_container)
+                    inline_container.remove(toc_sdt)
+                    body.remove(inline_container)
+                    body.insert(insert_at, toc_sdt)
+
+                seed_labels = {
+                    normalize_label(value)
+                    for value in (
+                        "第一部分：基本信息",
+                        "第二部分：检测结果",
+                        "第三部分：基因变异及相应靶向/免疫药物解析",
+                        "第四部分：附录",
+                        "参考文献",
+                    )
+                }
+                unwrapped_seed_blocks = []
+                cursor = toc_sdt.getnext()
+                for _ in range(8):
+                    if cursor is None:
+                        break
+                    next_cursor = cursor.getnext()
+                    cursor_text = "".join(cursor.xpath(".//w:t/text()", namespaces=ns))
+                    section_nodes = cursor.xpath(".//w:sectPr", namespaces=ns)
+                    if (
+                        cursor.tag == qn("p")
+                        and normalize_label(cursor_text) in seed_labels
+                    ):
+                        if section_nodes:
+                            boundary = etree.Element(qn("p"))
+                            boundary_properties = etree.SubElement(boundary, qn("pPr"))
+                            boundary_properties.append(copy.deepcopy(section_nodes[0]))
+                            parent = cursor.getparent()
+                            if parent is not None:
+                                boundary_index = parent.index(cursor)
+                                parent.remove(cursor)
+                                parent.insert(boundary_index, boundary)
+                            has_external_section_break = True
+                            break
+                        unwrapped_seed_blocks.append(cursor)
+                        cursor = next_cursor
+                        continue
+                    if section_nodes:
+                        has_external_section_break = True
+                    break
+                for block in unwrapped_seed_blocks:
+                    parent = block.getparent()
+                    if parent is not None:
+                        parent.remove(block)
+            else:
+                next_block = toc_sdt.getnext()
+                has_external_section_break = bool(
+                    next_block is not None
+                    and next_block.xpath(".//w:sectPr", namespaces=ns)
+                )
 
             normalized_numbers = {
                 normalize_label(label): str(number)
                 for label, number in page_numbers.items()
             }
+            disease_knowledge_label = next(
+                (
+                    label
+                    for label in ("肺癌诊疗知识", "结直肠癌诊疗知识")
+                    if normalize_label(label) in normalized_numbers
+                ),
+                "结直肠癌诊疗知识",
+            )
+            part3_disabled = (
+                str((context or {}).get("part3_knowledge_status") or "").strip().lower()
+                == "disabled"
+            )
+            part3_items = (
+                ["本部分未启用", "阅读说明"]
+                if part3_disabled
+                else ["基因变异解析", "靶向药物/免疫用药提示解析", "阅读说明"]
+            )
 
             toc_groups = [
                 (
@@ -6597,18 +6811,19 @@ class TemplateRenderer:
                         "检测结果小结",
                         "靶向药物相关检测结果",
                         "免疫治疗疗效评估",
+                        "化疗药物相关检测结果",
                         "检测结果说明",
                     ],
                 ),
                 (
                     "第三部分：基因变异及相应靶向/免疫药物解析",
-                    ["基因变异解析", "靶向药物/免疫用药提示解析", "阅读说明"],
+                    part3_items,
                 ),
                 (
                     "第四部分：附录",
                     [
                         "常见问题解答",
-                        "结直肠癌诊疗知识",
+                        disease_knowledge_label,
                         "癌症相关信号通路",
                         "基因检测列表",
                         "参考文献",
@@ -6628,9 +6843,16 @@ class TemplateRenderer:
                 "检测结果小结": {"needles": ["1.检测结果小结"]},
                 "靶向药物相关检测结果": {"needles": ["2.靶向药物相关检测结果"]},
                 "免疫治疗疗效评估": {"needles": ["3.免疫治疗疗效评估"]},
+                "化疗药物相关检测结果": {
+                    "needles": ["4.化疗药物相关检测结果"],
+                    "fallback": ["化疗药物相关检测结果"],
+                },
                 "检测结果说明": {
                     "needles": ["4.检测结果说明", "5.检测结果说明"],
                     "fallback": ["检测结果说明"],
+                },
+                "本部分未启用": {
+                    "needles": ["本项目肺癌专属知识当前未启用"],
                 },
                 "基因变异解析": {
                     "needles": ["1.基因变异解析"],
@@ -6642,6 +6864,7 @@ class TemplateRenderer:
                 },
                 "阅读说明": {"needles": ["3.阅读说明"]},
                 "常见问题解答": {"needles": ["1.常见问题解答"]},
+                "肺癌诊疗知识": {"needles": ["2.肺癌诊疗知识"]},
                 "结直肠癌诊疗知识": {"needles": ["2.结直肠癌诊疗知识"]},
                 "癌症相关信号通路": {"needles": ["3.癌症相关信号通路"]},
                 # Appendix titles also occur in explanatory prose. Keep these
@@ -6968,7 +7191,7 @@ class TemplateRenderer:
             # test templates that do not carry section properties.
             if reviewed_section_break is not None:
                 toc_content.append(reviewed_section_break)
-            else:
+            elif not has_external_section_break:
                 toc_content.append(make_page_break_paragraph())
 
             patched_xml = etree.tostring(
@@ -7066,9 +7289,12 @@ class TemplateRenderer:
         convergence either behavior can replace or shift the layout we are
         trying to measure.  The probe copy therefore removes automatic field
         refresh and ``usePrinterMetrics``, clears dirty flags and locks
-        field-begin nodes.  This helper is deliberately called only for a
-        temporary copy; the delivered report keeps dirty, reader-refreshable
-        fields and Word-compatible printer metrics.
+        field-begin nodes.  It also pins explicit and theme CJK fonts so old
+        families such as ``幼圆`` cannot select a different fallback face on
+        each LibreOffice cold start.  This helper is deliberately called only
+        for a temporary copy; the delivered report keeps dirty,
+        reader-refreshable fields, reviewed font names and Word-compatible
+        printer metrics.
         """
         import shutil
         from zipfile import ZIP_DEFLATED, ZipFile
@@ -7089,18 +7315,17 @@ class TemplateRenderer:
         os.close(fd)
         tmp_path = Path(tmp_name)
         try:
-            with ZipFile(source, "r") as zin, ZipFile(
-                tmp_path, "w", compression=ZIP_DEFLATED
-            ) as zout:
+            with (
+                ZipFile(source, "r") as zin,
+                ZipFile(tmp_path, "w", compression=ZIP_DEFLATED) as zout,
+            ):
                 for item in zin.infolist():
                     data = zin.read(item.filename)
                     if item.filename == "word/settings.xml":
                         data = self._stabilize_pdf_layout_probe_settings(data)
                     elif item.filename == "word/document.xml":
                         root = etree.fromstring(data)
-                        for field_char in root.xpath(
-                            ".//w:fldChar", namespaces=ns
-                        ):
+                        for field_char in root.xpath(".//w:fldChar", namespaces=ns):
                             field_char.attrib.pop(f"{{{word_ns}}}dirty", None)
                         for field_begin in root.xpath(
                             './/w:fldChar[@w:fldCharType="begin"]',
@@ -7118,6 +7343,10 @@ class TemplateRenderer:
         finally:
             if tmp_path.exists():
                 tmp_path.unlink()
+        stabilize_docx_fonts_for_libreoffice_render(
+            source,
+            require_available=False,
+        )
 
     def _detect_toc_page_numbers_from_pdf_layout(
         self,
@@ -7139,12 +7368,15 @@ class TemplateRenderer:
             ("检测结果小结", ("1.检测结果小结",)),
             ("靶向药物相关检测结果", ("2.靶向药物相关检测结果",)),
             ("免疫治疗疗效评估", ("3.免疫治疗疗效评估",)),
+            ("化疗药物相关检测结果", ("4.化疗药物相关检测结果",)),
             ("临床常用化疗药物评估及解析", ("4.临床常用化疗药物评估及解析",)),
             ("检测结果说明", ("4.检测结果说明", "5.检测结果说明", "检测结果说明")),
+            ("本部分未启用", ("本项目肺癌专属知识当前未启用",)),
             ("基因变异解析", ("基因变异说明", "5.检测结果说明")),
             ("靶向药物/免疫用药提示解析", ("靶向药物/免疫用药提示解析",)),
             ("阅读说明", ("3.阅读说明",)),
             ("常见问题解答", ("1.常见问题解答",)),
+            ("肺癌诊疗知识", ("2.肺癌诊疗知识",)),
             ("结直肠癌诊疗知识", ("2.结直肠癌诊疗知识",)),
             ("癌症相关信号通路", ("3.癌症相关信号通路",)),
             ("基因检测列表", ("4.基因检测列表", "GeneListforMLseq")),
@@ -7374,11 +7606,7 @@ class TemplateRenderer:
         changed = self._apply_gene_list_table_borders(doc, context)
         content_cfg = self._report_content_config(context)
         legacy_style_cfg = content_cfg.get("gene_list_table_style")
-        style_cfg = (
-            dict(legacy_style_cfg)
-            if isinstance(legacy_style_cfg, dict)
-            else {}
-        )
+        style_cfg = dict(legacy_style_cfg) if isinstance(legacy_style_cfg, dict) else {}
         # New panels own their layout tokens in rules/style.yaml. Preserve the
         # legacy report_content fallback for CRC, then let the active Panel
         # override only the gene-list values it explicitly declares.
@@ -7388,9 +7616,9 @@ class TemplateRenderer:
             style_cfg.get("header_row_height_cm"),
             row_height_cm,
         )
-        row_height_rule = str(
-            style_cfg.get("row_height_rule") or "at_least"
-        ).strip().lower()
+        row_height_rule = (
+            str(style_cfg.get("row_height_rule") or "at_least").strip().lower()
+        )
         resolved_height_rule = (
             WD_ROW_HEIGHT_RULE.EXACTLY
             if row_height_rule in {"exact", "exactly"}
@@ -7415,9 +7643,7 @@ class TemplateRenderer:
             seen_title_paragraphs: set[int] = set()
             for row_idx, row in enumerate(table.rows):
                 row.height_rule = resolved_height_rule
-                row.height = Cm(
-                    header_row_height_cm if row_idx == 0 else row_height_cm
-                )
+                row.height = Cm(header_row_height_cm if row_idx == 0 else row_height_cm)
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
                         # The legacy merged title row carries an embedded page

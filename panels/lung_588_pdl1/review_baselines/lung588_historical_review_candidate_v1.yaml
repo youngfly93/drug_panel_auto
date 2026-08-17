@@ -1,0 +1,98 @@
+schema_version: "1.0"
+contract_id: "lung588_historical_review_candidate_v1"
+panel_id: "lung_588_pdl1"
+
+lifecycle:
+  status: "report_group_review_candidate"
+  clinical_release_status: "blocked"
+  statement: >
+    本契约只冻结自动化工程基线，不表示固定医学内容、病例结论、规则命中、
+    报告组UAT或临床发布已经获批。
+  promotion_requires:
+    - "report_group_word_uat"
+    - "case_specific_pdl1_source_verification"
+    - "windows_word_or_wps_acceptance"
+
+privacy:
+  contains_phi: false
+  historical_source_committed: false
+  patient_specific_values_allowed_in_contract: false
+
+template:
+  id: "lung_588_pdl1_historical_golden_v1"
+  version: "0.4.0-review.2"
+  status: "pilot"
+  sha256: "4df4b5278226c9034e2a50c1a8b6a3dacd2666b2bd5db88e1c1d2a9e0ca3ade2"
+  structure:
+    table_count: 69
+    section_count: 5
+    inline_shape_count: 19
+  required_markers:
+    - "__PART3_MARKER__"
+    - "__PDL1_CASE_IMAGE__"
+    - "{%tr for row in variants_2_1 %}"
+    - "{%tr for row in targeted_drug_tips %}"
+  required_texts:
+    - "报告组评审候选稿（非临床交付）"
+    - "本表仅展示当前面板已输出的精确事件结果"
+    - "以下固定附录沿用历史终版版式"
+    - "Gene List for MLseq (n=588)"
+    - "图1. 免疫组化：PD-L1"
+  forbidden_texts:
+    - "肺癌329"
+    - "n=329"
+  dynamic_scope:
+    end_heading: "第四部分：附录"
+    forbidden_texts:
+      - "结直肠癌"
+      - "colorectal"
+      - "colon cancer"
+
+gene_list:
+  header: "Gene List for MLseq (n=588)"
+  count: 588
+  ordered_sha256: "f9e6be05c954a4d3df97f031d453fe1f58ea0689290b11de3c173f4a0edf08f1"
+
+fixed_content_policy:
+  status: "retained_for_report_group_review_only"
+  allowed_categories:
+    - "public_reference_identifiers"
+    - "drug_or_trial_codes"
+    - "legacy_epidemiology_and_guideline_text_under_visible_review_notice"
+  mandatory_review_notice: "以下固定附录沿用历史终版版式"
+  clinical_use_before_review: false
+
+rendered_output:
+  structure:
+    table_count: 69
+    section_count: 4
+    inline_shape_count_min: 19
+  required_texts:
+    - "报告组评审候选稿（非临床交付）"
+    - "本表仅展示当前面板已输出的精确事件结果"
+    - "以下固定附录沿用历史终版版式"
+    - "本项目肺癌专属知识当前未启用"
+    - "Gene List for MLseq (n=588)"
+    - "图1. 免疫组化：PD-L1"
+  forbidden_texts:
+    - "__PART3_MARKER__"
+    - "__PDL1_CASE_IMAGE__"
+    - "{{"
+    - "{%"
+    - "肺癌329"
+    - "n=329"
+    - "工程草案"
+    - "待报告组审核"
+  dynamic_scope:
+    end_heading: "第四部分：附录"
+    forbidden_texts:
+      - "结直肠癌"
+      - "colorectal"
+      - "colon cancer"
+  qa:
+    status: "PASS"
+    visual_render: "all"
+    page_count_min: 80
+    page_count_max: 100
+    max_blank_pages: 0
+    max_low_content_pages: 0

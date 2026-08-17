@@ -4,6 +4,7 @@
 核心业务逻辑编排，协调所有组件生成报告。
 """
 
+import hashlib
 import json
 import math
 import os
@@ -211,14 +212,10 @@ def validate_panel_biomarker_contracts(
         min_inclusive = bool(range_spec.get("minimum_inclusive", True))
         max_inclusive = bool(range_spec.get("maximum_inclusive", True))
         below = minimum is not None and (
-            numeric < float(minimum)
-            if min_inclusive
-            else numeric <= float(minimum)
+            numeric < float(minimum) if min_inclusive else numeric <= float(minimum)
         )
         above = maximum is not None and (
-            numeric > float(maximum)
-            if max_inclusive
-            else numeric >= float(maximum)
+            numeric > float(maximum) if max_inclusive else numeric >= float(maximum)
         )
         if below or above:
             failures.append(
@@ -285,6 +282,7 @@ class _GenerationState:
     canonical_project_type: Optional[str] = None
     panel_registration: Any = None
     panel_package: Any = None
+    template_identity: Optional[dict[str, Any]] = None
     panel_package_validation: Optional[dict[str, Any]] = None
     input_contract_validation: Optional[dict[str, Any]] = None
     report_data: Optional[ReportData] = None
@@ -536,6 +534,8 @@ class ReportGenerator:
             generation_id = "generation"
         if generation_id:
             payload["generation_id"] = generation_id
+        if state.template_identity is not None:
+            payload.setdefault("template_identity", state.template_identity)
 
         if output_file or state.output_dir:
             try:
@@ -548,9 +548,7 @@ class ReportGenerator:
                 state.stage_results_file = stage_results_file
                 payload["stage_results_file"] = stage_results_file
             except Exception as exc:
-                payload.setdefault("warnings", []).append(
-                    f"生成阶段报告失败: {exc}"
-                )
+                payload.setdefault("warnings", []).append(f"生成阶段报告失败: {exc}")
         if state.qa_report is not None and state.final_output and state.qa_report_file:
             state.qa_report = attach_pipeline_summary(
                 state.qa_report,
@@ -619,6 +617,10 @@ class ReportGenerator:
             if state.panel_registration is not None
             else None
         )
+        state.template_identity = self._template_identity(
+            state.panel_package,
+            state.template_file,
+        )
         stage.metrics.update(
             {
                 "project_type": state.canonical_project_type,
@@ -628,6 +630,9 @@ class ReportGenerator:
                     if state.panel_package is not None
                     else None
                 ),
+                "template_id": state.template_identity.get("template_id"),
+                "template_version": state.template_identity.get("version"),
+                "template_sha256": state.template_identity.get("sha256"),
             }
         )
 
@@ -776,7 +781,9 @@ class ReportGenerator:
                 )
 
         report_content = self.config_loader.get_setting("report_content", {}) or {}
-        state.report_content = report_content if isinstance(report_content, dict) else {}
+        state.report_content = (
+            report_content if isinstance(report_content, dict) else {}
+        )
         if state.report_content:
             state.report_data.set_field("report_content", state.report_content)
         panel_style = self._load_panel_style_config(state.panel_package)
@@ -873,7 +880,9 @@ class ReportGenerator:
         state: _GenerationState,
     ) -> None:
         if state.excel_data is None or state.report_data is None:
-            raise RuntimeError("Report data is unavailable before panel rule execution.")
+            raise RuntimeError(
+                "Report data is unavailable before panel rule execution."
+            )
 
         gene_knowledge_provider = None
         panel_raw = getattr(state.panel_package, "raw", None) or {}
@@ -913,9 +922,7 @@ class ReportGenerator:
                     gene_kb_cfg = dict(kb_cfg.get("gene_knowledge_db", {}) or {})
                     gene_kb_cfg["reviewed_part3_overlay_path"] = ""
                     gene_kb_cfg["reviewed_part3_overlay_paths"] = (
-                        self._resolve_panel_reviewed_part3_overlays(
-                            state.panel_package
-                        )
+                        self._resolve_panel_reviewed_part3_overlays(state.panel_package)
                     )
                     provider_cfg = {
                         "enabled": True,
@@ -924,21 +931,16 @@ class ReportGenerator:
                             panel_raw.get("fixed_domain_source_policy") or ""
                         ),
                         "gene_symbol_aliases": (
-                            panel_raw.get("gene_symbol_aliases")
-                            or {}
+                            panel_raw.get("gene_symbol_aliases") or {}
                         ),
                         "gene_knowledge_db": gene_kb_cfg,
                         "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
                         "knowledge_redactions": (
-                            load_panel_knowledge_redactions(
-                                state.panel_package
-                            )
+                            load_panel_knowledge_redactions(state.panel_package)
                         ),
                     }
                     gene_knowledge_provider = GeneKnowledgeProvider(provider_cfg)
-                stage.metrics["part3_knowledge_enabled"] = bool(
-                    gene_knowledge_provider
-                )
+                stage.metrics["part3_knowledge_enabled"] = bool(gene_knowledge_provider)
             except Exception as kb_err:
                 gene_knowledge_provider = None
                 stage.warn("GENE_KNOWLEDGE_PROVIDER_UNAVAILABLE", str(kb_err))
@@ -957,9 +959,7 @@ class ReportGenerator:
             project_type=state.canonical_project_type,
             panel_package=state.panel_package,
         )
-        pdl1_product_contract = load_pdl1_product_contract(
-            state.panel_package
-        )
+        pdl1_product_contract = load_pdl1_product_contract(state.panel_package)
         apply_pdl1_product_display_fields(
             state.report_data,
             pdl1_product_contract,
@@ -1067,7 +1067,9 @@ class ReportGenerator:
                 describe_input_contract_failure(failure)
                 for failure in structural_failures
             )
-            error_msg = f"Panel 输入 Excel 不满足必需工作表/列契约，阻断报告生成：{details}"
+            error_msg = (
+                f"Panel 输入 Excel 不满足必需工作表/列契约，阻断报告生成：{details}"
+            )
             stage.fail(
                 "PANEL_INPUT_CONTRACT_FAILED",
                 error_msg,
@@ -1085,9 +1087,7 @@ class ReportGenerator:
             }
 
         biomarker_contracts = (
-            panel_contract.get("biomarkers")
-            if isinstance(panel_contract, dict)
-            else {}
+            panel_contract.get("biomarkers") if isinstance(panel_contract, dict) else {}
         ) or {}
         biomarker_failures = validate_panel_biomarker_contracts(
             state.report_data,
@@ -1123,9 +1123,11 @@ class ReportGenerator:
                 if isinstance(pdl1_contract, dict)
                 else {}
             ) or {}
-            validation_mode = str(
-                governance.get("generation_validation_mode") or "fail"
-            ).strip().lower()
+            validation_mode = (
+                str(governance.get("generation_validation_mode") or "fail")
+                .strip()
+                .lower()
+            )
             if validation_mode == "warn":
                 warning_msg = (
                     "PD-L1逐病例结果、来源或图片尚未完整；已生成待审核草稿，"
@@ -1143,10 +1145,7 @@ class ReportGenerator:
                 )
             else:
                 duration = time.time() - start_time
-                error_msg = (
-                    "PD-L1检测方案或逐病例来源尚未满足产品合同，"
-                    "阻断报告生成"
-                )
+                error_msg = "PD-L1检测方案或逐病例来源尚未满足产品合同，阻断报告生成"
                 stage.fail(
                     "PANEL_PDL1_PRODUCT_CONTRACT_BLOCKED",
                     error_msg,
@@ -1221,7 +1220,9 @@ class ReportGenerator:
         ensure_directory_exists(state.output_dir)
 
         overwrite_existing = bool(
-            self.config_loader.get_setting("generation.output.overwrite_existing", False)
+            self.config_loader.get_setting(
+                "generation.output.overwrite_existing", False
+            )
         )
         if not overwrite_existing:
             state.output_filename = get_unique_filename(
@@ -1276,21 +1277,23 @@ class ReportGenerator:
             stage.skip(message="Template contract validation is disabled.")
             return None
 
-        state.template_contract_report = self.template_renderer.validate_template_contract(
-            state.template_file,
-            state.template_context,
-            contract_spec=template_contract_spec,
+        state.template_contract_report = (
+            self.template_renderer.validate_template_contract(
+                state.template_file,
+                state.template_context,
+                contract_spec=template_contract_spec,
+            )
         )
         stage.metrics["ok"] = bool(state.template_contract_report.get("ok", False))
-        declared_contract = state.template_contract_report.get("declared_contract") or {}
+        declared_contract = (
+            state.template_contract_report.get("declared_contract") or {}
+        )
 
         # Structural Part 3 requirements are safety gates, not advisory template
         # warnings. They remain blocking even when the caller selected the
         # historical "warn" contract mode.
         structural_errors: list[str] = []
-        missing_markers = list(
-            declared_contract.get("missing_required_markers") or []
-        )
+        missing_markers = list(declared_contract.get("missing_required_markers") or [])
         duplicate_markers = list(
             declared_contract.get("duplicate_required_markers") or []
         )
@@ -1305,9 +1308,7 @@ class ReportGenerator:
                 state.template_file,
             )
             if "part3_formatted_sections" not in (processor_names or ()):
-                structural_errors.append(
-                    "required Part 3 processor is not declared"
-                )
+                structural_errors.append("required Part 3 processor is not declared")
             try:
                 total_variants = int(
                     float(state.template_context.get("total_variants_count") or 0)
@@ -1329,16 +1330,10 @@ class ReportGenerator:
                 )
                 if str(value).strip()
             ]
-            part3_explicitly_disabled = (
-                str(
-                    state.template_context.get("part3_knowledge_status") or ""
-                ).strip().lower()
-                == "disabled"
-                and bool(
-                    str(
-                        state.template_context.get("part3_disabled_notice") or ""
-                    ).strip()
-                )
+            part3_explicitly_disabled = str(
+                state.template_context.get("part3_knowledge_status") or ""
+            ).strip().lower() == "disabled" and bool(
+                str(state.template_context.get("part3_disabled_notice") or "").strip()
             )
             if expected_variant_keys:
                 missing_variant_keys = sorted(
@@ -1367,15 +1362,11 @@ class ReportGenerator:
                 structural_errors.append(
                     "variants are present but gene_knowledge_sections is empty"
                 )
-            stage.metrics["part3_explicitly_disabled"] = (
-                part3_explicitly_disabled
-            )
+            stage.metrics["part3_explicitly_disabled"] = part3_explicitly_disabled
 
         if structural_errors:
             duration = time.time() - start_time
-            msg = "Part 3 结构契约校验失败，已阻断生成：" + "; ".join(
-                structural_errors
-            )
+            msg = "Part 3 结构契约校验失败，已阻断生成：" + "; ".join(structural_errors)
             details = {
                 "required_markers": required_markers,
                 "missing_required_markers": missing_markers,
@@ -1398,11 +1389,7 @@ class ReportGenerator:
                 "warnings": state.report_data.validation_errors,
                 "panel_package_validation": state.panel_package_validation,
                 "template_contract": state.template_contract_report,
-                **(
-                    {"context": state.template_context}
-                    if state.return_context
-                    else {}
-                ),
+                **({"context": state.template_context} if state.return_context else {}),
             }
 
         if state.template_contract_mode == "none":
@@ -1448,7 +1435,9 @@ class ReportGenerator:
         self.logger.warning(msg)
         return None
 
-    def _stage_template_render(self, stage: StageHandle, state: _GenerationState) -> None:
+    def _stage_template_render(
+        self, stage: StageHandle, state: _GenerationState
+    ) -> None:
         if state.report_data is None or state.output_path is None:
             raise RuntimeError("Report data is unavailable before template rendering.")
 
@@ -1566,17 +1555,13 @@ class ReportGenerator:
                 stage.fail(
                     "QA_REPORT_FAILED",
                     "Generated report QA status is FAIL.",
-                    details={
-                        "issue_count": len(state.qa_report.get("issues") or [])
-                    },
+                    details={"issue_count": len(state.qa_report.get("issues") or [])},
                 )
             elif state.qa_report.get("status") == "WARN":
                 stage.warn(
                     "QA_REPORT_WARN",
                     "Generated report QA status is WARN.",
-                    details={
-                        "issue_count": len(state.qa_report.get("issues") or [])
-                    },
+                    details={"issue_count": len(state.qa_report.get("issues") or [])},
                 )
         except Exception as qa_err:
             self.logger.warning("生成QA报告失败", error=str(qa_err))
@@ -1600,6 +1585,7 @@ class ReportGenerator:
                     state.panel_package,
                     state.template_file,
                 ),
+                template_identity=state.template_identity,
                 generation_id=state.generation_id or Path(state.final_output).stem,
                 output_file=state.final_output,
                 qa_report=state.qa_report,
@@ -1620,9 +1606,9 @@ class ReportGenerator:
                     "variant_count": state.report_summary.get("variants", {}).get(
                         "total"
                     ),
-                    "drug_related_count": state.report_summary.get(
-                        "variants", {}
-                    ).get("drug_related"),
+                    "drug_related_count": state.report_summary.get("variants", {}).get(
+                        "drug_related"
+                    ),
                     "qa_status": state.report_summary.get("qa", {}).get("status"),
                 }
             )
@@ -1655,7 +1641,9 @@ class ReportGenerator:
                 getattr(panel_package, "templates", None) or {}
             ).items():
                 try:
-                    resolved = panel_package.resolve_template_file(template_id).resolve()
+                    resolved = panel_package.resolve_template_file(
+                        template_id
+                    ).resolve()
                 except Exception:
                     continue
                 if resolved == requested:
@@ -1676,6 +1664,73 @@ class ReportGenerator:
             return None
         text = str(value).strip()
         return text or None
+
+    @classmethod
+    def _template_identity(
+        cls,
+        panel_package: Any,
+        template_file: Optional[str],
+    ) -> dict[str, Any]:
+        """Return a public, immutable identity for the selected DOCX template."""
+
+        selected_path: Optional[Path] = None
+        if template_file:
+            try:
+                selected_path = Path(template_file).resolve()
+            except Exception:
+                selected_path = None
+        elif panel_package is not None:
+            try:
+                selected_path = panel_package.resolve_template_file().resolve()
+            except Exception:
+                selected_path = None
+
+        template_id: Optional[str] = None
+        version: Optional[str] = None
+        status: Optional[str] = None
+        if panel_package is not None and selected_path is not None:
+            for candidate_id, candidate in (
+                getattr(panel_package, "templates", None) or {}
+            ).items():
+                try:
+                    candidate_path = panel_package.resolve_template_file(
+                        candidate_id
+                    ).resolve()
+                except Exception:
+                    continue
+                if candidate_path != selected_path:
+                    continue
+                template_id = str(candidate_id)
+                version = str(getattr(candidate, "version", "") or "") or None
+                status = cls._clean_status(getattr(candidate, "status", None))
+                break
+
+        digest: Optional[str] = None
+        if selected_path is not None and selected_path.is_file():
+            sha = hashlib.sha256()
+            with selected_path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    sha.update(chunk)
+            digest = sha.hexdigest()
+
+        default_id = (
+            str(getattr(panel_package, "default_template_id", "") or "") or None
+            if panel_package is not None
+            else None
+        )
+        return {
+            "panel_id": (
+                str(getattr(panel_package, "panel_id", "") or "") or None
+                if panel_package is not None
+                else None
+            ),
+            "template_id": template_id,
+            "version": version,
+            "status": status,
+            "filename": selected_path.name if selected_path is not None else None,
+            "sha256": digest,
+            "is_default": bool(template_id and template_id == default_id),
+        }
 
     def _build_success_payload(
         self,
@@ -1700,6 +1755,7 @@ class ReportGenerator:
             "qa_report": state.qa_report,
             "qa_report_file": state.qa_report_file,
             "qa_status": state.qa_report.get("status") if state.qa_report else None,
+            "template_identity": state.template_identity,
             "report_summary": state.report_summary,
             "report_summary_file": state.report_summary_file,
             "generation_id": state.generation_id,
@@ -2013,8 +2069,9 @@ class ReportGenerator:
                 # Clean up consecutive underscores and leading/trailing underscores
                 # caused by empty fields (e.g. "_MLB123_..." when patient_name is empty)
                 import re
-                filename = re.sub(r'_+', '_', filename)  # collapse multiple underscores
-                filename = filename.lstrip('_')  # remove leading underscore
+
+                filename = re.sub(r"_+", "_", filename)  # collapse multiple underscores
+                filename = filename.lstrip("_")  # remove leading underscore
             except KeyError as e:
                 self.logger.warning(
                     "文件名模板包含未知变量，回退默认命名",
@@ -2044,7 +2101,9 @@ class ReportGenerator:
         """Fill missing report_date with the generation date."""
         report_date = date.today().isoformat()
         report_data.set_field("report_date", report_date)
-        self.logger.warning("report_date缺失，已使用生成报告当天日期", report_date=report_date)
+        self.logger.warning(
+            "report_date缺失，已使用生成报告当天日期", report_date=report_date
+        )
 
     def _mark_missing_report_date(self, report_data: ReportData) -> None:
         """Backward-compatible wrapper for callers that fill missing report_date."""

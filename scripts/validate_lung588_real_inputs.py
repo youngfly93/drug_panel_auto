@@ -26,6 +26,8 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# v0.4.0-review.2 keeps the body header on one line; the same complete report
+# content therefore occupies 83 pages instead of the prior wrapped-header 84.
 KNOWN_INPUTS = {
     "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646": {
         "alias": "CASE-LUNG-A",
@@ -36,6 +38,7 @@ KNOWN_INPUTS = {
         "expected_targeted_drug_count": 0,
         "expected_immune_positive_count": 0,
         "expected_immune_negative_count": 0,
+        "expected_page_count": 83,
     },
     "623c96cee1eb7b16cacb62cababba3b790e82007a00a59d0f159efbe025db000": {
         "alias": "CASE-LUNG-B",
@@ -46,6 +49,7 @@ KNOWN_INPUTS = {
         "expected_targeted_drug_count": 0,
         "expected_immune_positive_count": 5,
         "expected_immune_negative_count": 0,
+        "expected_page_count": 83,
     },
     "7b39431044c4a9298f7663c97a47c4df83b5b1e0875d88a64b3e24c05bfa498a": {
         "alias": "CASE-LUNG-C",
@@ -56,15 +60,12 @@ KNOWN_INPUTS = {
         "expected_targeted_drug_count": 2,
         "expected_immune_positive_count": 2,
         "expected_immune_negative_count": 1,
+        "expected_page_count": 83,
     },
 }
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 UAT_POLICY_PATH = (
-    ROOT
-    / "panels"
-    / "lung_588_pdl1"
-    / "uat"
-    / "lung588_risk_based_release_policy.yaml"
+    ROOT / "panels" / "lung_588_pdl1" / "uat" / "lung588_risk_based_release_policy.yaml"
 )
 REPORT_GROUP_UAT_DECISIONS_PATH = (
     ROOT
@@ -72,6 +73,13 @@ REPORT_GROUP_UAT_DECISIONS_PATH = (
     / "lung_588_pdl1"
     / "uat"
     / "lung588_report_group_uat_decisions.yaml"
+)
+REVIEW_CANDIDATE_CONTRACT_PATH = (
+    ROOT
+    / "panels"
+    / "lung_588_pdl1"
+    / "review_baselines"
+    / "lung588_historical_review_candidate_v1.yaml"
 )
 
 
@@ -188,9 +196,7 @@ def _load_report_group_uat_decisions(
             )
         p0_count = item.get("p0_count")
         if decision in {"pass", "fail"} and (
-            isinstance(p0_count, bool)
-            or not isinstance(p0_count, int)
-            or p0_count < 0
+            isinstance(p0_count, bool) or not isinstance(p0_count, int) or p0_count < 0
         ):
             raise RuntimeError(
                 f"completed lung588 UAT decision for {alias} requires p0_count"
@@ -369,6 +375,12 @@ def _render_case(
     *,
     dpi: int,
 ) -> dict[str, Any]:
+    from reportgen.core.review_candidate_contract import (
+        load_review_candidate_contract,
+        validate_review_candidate_output,
+        validate_review_candidate_template,
+    )
+
     result = bridge.generate_report(
         str(excel_path),
         str(output_dir),
@@ -390,6 +402,25 @@ def _render_case(
     visual = (qa_payload.get("checks") or {}).get("visual_render") or {}
     pixel = visual.get("pixel_check") or {}
 
+    contract = load_review_candidate_contract(REVIEW_CANDIDATE_CONTRACT_PATH)
+    template_identity = dict(result.get("template_identity") or {})
+    selected_template = Path(bridge._resolve_template_path(None, "lung_588_pdl1"))
+    template_gate = validate_review_candidate_template(
+        contract,
+        selected_template,
+        template_id=str(template_identity.get("template_id") or ""),
+        template_version=str(template_identity.get("version") or ""),
+        template_status=str(template_identity.get("status") or ""),
+    )
+    output_gate = validate_review_candidate_output(
+        contract,
+        output_file,
+        qa_report=qa_payload,
+        expected_texts=(str(case["alias"]), str(case["pdl1_result"])),
+        expected_page_count=int(case["expected_page_count"]),
+        require_case_image=True,
+    )
+
     content_failures: list[str] = []
     if output_file.is_file():
         document = Document(output_file)
@@ -406,12 +437,11 @@ def _render_case(
             "Gene List for MLseq (n=588)",
             "肺癌专属知识当前未启用",
             "图1. 免疫组化：PD-L1",
+            "报告组评审候选稿（非临床交付）",
         )
         forbidden_texts = (
             "__PART3_MARKER__",
             "__PDL1_CASE_IMAGE__",
-            "原始记录未提供抗体克隆",
-            "不据此推导检测方案等效性",
             "n=329",
             "{{",
             "{%",
@@ -444,16 +474,38 @@ def _render_case(
         and not blank_pages
         and not low_content_pages
         and not content_failures
+        and template_gate["status"] == "PASS"
+        and output_gate["status"] == "PASS"
         else "FAIL"
+    )
+    failed_codes = sorted(
+        {
+            str(item.get("code") or "UNKNOWN")
+            for gate in (template_gate, output_gate)
+            for item in gate.get("errors") or []
+        }
     )
     return {
         "status": status,
         "output_alias": output_file.name,
+        "_output_file": str(output_file) if output_file.is_file() else "",
         "qa_status": qa_payload.get("status") or result.get("qa_status"),
         "page_count": pixel.get("checked_pages"),
         "blank_page_count": len(blank_pages),
         "unexpected_low_content_page_count": len(low_content_pages),
         "content_failures": content_failures,
+        "template_identity": template_identity,
+        "review_candidate_contract": {
+            "contract_id": contract["contract_id"],
+            "status": (
+                "PASS"
+                if template_gate["status"] == "PASS" and output_gate["status"] == "PASS"
+                else "FAIL"
+            ),
+            "template_status": template_gate["status"],
+            "output_status": output_gate["status"],
+            "failed_codes": failed_codes,
+        },
         "error_count": len(result.get("errors") or []),
     }
 
@@ -498,9 +550,7 @@ def _build_uat_readiness(
     )
     missing_case_alias_count = sum(not alias for alias in aliases)
     missing_decision_aliases = [
-        alias
-        for alias in aliases
-        if alias and alias not in report_group_decisions
+        alias for alias in aliases if alias and alias not in report_group_decisions
     ]
     complete_decisions = {
         alias: report_group_decisions[alias]
@@ -711,9 +761,7 @@ def validate_inputs(
             {
                 "alias": case["alias"],
                 "source_sha256": digest,
-                "expected_targeted_drug_count": case[
-                    "expected_targeted_drug_count"
-                ],
+                "expected_targeted_drug_count": case["expected_targeted_drug_count"],
                 "expected_immune_positive_count": case[
                     "expected_immune_positive_count"
                 ],
@@ -729,6 +777,33 @@ def validate_inputs(
                 "report_generation": report_generation,
             }
         )
+
+    if render_output_dir is not None:
+        from reportgen.core.review_candidate_contract import extract_docx_text
+
+        aliases = [str(row["alias"]) for row in rows]
+        for row in rows:
+            generation = row["report_generation"]
+            output_value = str(generation.pop("_output_file", "") or "")
+            output_path = Path(output_value) if output_value else None
+            own_alias = str(row["alias"])
+            if output_path is None or not output_path.is_file():
+                generation["cross_case_leak_status"] = "FAIL"
+                generation["cross_case_leaks"] = ["output_missing"]
+                generation["status"] = "FAIL"
+                continue
+            visible = extract_docx_text(output_path)
+            leaks = [
+                alias for alias in aliases if alias != own_alias and alias in visible
+            ]
+            own_alias_present = own_alias in visible
+            generation["cross_case_leak_status"] = (
+                "PASS" if own_alias_present and not leaks else "FAIL"
+            )
+            generation["cross_case_leaks"] = leaks
+            generation["own_alias_present"] = own_alias_present
+            if generation["cross_case_leak_status"] != "PASS":
+                generation["status"] = "FAIL"
 
     failures: list[str] = []
     for row in rows:
@@ -756,9 +831,7 @@ def validate_inputs(
             failures.append(
                 f"{row['alias']}: web preview targeted-drug count is inconsistent"
             )
-        if preview["drug_related_variant_count"] != row[
-            "expected_targeted_drug_count"
-        ]:
+        if preview["drug_related_variant_count"] != row["expected_targeted_drug_count"]:
             failures.append(
                 f"{row['alias']}: web preview drug-related variant count is inconsistent"
             )
@@ -769,13 +842,17 @@ def validate_inputs(
         ):
             failures.append(f"{row['alias']}: web preview lost positive immune hits")
         if not row["expected_immune_positive_count"] and positive_result != "未检出":
-            failures.append(f"{row['alias']}: web preview positive immune zero is wrong")
+            failures.append(
+                f"{row['alias']}: web preview positive immune zero is wrong"
+            )
         if row["expected_immune_negative_count"] and not negative_result.startswith(
             "检出（"
         ):
             failures.append(f"{row['alias']}: web preview lost negative immune hits")
         if not row["expected_immune_negative_count"] and negative_result != "未检出":
-            failures.append(f"{row['alias']}: web preview negative immune zero is wrong")
+            failures.append(
+                f"{row['alias']}: web preview negative immune zero is wrong"
+            )
         if row["biomarker_contract_status"] != "PASS":
             failures.append(f"{row['alias']}: biomarker contract failed")
         if row["pdl1_product_contract_status"] != "PASS":
@@ -787,6 +864,13 @@ def validate_inputs(
         if render_output_dir is not None and row["context_contract"]["contract_id"]:
             if render_status != "PASS":
                 failures.append(f"{row['alias']}: rendered report gate failed")
+            candidate_contract = (
+                row["report_generation"].get("review_candidate_contract") or {}
+            )
+            if candidate_contract.get("status") != "PASS":
+                failures.append(f"{row['alias']}: review-candidate contract failed")
+            if row["report_generation"].get("cross_case_leak_status") != "PASS":
+                failures.append(f"{row['alias']}: cross-case value leakage detected")
     return {
         "schema_version": "1.0",
         "panel_id": "lung_588_pdl1",
@@ -810,7 +894,7 @@ def main() -> int:
     parser.add_argument(
         "--render-output-dir",
         type=Path,
-        help="Optionally render the two historical gold cases with full visual QA.",
+        help="Optionally render all registered historical cases with full visual QA.",
     )
     parser.add_argument("--render-dpi", type=int, default=120)
     args = parser.parse_args()

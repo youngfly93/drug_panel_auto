@@ -1192,6 +1192,7 @@ def _generate_response_from_result(
         qa_status=result.get("qa_status"),
         qa_issues=(result.get("qa_report") or {}).get("issues") or [],
         visual_render=((result.get("qa_report") or {}).get("checks") or {}).get("visual_render"),
+        template_identity=result.get("template_identity"),
         panel_package_validation=result.get("panel_package_validation"),
         generation_id=result.get("generation_id"),
         stage_results=result.get("stage_results") or [],

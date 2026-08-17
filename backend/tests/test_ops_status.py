@@ -94,7 +94,7 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
                 "profile_mode": "isolated",
                 "pdf_renderer": "pdftoppm",
                 "pdf_renderer_version": "pdftoppm 24.02.0",
-                "font_substitution_profile": "reportgen-cjk-font-substitution-v2",
+                "font_substitution_profile": ops_api.FONT_SUBSTITUTION_PROFILE,
                 "font_substitution_profile_sha256": "b" * 64,
                 "zh_font_match": "Noto Sans CJK SC",
                 "zh_font_match_sha256": "a" * 64,
@@ -211,7 +211,7 @@ def test_ops_status_returns_sanitized_runtime_snapshot(tmp_path, monkeypatch):
     assert data["runtime"]["renderer_fingerprint"]["available"] is True
     assert (
         data["runtime"]["renderer_fingerprint"]["font_substitution_profile"]
-        == "reportgen-cjk-font-substitution-v2"
+        == ops_api.FONT_SUBSTITUTION_PROFILE
     )
     assert data["runtime"]["alert_delivery"]["configured"] is True
     assert data["runtime"]["restore_drill"]["status"] == "PASS"

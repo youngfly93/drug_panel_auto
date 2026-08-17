@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 display_name: "肺癌588基因+PD-L1"
-version: "0.3.1"
+version: "0.4.0"
 status: "pilot"
 description: >
   Independent lung 588-gene + PD-L1 package. The controlled pilot supports
@@ -52,6 +52,9 @@ release_governance:
   uat_policy: "uat/lung588_risk_based_release_policy.yaml"
   report_group_uat_decisions: "uat/lung588_report_group_uat_decisions.yaml"
 
+review_candidate_contract: >-
+  review_baselines/lung588_historical_review_candidate_v1.yaml
+
 part3_knowledge:
   enabled: false
   reason: >
@@ -70,7 +73,7 @@ reviewed_part3_overlay_additions:
 
 enhancer: "reportgen.core.enhancer_registry:CRC358Enhancer"
 
-default_template: "lung_588_pdl1_golden_template_v0"
+default_template: "lung_588_pdl1_historical_golden_v1"
 templates:
   - id: "lung_588_pdl1_golden_template_v0"
     file: "templates/lung_588_pdl1_golden_template_v0.docx"
@@ -81,6 +84,29 @@ templates:
       scaffold, relabelled for the independent 588 product and hardened so
       unreviewed treatment/PGx content fails closed and PD-L1 media is supplied
       only through the case-specific upload pipeline.
+    processors:
+      - "part3_formatted_sections"
+      - "rebuild_references"
+      - "signature_placeholder"
+      - "pdl1_case_image"
+      - "immune_table_notes"
+      - "bullet_lists"
+      - "signature_layout"
+      - "front_matter_spacing"
+      - "blank_page_cleanup"
+      - "toc_refresh"
+      - "final_refresh_cleanup"
+      - "underlines_and_styles"
+  - id: "lung_588_pdl1_historical_golden_v1"
+    file: "templates/lung_588_pdl1_historical_golden_v1.docx"
+    version: "0.4.0-review.2"
+    status: "pilot"
+    description: >
+      Full-layout report-group review candidate distilled in place from the
+      repaired controlled historical lung588 final report. Patient identifiers,
+      signatures, case images, historical event narratives and fixed patient
+      genotypes are removed; current ReportGen fields drive case results while
+      the historical appendix remains visibly labelled for medical review.
     processors:
       - "part3_formatted_sections"
       - "rebuild_references"

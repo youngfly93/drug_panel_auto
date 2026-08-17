@@ -7,7 +7,19 @@ from typing import Any, Iterable, Optional
 
 from reportgen.models.report_data import ReportData
 
-EMPTY_VALUES = {"", "-", "--", "无", "未填写", "未知", "none", "null", "nan", "n/a", "na"}
+EMPTY_VALUES = {
+    "",
+    "-",
+    "--",
+    "无",
+    "未填写",
+    "未知",
+    "none",
+    "null",
+    "nan",
+    "n/a",
+    "na",
+}
 
 
 def build_report_summary(
@@ -17,6 +29,7 @@ def build_report_summary(
     project_name: Optional[str] = None,
     panel_status: Optional[str] = None,
     template_status: Optional[str] = None,
+    template_identity: Optional[dict[str, Any]] = None,
     generation_id: Optional[str] = None,
     output_file: Optional[str] = None,
     qa_report: Optional[dict[str, Any]] = None,
@@ -31,8 +44,12 @@ def build_report_summary(
 
     context = report_data.context or {}
     qa_issues = (qa_report or {}).get("issues") or []
-    variants = _first_table(report_data, ("variants_2_1", "summary_variants", "variants"))
-    summary_variants = _first_table(report_data, ("summary_variants", "variants_2_1", "variants"))
+    variants = _first_table(
+        report_data, ("variants_2_1", "summary_variants", "variants")
+    )
+    summary_variants = _first_table(
+        report_data, ("summary_variants", "variants_2_1", "variants")
+    )
     detected_variants = [row for row in variants if _is_detected_variant(row)]
     display_variants = detected_variants or variants
     targeted_drugs = _table(report_data, "targeted_drug_tips")
@@ -66,12 +83,24 @@ def build_report_summary(
         "generation_id": generation_id,
         "project_type": project_type,
         "project_name": project_name
-        or _safe_text(_first_nonempty(context, ("project_name", "检测项目", "项目名称"))),
+        or _safe_text(
+            _first_nonempty(context, ("project_name", "检测项目", "项目名称"))
+        ),
         "output_file": output_file,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "panel": {
             "status": _nullable_text(panel_status),
             "template_status": _nullable_text(template_status),
+        },
+        "template": {
+            "id": _nullable_text((template_identity or {}).get("template_id")),
+            "version": _nullable_text((template_identity or {}).get("version")),
+            "status": _nullable_text(
+                (template_identity or {}).get("status") or template_status
+            ),
+            "filename": _nullable_text((template_identity or {}).get("filename")),
+            "sha256": _nullable_text((template_identity or {}).get("sha256")),
+            "is_default": bool((template_identity or {}).get("is_default")),
         },
         "patient": {
             "patient_name": _safe_text(
@@ -95,7 +124,9 @@ def build_report_summary(
                 )
             ),
             "receive_date": _safe_text(
-                _first_nonempty(context, ("receive_date", "sample_receive_date", "收样日期"))
+                _first_nonempty(
+                    context, ("receive_date", "sample_receive_date", "收样日期")
+                )
             ),
             "report_date": _safe_text(
                 _first_nonempty(
@@ -112,7 +143,9 @@ def build_report_summary(
             },
             "msi": {
                 "summary": _safe_text(_first_nonempty(context, ("msi_summary",))),
-                "status": _safe_text(_first_nonempty(context, ("msi_status", "MSI状态"))),
+                "status": _safe_text(
+                    _first_nonempty(context, ("msi_status", "MSI状态"))
+                ),
             },
             "immune": {
                 "status": _safe_text(
@@ -144,7 +177,9 @@ def build_report_summary(
                 ),
             ),
             "key_rows": [_normalize_variant_row(row) for row in display_variants[:8]],
-            "summary_rows": [_normalize_variant_row(row) for row in summary_variants[:8]],
+            "summary_rows": [
+                _normalize_variant_row(row) for row in summary_variants[:8]
+            ],
         },
         "drugs": {
             # targeted_drug_tips may be configured as an all-variant display
@@ -172,7 +207,9 @@ def build_report_summary(
                 context.get("approved_drug_rows_suppressed_names")
             ),
             "targeted_rows": [_normalize_drug_row(row) for row in targeted_drugs[:8]],
-            "chemotherapy_rows": [_normalize_chemo_row(row) for row in chemotherapy[:8]],
+            "chemotherapy_rows": [
+                _normalize_chemo_row(row) for row in chemotherapy[:8]
+            ],
         },
         "qa": {
             "status": qa_status,
@@ -192,7 +229,11 @@ def write_report_summary(
 ) -> str:
     """Persist a report summary next to the generated DOCX."""
 
-    path = Path(summary_file) if summary_file else Path(output_file).with_suffix(".summary.json")
+    path = (
+        Path(summary_file)
+        if summary_file
+        else Path(output_file).with_suffix(".summary.json")
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(summary, ensure_ascii=False, indent=2),
@@ -224,7 +265,9 @@ def _first_table(report_data: ReportData, names: Iterable[str]) -> list[dict[str
 
 def _normalize_variant_row(row: dict[str, Any]) -> dict[str, Any]:
     c_hgvs = _safe_text(_pick(row, ("cHGVS", "c_hgvs", "c_point", "cDNA", "cDNA变异")))
-    p_hgvs = _safe_text(_pick(row, ("pHGVS", "p_hgvs", "p_point", "protein", "氨基酸变异")))
+    p_hgvs = _safe_text(
+        _pick(row, ("pHGVS", "p_hgvs", "p_point", "protein", "氨基酸变异"))
+    )
     locus = _safe_text(_pick(row, ("locus", "variant_site", "site", "变异位点")))
     return {
         "gene": _safe_text(_pick(row, ("gene", "Gene", "基因"))),
@@ -236,10 +279,18 @@ def _normalize_variant_row(row: dict[str, Any]) -> dict[str, Any]:
         "classification": _safe_text(
             _pick(
                 row,
-                ("gene_class", "classification", "variant_level", "mutation_level", "变异等级"),
+                (
+                    "gene_class",
+                    "classification",
+                    "variant_level",
+                    "mutation_level",
+                    "变异等级",
+                ),
             )
         ),
-        "frequency": _safe_text(_pick(row, ("af_pct", "frequency", "Freq(%)", "AF", "丰度"))),
+        "frequency": _safe_text(
+            _pick(row, ("af_pct", "frequency", "Freq(%)", "AF", "丰度"))
+        ),
         "benefit_drugs": _safe_text(
             _pick(row, ("benefit_drugs_full", "benefit_drugs", "潜在获益药物"))
         ),
@@ -252,7 +303,9 @@ def _normalize_variant_row(row: dict[str, Any]) -> dict[str, Any]:
 def _normalize_drug_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "gene": _safe_text(_pick(row, ("gene", "Gene", "基因"))),
-        "variant_site": _safe_text(_pick(row, ("variant_site", "locus", "site", "变异位点"))),
+        "variant_site": _safe_text(
+            _pick(row, ("variant_site", "locus", "site", "变异位点"))
+        ),
         "benefit_drugs": _drug_display_text(
             row, ("benefit_drugs_full", "benefit_drugs", "潜在获益药物")
         ),
@@ -346,13 +399,18 @@ def _count_drug_related_rows(rows: list[dict[str, Any]]) -> int:
     return sum(
         1
         for row in rows
-        if not _is_empty(row.get("benefit_drugs")) or not _is_empty(row.get("caution_drugs"))
+        if not _is_empty(row.get("benefit_drugs"))
+        or not _is_empty(row.get("caution_drugs"))
     )
 
 
 def _is_detected_variant(row: dict[str, Any]) -> bool:
     text = " ".join(
-        _safe_text(_pick(row, ("locus", "variant_site", "cHGVS", "pHGVS", "检测结果", "result"))).split()
+        _safe_text(
+            _pick(
+                row, ("locus", "variant_site", "cHGVS", "pHGVS", "检测结果", "result")
+            )
+        ).split()
     )
     if not text:
         return bool(_safe_text(_pick(row, ("gene", "Gene", "基因"))))
@@ -408,7 +466,9 @@ def _status_review_items(
     for status, sources in grouped.items():
         source_label = "、".join(sources)
         if status == "draft":
-            items.append(f"{source_label}状态为 draft（草稿）：需人工复核，勿直接交付。")
+            items.append(
+                f"{source_label}状态为 draft（草稿）：需人工复核，勿直接交付。"
+            )
         elif status == "pilot":
             items.append(f"{source_label}状态为 pilot（试运行）：需人工复核后再交付。")
     return items

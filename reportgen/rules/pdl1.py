@@ -325,28 +325,43 @@ def apply_pdl1_product_display_fields(
     profile_id = _clean(report_data.get_field("pdl1_assay_profile_id"))
     profile = _candidate_profiles(contract).get(profile_id)
     if profile is None:
-        return
-
-    assay_name = _clean(profile.get("assay_name"))
-    clone = _clean(profile.get("antibody_clone"))
-    platform = _clean(profile.get("staining_platform"))
-    visualization = _clean(profile.get("visualization_system"))
-    scoring = _clean(profile.get("primary_scoring_method"))
-    method_notice = _clean(profile.get("report_method_notice"))
-    report_data.set_field("pdl1_assay_name", assay_name)
-    report_data.set_field("pdl1_antibody_clone", clone)
-    report_data.set_field("pdl1_test_platform", platform)
-    report_data.set_field("pdl1_visualization_system", visualization)
-    report_data.set_field("pdl1_scoring_method", scoring)
-    report_data.set_field(
-        "pdl1_assay_provenance",
-        "检测方案："
-        f"{assay_name or '--'}；抗体克隆：{clone or '--'}；"
-        f"染色平台：{platform or '--'}；"
-        f"显色系统：{visualization or '--'}；"
-        f"主要评分方法：{scoring or '--'}。"
-        + (f" {method_notice}" if method_notice else ""),
-    )
+        # Missing optional IHC metadata must remain visible in a report-group
+        # draft, not become a template-contract gate.  The clinical fields stay
+        # absent; only the presentation aliases receive an explicit placeholder.
+        for field in (
+            "pdl1_assay_name",
+            "pdl1_antibody_clone",
+            "pdl1_test_platform",
+            "pdl1_visualization_system",
+            "pdl1_scoring_method",
+        ):
+            report_data.set_field(field, "待补充")
+        report_data.set_field(
+            "pdl1_assay_provenance",
+            "PD-L1检测方案、抗体克隆、染色平台、显色系统及评分方法未提供；"
+            "待报告组核对后补充。",
+        )
+    else:
+        assay_name = _clean(profile.get("assay_name"))
+        clone = _clean(profile.get("antibody_clone"))
+        platform = _clean(profile.get("staining_platform"))
+        visualization = _clean(profile.get("visualization_system"))
+        scoring = _clean(profile.get("primary_scoring_method"))
+        method_notice = _clean(profile.get("report_method_notice"))
+        report_data.set_field("pdl1_assay_name", assay_name)
+        report_data.set_field("pdl1_antibody_clone", clone)
+        report_data.set_field("pdl1_test_platform", platform)
+        report_data.set_field("pdl1_visualization_system", visualization)
+        report_data.set_field("pdl1_scoring_method", scoring)
+        report_data.set_field(
+            "pdl1_assay_provenance",
+            "检测方案："
+            f"{assay_name or '--'}；抗体克隆：{clone or '--'}；"
+            f"染色平台：{platform or '--'}；"
+            f"显色系统：{visualization or '--'}；"
+            f"主要评分方法：{scoring or '--'}。"
+            + (f" {method_notice}" if method_notice else ""),
+        )
 
     source_record = _clean(report_data.get_field("pdl1_source_record_id"))
     source_date = _clean(report_data.get_field("pdl1_source_record_date"))
@@ -354,6 +369,6 @@ def apply_pdl1_product_display_fields(
     report_data.set_field(
         "pdl1_source_provenance",
         "原始IHC记录："
-        f"{source_record or '--'}；记录日期：{source_date or '--'}；"
-        f"PD-L1标本标识：{specimen_id or '--'}。",
+        f"{source_record or '待补充'}；记录日期：{source_date or '待补充'}；"
+        f"PD-L1标本标识：{specimen_id or '待补充'}。",
     )

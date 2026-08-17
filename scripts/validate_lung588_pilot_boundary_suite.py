@@ -21,13 +21,6 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = (
-    ROOT
-    / "panels"
-    / "lung_588_pdl1"
-    / "templates"
-    / "lung_588_pdl1_golden_template_v0.docx"
-)
 PROFILE_ID = "legacy_unspecified_ihc_transcription_v1"
 
 
@@ -347,8 +340,13 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
             sys.path.insert(0, import_path)
 
     from reportgen.core.report_generator import ReportGenerator
+    from reportgen.panels.loader import load_panel_package
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    template = load_panel_package(
+        "lung_588_pdl1",
+        project_root=ROOT,
+    ).resolve_template_file()
     generator = ReportGenerator(
         config_dir=str(ROOT / "config"),
         log_level="ERROR",
@@ -362,7 +360,7 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
         result = generator.generate(
             excel_file=str(xlsx_path),
             excel_data=_build_excel_data(scenario, xlsx_path),
-            template_file=str(TEMPLATE),
+            template_file=str(template),
             output_dir=str(output_dir / case_id),
             output_filename=f"{case_id}.docx",
             strict_mode=True,

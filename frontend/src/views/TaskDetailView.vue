@@ -389,6 +389,14 @@
             <el-tag v-if="reportSummary?.project_name" size="small" type="info">
               {{ reportSummary.project_name }}
             </el-tag>
+            <el-tag
+              v-if="reportSummary?.template?.id"
+              size="small"
+              type="warning"
+              :title="reportSummary.template.sha256 || ''"
+            >
+              {{ reportSummary.template.id }} · {{ reportSummary.template.version || '未标版本' }}
+            </el-tag>
           </div>
         </div>
         <el-alert

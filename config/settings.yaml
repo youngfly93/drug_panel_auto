@@ -444,6 +444,7 @@ report_content:
   # 参考文献正文使用报告组约定的西文字体；标题样式不在此处改写。
   reference_style:
     font_name: "Calibri"
+    east_asia_font_name: "微软雅黑"
     font_size_pt: 10.5
     line_spacing: 1.0
     space_before_pt: 0

@@ -33,6 +33,7 @@ class GenerateResponse(BaseModel):
     qa_status: Optional[str] = None
     qa_issues: list[dict[str, Any]] = []
     visual_render: Optional[dict[str, Any]] = None
+    template_identity: Optional[dict[str, Any]] = None
     panel_package_validation: Optional[dict[str, Any]] = None
     generation_id: Optional[str] = None
     stage_results: list[dict[str, Any]] = []

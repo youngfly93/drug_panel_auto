@@ -34,6 +34,7 @@ from typing import List, Optional, Sequence
 from reportgen.utils.libreoffice_profile import (
     font_substitution_fingerprint,
     initialize_libreoffice_profile,
+    stabilize_docx_fonts_for_libreoffice_render,
 )
 
 
@@ -314,16 +315,24 @@ def render_docx_to_pngs(
     )
 
     tmp_root = _render_tmp_root(output_dir, tmp_dir=tmp_dir)
-    with tempfile.TemporaryDirectory(
-        prefix="reportgen_render_", dir=str(tmp_root)
-    ) as workdir_str, tempfile.TemporaryDirectory(
-        prefix="reportgen_lo_profile_"
-    ) as profile_dir_str:
+    with (
+        tempfile.TemporaryDirectory(
+            prefix="reportgen_render_", dir=str(tmp_root)
+        ) as workdir_str,
+        tempfile.TemporaryDirectory(prefix="reportgen_lo_profile_") as profile_dir_str,
+    ):
         workdir = Path(workdir_str)
         profile_dir = Path(profile_dir_str)
 
         tmp_docx = workdir / "input.docx"
         shutil.copy2(docx_path, tmp_docx)
+        # Normalize fonts only in the disposable render copy.  Empty East Asia
+        # theme fonts and legacy names such as 幼圆 otherwise resolve to
+        # different macOS faces across identical LibreOffice cold starts.
+        stabilize_docx_fonts_for_libreoffice_render(
+            tmp_docx,
+            require_available=False,
+        )
 
         # DOCX -> PDF. LibreOffice is usually more reliable when both profile
         # and input paths are ASCII-only; `_docx_to_pdf` contains a guarded
