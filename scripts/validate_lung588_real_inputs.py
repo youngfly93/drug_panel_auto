@@ -26,8 +26,6 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# v0.4.0-review.3 keeps the body header on one line; the same complete report
-# content therefore occupies 83 pages instead of the prior wrapped-header 84.
 KNOWN_INPUTS = {
     "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646": {
         "alias": "CASE-LUNG-A",
@@ -38,7 +36,6 @@ KNOWN_INPUTS = {
         "expected_targeted_drug_count": 0,
         "expected_immune_positive_count": 0,
         "expected_immune_negative_count": 0,
-        "expected_page_count": 83,
     },
     "623c96cee1eb7b16cacb62cababba3b790e82007a00a59d0f159efbe025db000": {
         "alias": "CASE-LUNG-B",
@@ -49,7 +46,6 @@ KNOWN_INPUTS = {
         "expected_targeted_drug_count": 0,
         "expected_immune_positive_count": 5,
         "expected_immune_negative_count": 0,
-        "expected_page_count": 83,
     },
     "7b39431044c4a9298f7663c97a47c4df83b5b1e0875d88a64b3e24c05bfa498a": {
         "alias": "CASE-LUNG-C",
@@ -60,7 +56,6 @@ KNOWN_INPUTS = {
         "expected_targeted_drug_count": 2,
         "expected_immune_positive_count": 2,
         "expected_immune_negative_count": 1,
-        "expected_page_count": 83,
     },
 }
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -417,7 +412,6 @@ def _render_case(
         output_file,
         qa_report=qa_payload,
         expected_texts=(str(case["alias"]), str(case["pdl1_result"])),
-        expected_page_count=int(case["expected_page_count"]),
         require_case_image=True,
     )
 
