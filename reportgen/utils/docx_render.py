@@ -266,6 +266,19 @@ def _docx_to_pdf(
         )
         return _find_pdf_output(workdir)
 
+    # Prefer the persistent UNO listener when the web backend runs one: it is
+    # seeded with the same deterministic profile as the disposable per-call
+    # profile below, and skips the 10-30 s soffice cold start per render.
+    from reportgen.utils.uno_pdf import convert_docx_to_pdf_via_listener
+
+    listener_pdf = workdir / "input.pdf"
+    if convert_docx_to_pdf_via_listener(
+        tmp_docx,
+        listener_pdf,
+        timeout_seconds=timeout_seconds,
+    ):
+        return _find_pdf_output(workdir)
+
     initialize_libreoffice_profile(profile_dir, require_available=True)
     convert_cmd = _isolated_profile_convert_cmd(
         soffice=soffice,
