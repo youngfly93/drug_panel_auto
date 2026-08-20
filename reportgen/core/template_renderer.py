@@ -7489,40 +7489,53 @@ class TemplateRenderer:
             input_dir.mkdir(parents=True, exist_ok=True)
             output_dir.mkdir(parents=True, exist_ok=True)
             profile_dir.mkdir(parents=True, exist_ok=True)
-            initialize_libreoffice_profile(profile_dir, require_available=True)
             tmp_input = input_dir / "input.docx"
             shutil.copy2(file_path, tmp_input)
             self._freeze_fields_for_pdf_layout_probe(str(tmp_input))
 
-            cmd = [
-                soffice,
-                f"-env:UserInstallation={profile_dir.as_uri()}",
-                "--headless",
-                "--nologo",
-                "--nodefault",
-                "--nolockcheck",
-                "--nofirststartwizard",
-                "--norestore",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                str(output_dir),
-                str(tmp_input),
-            ]
-            try:
-                subprocess.run(
-                    cmd,
-                    check=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    timeout=180,
-                )
-            except Exception as exc:
-                self.logger.debug("目录页码 PDF 渲染失败，跳过静态写回", error=str(exc))
-                return {}
-
             pdf_path = output_dir / "input.pdf"
+            # Prefer the persistent UNO listener (same deterministic profile,
+            # same engine): the pagination probe runs 2+ times per report and
+            # each cold ``--convert-to`` start costs 10-30 s on a loaded host.
+            from reportgen.utils.uno_pdf import convert_docx_to_pdf_via_listener
+
+            converted_via_listener = convert_docx_to_pdf_via_listener(
+                tmp_input,
+                pdf_path,
+                timeout_seconds=180,
+            )
+            if not converted_via_listener:
+                initialize_libreoffice_profile(profile_dir, require_available=True)
+                cmd = [
+                    soffice,
+                    f"-env:UserInstallation={profile_dir.as_uri()}",
+                    "--headless",
+                    "--nologo",
+                    "--nodefault",
+                    "--nolockcheck",
+                    "--nofirststartwizard",
+                    "--norestore",
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    str(output_dir),
+                    str(tmp_input),
+                ]
+                try:
+                    subprocess.run(
+                        cmd,
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=180,
+                    )
+                except Exception as exc:
+                    self.logger.debug(
+                        "目录页码 PDF 渲染失败，跳过静态写回", error=str(exc)
+                    )
+                    return {}
+
             if not pdf_path.exists():
                 return {}
 
@@ -7544,29 +7557,64 @@ class TemplateRenderer:
 
             page_texts: dict[int, str] = {}
             normalized_pages: dict[int, str] = {}
-            for page in range(1, page_count + 1):
-                try:
-                    text = subprocess.run(
-                        [
-                            pdftotext,
-                            "-layout",
-                            "-f",
-                            str(page),
-                            "-l",
-                            str(page),
-                            str(pdf_path),
-                            "-",
-                        ],
-                        check=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        timeout=30,
-                    ).stdout
-                except Exception:
-                    text = ""
-                page_texts[page] = text
-                normalized_pages[page] = normalize(text)
+            # One whole-document pdftotext call: pages arrive separated by
+            # form feeds (\f). The previous per-page -f/-l loop spawned one
+            # subprocess per page (85+ per probe) which dominated probe time
+            # on loaded hosts. Output parity: pdftotext emits the identical
+            # -layout text per page either way.
+            whole_text: str | None = None
+            try:
+                whole_text = subprocess.run(
+                    [pdftotext, "-layout", str(pdf_path), "-"],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=120,
+                ).stdout
+            except Exception:
+                whole_text = None
+
+            split_pages: list[str] | None = None
+            if whole_text is not None:
+                candidate = whole_text.split("\f")
+                # pdftotext terminates every page with \f, so a full read
+                # yields page_count chunks plus one trailing empty chunk.
+                if candidate and candidate[-1].strip() == "":
+                    candidate = candidate[:-1]
+                if len(candidate) == page_count:
+                    split_pages = candidate
+
+            if split_pages is not None:
+                for page, text in enumerate(split_pages, start=1):
+                    page_texts[page] = text
+                    normalized_pages[page] = normalize(text)
+            else:
+                # Fallback: page-count mismatch or whole-read failure; keep the
+                # authoritative per-page extraction.
+                for page in range(1, page_count + 1):
+                    try:
+                        text = subprocess.run(
+                            [
+                                pdftotext,
+                                "-layout",
+                                "-f",
+                                str(page),
+                                "-l",
+                                str(page),
+                                str(pdf_path),
+                                "-",
+                            ],
+                            check=True,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            timeout=30,
+                        ).stdout
+                    except Exception:
+                        text = ""
+                    page_texts[page] = text
+                    normalized_pages[page] = normalize(text)
 
         report_page_numbers = {
             page: number
