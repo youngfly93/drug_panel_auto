@@ -184,3 +184,17 @@ def test_empty_material_fails_for_current_schema(tmp_path):
 
     assert result["status"] == "FAIL"
     assert "request_empty_material" in _codes(result)
+
+
+def test_request_detail_column_is_required(tmp_path):
+    headers = [column for column in REQUEST_HEADERS if column != "需索要材料"]
+    request_path = _write_tsv(
+        tmp_path / "request.tsv",
+        headers,
+        [["P1", "模板", "A", "肺癌13基因", "N", "LW900021", "测试"]],
+    )
+
+    result = validate_request_list(request_path)
+
+    assert result["status"] == "FAIL"
+    assert "request_schema_missing_request_detail" in _codes(result)
