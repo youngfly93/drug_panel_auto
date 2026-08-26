@@ -1,5 +1,9 @@
 # 肺癌小 Panel 产品线建设规格（13 基因 → 62 基因系列）
 
+肺癌全产品的六模板架构、评审稿/生产发布分层和最新资料清单流程，以
+[`spec_lung_template_family_architecture.md`](spec_lung_template_family_architecture.md)
+为总规格；本文件保留小 Panel 的专项建设约束。
+
 ## 1. 决策与边界
 
 建设顺序固定为：

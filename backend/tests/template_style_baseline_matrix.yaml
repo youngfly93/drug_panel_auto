@@ -1,0 +1,68 @@
+schema_version: "1.0"
+policy:
+  scope: "all templates declared in panels/*/panel.yaml, including rollback/deprecated entries"
+  source_baseline: "PHI-safe hashes plus style/layout metrics"
+  rendered_output_baseline: "only where an accepted deterministic golden-case baseline exists"
+
+templates:
+  - panel_id: "crc_301_msi"
+    template_id: "crc_301_msi_standard_v1"
+    status: "active"
+    default: false
+    source_baseline: "baselines/template_sources/aligned_template_with_cnv_fusion_hla_FIXED.json"
+
+  - panel_id: "crc_301_msi"
+    template_id: "crc_301_msi_golden_template_v0"
+    status: "deprecated"
+    default: false
+    source_baseline: "baselines/template_sources/crc_301_msi_golden_template_v0.json"
+
+  - panel_id: "crc_301_msi"
+    template_id: "crc_301_msi_golden_template_v1"
+    status: "active"
+    default: true
+    source_baseline: "baselines/template_sources/crc_301_msi_golden_template_v1.json"
+    rendered_output_baseline: "baselines/crc_301_msi_style_baseline.json"
+
+  - panel_id: "crc_358_msi"
+    template_id: "crc_358_msi_standard_v1"
+    status: "active"
+    default: false
+    source_baseline: "baselines/template_sources/aligned_template_with_cnv_fusion_hla_FIXED.json"
+
+  - panel_id: "crc_358_msi"
+    template_id: "crc_358_msi_golden_template_v0"
+    status: "active"
+    default: true
+    source_baseline: "baselines/template_sources/crc_358_msi_golden_template_v0.json"
+    rendered_output_baseline: "baselines/crc_358_msi_style_baseline.json"
+
+  - panel_id: "endometrial_29"
+    template_id: "endometrial_29_golden_template_v0"
+    status: "draft"
+    default: true
+    source_baseline: "baselines/template_sources/endometrial_29_golden_template_v0.json"
+
+  - panel_id: "lung_329_pdl1"
+    template_id: "lung_329_pdl1_golden_template_v2"
+    status: "pilot"
+    default: true
+    source_baseline: "baselines/template_sources/lung_329_pdl1_golden_template_v2.json"
+
+  - panel_id: "lung_588_pdl1"
+    template_id: "lung_588_pdl1_golden_template_v0"
+    status: "pilot"
+    default: false
+    source_baseline: "baselines/template_sources/lung_588_pdl1_golden_template_v0.json"
+
+  - panel_id: "lung_588_pdl1"
+    template_id: "lung_588_pdl1_historical_golden_v1"
+    status: "pilot"
+    default: true
+    source_baseline: "baselines/template_sources/lung_588_pdl1_historical_golden_v1.json"
+
+  - panel_id: "lung_methylation"
+    template_id: "lung_methylation_minimal_v1"
+    status: "draft"
+    default: true
+    source_baseline: "baselines/template_sources/lung_methylation_minimal_v1.json"
