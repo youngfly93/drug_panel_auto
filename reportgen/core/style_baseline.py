@@ -1,4 +1,4 @@
-"""金标样式基线：从生成好的报告 DOCX 提取"关键表 + 标志位"的结构化样式指纹。
+"""金标样式基线：从报告或模板 DOCX 提取可回归的结构化样式指纹。
 
 用途：把 crc_358/crc_301 等 panel 的**当前正确输出**冻结为基线 JSON，后处理层
 任何改动只要跑一遍基线测试，就能立刻发现是否把别处的样式弄坏了（链接色/下划线/
@@ -9,8 +9,12 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from hashlib import sha256
+import json
+from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Union
 from zipfile import ZipFile
 
 from docx import Document
@@ -25,6 +29,19 @@ _TABLE_SIGNATURES: dict[str, tuple[str, ...]] = {
     "biomarker_results": ("用药提示",),
     "gene_list": ("Gene List for MLseq",),
 }
+
+_TEMPLATE_STYLE_PARTS = {
+    "word/document.xml",
+    "word/fontTable.xml",
+    "word/numbering.xml",
+    "word/settings.xml",
+    "word/styles.xml",
+    "word/theme/theme1.xml",
+}
+_TEMPLATE_RELATED_PART = re.compile(
+    r"word/(?:header|footer)\d+\.xml$|"
+    r"word/_rels/(?:document|header\d+|footer\d+)\.xml\.rels$"
+)
 
 
 def _run_style(run) -> str:
@@ -61,6 +78,113 @@ def _cell_signature(cell) -> list[str]:
 
 def _table_fingerprint(table) -> list[list[list[str]]]:
     return [[_cell_signature(cell) for cell in row.cells] for row in table.rows]
+
+
+def _sha256_bytes(value: bytes) -> str:
+    return sha256(value).hexdigest()
+
+
+def _length(value: Any) -> int | None:
+    return int(value) if value is not None else None
+
+
+def _style_id(value: Any) -> str:
+    style = getattr(value, "style", None)
+    return str(getattr(style, "style_id", "") or "<none>")
+
+
+def _template_package_hashes(docx_path: Union[str, Path]) -> dict[str, str]:
+    """Hash style/layout-bearing package parts without emitting their text."""
+    with ZipFile(docx_path) as zf:
+        names = sorted(
+            name
+            for name in zf.namelist()
+            if name in _TEMPLATE_STYLE_PARTS
+            or _TEMPLATE_RELATED_PART.fullmatch(name)
+            or name.startswith("word/media/")
+        )
+        return {name: _sha256_bytes(zf.read(name)) for name in names}
+
+
+def extract_template_style_baseline(
+    docx_path: Union[str, Path],
+) -> dict[str, Any]:
+    """Return a PHI-safe source-template style/layout fingerprint.
+
+    Unlike :func:`extract_style_baseline`, this function is meant for template
+    sources that do not yet have a fully accepted rendered golden case. It
+    never emits paragraph/cell text. Content-bearing XML and media are retained
+    only as SHA-256 digests, so any source-template drift remains detectable
+    without copying case content into versioned JSON baselines.
+    """
+    path = Path(docx_path)
+    doc = Document(str(path))
+    paragraph_styles = Counter(_style_id(paragraph) for paragraph in doc.paragraphs)
+    table_styles = Counter(_style_id(table) for table in doc.tables)
+    table_shapes = Counter(
+        f"{len(table.rows)}x{len(table.columns)}" for table in doc.tables
+    )
+    section_layout = []
+    for section in doc.sections:
+        section_layout.append(
+            {
+                "orientation": str(section.orientation),
+                "start_type": str(section.start_type),
+                "page_width": _length(section.page_width),
+                "page_height": _length(section.page_height),
+                "top_margin": _length(section.top_margin),
+                "right_margin": _length(section.right_margin),
+                "bottom_margin": _length(section.bottom_margin),
+                "left_margin": _length(section.left_margin),
+                "header_distance": _length(section.header_distance),
+                "footer_distance": _length(section.footer_distance),
+                "header_linked": bool(section.header.is_linked_to_previous),
+                "footer_linked": bool(section.footer.is_linked_to_previous),
+            }
+        )
+
+    with ZipFile(path) as zf:
+        xml_parts = [
+            zf.read(name)
+            for name in zf.namelist()
+            if name == "word/document.xml"
+            or re.fullmatch(r"word/(?:header|footer)\d+\.xml", name)
+        ]
+    xml = b"\n".join(xml_parts)
+    package_hashes = _template_package_hashes(path)
+    canonical = json.dumps(
+        package_hashes,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("ascii")
+
+    return {
+        "schema_version": 1,
+        "metrics": {
+            "paragraph_count": len(doc.paragraphs),
+            "table_count": len(doc.tables),
+            "section_count": len(doc.sections),
+            "inline_shape_count": len(doc.inline_shapes),
+            "drawing_count": len(re.findall(rb"<(?:w:drawing|wp:inline|wp:anchor)\b", xml)),
+            "jinja_variable_count": xml.count(b"{{"),
+            "jinja_control_count": xml.count(b"{%"),
+            "media_part_count": sum(
+                name.startswith("word/media/") for name in package_hashes
+            ),
+        },
+        "paragraph_styles": dict(sorted(paragraph_styles.items())),
+        "table_styles": dict(sorted(table_styles.items())),
+        "table_shapes": dict(sorted(table_shapes.items())),
+        "sections": section_layout,
+        "package_parts_sha256": package_hashes,
+        "aggregate_sha256": _sha256_bytes(canonical),
+        "privacy": {
+            "paragraph_text_emitted": False,
+            "cell_text_emitted": False,
+            "media_bytes_emitted": False,
+        },
+    }
 
 
 def _part3_bullet_color(doc) -> str | None:

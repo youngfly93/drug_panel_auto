@@ -1,5 +1,25 @@
 # Execution Log
 
+## 2026-08-26 肺癌模板族实施基础与版本对齐
+
+- GitHub `origin/main` 与 iyun129 当前 immutable release 均核对为提交
+  `1020e1e659201beb39138dcf40931e2aa44d240d`；生产进程工作目录和 `REVISION`
+  一致，本地原 `main` 的未提交内容保持不动。
+- 从该精确提交建立独立工作树和分支
+  `codex/lung-template-family-foundation-20260826`，新工作与既有脏工作树隔离。
+- 新增肺癌资料索要清单校验器；真实 ignored 清单验收为 36 行、36 个唯一样本、
+  PD-L1 24 例/非 PD-L1 12 例，并与 487 行历史终版台账交叉核对 `PASS`。
+- 建立覆盖全部 10 个已声明模板（含 active/pilot/draft/deprecated）的模板样式基线矩阵。
+  源模板指纹只提交布局指标和 SHA-256，不提交段落、表格正文或媒体字节；CRC301/358
+  继续保留独立的渲染后 golden style baseline，静态基线不冒充端到端验收。
+- 新增六模板肺癌架构总规格，明确“版式族 × PD-L1 变体 × 产品规则包”、评审稿与生产
+  发布分层，以及技术老师需要提供的同案 Excel/Word、PD-L1 来源包和 UAT 结论。
+- 本地定向回归 `36 passed`：清单校验、10 模板矩阵、CRC301/358 渲染样式基线和
+  golden-template pilot 全部通过；受控 Ruff 与 Python 编译通过。6 条 Pillow
+  `getdata()` 弃用警告为既有技术债，无功能失败。
+- iyun129 当前发布完整 `qa gate` 为 `PASS`：panel/知识/工具链/lint/完整回归、
+  CRC358 reference/candidate/repeat diff 和当前输出检查全部通过；生产未重启或切换版本。
+
 ## 2026-07-14 CRC358 历史金标准与批量生成加固
 
 - 建立执行 Spec：`docs/spec_crc358_historical_golden_batch_hardening.md`。
