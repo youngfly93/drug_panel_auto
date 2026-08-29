@@ -20,9 +20,9 @@ privacy:
 
 template:
   id: "lung_588_pdl1_historical_golden_v1"
-  version: "0.4.0-review.3"
+  version: "0.4.0-review.4"
   status: "pilot"
-  sha256: "4df4b5278226c9034e2a50c1a8b6a3dacd2666b2bd5db88e1c1d2a9e0ca3ade2"
+  sha256: "b37735da11e9c572732522fdccf8f9f85f451b4a6704bb7344476c46489d506d"
   structure:
     table_count: 69
     section_count: 5

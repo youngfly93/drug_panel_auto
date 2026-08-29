@@ -136,10 +136,10 @@ def test_lung588_review_candidate_contract_freezes_default_template(tmp_path):
     assert identity == {
         "panel_id": "lung_588_pdl1",
         "template_id": "lung_588_pdl1_historical_golden_v1",
-        "version": "0.4.0-review.3",
+        "version": "0.4.0-review.4",
         "status": "pilot",
         "filename": "lung_588_pdl1_historical_golden_v1.docx",
-        "sha256": "4df4b5278226c9034e2a50c1a8b6a3dacd2666b2bd5db88e1c1d2a9e0ca3ade2",
+        "sha256": "b37735da11e9c572732522fdccf8f9f85f451b4a6704bb7344476c46489d506d",
         "is_default": True,
     }
     assert contract["lifecycle"]["clinical_release_status"] == "blocked"
@@ -907,6 +907,7 @@ def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
     assert pilot_profile["treatment_inference_allowed"] is False
     assert pilot_profile["antibody_clone"] == "原始记录未提供"
     assert pilot_profile["staining_platform"] == "原始记录未提供"
+    assert "不使用通用TPS/CPS阈值" in pilot_profile["report_classification_notice"]
 
     profile = next(row for row in profiles if row["profile_id"] == "nsclc_22c3_pharmdx_tps_v1")
     assert profile["profile_id"] == "nsclc_22c3_pharmdx_tps_v1"
@@ -1001,6 +1002,9 @@ def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
     assert "原始记录未提供" in provenance
     assert "不据此推导" in provenance
     assert "22C3" not in provenance
+    classification_notice = pilot_data.get_field("pdl1_classification_notice")
+    assert "不使用通用TPS/CPS阈值" in classification_notice
+    assert "TPS<1%" not in classification_notice
 
     pilot_data.set_field("pdl1_result", "未经允许的分层")
     assert {
@@ -1117,7 +1121,7 @@ def test_lung588_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
     assert result["qa_status"] == "WARN"
     assert result["template_identity"]["template_id"] == ("lung_588_pdl1_historical_golden_v1")
     assert result["template_identity"]["sha256"] == (
-        "4df4b5278226c9034e2a50c1a8b6a3dacd2666b2bd5db88e1c1d2a9e0ca3ade2"
+        "b37735da11e9c572732522fdccf8f9f85f451b4a6704bb7344476c46489d506d"
     )
     assert result["report_summary"]["template"]["id"] == ("lung_588_pdl1_historical_golden_v1")
     assert any("PD-L1逐病例结果" in warning for warning in result["warnings"])
@@ -1223,3 +1227,5 @@ def test_lung588_generation_allows_source_record_only_pilot_profile(
     with ZipFile(output) as archive:
         assert any(name.startswith("word/media/") for name in archive.namelist())
     assert "22C3" not in visible
+    assert "结果判定沿用病例专属来源记录" in visible
+    assert "定性结果判定标准：TPS<1%" not in visible

@@ -341,6 +341,10 @@ def apply_pdl1_product_display_fields(
             "PD-L1检测方案、抗体克隆、染色平台、显色系统及评分方法未提供；"
             "待报告组核对后补充。",
         )
+        report_data.set_field(
+            "pdl1_classification_notice",
+            "未提供可核验的病例专属PD-L1来源记录，当前不进行结果分级。",
+        )
     else:
         assay_name = _clean(profile.get("assay_name"))
         clone = _clean(profile.get("antibody_clone"))
@@ -348,6 +352,7 @@ def apply_pdl1_product_display_fields(
         visualization = _clean(profile.get("visualization_system"))
         scoring = _clean(profile.get("primary_scoring_method"))
         method_notice = _clean(profile.get("report_method_notice"))
+        classification_notice = _clean(profile.get("report_classification_notice"))
         report_data.set_field("pdl1_assay_name", assay_name)
         report_data.set_field("pdl1_antibody_clone", clone)
         report_data.set_field("pdl1_test_platform", platform)
@@ -361,6 +366,12 @@ def apply_pdl1_product_display_fields(
             f"显色系统：{visualization or '--'}；"
             f"主要评分方法：{scoring or '--'}。"
             + (f" {method_notice}" if method_notice else ""),
+        )
+        report_data.set_field(
+            "pdl1_classification_notice",
+            classification_notice
+            or "结果判定应按病例专属来源记录和已确认检测方案解释；"
+            "本报告不使用未登记的通用阈值重新分级。",
         )
 
     source_record = _clean(report_data.get_field("pdl1_source_record_id"))
