@@ -907,6 +907,7 @@ def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
     assert pilot_profile["treatment_inference_allowed"] is False
     assert pilot_profile["antibody_clone"] == "原始记录未提供"
     assert pilot_profile["staining_platform"] == "原始记录未提供"
+    assert pilot_profile["report_classification_notice"].startswith("4、")
     assert "不使用通用TPS/CPS阈值" in pilot_profile["report_classification_notice"]
 
     profile = next(row for row in profiles if row["profile_id"] == "nsclc_22c3_pharmdx_tps_v1")
@@ -1003,6 +1004,7 @@ def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():
     assert "不据此推导" in provenance
     assert "22C3" not in provenance
     classification_notice = pilot_data.get_field("pdl1_classification_notice")
+    assert classification_notice.startswith("4、")
     assert "不使用通用TPS/CPS阈值" in classification_notice
     assert "TPS<1%" not in classification_notice
 
@@ -1140,6 +1142,8 @@ def test_lung588_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
     )
     assert "先生成NGS报告草稿供报告解读组审核" in visible
     assert "未提供本病例PD-L1免疫组化图片" in visible
+    assert "4、未提供可核验的病例专属PD-L1来源记录" in visible
+    assert "4、定性结果判定标准：TPS<1%" not in visible
     assert "__PDL1_CASE_IMAGE__" not in visible
     assert len(rendered.inline_shapes) == len(Document(TEMPLATE).inline_shapes)
     pdl1_rows = [

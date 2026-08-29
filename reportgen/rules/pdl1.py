@@ -343,7 +343,7 @@ def apply_pdl1_product_display_fields(
         )
         report_data.set_field(
             "pdl1_classification_notice",
-            "未提供可核验的病例专属PD-L1来源记录，当前不进行结果分级。",
+            "4、未提供可核验的病例专属PD-L1来源记录，当前不进行结果分级。",
         )
     else:
         assay_name = _clean(profile.get("assay_name"))
@@ -370,7 +370,7 @@ def apply_pdl1_product_display_fields(
         report_data.set_field(
             "pdl1_classification_notice",
             classification_notice
-            or "结果判定应按病例专属来源记录和已确认检测方案解释；"
+            or "4、结果判定应按病例专属来源记录和已确认检测方案解释；"
             "本报告不使用未登记的通用阈值重新分级。",
         )
 
