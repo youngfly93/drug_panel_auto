@@ -74,7 +74,7 @@ REVIEW_CANDIDATE_CONTRACT = (
     / "review_baselines"
     / "lung588_historical_review_candidate_v1.yaml"
 )
-TEMPLATE_VERSION = "0.4.0-review.3"
+TEMPLATE_VERSION = "0.4.0-review.4"
 EXPECTED_REPAIRED_SOURCE_SHA256 = (
     "e9cde046db0a93a5b33f13961ff7be25fcce9644a6682b7c132ca9e3604dbb96"
 )
@@ -105,6 +105,14 @@ IMMUNE_REVIEW_NOTICE = (
 HLA_REVIEW_NOTICE = (
     "HLA-I分型直接来自本病例Excel，仅供报告组核对；等位基因、合子状态与"
     "免疫治疗结局之间的患者级推断当前未启用。"
+)
+PDL1_CLASSIFICATION_NOTICE_MARKER = "{{ pdl1_classification_notice }}"
+LEGACY_FIXED_PDL1_CLASSIFICATION_TEXT = (
+    "4、定性结果判定标准：TPS<1%，判定PD-L1蛋白表达为阴性/无表达；"
+    "TPS（1-49%），判定PD-L1蛋白表达为低表达；TPS≥50%，判定PD-L1蛋白表达为高表达；"
+    "CPS<1，判定PD-L1蛋白表达为阴性；CPS≥1，判定PD-L1蛋白表达为阳性。"
+    "目前FDA推荐胃癌/胃食管交界处腺癌、尿路上皮癌、宫颈癌、食管鳞状细胞癌等患者"
+    "在使用相关免疫抑制剂时采用CPS评分标准。TPS评分标准主要应用于肺癌。"
 )
 
 # Historical tables 17-49 correspond to the named CtDrug mappings below.
@@ -749,6 +757,7 @@ def _validate_template(
         "{{ pdl1_tps }}",
         "{{ pdl1_cps }}",
         "{{ pdl1_result }}",
+        PDL1_CLASSIFICATION_NOTICE_MARKER,
         "{%tr for row in variants_2_1 %}",
         "{%tr for row in targeted_drug_tips %}",
         "{%tr for row in nccn_results %}",
@@ -968,6 +977,10 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
             "{{ tmb_detail_interpretation }}",
             "{{ tmb_drug_note }}",
         ),
+    )
+    _replace_paragraph_text(
+        _body_paragraph(document, LEGACY_FIXED_PDL1_CLASSIFICATION_TEXT),
+        PDL1_CLASSIFICATION_NOTICE_MARKER,
     )
     _collapse_between(
         document,
