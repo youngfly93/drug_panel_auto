@@ -422,9 +422,12 @@
           </span>
         </div>
         <el-progress
-          :percentage="singleProgressPercent"
+          :percentage="100"
+          :indeterminate="!['failed', 'completed', 'cancelled'].includes(singleTask.status)"
           :status="singleTask.status === 'failed' ? 'exception' : singleTask.status === 'completed' ? 'success' : undefined"
+          :show-text="false"
         />
+        <div class="single-stage-label">{{ singleStageLabel }}</div>
         <div class="single-actions">
           <el-button @click="$router.push(`/tasks/${singleTask.id}`)">
             {{ isControlledLungProject ? '查看草稿与审核状态' : '查看任务详情' }}
@@ -680,13 +683,16 @@ const canRetryBatch = computed(() => {
   return Boolean(task?.id && isBatchTerminal.value && (task.failed_files || 0) > 0)
 })
 
-const singleProgressPercent = computed(() => {
+const singleStageLabel = computed(() => {
   const status = singleTask.value?.status
-  if (status === 'completed') return 100
-  if (status === 'failed' || status === 'cancelled') return 100
-  if (status === 'running') return 55
-  if (status === 'pending') return 12
-  return 0
+  if (status === 'pending' || status === 'queued') return '任务已排队，等待执行'
+  if (status === 'preflight') return '正在校验输入与 Panel 配置'
+  if (status === 'qa') return '正在执行报告质量检查'
+  if (status === 'running' || status === 'generating') return '报告流水线执行中'
+  if (status === 'failed') return '报告生成失败'
+  if (status === 'cancelled') return '任务已取消'
+  if (status === 'completed') return '报告生成完成'
+  return '正在准备任务'
 })
 
 const requiredClinicalFields = computed(() => {
@@ -1545,6 +1551,12 @@ function statusLabel(status: string) {
 
 .single-progress-title span {
   color: #667085;
+  font-size: 13px;
+}
+
+.single-stage-label {
+  margin-top: 8px;
+  color: #606266;
   font-size: 13px;
 }
 

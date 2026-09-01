@@ -205,22 +205,15 @@
             :loading="Boolean(downloadingTasks[row.id])"
             @click="downloadReport(row.id)"
           >{{ downloadingTasks[row.id] ? '下载中' : '下载' }}</el-button>
-          <el-upload
+          <el-button
             v-if="row.task_type === 'single'"
-            :show-file-list="false"
-            :auto-upload="true"
-            :http-request="feedbackRequest(row.id)"
-            accept=".docx,.doc,.pdf,.txt,.md"
-            class="feedback-upload"
-          >
-            <el-button
-              text
-              type="warning"
-              size="small"
-              :icon="Upload"
-              :loading="Boolean(feedbackUploading[row.id])"
-            >{{ feedbackUploading[row.id] ? '上传中' : '反馈' }}</el-button>
-          </el-upload>
+            text
+            type="warning"
+            size="small"
+            :icon="Upload"
+            :loading="Boolean(feedbackUploading[row.id])"
+            @click="openFeedbackDialog(row.id)"
+          >{{ feedbackUploading[row.id] ? '上传中' : '反馈' }}</el-button>
           <el-popconfirm
             v-if="isActiveTaskStatus(row.status)"
             title="确认取消当前任务？"
@@ -245,6 +238,50 @@
         @current-change="handlePageChange"
       />
     </div>
+
+    <el-dialog
+      v-model="feedbackDialogVisible"
+      title="上传报告反馈"
+      width="min(560px, 92vw)"
+      :close-on-click-modal="false"
+      @closed="resetFeedbackDialog"
+    >
+      <el-upload
+        drag
+        :auto-upload="false"
+        :limit="1"
+        :file-list="feedbackFileList"
+        :on-change="handleFeedbackFileChange"
+        :on-remove="handleFeedbackFileRemove"
+        accept=".docx,.doc,.pdf,.txt,.md"
+      >
+        <el-icon class="el-icon--upload"><Upload /></el-icon>
+        <div class="el-upload__text">拖入反馈文件，或<em>点击选择</em></div>
+        <template #tip>
+          <div class="el-upload__tip">支持 DOCX、DOC、PDF、TXT、MD；一次上传一份。</div>
+        </template>
+      </el-upload>
+      <el-input
+        v-model="feedbackNote"
+        type="textarea"
+        :rows="3"
+        maxlength="500"
+        show-word-limit
+        placeholder="可选：填写需要调整的章节或问题说明"
+        style="margin-top: 16px"
+      />
+      <template #footer>
+        <el-button @click="feedbackDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :disabled="!feedbackFile"
+          :loading="Boolean(feedbackUploading[feedbackTaskId])"
+          @click="submitFeedback"
+        >
+          上传反馈
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -282,6 +319,11 @@ const stats = ref<TaskStats>({
 const loading = ref(false)
 const downloadingTasks = ref<Record<string, boolean>>({})
 const feedbackUploading = ref<Record<string, boolean>>({})
+const feedbackDialogVisible = ref(false)
+const feedbackTaskId = ref('')
+const feedbackFile = ref<File | null>(null)
+const feedbackFileList = ref<any[]>([])
+const feedbackNote = ref('')
 const quickFilter = ref<QuickFilter>('all')
 const searchQuery = ref('')
 const appliedSearch = ref('')
@@ -568,20 +610,43 @@ async function downloadReport(taskId: string) {
   }
 }
 
-function feedbackRequest(taskId: string) {
-  return (option: any) => handleFeedbackUpload(taskId, option)
+function openFeedbackDialog(taskId: string) {
+  resetFeedbackDialog()
+  feedbackTaskId.value = taskId
+  feedbackDialogVisible.value = true
 }
 
-async function handleFeedbackUpload(taskId: string, option: any) {
-  const file = option.file as File
+function handleFeedbackFileChange(file: any) {
+  feedbackFile.value = file.raw || null
+  feedbackFileList.value = [file]
+}
+
+function handleFeedbackFileRemove() {
+  feedbackFile.value = null
+  feedbackFileList.value = []
+}
+
+function resetFeedbackDialog() {
+  feedbackTaskId.value = ''
+  feedbackFile.value = null
+  feedbackFileList.value = []
+  feedbackNote.value = ''
+}
+
+async function submitFeedback() {
+  const taskId = feedbackTaskId.value
+  const file = feedbackFile.value
+  if (!taskId || !file) {
+    ElMessage.warning('请先选择反馈文件')
+    return
+  }
   feedbackUploading.value[taskId] = true
   try {
-    const res = await reportApi.uploadFeedback(taskId, file)
+    const res = await reportApi.uploadFeedback(taskId, file, feedbackNote.value)
     ElMessage.success(`反馈已上传（样本 ${res.sample_id}）`)
-    option.onSuccess?.(res)
+    feedbackDialogVisible.value = false
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || err.message || '反馈上传失败')
-    option.onError?.(err)
   } finally {
     feedbackUploading.value[taskId] = false
   }
@@ -606,14 +671,6 @@ onMounted(fetchTasks)
 .task-queue {
   display: grid;
   gap: 16px;
-}
-
-.feedback-upload {
-  display: inline-block;
-}
-
-.feedback-upload :deep(.el-upload) {
-  display: inline-block;
 }
 
 .queue-head,

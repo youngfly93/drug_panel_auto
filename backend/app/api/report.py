@@ -717,9 +717,9 @@ def _quality_gate_payload(task: Task, db: Session) -> dict:
     ):
         issues.append(
             _gate_issue(
-                "blocker",
+                "warning",
                 "CONTROLLED_PILOT_REVIEW_REQUIRED",
-                "肺癌588处于受控试运行，必须先由复核人标记“已审核”后才能交付。",
+                "肺癌报告处于评审稿阶段，建议报告组登记“已审核”或“退回修改”。",
             )
         )
 

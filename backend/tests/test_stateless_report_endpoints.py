@@ -1856,6 +1856,67 @@ def test_quality_gate_review_state_and_audit_package(tmp_path, monkeypatch):
     assert "case.xlsx" not in audit_log_text
 
 
+def test_controlled_lung_review_is_advisory_and_admin_can_record_decisions(
+    tmp_path,
+    monkeypatch,
+):
+    task_id = "synthetic-lung-review-self-service"
+    report_path = tmp_path / "reports" / task_id / "synthetic-lung.docx"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_bytes(b"PK\x03\x04synthetic-lung")
+    report_path.with_suffix(".qa.json").write_text(
+        json.dumps({"status": "PASS", "issues": [], "checks": {}}),
+        encoding="utf-8",
+    )
+
+    with _client(tmp_path, monkeypatch, role="admin") as client:
+        db = report_api.SessionLocal()
+        try:
+            db.add(
+                Task(
+                    id=task_id,
+                    user_id=1,
+                    task_type="single",
+                    status="completed",
+                    project_type="lung_588_pdl1",
+                    output_path=str(report_path),
+                    completed_files=1,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        draft_gate = client.get(f"/api/v1/reports/{task_id}/quality-gate")
+        rejected = client.post(
+            f"/api/v1/reports/{task_id}/review-state",
+            json={"status": "rejected", "note": "synthetic regression"},
+        )
+        reviewed = client.post(
+            f"/api/v1/reports/{task_id}/review-state",
+            json={"status": "reviewed"},
+        )
+
+    gate = draft_gate.json()["data"]
+    review_issue = next(
+        item
+        for item in gate["issues"]
+        if item["code"] == "CONTROLLED_PILOT_REVIEW_REQUIRED"
+    )
+    assert draft_gate.status_code == 200
+    assert gate["blockers"] == 0
+    assert gate["passed"] is True
+    assert review_issue["level"] == "warning"
+    assert rejected.status_code == 200
+    assert rejected.json()["data"]["status"] == "rejected"
+    assert rejected.json()["data"]["updated_by"] == "Synthetic Admin"
+    assert rejected.json()["data"]["updated_at"]
+    assert reviewed.status_code == 200
+    assert reviewed.json()["data"]["status"] == "reviewed"
+    assert reviewed.json()["data"]["updated_by"] == "Synthetic Admin"
+    assert reviewed.json()["data"]["updated_at"]
+
+
 def test_quality_gate_blocks_failed_batch_delivery(tmp_path, monkeypatch):
     bridge = FailOnceBridge()
     with _client(tmp_path, monkeypatch, bridge=bridge) as client:

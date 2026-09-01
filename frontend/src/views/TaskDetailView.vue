@@ -122,6 +122,15 @@
             </el-button>
             <el-button
               v-if="canReview"
+              type="danger"
+              plain
+              :loading="reviewUpdating"
+              @click="markReviewState('rejected')"
+            >
+              退回修改
+            </el-button>
+            <el-button
+              v-if="canReview"
               type="primary"
               :disabled="!qualityGate?.passed"
               :loading="reviewUpdating"
@@ -512,10 +521,17 @@
             show-icon
             :closable="false"
           />
+          <el-alert
+            v-if="visualPreviewError"
+            :title="visualPreviewError"
+            type="warning"
+            show-icon
+            :closable="false"
+          />
           <img
-            v-if="firstRenderedPage"
+            v-if="visualPreviewUrl"
             class="render-preview"
-            :src="firstRenderedPage.url"
+            :src="visualPreviewUrl"
             alt="Rendered report page"
           />
           <el-collapse v-if="visualRender?.stderr_tail || visualRender?.command" class="debug-collapse">
@@ -809,7 +825,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, Close, Download, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -862,6 +878,8 @@ const provenance = ref<Record<string, any> | null>(null)
 const stageReport = ref<Record<string, any> | null>(null)
 const batchResults = ref<BatchResults | null>(null)
 const visualRender = ref<VisualRenderResult | null>(null)
+const visualPreviewUrl = ref('')
+const visualPreviewError = ref('')
 const reportDiff = ref<ReportDiffResult | null>(null)
 const referenceFile = ref<File | null>(null)
 const referenceFileList = ref<any[]>([])
@@ -939,7 +957,6 @@ const provenanceRows = computed(() => {
   })
 })
 
-const firstRenderedPage = computed(() => visualRender.value?.rendered_pages?.[0] || null)
 const diffIssueRows = computed(() => reportDiff.value?.issues || [])
 const qualityGateIssueRows = computed(() => qualityGate.value?.issues || [])
 const batchDiffRows = computed(() => reportDiff.value?.items || [])
@@ -1507,6 +1524,7 @@ async function fetchAll() {
 
 async function renderFirstPage() {
   rendering.value = true
+  visualPreviewError.value = ''
   try {
     visualRender.value = await reportApi.renderVisual(taskId, {
       mode: 'first',
@@ -1514,14 +1532,29 @@ async function renderFirstPage() {
       timeout_seconds: 60,
     })
     if (visualRender.value.status === 'PASS') {
+      const page = visualRender.value.rendered_pages?.[0]
+      if (!page) {
+        throw new Error('视觉渲染未返回首页图片')
+      }
+      const blob = await reportApi.getVisualRenderPage(taskId, page.filename)
+      clearVisualPreviewUrl()
+      visualPreviewUrl.value = URL.createObjectURL(blob)
       ElMessage.success('首页渲染完成')
     } else {
       ElMessage.warning(visualRender.value.message || '视觉渲染未通过')
     }
   } catch (err: any) {
-    ElMessage.error(err.response?.data?.error || '视觉渲染请求失败')
+    visualPreviewError.value = err.response?.data?.detail || err.message || '首页图片加载失败'
+    ElMessage.error(visualPreviewError.value)
   } finally {
     rendering.value = false
+  }
+}
+
+function clearVisualPreviewUrl() {
+  if (visualPreviewUrl.value) {
+    URL.revokeObjectURL(visualPreviewUrl.value)
+    visualPreviewUrl.value = ''
   }
 }
 
@@ -1730,7 +1763,7 @@ async function refreshGate() {
   }
 }
 
-async function markReviewState(status: 'reviewed' | 'delivered') {
+async function markReviewState(status: 'reviewed' | 'delivered' | 'rejected') {
   reviewUpdating.value = true
   try {
     reviewState.value = await reportApi.updateReviewState(taskId, {
@@ -1738,7 +1771,12 @@ async function markReviewState(status: 'reviewed' | 'delivered') {
     })
     qualityGate.value = await reportApi.getQualityGate(taskId)
     await fetchAuditTrail()
-    ElMessage.success(status === 'delivered' ? '已标记交付' : '已标记审核')
+    const message = status === 'delivered'
+      ? '已标记交付'
+      : status === 'rejected'
+        ? '已退回修改'
+        : '已标记审核'
+    ElMessage.success(message)
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || '审核状态更新失败')
   } finally {
@@ -1772,7 +1810,15 @@ async function retryFailedBatch() {
   }
 }
 
-onMounted(fetchAll)
+async function initializeTaskDetail() {
+  if (authStore.token && !authStore.user) {
+    await authStore.fetchUser()
+  }
+  await fetchAll()
+}
+
+onMounted(initializeTaskDetail)
+onBeforeUnmount(clearVisualPreviewUrl)
 </script>
 
 <style scoped>

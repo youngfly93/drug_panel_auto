@@ -257,6 +257,14 @@ def apply_pdl1_display_fields(
             return str(value or "--").strip()
         return f"{numeric:g}"
 
+    # The DOCX template also renders the scalar fields directly.  Keep their
+    # presentation consistent with the interpretation text: integer-valued
+    # inputs do not acquire a synthetic ``.0``, while real decimals remain.
+    if tps not in (None, ""):
+        report_data.set_field("pdl1_tps", display(tps))
+    if cps not in (None, ""):
+        report_data.set_field("pdl1_cps", display(cps))
+
     report_data.set_field(
         "pdl1_table_interpretation",
         "本次PD-L1免疫组化检测结果："

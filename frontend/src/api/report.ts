@@ -735,6 +735,14 @@ export const reportApi = {
     return data.data
   },
 
+  async getVisualRenderPage(taskId: string, filename: string): Promise<Blob> {
+    const { data } = await client.get(
+      `/reports/${taskId}/visual-render/pages/${encodeURIComponent(filename)}`,
+      { responseType: 'blob' },
+    )
+    return data
+  },
+
   async compareReport(
     taskId: string,
     reference: File,

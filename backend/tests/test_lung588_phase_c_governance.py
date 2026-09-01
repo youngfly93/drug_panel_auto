@@ -466,6 +466,19 @@ def test_lung588_runtime_exact_drug_rules_show_review_and_missing_context_notice
         "NM_004448.4",
         targeted_drug_rules=rules,
     ) == ("德曲妥珠单抗（A）\n【待报告组审】", "--")
+
+    partial_rules = load_targeted_drug_rule_context(
+        package,
+        clinical_context={"lung_histology": "非小细胞肺癌"},
+    )
+    partial_notices = {
+        row["gene"]: row.get("_clinical_context_display_notice")
+        for row in partial_rules["reviewed_variant_overrides"]
+    }
+    assert partial_notices == {
+        "BRAF": "疾病范围/分期、伴随诊断状态未提供",
+        "ERBB2": "疾病范围/分期、既往系统治疗情况、伴随诊断状态未提供",
+    }
     assert mapper._lookup_reviewed_variant_override_drugs(
         "BRAF",
         "c.1781A>G",
@@ -499,7 +512,7 @@ def test_lung588_runtime_exact_drug_rules_show_review_and_missing_context_notice
         targeted_drug_rules=missing,
     )
     assert missing_braf is not None
-    assert "【临床背景未提供】" in missing_braf[0]
+    assert "【肺癌病理类型、疾病范围/分期、伴随诊断状态未提供】" in missing_braf[0]
     assert "【待报告组审】" in missing_braf[0]
 
     uncertain = load_targeted_drug_rule_context(
@@ -509,6 +522,13 @@ def test_lung588_runtime_exact_drug_rules_show_review_and_missing_context_notice
     assert uncertain is not None
     assert len(uncertain["reviewed_variant_overrides"]) == 2
     assert uncertain["blocked_reviewed_variant_overrides"] == []
+    assert {
+        row["gene"]: row.get("_clinical_context_display_notice")
+        for row in uncertain["reviewed_variant_overrides"]
+    } == {
+        "BRAF": "伴随诊断状态未明确",
+        "ERBB2": "伴随诊断状态未明确",
+    }
 
     blocked = load_targeted_drug_rule_context(
         package,
