@@ -822,6 +822,25 @@ def test_lung588_batch_strips_shared_pdl1_values_and_aliases():
     assert isolated == {"patient_name": "SYNTHETIC_PATIENT"}
 
 
+def test_lung588_batch_marks_only_a_missing_patient_name_as_not_provided():
+    missing = batch_api._apply_batch_missing_display_defaults(
+        {"sample_id": "SYNTHETIC_L588"},
+        "lung_588_pdl1",
+    )
+    existing = batch_api._apply_batch_missing_display_defaults(
+        {"patient_name": "SYNTHETIC_PATIENT", "sample_id": "SYNTHETIC_L588"},
+        "lung_588_pdl1",
+    )
+    unrelated = batch_api._apply_batch_missing_display_defaults(
+        {"sample_id": "SYNTHETIC_CRC"},
+        "crc_358_msi",
+    )
+
+    assert missing == {"sample_id": "SYNTHETIC_L588", "patient_name": "未提供"}
+    assert existing["patient_name"] == "SYNTHETIC_PATIENT"
+    assert unrelated == {"sample_id": "SYNTHETIC_CRC"}
+
+
 def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification():
     package = load_panel_package("lung_588_pdl1", project_root=ROOT)
     contracts = package.input_contract["biomarkers"]

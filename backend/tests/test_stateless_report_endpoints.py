@@ -1303,6 +1303,47 @@ def test_batch_files_preflight_uses_sample_enrichment_for_dates(tmp_path, monkey
     assert bridge.last_generate_kwargs["clinical_info"]["report_date"] == "2026-05-31"
 
 
+def test_lung_batch_preparation_marks_only_missing_patient_name(monkeypatch, tmp_path):
+    bridge = FakeBridge()
+    bridge.detect_result = {
+        "project_type": "lung_588_pdl1",
+        "project_name": "肺癌588基因+PD-L1",
+        "confidence": 1.0,
+        "detected": True,
+    }
+    bridge.get_mapped_clinical_fields = lambda _excel_data: {
+        "sample_id": "SYNTHETIC-LUNG-BATCH",
+        "report_date": "2026-09-02",
+        "tmb_value": 6.5,
+        "msi_status": "MSS",
+        "pdl1_tps": 50,
+    }
+    monkeypatch.setattr(
+        batch_api.clinical_svc,
+        "enrich_patient_with_hard_timeout",
+        lambda *_args, **_kwargs: SimpleNamespace(fields={}),
+    )
+    source = tmp_path / "SYNTHETIC-LUNG-BATCH.xlsx"
+    source.write_bytes(b"placeholder")
+
+    clinical, project_type, project_name, _excel_data = (
+        batch_api._prepare_item_clinical_payload(
+            stored_path=str(source),
+            original_filename=source.name,
+            bridge=bridge,
+            shared_clinical_info={},
+            project_type="lung_588_pdl1",
+            project_name="肺癌588基因+PD-L1",
+        )
+    )
+
+    assert project_type == "lung_588_pdl1"
+    assert project_name == "肺癌588基因+PD-L1"
+    assert clinical["patient_name"] == "未提供"
+    assert clinical["sample_id"] == "SYNTHETIC-LUNG-BATCH"
+    assert "pdl1_tps" not in clinical
+
+
 def test_batch_files_ack_is_fast_and_does_not_preflight_synchronously(
     tmp_path,
     monkeypatch,
