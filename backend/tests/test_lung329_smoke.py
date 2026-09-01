@@ -270,6 +270,7 @@ def test_lung329_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
 
 def test_lung329_batch_is_enabled_and_strips_shared_pdl1():
     from app.api.batch import (
+        _apply_batch_missing_display_defaults,
         _batch_generation_policy_error,
         _isolate_batch_case_fields,
     )
@@ -289,6 +290,10 @@ def test_lung329_batch_is_enabled_and_strips_shared_pdl1():
         "lung_329_pdl1",
     )
     assert isolated == {"sample_id": "SYNTHETIC_L329"}
+    assert _apply_batch_missing_display_defaults(
+        isolated,
+        "lung_329_pdl1",
+    ) == {"sample_id": "SYNTHETIC_L329", "patient_name": "未提供"}
 
 
 def test_lung329_exact_immune_rows_do_not_fall_back_without_variants(tmp_path):

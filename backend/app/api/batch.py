@@ -59,6 +59,7 @@ from app.services.file_manager import (
     save_upload_with_digest,
 )
 from app.services.generation_preflight import (
+    is_missing_value,
     required_inputs_error_message,
     validate_required_inputs,
 )
@@ -138,6 +139,34 @@ def _isolate_batch_case_fields(payload: dict, project_type: Optional[str]) -> di
         for key, value in dict(payload or {}).items()
         if str(key).strip() not in excluded
     }
+
+
+def _apply_batch_missing_display_defaults(
+    payload: dict,
+    project_type: Optional[str],
+) -> dict:
+    """Apply Panel-declared honest display markers after case isolation.
+
+    This is intentionally limited to ``case_isolated_optional`` batch pilots.
+    A configured marker is used only when the per-case workbook and enrichment
+    both lack the field; an existing value is never overwritten.  Panel
+    packages must opt in field by field, so medical values cannot be silently
+    defaulted by this helper.
+    """
+
+    policy = _batch_generation_policy(project_type)
+    result = dict(payload or {})
+    if policy.get("clinical_info_mode") != "case_isolated_optional":
+        return result
+    defaults = policy.get("missing_display_defaults") or {}
+    if not isinstance(defaults, dict):
+        return result
+    for field, marker in defaults.items():
+        key = str(field or "").strip()
+        value = str(marker or "").strip()
+        if key and value and is_missing_value(result.get(key)):
+            result[key] = value
+    return result
 
 
 def _validated_reference_gate_mode(value: str | None, user: User) -> str:
@@ -453,6 +482,10 @@ def _prepare_item_clinical_payload(
         lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
     )
     clinical_payload = _isolate_batch_case_fields(
+        clinical_payload,
+        detected_project_type,
+    )
+    clinical_payload = _apply_batch_missing_display_defaults(
         clinical_payload,
         detected_project_type,
     )

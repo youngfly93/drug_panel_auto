@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 display_name: "肺癌329基因+PD-L1"
-version: "0.5.0"
+version: "0.5.1"
 status: "pilot"
 description: >
   Lung 329-gene + PD-L1 controlled-pilot package. It reports structured
@@ -32,6 +32,8 @@ project_detector_rules:
 batch_generation:
   enabled: true
   clinical_info_mode: "case_isolated_optional"
+  missing_display_defaults:
+    patient_name: "未提供"
   shared_field_exclusions:
     - "pdl1_tps"
     - "pdl1_cps"
@@ -43,10 +45,11 @@ batch_generation:
     - "pdl1_specimen_id"
     - "pdl1_image_disposition"
   reason: >
-    Batch generation is available for report-group pilot review. PD-L1 values,
-    provenance and images are never copied from the shared batch form or
-    inferred from the NGS workbook; each batch report leaves them absent and
-    displays the configured not-provided marker.
+    Batch generation is available for report-group pilot review. A patient name
+    absent from both the workbook and case enrichment is displayed explicitly
+    as not provided. PD-L1 values, provenance and images are never copied from
+    the shared batch form or inferred from the NGS workbook; each batch report
+    leaves them absent and displays the configured not-provided marker.
 
 release_governance:
   uat_policy: "uat/lung329_risk_based_release_policy.yaml"
