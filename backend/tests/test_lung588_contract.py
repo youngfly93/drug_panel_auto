@@ -909,10 +909,18 @@ def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification(
     assert validate_panel_biomarker_contracts(valid, contracts) == []
     apply_pdl1_display_fields(valid)
     interpretation = valid.get_field("pdl1_table_interpretation")
+    assert valid.get_field("pdl1_tps") == "5"
+    assert valid.get_field("pdl1_cps") == "6"
     assert "TPS 5%" in interpretation
     assert "CPS 6" in interpretation
     assert "推荐" not in interpretation
     assert "帕博利珠单抗" not in interpretation
+
+    valid.set_field("pdl1_tps", 5.25)
+    valid.set_field("pdl1_cps", "6.5")
+    apply_pdl1_display_fields(valid)
+    assert valid.get_field("pdl1_tps") == "5.25"
+    assert valid.get_field("pdl1_cps") == "6.5"
 
 
 def test_lung588_pdl1_product_profiles_are_traceable_and_fail_closed():

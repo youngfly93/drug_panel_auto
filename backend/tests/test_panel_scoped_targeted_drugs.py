@@ -76,10 +76,17 @@ def test_targeted_drug_rule_context_matrix():
     assert lung["approved_drug_rows_enabled"] is False
     assert len(lung["reviewed_variant_overrides"]) == 2
     assert lung["blocked_reviewed_variant_overrides"] == []
-    assert all(
-        row.get("_clinical_context_display_notice") == "临床背景未提供"
+    notices = {
+        row["gene"]: row.get("_clinical_context_display_notice")
         for row in lung["reviewed_variant_overrides"]
-    )
+    }
+    assert notices == {
+        "BRAF": "肺癌病理类型、疾病范围/分期、伴随诊断状态未提供",
+        "ERBB2": (
+            "肺癌病理类型、疾病范围/分期、既往系统治疗情况、"
+            "伴随诊断状态未提供"
+        ),
+    }
     assert all(
         row.get("_review_status_display_notice") == "待报告组审"
         for row in lung["reviewed_variant_overrides"]
@@ -325,6 +332,8 @@ def test_explicit_lung_policy_never_reopens_ctdrug_when_base_db_is_unavailable(
     assert rows[0]["gene"] == "BRAF"
     assert "p.V600E" in rows[0]["variant_site"]
     assert "达拉非尼+曲美替尼" in rows[0]["benefit_drugs"]
-    assert "临床背景未提供" in rows[0]["benefit_drugs"]
+    assert "肺癌病理类型、疾病范围/分期、伴随诊断状态未提供" in rows[0][
+        "benefit_drugs"
+    ]
     assert "待报告组审" in rows[0]["benefit_drugs"]
     assert "SENTINEL-GENE-FALLBACK" not in str(rows)

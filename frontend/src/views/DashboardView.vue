@@ -6,7 +6,7 @@
     <el-row :gutter="20" style="margin-bottom: 24px">
       <el-col :span="6">
         <el-card shadow="hover" body-style="padding: 20px">
-          <el-statistic title="总任务数" :value="taskStats.total">
+          <el-statistic title="总任务数" :value="dashboardLoaded ? taskStats.total : '-'">
             <template #suffix>
               <el-tag v-if="taskStats.running > 0" type="warning" size="small" style="margin-left: 8px">
                 {{ taskStats.running }} 运行中
@@ -17,20 +17,36 @@
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" body-style="padding: 20px">
-          <el-statistic title="已完成" :value="taskStats.completed" />
+          <el-statistic title="已完成" :value="dashboardLoaded ? taskStats.completed : '-'" />
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" body-style="padding: 20px">
-          <el-statistic title="知识库基因数" :value="kbStats.gene_knowledge?.total_rows || 0" />
+          <el-statistic
+            title="知识库基因数"
+            :value="dashboardLoaded ? (kbStats.gene_knowledge?.total_rows ?? 0) : '-'"
+          />
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" body-style="padding: 20px">
-          <el-statistic title="药物映射" :value="kbStats.drug_mappings?.total_rows || 0" suffix="条" />
+          <el-statistic
+            title="药物映射"
+            :value="dashboardLoaded ? (kbStats.drug_mappings?.total_rows ?? 0) : '-'"
+            :suffix="dashboardLoaded ? '条' : ''"
+          />
         </el-card>
       </el-col>
     </el-row>
+
+    <el-alert
+      v-if="loadError"
+      :title="loadError"
+      type="warning"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 24px"
+    />
 
     <!-- Quick actions -->
     <el-row :gutter="20" style="margin-bottom: 24px">
@@ -71,7 +87,13 @@
           <el-button text type="primary" @click="$router.push('/tasks')">查看全部</el-button>
         </div>
       </template>
-      <el-table :data="recentTasks" stripe size="small" v-loading="loading">
+      <el-table
+        :data="recentTasks"
+        stripe
+        size="small"
+        v-loading="loading"
+        :empty-text="dashboardLoaded ? '暂无任务' : '正在加载最近任务'"
+      >
         <el-table-column prop="id" label="任务ID" width="140" show-overflow-tooltip />
         <el-table-column prop="task_type" label="类型" width="80">
           <template #default="{ row }">
@@ -109,7 +131,9 @@ import { knowledgeApi, type KBStats } from '@/api/knowledge'
 const taskStats = ref<TaskStats>({ total: 0, completed: 0, failed: 0, running: 0, pending: 0 })
 const kbStats = ref<Partial<KBStats>>({})
 const recentTasks = ref<TaskItem[]>([])
-const loading = ref(false)
+const loading = ref(true)
+const dashboardLoaded = ref(false)
+const loadError = ref('')
 
 function statusType(s: string) {
   return {
@@ -139,8 +163,9 @@ function statusLabel(s: string) {
   }[s] || s
 }
 
-onMounted(async () => {
+async function loadDashboard() {
   loading.value = true
+  loadError.value = ''
   try {
     const [ts, kb, recent] = await Promise.allSettled([
       taskApi.getStats(),
@@ -150,8 +175,15 @@ onMounted(async () => {
     if (ts.status === 'fulfilled') taskStats.value = ts.value
     if (kb.status === 'fulfilled') kbStats.value = kb.value
     if (recent.status === 'fulfilled') recentTasks.value = recent.value.items
+    const failed = [ts, kb, recent].filter((item) => item.status === 'rejected').length
+    if (failed) {
+      loadError.value = `工作台有 ${failed} 项数据加载失败，请刷新重试。`
+    }
   } finally {
+    dashboardLoaded.value = true
     loading.value = false
   }
-})
+}
+
+onMounted(loadDashboard)
 </script>

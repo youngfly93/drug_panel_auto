@@ -33,6 +33,7 @@ def _unauthenticated_client() -> TestClient:
         "/api/v1/tasks/stats",
         "/api/v1/excel/missing/sheets",
         "/api/v1/reports/missing",
+        "/api/v1/reports/missing/visual-render/pages/page_1.png",
         "/api/v1/admin/ops/status",
         "/api/v1/config/mapping.yaml",
     ],

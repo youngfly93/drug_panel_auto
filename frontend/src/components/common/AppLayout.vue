@@ -140,7 +140,12 @@ function onResize() {
   if (!isMobile.value) sidebarOpen.value = false
 }
 
-onMounted(() => window.addEventListener('resize', onResize))
+onMounted(() => {
+  window.addEventListener('resize', onResize)
+  if (authStore.token && !authStore.user) {
+    void authStore.fetchUser()
+  }
+})
 onUnmounted(() => window.removeEventListener('resize', onResize))
 </script>
 

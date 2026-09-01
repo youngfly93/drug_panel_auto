@@ -159,6 +159,35 @@ def _partition_rows_by_clinical_context(
         "CONTEXT_VALUE_MISSING:",
         "CONTEXT_VALUE_UNCERTAIN:",
     )
+
+    def display_notice_for(reasons: tuple[str, ...]) -> str:
+        missing: list[str] = []
+        uncertain: list[str] = []
+        field_contracts = (
+            contract.get("fields")
+            if isinstance(contract, Mapping)
+            and isinstance(contract.get("fields"), Mapping)
+            else {}
+        )
+        for reason in reasons:
+            prefix, _, field = reason.partition(":")
+            raw_field_contract = field_contracts.get(field)
+            configured_label = (
+                str(raw_field_contract.get("label") or "").strip()
+                if isinstance(raw_field_contract, Mapping)
+                else ""
+            )
+            label = configured_label or field
+            target = uncertain if prefix == "CONTEXT_VALUE_UNCERTAIN" else missing
+            if label and label not in target:
+                target.append(label)
+        parts: list[str] = []
+        if missing:
+            parts.append(f"{'、'.join(missing)}未提供")
+        if uncertain:
+            parts.append(f"{'、'.join(uncertain)}未明确")
+        return "；".join(parts) or display_notice or "临床背景未提供"
+
     for row in rows:
         decision = evaluate_required_clinical_context(
             row,
@@ -178,8 +207,8 @@ def _partition_rows_by_clinical_context(
         ):
             visible = dict(row)
             visible["_clinical_context_display_reasons"] = list(decision.reasons)
-            visible["_clinical_context_display_notice"] = (
-                display_notice or "临床背景未提供"
+            visible["_clinical_context_display_notice"] = display_notice_for(
+                decision.reasons
             )
             eligible_rows.append(visible)
             continue
