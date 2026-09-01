@@ -133,10 +133,32 @@ def _partition_rows_by_clinical_context(
     clinical_context: Optional[Mapping[str, Any]],
     contract: Optional[Mapping[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Move context-ineligible runtime rows into the blocking selector set."""
+    """Apply the configured missing-context display policy to runtime rows.
+
+    A pilot may display an already reviewed exact-event row when its optional
+    clinical background is absent or explicitly uncertain, provided the row is
+    visibly labelled. Invalid values, values outside the reviewed cancer/stage
+    scope, and malformed contracts remain fail-closed.
+    """
 
     eligible_rows: list[dict[str, Any]] = []
     blocked_rows: list[dict[str, Any]] = []
+    contract_policy = (
+        str((contract or {}).get("missing_or_uncertain_policy") or "")
+        .strip()
+        .lower()
+        if isinstance(contract, Mapping)
+        else ""
+    )
+    display_notice = (
+        str((contract or {}).get("missing_or_uncertain_notice") or "").strip()
+        if isinstance(contract, Mapping)
+        else ""
+    )
+    displayable_reason_prefixes = (
+        "CONTEXT_VALUE_MISSING:",
+        "CONTEXT_VALUE_UNCERTAIN:",
+    )
     for row in rows:
         decision = evaluate_required_clinical_context(
             row,
@@ -146,10 +168,73 @@ def _partition_rows_by_clinical_context(
         if decision.eligible:
             eligible_rows.append(row)
             continue
+        if (
+            contract_policy == "show_rule_with_notice"
+            and decision.reasons
+            and all(
+                reason.startswith(displayable_reason_prefixes)
+                for reason in decision.reasons
+            )
+        ):
+            visible = dict(row)
+            visible["_clinical_context_display_reasons"] = list(decision.reasons)
+            visible["_clinical_context_display_notice"] = (
+                display_notice or "临床背景未提供"
+            )
+            eligible_rows.append(visible)
+            continue
         blocked = dict(row)
         blocked["_clinical_context_block_reasons"] = list(decision.reasons)
         blocked_rows.append(blocked)
     return eligible_rows, blocked_rows
+
+
+def _attach_review_status_display_notice(
+    rows: list[dict[str, Any]],
+    *,
+    display_policy: Optional[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Attach the governed pilot-review notice to displayable rule rows.
+
+    The marker travels with the request-scoped rule row so every downstream
+    rendering path (FieldMapper and the template enhancer) sees the same
+    decision. Medical content and review status remain unchanged.
+    """
+
+    if not isinstance(display_policy, Mapping):
+        return rows
+    if str(display_policy.get("mode") or "").strip().lower() != "show_with_notice":
+        return rows
+
+    notice = str(display_policy.get("notice") or "").strip()
+    if not notice:
+        return rows
+    configured_statuses = {
+        str(value).strip().lower()
+        for value in (display_policy.get("visible_statuses") or [])
+        if str(value).strip()
+    }
+
+    decorated: list[dict[str, Any]] = []
+    for row in rows:
+        row_statuses = {
+            str(value).strip().lower()
+            for value in (
+                row.get("review_status"),
+                row.get("secondary_review_status"),
+                (row.get("review_metadata") or {}).get("secondary_review_status")
+                if isinstance(row.get("review_metadata"), Mapping)
+                else "",
+            )
+            if str(value or "").strip()
+        }
+        if configured_statuses and not row_statuses & configured_statuses:
+            decorated.append(row)
+            continue
+        visible = dict(row)
+        visible["_review_status_display_notice"] = notice
+        decorated.append(visible)
+    return decorated
 
 
 def _dict_rows(value: Any) -> list[dict[str, Any]]:
@@ -402,6 +487,7 @@ def _disabled_context(panel_id: str, *, reason: str) -> dict[str, Any]:
         "applicability_rules": [],
         "clinical_context_contract": {},
         "clinical_context_enforced": False,
+        "review_status_display": {},
     }
 
 
@@ -487,6 +573,15 @@ def load_targeted_drug_rule_context(
         clinical_context=clinical_context,
         contract=context_contract,
     )
+    review_status_display = (
+        dict(policy.get("review_status_display"))
+        if isinstance(policy.get("review_status_display"), Mapping)
+        else {}
+    )
+    active_rows = _attach_review_status_display_notice(
+        active_rows,
+        display_policy=review_status_display,
+    )
     blocked_rows = _blocked_governed_rows(
         raw,
         _dict_rows(policy.get("reviewed_variant_overrides")),
@@ -537,4 +632,5 @@ def load_targeted_drug_rule_context(
         ),
         "clinical_context_contract": context_contract or {},
         "clinical_context_enforced": bool(context_contract),
+        "review_status_display": review_status_display,
     }

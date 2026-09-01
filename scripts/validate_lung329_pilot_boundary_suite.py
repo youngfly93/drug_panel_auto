@@ -388,18 +388,21 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
                 failures.append("pdl1_image_marker_not_replaced")
             if "图1. 免疫组化：PD-L1" not in visible:
                 failures.append("missing_pdl1_image_caption")
-            if "原始记录未提供抗体克隆" in visible:
-                failures.append("obsolete_method_provenance_visible")
-            if "不据此推导检测方案等效性" in visible:
-                failures.append("obsolete_no_inference_notice_visible")
             if "22C3" in visible:
                 failures.append("invented_22c3_method")
-            if "肺癌专属知识当前未启用" not in visible:
-                failures.append("missing_part3_disabled_notice")
+            if "第三部分：基因变异及相应靶向/免疫药物解析" not in visible:
+                failures.append("missing_part3_heading")
+            if "肺癌专属知识当前未启用" in visible:
+                failures.append("stale_part3_disabled_notice")
             if "3.4 免疫相关基因模块（未启用）" not in visible:
                 failures.append("missing_immune_module_disabled_heading")
             if "免疫治疗正相关基因检测结果" in visible:
                 failures.append("legacy_immune_gene_table_visible")
+            if (
+                scenario["expected_targeted_drug_count"]
+                and "【待报告组审】" not in visible
+            ):
+                failures.append("missing_targeted_drug_review_notice")
             for other_id in sorted(all_ids - {case_id}):
                 if other_id in visible:
                     failures.append(f"cross_case_leak:{other_id}")
@@ -407,8 +410,8 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
         targeted_count = len(context.get("targeted_drug_tips") or [])
         if targeted_count != scenario["expected_targeted_drug_count"]:
             failures.append("exact_targeted_drug_count_mismatch")
-        if context.get("gene_knowledge_sections"):
-            failures.append("unreviewed_part3_sections_visible")
+        if not context.get("gene_knowledge_sections"):
+            failures.append("part3_sections_missing")
         for table_name in (
             "immune_positive_results",
             "immune_negative_results",
@@ -418,8 +421,19 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
                 failures.append(f"disabled_immune_rows_present:{table_name}")
 
         qa_status = result.get("qa_status")
-        if require_visual and qa_status != "PASS":
-            failures.append(f"visual_qa_not_pass:{qa_status or 'missing'}")
+        qa_payload: dict[str, Any] = {}
+        qa_path = Path(str(result.get("qa_report_file") or ""))
+        if qa_path.is_file():
+            qa_payload = json.loads(qa_path.read_text(encoding="utf-8"))
+        if qa_status not in {"PASS", "WARN"}:
+            failures.append(f"qa_not_nonblocking:{qa_status or 'missing'}")
+        visual_status = (
+            ((qa_payload.get("checks") or {}).get("visual_render") or {}).get(
+                "status"
+            )
+        )
+        if require_visual and visual_status != "PASS":
+            failures.append(f"visual_qa_not_pass:{visual_status or 'missing'}")
         case_rows.append(
             {
                 "case_id": case_id,
@@ -439,6 +453,7 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
                     context.get("gene_knowledge_sections") or []
                 ),
                 "qa_status": qa_status,
+                "visual_qa_status": visual_status,
                 "output_sha256": (
                     _sha256(output_path) if output_path.is_file() else ""
                 ),
@@ -467,7 +482,7 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
             "fixed_minimum_real_case_count": None,
             "active_medical_release_promoted": False,
             "treatment_inference_allowed": (
-                "reviewed exact events only after context match and case review"
+                "registered exact events in pilot drafts with visible review/context notices"
             ),
         },
     }

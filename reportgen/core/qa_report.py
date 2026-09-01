@@ -1842,6 +1842,26 @@ def _build_business_checks(
     project_type: Optional[str],
 ) -> Dict[str, Any]:
     checks: Dict[str, Any] = {}
+    residual_scan = context.get("part3_cross_cancer_residual_scan")
+    if isinstance(residual_scan, Mapping) and residual_scan.get("enabled"):
+        configured_terms = [
+            str(term).strip()
+            for term in residual_scan.get("terms") or []
+            if str(term).strip()
+        ]
+        matched_terms = [
+            term for term in configured_terms if _compact(term) in compact_text
+        ]
+        checks["part3_cross_cancer_residuals"] = {
+            "status": "WARN" if matched_terms else "PASS",
+            "severity": "warning",
+            "configured_term_count": len(configured_terms),
+            "matched_terms": matched_terms,
+            "message": str(
+                residual_scan.get("notice")
+                or "Part 3 contains cross-cancer historical wording pending review."
+            ).strip(),
+        }
     if not _is_crc(project_type):
         return checks
 
@@ -1980,13 +2000,17 @@ def _business_issues(checks: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
         ),
         "tmb_status_text": "TMB status from context was not found in rendered text.",
         "msi_status_text": "MSI status from context was not found in rendered text.",
+        "part3_cross_cancer_residuals": (
+            "Part 3 contains cross-cancer historical wording pending review."
+        ),
     }
     for key, check in checks.items():
         status = check.get("status")
+        message = str(check.get("message") or messages.get(key) or key)
         if status == "FAIL":
-            yield {"level": "error", "code": key.upper(), "message": messages[key]}
+            yield {"level": "error", "code": key.upper(), "message": message}
         elif status == "WARN":
-            yield {"level": "warning", "code": key.upper(), "message": messages[key]}
+            yield {"level": "warning", "code": key.upper(), "message": message}
 
 
 def _as_int(value: Any) -> Optional[int]:

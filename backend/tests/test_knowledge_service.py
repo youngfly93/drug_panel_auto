@@ -243,9 +243,9 @@ def test_lung329_pilot_uses_own_coverage_and_risk_based_uat_policy():
     readiness = contract["clinical_release_readiness"]
     assert readiness["status"] == "BLOCKED"
     assert readiness["uat"]["minimum_reviewed_reports"] is None
-    assert readiness["uat"]["required_pass_rate_percent"] == 100.0
+    assert readiness["uat"]["required_pass_rate_percent"] == 0.0
     assert readiness["uat"]["panel_policy_id"] == (
-        "lung329_risk_based_all_available_cases_v1"
+        "lung329_report_group_self_service_pilot_v2"
     )
     assert "controlled_pilot_without_real_case_uat" in readiness["blocking_reasons"]
     assert "insufficient_uat_reports" not in readiness["blocking_reasons"]

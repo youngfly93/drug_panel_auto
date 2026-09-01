@@ -5,11 +5,13 @@ release_status: "NOT_BUILT"
 production_eligible: false
 enforced_targets:
   - "iyun129"
-blocker_code: "formal_same_case_input_golden_and_pdl1_provenance_missing"
+blocker_code: "draft_build_allowed_production_evidence_pending"
+draft_build_allowed: true
 decision: >-
   Treat lung-62 plus PD-L1 as a distinct product. Reuse only the reviewed
-  small-panel structural base; require case-specific PD-L1 source provenance
-  and a dedicated reviewed golden before any production entry is exposed.
+  small-panel structural base. Draft construction is allowed for report-group
+  evaluation; case-specific PD-L1 provenance and a dedicated reviewed golden
+  remain mandatory before any production entry is exposed.
 
 aggregate_inventory:
   historical_final_docx_count: 55

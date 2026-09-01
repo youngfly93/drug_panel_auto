@@ -1,6 +1,7 @@
 schema_version: "1.0"
 contract_id: "lung588_historical_review_candidate_v1"
 panel_id: "lung_588_pdl1"
+runtime_policy_revision: "2026-09-01-report-group-self-service-pilot"
 
 lifecycle:
   status: "report_group_review_candidate"
@@ -43,10 +44,7 @@ template:
     - "n=329"
   dynamic_scope:
     end_heading: "第四部分：附录"
-    forbidden_texts:
-      - "结直肠癌"
-      - "colorectal"
-      - "colon cancer"
+    forbidden_texts: []
 
 gene_list:
   header: "Gene List for MLseq (n=588)"
@@ -71,7 +69,7 @@ rendered_output:
     - "报告组评审候选稿（非临床交付）"
     - "本表仅展示当前面板已输出的精确事件结果"
     - "以下固定附录沿用历史终版版式"
-    - "本项目肺癌专属知识当前未启用"
+    - "第三部分：基因变异及相应靶向/免疫药物解析"
     - "Gene List for MLseq (n=588)"
     - "图1. 免疫组化：PD-L1"
   forbidden_texts:
@@ -85,12 +83,9 @@ rendered_output:
     - "待报告组审核"
   dynamic_scope:
     end_heading: "第四部分：附录"
-    forbidden_texts:
-      - "结直肠癌"
-      - "colorectal"
-      - "colon cancer"
+    forbidden_texts: []
   qa:
-    status: "PASS"
+    allowed_statuses: ["PASS", "WARN"]
     visual_render: "all"
     page_count_min: 80
     page_count_max: 100

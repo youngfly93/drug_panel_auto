@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 display_name: "肺癌588基因+PD-L1"
-version: "0.4.2"
+version: "0.5.0"
 status: "pilot"
 description: >
   Independent lung 588-gene + PD-L1 package. The controlled pilot supports
@@ -41,12 +41,23 @@ project_detector_rules:
             - "ExistIn178"
 
 batch_generation:
-  enabled: false
-  clinical_info_mode: "per_case_required"
+  enabled: true
+  clinical_info_mode: "case_isolated_optional"
+  shared_field_exclusions:
+    - "pdl1_tps"
+    - "pdl1_cps"
+    - "pdl1_result"
+    - "pdl1_image_path"
+    - "pdl1_assay_profile_id"
+    - "pdl1_source_record_id"
+    - "pdl1_source_record_date"
+    - "pdl1_specimen_id"
+    - "pdl1_image_disposition"
   reason: >
-    The source Excel does not contain PD-L1. A shared batch form would copy one
-    TPS/CPS/result into every patient, so batch generation remains blocked until
-    per-file clinical payloads are implemented and validated.
+    Batch generation is available for report-group pilot review. PD-L1 values,
+    provenance and images are never copied from the shared batch form or
+    inferred from the NGS workbook; each batch report leaves them absent and
+    displays the configured not-provided marker.
 
 release_governance:
   uat_policy: "uat/lung588_risk_based_release_policy.yaml"
@@ -56,15 +67,22 @@ review_candidate_contract: >-
   review_baselines/lung588_historical_review_candidate_v1.yaml
 
 part3_knowledge:
-  enabled: false
-  reason: >
-    The shared base workbook contains historical cross-cancer narratives and
-    references. Lung588 must use an independently reviewed event-level overlay
-    before any patient-visible Part-3 interpretation is enabled.
-  disabled_notice: >
-    本项目肺癌专属知识当前未启用，暂不提供第三部分的患者级基因解释和药物解析。
-    检测结果请以第二部分为准，
-    最终临床意义须由专业医师结合病理类型、疾病分期及现行诊疗规范综合判断。
+  enabled: true
+  release_mode: "report_group_pilot_draft"
+  cross_cancer_residual_scan:
+    enabled: true
+    severity: "warn"
+    terms:
+      - "结直肠癌"
+      - "结肠癌"
+      - "直肠癌"
+      - "大肠癌"
+      - "肠癌预后"
+      - "colorectal"
+      - "colon cancer"
+    notice: >
+      第三部分检出跨癌种历史叙述残留；本报告仍可作为报告组 pilot 评审稿生成，
+      但命中内容须在正式临床放行前复核。
 
 reviewed_part3_overlay_additions:
   - "rules/reviewed_part3_domain_candidates.yaml"

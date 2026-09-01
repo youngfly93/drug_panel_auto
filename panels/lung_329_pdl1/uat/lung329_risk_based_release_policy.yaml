@@ -1,30 +1,44 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
-policy_id: "lung329_risk_based_all_available_cases_v1"
+policy_id: "lung329_report_group_self_service_pilot_v2"
 status: "active_policy"
-effective_date: "2026-07-25"
+effective_date: "2026-09-01"
 decision_owner: "product_owner"
 
 supersedes:
   - "fixed_ten_real_case_threshold"
 
 rationale: >
-  A fixed ten-case threshold was an internal conservative convention rather
-  than a report-group or regulatory sample-size requirement. Controlled-pilot
-  release evaluates every registered real case available at the frozen
-  identity and supplements it with deterministic synthetic boundary tests.
-  Synthetic cases never count as real medical UAT.
+  Report-group pilot drafts are generated first so reviewers can inspect the
+  actual Word output and submit feedback. Per-case report-group decisions,
+  reviewer names and dates are not prerequisites for draft generation. Formal
+  clinical promotion remains a separate decision and is not implied here.
 
 real_case_policy:
   selection: "all_registered_real_cases_available_at_release_freeze"
   fixed_minimum_real_case_count: null
   require_non_empty_case_set: false
-  required_review_fraction: 1.0
-  required_pass_fraction: 1.0
+  required_review_fraction: 0.0
+  required_pass_fraction: 0.0
   p0_allowed: 0
   no_real_case_disposition: >
     The release may only be labelled controlled internal pilot. It must not be
     described as active medical release or completed real-case UAT.
+
+case_requirements:
+  ngs_structure_must_pass: true
+  pdl1_product_contract_must_pass: true
+  verified_case_specific_ihc_source_required: true
+  report_group_decision_required: false
+  report_group_reviewer_and_date_required: false
+
+product_owner_feedback_source:
+  required: true
+  minimum_entry_count: 1
+  entries:
+    - recorded_at: "2026-09-01"
+      source: "产品负责人指令：肺癌 pilot 去锁，让报告组自助测试"
+      scope: "lung588/lung329 report-group pilot draft generation"
 
 synthetic_boundary_policy:
   required_suite: "lung329_controlled_pilot_synthetic_boundary_v1"
@@ -34,20 +48,26 @@ synthetic_boundary_policy:
     - "MSI/TMB boundaries"
     - "single and multi-variant pagination"
     - "cross-case leak protection"
-    - "fail-closed treatment and Part-3 modules"
+    - "pilot-visible treatment and Part-3 modules"
 
 current_release_boundaries:
-  batch_generation_enabled: false
-  part3_knowledge_enabled: false
+  batch_generation_enabled: true
+  batch_pdl1_mode: "case_isolated_blank_display_not_provided"
+  part3_knowledge_enabled: true
+  part3_cross_cancer_residual_policy: "qa_warn_non_blocking"
   targeted_drug_rules_enabled: true
-  targeted_drug_scope: "inherits two exact lung588 events yielding three context-bounded treatment combinations"
+  targeted_drug_scope: >
+    Inherits two exact lung588 events yielding three treatment combinations;
+    missing or uncertain clinical context is displayed with a notice, while
+    invalid or out-of-scope context remains blocked.
   immune_gene_claims_enabled: false
   immune_gene_scope: "staged exact historical rows pending panel-specific review"
   chemotherapy_pharmacogenomics_enabled: false
   external_delivery_without_manual_review: false
   pdl1_treatment_inference_allowed: false
+  visible_release_label: "report_group_pilot_draft"
 
 active_release_promotion_requirements:
   - "actual PD-L1 assay clone/platform and scoring contract confirmed"
-  - "all available real cases reviewed at the frozen identity"
-  - "event-level Part-3 and treatment knowledge independently approved before activation"
+  - "formal clinical-release evidence reviewed at the frozen identity"
+  - "event-level Part-3 and treatment knowledge independently approved before formal clinical promotion"

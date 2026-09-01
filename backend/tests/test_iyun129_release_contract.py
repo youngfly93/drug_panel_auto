@@ -119,6 +119,7 @@ def test_lung13_intake_is_reserved_but_not_misrepresented_as_built() -> None:
     assert readiness["panel_id"] == "lung_13"
     assert readiness["release_status"] == "NOT_BUILT"
     assert readiness["production_eligible"] is False
+    assert readiness["draft_build_allowed"] is True
     assert readiness["aggregate_inventory"]["historical_final_docx_count"] == 246
     assert readiness["aggregate_inventory"]["supplied_matching_lung_13_excel_count"] == 0
     assert readiness["aggregate_inventory"]["contains_patient_data"] is False
@@ -135,6 +136,8 @@ def test_lung62_series_is_reserved_as_two_distinct_unbuilt_products() -> None:
 
     assert lung62["production_eligible"] is False
     assert lung62_pdl1["production_eligible"] is False
+    assert lung62["draft_build_allowed"] is True
+    assert lung62_pdl1["draft_build_allowed"] is True
     assert lung62["aggregate_inventory"]["historical_final_docx_count"] == 33
     assert lung62_pdl1["aggregate_inventory"]["historical_final_docx_count"] == 55
     assert lung62["aggregate_inventory"]["supplied_matching_lung_62_excel_count"] == 0

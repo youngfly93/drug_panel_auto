@@ -25,9 +25,9 @@ PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://panel.mailuo-report.com.cn/api/v
 TUNNEL_METRICS_URL="${TUNNEL_METRICS_URL:-http://127.0.0.1:20242/metrics}"
 RG_WEB_DOCS_ENABLED="${RG_WEB_DOCS_ENABLED:-0}"
 RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
-# Lung329 and lung588 are single-case controlled pilots. CRC301, methylation
-# and unbuilt small panels remain disabled until their independent promotion
-# gates are complete.
+# Lung329 and lung588 are single-case plus case-isolated batch pilot products.
+# CRC301, methylation and unbuilt small panels remain disabled until their
+# independent promotion gates are complete.
 RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1}"
 REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 VITE_DISABLED_PROJECT_TYPES="${VITE_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"

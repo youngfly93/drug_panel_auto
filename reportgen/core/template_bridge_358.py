@@ -1495,10 +1495,23 @@ def _select_reviewed_variant_override(
 def _drugs_from_override(override: Optional[Dict[str, Any]]) -> Tuple[str, str]:
     if not override:
         return "", ""
-    return (
-        _join_text_value(override.get("benefit_drugs")),
-        _join_text_value(override.get("caution_drugs")),
-    )
+    benefit = _join_text_value(override.get("benefit_drugs"))
+    caution = _join_text_value(override.get("caution_drugs"))
+    notices = [
+        str(override.get(key) or "").strip()
+        for key in (
+            "_clinical_context_display_notice",
+            "_review_status_display_notice",
+        )
+        if str(override.get(key) or "").strip()
+    ]
+    if notices:
+        suffix = "\n".join(f"【{notice}】" for notice in dict.fromkeys(notices))
+        if benefit and benefit != "--":
+            benefit = f"{benefit}\n{suffix}"
+        elif caution and caution != "--":
+            caution = f"{caution}\n{suffix}"
+    return benefit, caution
 
 
 def _research_drugs_from_override(override: Optional[Dict[str, Any]]) -> str:

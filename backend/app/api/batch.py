@@ -73,18 +73,37 @@ router = APIRouter(prefix="/reports", tags=["reports-batch"])
 
 IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
 
+_BATCH_CASE_FIELD_ALIASES = {
+    "pdl1_tps": {"PD-L1 TPS", "TPS"},
+    "pdl1_cps": {"PD-L1 CPS", "CPS"},
+    "pdl1_result": {"PD-L1结果", "PD-L1 Result"},
+    "pdl1_image_path": {"PD-L1病例图片"},
+    "pdl1_assay_profile_id": {"PD-L1检测方案"},
+    "pdl1_source_record_id": {"PD-L1原始记录编号"},
+    "pdl1_source_record_date": {"PD-L1原始记录日期"},
+    "pdl1_specimen_id": {"PD-L1检测标本标识"},
+    "pdl1_image_disposition": {"PD-L1图像处置"},
+}
 
-def _batch_generation_policy_error(project_type: Optional[str]) -> Optional[str]:
-    """Return a safe reason when the selected Panel disallows shared batches."""
+
+def _batch_generation_policy(project_type: Optional[str]) -> dict:
+    """Return the selected Panel's immutable batch policy, if available."""
+
     if not str(project_type or "").strip():
-        return None
+        return {}
     try:
         registration = get_panel_registry().get(project_type)
     except Exception:
-        return None
+        return {}
     package = registration.package if registration else None
     policy = (package.raw.get("batch_generation") or {}) if package else {}
-    if not isinstance(policy, dict) or policy.get("enabled", True):
+    return dict(policy) if isinstance(policy, dict) else {}
+
+
+def _batch_generation_policy_error(project_type: Optional[str]) -> Optional[str]:
+    """Return a safe reason when the selected Panel disallows shared batches."""
+    policy = _batch_generation_policy(project_type)
+    if not policy or policy.get("enabled", True):
         return None
     if policy.get("clinical_info_mode") == "per_case_required":
         return (
@@ -92,6 +111,33 @@ def _batch_generation_policy_error(project_type: Optional[str]) -> Optional[str]
             "为避免患者间结果串用，暂不开放批量生成。"
         )
     return str(policy.get("reason") or "该项目当前未开放批量生成。").strip()
+
+
+def _isolate_batch_case_fields(payload: dict, project_type: Optional[str]) -> dict:
+    """Remove fields that a Panel forbids copying across batch cases.
+
+    Lung PD-L1 values and provenance are intentionally absent in the current
+    batch workflow: the uploaded NGS workbook is not their source, and the Web
+    form has no per-file PD-L1 sidecar. Both canonical keys and accepted display
+    aliases are removed after mapping/enrichment so no shared value can leak.
+    """
+
+    policy = _batch_generation_policy(project_type)
+    if policy.get("clinical_info_mode") != "case_isolated_optional":
+        return dict(payload or {})
+    canonical = {
+        str(value).strip()
+        for value in policy.get("shared_field_exclusions") or []
+        if str(value).strip()
+    }
+    excluded = set(canonical)
+    for key in canonical:
+        excluded.update(_BATCH_CASE_FIELD_ALIASES.get(key, set()))
+    return {
+        key: value
+        for key, value in dict(payload or {}).items()
+        if str(key).strip() not in excluded
+    }
 
 
 def _validated_reference_gate_mode(value: str | None, user: User) -> str:
@@ -405,6 +451,10 @@ def _prepare_item_clinical_payload(
         clinical_payload,
         detected_project_type,
         lookup_sample_id=clinical_svc.project_code_from_filename(original_filename),
+    )
+    clinical_payload = _isolate_batch_case_fields(
+        clinical_payload,
+        detected_project_type,
     )
     clinical_payload.pop("项目名称", None)
     clinical_payload.pop("检测项目", None)
