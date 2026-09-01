@@ -429,7 +429,7 @@ def test_lung588_candidate_context_evaluator_rejects_missing_uncertain_and_out_o
     ).reasons == ("CONTEXT_OUT_OF_SCOPE:prior_systemic_therapy",)
 
 
-def test_lung588_runtime_exact_drug_rules_require_event_transcript_and_context():
+def test_lung588_runtime_exact_drug_rules_show_review_and_missing_context_notices():
     package = load_panel_package("lung_588_pdl1", project_root=ROOT)
     context = {
         "lung_histology": "非小细胞肺癌",
@@ -455,7 +455,7 @@ def test_lung588_runtime_exact_drug_rules_require_event_transcript_and_context()
         "NM_004333.6",
         targeted_drug_rules=rules,
     ) == (
-        "达拉非尼+曲美替尼（A）\n康奈非尼+贝美替尼（A）",
+        "达拉非尼+曲美替尼（A）\n康奈非尼+贝美替尼（A）\n【待报告组审】",
         "--",
     )
     assert mapper._lookup_reviewed_variant_override_drugs(
@@ -465,7 +465,7 @@ def test_lung588_runtime_exact_drug_rules_require_event_transcript_and_context()
         "Ⅰ类",
         "NM_004448.4",
         targeted_drug_rules=rules,
-    ) == ("德曲妥珠单抗（A）", "--")
+    ) == ("德曲妥珠单抗（A）\n【待报告组审】", "--")
     assert mapper._lookup_reviewed_variant_override_drugs(
         "BRAF",
         "c.1781A>G",
@@ -483,9 +483,36 @@ def test_lung588_runtime_exact_drug_rules_require_event_transcript_and_context()
         targeted_drug_rules=rules,
     ) is None
 
-    blocked = load_targeted_drug_rule_context(
+    missing = load_targeted_drug_rule_context(
+        package,
+        clinical_context={},
+    )
+    assert missing is not None
+    assert len(missing["reviewed_variant_overrides"]) == 2
+    assert missing["blocked_reviewed_variant_overrides"] == []
+    missing_braf = mapper._lookup_reviewed_variant_override_drugs(
+        "BRAF",
+        "c.1799T>A",
+        "p.V600E",
+        "Ⅰ类",
+        "NM_004333.6",
+        targeted_drug_rules=missing,
+    )
+    assert missing_braf is not None
+    assert "【临床背景未提供】" in missing_braf[0]
+    assert "【待报告组审】" in missing_braf[0]
+
+    uncertain = load_targeted_drug_rule_context(
         package,
         clinical_context={**context, "companion_diagnostic_status": "待确认"},
+    )
+    assert uncertain is not None
+    assert len(uncertain["reviewed_variant_overrides"]) == 2
+    assert uncertain["blocked_reviewed_variant_overrides"] == []
+
+    blocked = load_targeted_drug_rule_context(
+        package,
+        clinical_context={**context, "disease_extent": "可切除早期"},
     )
     assert blocked is not None
     assert blocked["reviewed_variant_overrides"] == []
@@ -859,10 +886,13 @@ def test_real_input_validator_separates_ngs_pre_uat_from_formal_uat():
     readiness = validate_lung588_real_inputs._build_uat_readiness(rows)
 
     assert readiness["scope"] == "risk_based_all_available_real_cases"
-    assert readiness["policy_id"] == "lung588_risk_based_all_available_cases_v1"
+    assert readiness["policy_id"] == "lung588_report_group_self_service_pilot_v2"
     assert readiness["fixed_minimum_real_case_count"] is None
     assert readiness["observed_real_input_count"] == 3
-    assert readiness["required_report_group_review_case_count"] == 3
+    assert readiness["required_report_group_review_case_count"] == 0
+    assert readiness["report_group_decision_required"] is False
+    assert readiness["report_group_reviewer_and_date_required"] is False
+    assert readiness["product_owner_feedback_source_count"] == 1
     assert readiness["ngs_structure_pass_count"] == 3
     assert readiness["ngs_structure_status"] == "PASS"
     assert readiness["pdl1_product_pass_count"] == 0
@@ -874,7 +904,6 @@ def test_real_input_validator_separates_ngs_pre_uat_from_formal_uat():
     assert {blocker["code"] for blocker in readiness["blockers"]} == {
         "PDL1_PRODUCT_CONTRACT_BLOCKED",
         "PDL1_CASE_SOURCE_NOT_VERIFIED",
-        "REPORT_GROUP_UAT_INCOMPLETE",
     }
 
 
@@ -910,7 +939,7 @@ def test_real_input_validator_can_pass_three_cases_without_fixed_denominator():
     )
 
     assert readiness["observed_real_input_count"] == 3
-    assert readiness["required_report_group_review_case_count"] == 3
+    assert readiness["required_report_group_review_case_count"] == 0
     assert readiness["report_group_reviewed_case_count"] == 3
     assert readiness["report_group_passed_case_count"] == 3
     assert readiness["formal_uat_status"] == "PASS"

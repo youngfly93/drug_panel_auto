@@ -5,11 +5,13 @@ release_status: "NOT_BUILT"
 production_eligible: false
 enforced_targets:
   - "iyun129"
-blocker_code: "formal_same_case_input_and_golden_missing"
+blocker_code: "draft_build_allowed_production_evidence_pending"
+draft_build_allowed: true
 decision: >-
-  Reserve the product identity and keep every production entry point closed.
-  Do not create or promote a panel package until a report-group-selected final
-  DOCX and real source Excel cases establish the input and output contracts.
+  Draft construction is allowed for report-group evaluation. Keep every
+  production entry point closed, and do not promote the product until a
+  report-group-selected final DOCX and real source Excel cases establish the
+  input and output contracts.
 
 aggregate_inventory:
   historical_final_docx_count: 246

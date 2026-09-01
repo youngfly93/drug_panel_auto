@@ -1,16 +1,17 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "clinical_context"
-version: "0.1.0"
-updated: "2026-07-23"
-status: "draft"
+version: "0.2.0"
+updated: "2026-09-01"
+status: "pilot"
 description: >
   Controlled patient context used only to reject out-of-scope lung588
   treatment rules. Values are supplied by the case form and are never inferred
   from free-text diagnosis.
 
 clinical_context_contract:
-  missing_or_uncertain_policy: "keep_rule_hidden"
+  missing_or_uncertain_policy: "show_rule_with_notice"
+  missing_or_uncertain_notice: "临床背景未提供"
   fields:
     lung_histology:
       allowed_values:

@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "drugs"
-version: "0.2.1"
-updated: "2026-08-10"
+version: "0.3.0"
+updated: "2026-09-01"
 status: "pilot"
 description: >
   Exact-event lung treatment policy. Two exact events yield three evidence-
@@ -40,6 +40,14 @@ targeted_drug_rules:
   require_cancer_profile_match: true
   approved_drug_rows_enabled: false
   clinical_context_rule: "clinical_context"
+  review_status_display:
+    mode: "show_with_notice"
+    visible_statuses:
+      - "needs_review"
+      - "provisional_runtime"
+      - "pending_report_group_review"
+      - "case_level_report_group_review_required"
+    notice: "待报告组审"
   summary_display_scope: "drug_matched_variants"
   summary_display_variant_levels: ["Ⅰ类", "Ⅱ类"]
   overrides: {}

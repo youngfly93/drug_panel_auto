@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 rule_id: "pdl1_product_contract"
-version: "0.4.1"
-updated: "2026-08-10"
+version: "0.5.0"
+updated: "2026-09-01"
 status: "pilot"
 description: >
   Product and provenance contract for per-case PD-L1 IHC results. The lung NGS
@@ -10,6 +10,10 @@ description: >
   is available for controlled report-group pilot use when the source record
   does not state the assay clone or platform. It never infers treatment
   eligibility.
+
+missing_case_display:
+  scalar_value: "未提供"
+  source: "explicit_absence_only"
 
 governance:
   contract_id: "lung329_pdl1_product_contract_v1"

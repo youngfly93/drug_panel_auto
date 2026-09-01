@@ -269,6 +269,9 @@ class TemplateRenderer:
             context.get("pdl1_image_missing_notice")
             or "未提供本病例PD-L1免疫组化图片；当前报告为待审核草稿。"
         ).strip()
+        missing_value_display = str(
+            context.get("pdl1_missing_value_display") or "待补充"
+        ).strip()
         doc = Document(file_path)
         draft_fields = (
             (2, "pdl1_tps"),
@@ -285,11 +288,11 @@ class TemplateRenderer:
                         continue
                     paragraph = cells[cell_index].paragraphs[0]
                     if paragraph.runs:
-                        paragraph.runs[0].text = "待补充"
+                        paragraph.runs[0].text = missing_value_display
                         for extra_run in paragraph.runs[1:]:
                             extra_run.text = ""
                     else:
-                        paragraph.add_run("待补充")
+                        paragraph.add_run(missing_value_display)
         matches = [p for p in doc.paragraphs if (p.text or "").strip() == marker]
         notice_matches = [
             p for p in doc.paragraphs if (p.text or "").strip() == missing_notice
@@ -3775,11 +3778,12 @@ class TemplateRenderer:
         file_path: str,
         text_prefixes: tuple[str, ...],
     ) -> None:
-        """Remove configured explicit page breaks from matching paragraphs.
+        """Remove configured explicit page breaks at/after matching paragraphs.
 
         This is a narrow layout control for reviewed templates whose source
-        paragraph ends in ``w:br type=page``.  It does not alter section breaks,
-        paragraph page-break-before settings, or unrelated template content.
+        paragraph ends in ``w:br type=page`` or is followed by a standalone
+        page-break paragraph.  It does not alter section breaks, paragraph
+        page-break-before settings, or unrelated template content.
         """
         import os
         import shutil
@@ -3822,16 +3826,40 @@ class TemplateRenderer:
             document_info = zin.getinfo("word/document.xml")
 
         root = ET.fromstring(document_xml)
+        parent_by_child = {
+            child: parent for parent in root.iter() for child in list(parent)
+        }
         removed = 0
-        for paragraph in root.iter(w_p):
-            text = "".join((node.text or "") for node in paragraph.iter(w_t)).strip()
-            if not any(text.startswith(prefix) for prefix in prefixes):
-                continue
+
+        def remove_explicit_page_breaks(paragraph) -> int:
+            count = 0
             for run in paragraph.iter(w_r):
                 for br in list(run.findall(w_br)):
                     if br.attrib.get(w_type) == "page":
                         run.remove(br)
-                        removed += 1
+                        count += 1
+            return count
+
+        for paragraph in list(root.iter(w_p)):
+            text = "".join((node.text or "") for node in paragraph.iter(w_t)).strip()
+            if not any(text.startswith(prefix) for prefix in prefixes):
+                continue
+            removed += remove_explicit_page_breaks(paragraph)
+
+            parent = parent_by_child.get(paragraph)
+            if parent is None:
+                continue
+            siblings = list(parent)
+            paragraph_index = siblings.index(paragraph)
+            for sibling in siblings[paragraph_index + 1 :]:
+                if sibling.tag != w_p:
+                    break
+                sibling_text = "".join(
+                    (node.text or "") for node in sibling.iter(w_t)
+                ).strip()
+                if sibling_text:
+                    break
+                removed += remove_explicit_page_breaks(sibling)
 
         if not removed:
             return
@@ -3852,7 +3880,7 @@ class TemplateRenderer:
                 os.unlink(tmp_name)
 
         self.logger.debug(
-            "已移除配置段落末尾的显式分页符",
+            "已移除配置段落及其后空段的显式分页符",
             removed=removed,
             prefixes=len(prefixes),
         )

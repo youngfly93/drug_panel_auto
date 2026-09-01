@@ -5,11 +5,13 @@ release_status: "NOT_BUILT"
 production_eligible: false
 enforced_targets:
   - "iyun129"
-blocker_code: "formal_same_case_input_and_golden_missing"
+blocker_code: "draft_build_allowed_production_evidence_pending"
+draft_build_allowed: true
 decision: >-
   Keep the non-PD-L1 62-gene product separate from its PD-L1 sibling and from
-  the large-panel family. Do not create or promote a panel package until its
-  own reviewed final DOCX and real source Excel establish the contract.
+  the large-panel family. Draft construction is allowed for report-group
+  evaluation, but production promotion remains blocked until its own reviewed
+  final DOCX and real source Excel establish the contract.
 
 aggregate_inventory:
   historical_final_docx_count: 33

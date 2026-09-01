@@ -6607,6 +6607,8 @@ def test_front_matter_spacing_honors_panel_page_flow_config(tmp_path):
     doc.add_paragraph("报告导读")
     notice = doc.add_paragraph("本表仅展示当前面板已输出的精确事件结果；评审用。")
     notice.add_run().add_break(WD_BREAK.PAGE)
+    standalone_break = doc.add_paragraph("")
+    standalone_break.add_run().add_break(WD_BREAK.PAGE)
     unrelated = doc.add_paragraph("其它段落")
     unrelated.add_run().add_break(WD_BREAK.PAGE)
     doc.save(docx_path)
@@ -6656,8 +6658,10 @@ def test_front_matter_spacing_honors_panel_page_flow_config(tmp_path):
     rendered_notice = next(
         elem for elem in paragraphs if text(elem).startswith("本表仅展示当前面板")
     )
+    rendered_standalone_break = paragraphs[paragraphs.index(rendered_notice) + 1]
     rendered_unrelated = next(elem for elem in paragraphs if text(elem) == "其它段落")
     assert has_page_break(rendered_notice) is False
+    assert has_page_break(rendered_standalone_break) is False
     assert has_page_break(rendered_unrelated) is True
 
 

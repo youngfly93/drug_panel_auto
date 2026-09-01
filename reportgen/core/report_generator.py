@@ -959,6 +959,18 @@ class ReportGenerator:
             project_type=state.canonical_project_type,
             panel_package=state.panel_package,
         )
+        residual_scan = part3_policy.get("cross_cancer_residual_scan") or {}
+        if part3_enabled and isinstance(residual_scan, dict) and residual_scan.get(
+            "enabled"
+        ):
+            # QA scans the final rendered DOCX, not the pre-render source rows.
+            # This policy is deliberately advisory for report-group pilot
+            # drafts and never changes a medical value or blocks generation.
+            state.report_data.set_field(
+                "part3_cross_cancer_residual_scan",
+                dict(residual_scan),
+            )
+            stage.metrics["part3_cross_cancer_residual_scan_enabled"] = True
         pdl1_product_contract = load_pdl1_product_contract(state.panel_package)
         apply_pdl1_product_display_fields(
             state.report_data,

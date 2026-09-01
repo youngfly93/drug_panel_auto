@@ -375,6 +375,50 @@ class TargetedDrugMixin:
             benefit = "\n".join(self._as_text_list(selected.get("benefit_drugs")))
             caution = "\n".join(self._as_text_list(selected.get("caution_drugs")))
             if benefit or caution:
+                notices: list[str] = []
+                clinical_notice = str(
+                    selected.get("_clinical_context_display_notice") or ""
+                ).strip()
+                if clinical_notice:
+                    notices.append(clinical_notice)
+
+                review_display = (
+                    (targeted_drug_rules or {}).get("review_status_display") or {}
+                )
+                if isinstance(review_display, dict) and str(
+                    review_display.get("mode") or ""
+                ).strip().lower() == "show_with_notice":
+                    configured_statuses = {
+                        str(value).strip().lower()
+                        for value in review_display.get("visible_statuses") or []
+                        if str(value).strip()
+                    }
+                    row_statuses = {
+                        str(value).strip().lower()
+                        for value in (
+                            selected.get("review_status"),
+                            selected.get("secondary_review_status"),
+                            (selected.get("review_metadata") or {}).get(
+                                "secondary_review_status"
+                            )
+                            if isinstance(selected.get("review_metadata"), dict)
+                            else "",
+                        )
+                        if str(value or "").strip()
+                    }
+                    if not configured_statuses or row_statuses & configured_statuses:
+                        review_notice = str(
+                            review_display.get("notice") or ""
+                        ).strip()
+                        if review_notice and review_notice not in notices:
+                            notices.append(review_notice)
+
+                if notices:
+                    suffix = "\n".join(f"【{notice}】" for notice in notices)
+                    if benefit and benefit != "--":
+                        benefit = f"{benefit}\n{suffix}"
+                    elif caution and caution != "--":
+                        caution = f"{caution}\n{suffix}"
                 return benefit or "--", caution or "--"
         return None
 

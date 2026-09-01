@@ -1,8 +1,9 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
-policy_id: "lung588_risk_based_all_available_cases_v1"
-status: "pending_report_group_review"
-updated: "2026-07-25"
+policy_id: "lung588_report_group_self_service_pilot_v2"
+status: "optional_feedback_register"
+updated: "2026-09-01"
+required_for_pilot_generation: false
 
 cases:
   - alias: "CASE-LUNG-A"

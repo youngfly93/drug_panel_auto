@@ -425,12 +425,20 @@ def _check_qa(
         return
     check("OUTPUT_QA_PRESENT", True, expected="mapping", actual="mapping")
 
-    required_status = str(contract.get("status") or "PASS")
+    configured_statuses = contract.get("allowed_statuses")
+    if isinstance(configured_statuses, (list, tuple, set)):
+        allowed_statuses = {
+            str(value).strip().upper()
+            for value in configured_statuses
+            if str(value).strip()
+        }
+    else:
+        allowed_statuses = {str(contract.get("status") or "PASS").strip().upper()}
     actual_status = str(qa_report.get("status") or "")
     check(
         "OUTPUT_QA_STATUS",
-        actual_status == required_status,
-        expected=required_status,
+        actual_status.upper() in allowed_statuses,
+        expected=sorted(allowed_statuses),
         actual=actual_status,
     )
     metrics = qa_report.get("metrics") or {}

@@ -156,13 +156,15 @@ known-good process and refuses the switch when any is truthy.
 
 ### CRC358 + lung329/lung588 controlled-pilot release
 
-The lung329 and lung588 products are exposed only for single-case controlled
-generation. A report-review draft may be generated and downloaded when PD-L1
-values, source identity, the case image, or treatment context are not yet
-available; those omissions must remain visible as WARN/not-provided text and
-must not produce context-dependent drug matches. Shared batch generation stays
-disabled because one shared form must never be copied across patients. Review
-state governs formal review/delivery records, not access to the draft Word file.
+The lung329 and lung588 products are exposed for single-case and case-isolated
+batch pilot generation. A report-review draft may be generated and downloaded
+when PD-L1 values, source identity, the case image, or treatment context are not
+yet available. Batch generation strips all shared PD-L1 fields and renders them
+as not provided per case. Missing/uncertain treatment context may show only the
+Panel's registered exact-event rules with visible review/context notices;
+invalid or explicitly out-of-scope values remain blocked. Part 3 is pilot-visible
+and its final rendered text receives a non-blocking cross-cancer residual WARN.
+Review state governs formal clinical release, not access to the pilot Word file.
 CRC301, lung methylation and the unbuilt small panels remain disabled in all
 three scope guards:
 
@@ -174,8 +176,8 @@ VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation,lung_13,lung_62,lung_62
 
 The first guard blocks direct/core generation, the second blocks Web API entry
 points, and the third removes unpromoted products from the production
-generation selector. Batch generation remains independently disabled by each
-lung pilot's committed Panel contract. The list also reserves `lung_13`,
+generation selector. Batch case isolation remains independently enforced by
+each lung pilot's committed Panel contract. The list also reserves `lung_13`,
 `lung_62`, and `lung_62_pdl1`, which have product-intake records but no Panel
 package or matching source Excel.
 The iyun129 deployment wrapper supplies these values by default. The backend

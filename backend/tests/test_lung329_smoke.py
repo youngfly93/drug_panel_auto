@@ -2,7 +2,7 @@
 """肺癌329+PD-L1 受控试运行冒烟与安全边界。
 
 默认模板必须无病例硬编码、可渲染；缺少PD-L1时允许先生成待审核草稿，
-批量生成仍不得把一份病例信息串用到其他病例。
+批量生成必须逐病例清空共享PD-L1信息，避免串用。
 """
 
 import io
@@ -263,16 +263,32 @@ def test_lung329_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
         for row in table.rows
         if row.cells and "PD-L1蛋白表达" in row.cells[0].text
     ]
-    assert any(row[2:5] == ["待补充", "待补充", "待补充"] for row in pdl1_rows)
+    assert any(row[2:5] == ["未提供", "未提供", "未提供"] for row in pdl1_rows)
+    assert "第三部分：基因变异及相应靶向/免疫药物解析" in visible
+    assert "TP53基因" in visible
 
 
-def test_lung329_shared_batch_is_blocked():
-    from app.api.batch import _batch_generation_policy_error
+def test_lung329_batch_is_enabled_and_strips_shared_pdl1():
+    from app.api.batch import (
+        _batch_generation_policy_error,
+        _isolate_batch_case_fields,
+    )
 
     error = _batch_generation_policy_error("lung_329_pdl1")
-    assert error is not None
-    assert "逐病例" in error
-    assert "串用" in error
+    assert error is None
+    assert _PANEL_SPEC["batch_generation"]["enabled"] is True
+    assert _PANEL_SPEC["part3_knowledge"]["enabled"] is True
+    isolated = _isolate_batch_case_fields(
+        {
+            "sample_id": "SYNTHETIC_L329",
+            "pdl1_tps": 5,
+            "PD-L1 CPS": 6,
+            "PD-L1结果": "阳性（低表达）",
+            "pdl1_image_path": "/tmp/other-case.png",
+        },
+        "lung_329_pdl1",
+    )
+    assert isolated == {"sample_id": "SYNTHETIC_L329"}
 
 
 def test_lung329_exact_immune_rows_do_not_fall_back_without_variants(tmp_path):

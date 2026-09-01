@@ -1,15 +1,14 @@
 # ruff: noqa: E402
 """Independent lung588 engineering-contract regression tests."""
 
-import asyncio
 import copy
 import hashlib
 import io
+import json
 import re
 import shutil
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from zipfile import ZipFile
 
 import yaml
@@ -17,7 +16,6 @@ from docx import Document
 from docx.enum.table import WD_ROW_HEIGHT_RULE
 from docx.oxml.ns import qn
 from docxtpl import DocxTemplate
-from fastapi import HTTPException
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -106,9 +104,13 @@ def test_lung588_package_is_independent_and_valid():
     assert package.display_name == "肺癌588基因+PD-L1"
     assert package.raw["status"] == "pilot"
     assert package.default_template.status == "pilot"
-    assert package.raw["part3_knowledge"]["enabled"] is False
-    assert "cross-cancer" in package.raw["part3_knowledge"]["reason"]
-    assert "肺癌专属知识当前未启用" in (package.raw["part3_knowledge"]["disabled_notice"])
+    assert package.raw["part3_knowledge"]["enabled"] is True
+    assert package.raw["part3_knowledge"]["release_mode"] == (
+        "report_group_pilot_draft"
+    )
+    residual_scan = package.raw["part3_knowledge"]["cross_cancer_residual_scan"]
+    assert residual_scan["enabled"] is True
+    assert residual_scan["severity"] == "warn"
     assert package.raw["release_governance"] == {
         "uat_policy": "uat/lung588_risk_based_release_policy.yaml",
         "report_group_uat_decisions": ("uat/lung588_report_group_uat_decisions.yaml"),
@@ -143,6 +145,13 @@ def test_lung588_review_candidate_contract_freezes_default_template(tmp_path):
         "is_default": True,
     }
     assert contract["lifecycle"]["clinical_release_status"] == "blocked"
+    assert contract["runtime_policy_revision"] == (
+        "2026-09-01-report-group-self-service-pilot"
+    )
+    assert contract["rendered_output"]["qa"]["allowed_statuses"] == [
+        "PASS",
+        "WARN",
+    ]
 
     changed = tmp_path / "changed-candidate.docx"
     document = Document(TEMPLATE)
@@ -228,9 +237,18 @@ def test_lung588_current_uat_policy_has_no_fixed_case_denominator():
     assert policy["real_case_policy"]["selection"] == (
         "all_registered_real_cases_available_at_release_freeze"
     )
-    assert policy["real_case_policy"]["required_review_fraction"] == 1.0
-    assert policy["real_case_policy"]["required_pass_fraction"] == 1.0
+    assert policy["real_case_policy"]["required_review_fraction"] == 0.0
+    assert policy["real_case_policy"]["required_pass_fraction"] == 0.0
+    assert policy["case_requirements"]["report_group_decision_required"] is False
+    assert (
+        policy["case_requirements"]["report_group_reviewer_and_date_required"]
+        is False
+    )
+    feedback = policy["product_owner_feedback_source"]
+    assert feedback["minimum_entry_count"] == 1
+    assert len(feedback["entries"]) == 1
     assert decisions["policy_id"] == policy["policy_id"]
+    assert decisions["required_for_pilot_generation"] is False
     assert [item["alias"] for item in decisions["cases"]] == [
         "CASE-LUNG-A",
         "CASE-LUNG-B",
@@ -776,32 +794,32 @@ def test_lung588_pdl1_form_is_project_scoped_and_optional_for_draft():
     assert not set(treatment_context) & crc_fields
 
 
-def test_lung588_batch_is_blocked_until_per_case_pdl1_exists():
+def test_lung588_batch_is_enabled_with_case_isolated_pdl1():
     error = _batch_generation_policy_error("lung_588_pdl1")
 
-    assert error is not None
-    assert "逐病例" in error
-    assert "串用" in error
+    package = load_panel_package("lung_588_pdl1", project_root=ROOT)
+    assert error is None
+    assert package.raw["batch_generation"]["enabled"] is True
+    assert package.raw["batch_generation"]["clinical_info_mode"] == (
+        "case_isolated_optional"
+    )
     assert _batch_generation_policy_error("crc_358_msi") is None
 
 
-def test_lung588_legacy_batch_endpoint_enforces_policy_before_input_resolution():
-    bridge = SimpleNamespace(ensure_project_type_enabled=lambda _project_type: None)
+def test_lung588_batch_strips_shared_pdl1_values_and_aliases():
+    isolated = batch_api._isolate_batch_case_fields(
+        {
+            "patient_name": "SYNTHETIC_PATIENT",
+            "pdl1_tps": 50,
+            "PD-L1 CPS": 52,
+            "pdl1_result": "阳性（高表达）",
+            "PD-L1病例图片": "/tmp/other-case.png",
+            "pdl1_source_record_id": "OTHER-CASE-IHC",
+        },
+        "lung_588_pdl1",
+    )
 
-    try:
-        asyncio.run(
-            batch_api.batch_generate(
-                project_type="lung_588_pdl1",
-                bridge=bridge,
-                current_user=SimpleNamespace(id=1, role="admin"),
-            )
-        )
-    except HTTPException as exc:
-        assert exc.status_code == 409
-        assert "逐病例" in str(exc.detail)
-        assert "串用" in str(exc.detail)
-    else:
-        raise AssertionError("legacy /batch must fail closed for lung588")
+    assert isolated == {"patient_name": "SYNTHETIC_PATIENT"}
 
 
 def test_lung588_pdl1_contract_fails_closed_on_missing_range_and_classification():
@@ -1072,6 +1090,14 @@ def test_lung588_generation_surfaces_pending_pdl1_profile_in_draft(tmp_path):
 
     assert result["success"] is True, result["errors"]
     assert result["qa_status"] == "WARN"
+    qa = json.loads(Path(result["qa_report_file"]).read_text(encoding="utf-8"))
+    residual_check = qa["checks"]["part3_cross_cancer_residuals"]
+    assert residual_check["status"] == "WARN"
+    assert residual_check["matched_terms"]
+    assert any(
+        issue["code"] == "PART3_CROSS_CANCER_RESIDUALS"
+        for issue in qa["issues"]
+    )
     assert any(
         issue["code"] == "PANEL_PDL1_PRODUCT_CONTRACT_WARNING"
         for stage in result["stage_results"]
@@ -1152,7 +1178,9 @@ def test_lung588_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
         for row in table.rows
         if row.cells and "PD-L1蛋白表达" in row.cells[0].text
     ]
-    assert any(row[2:5] == ["待补充", "待补充", "待补充"] for row in pdl1_rows)
+    assert any(row[2:5] == ["未提供", "未提供", "未提供"] for row in pdl1_rows)
+    assert "第三部分：基因变异及相应靶向/免疫药物解析" in visible
+    assert "TP53基因" in visible
 
 
 def test_lung588_generation_allows_source_record_only_pilot_profile(

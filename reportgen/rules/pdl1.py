@@ -322,6 +322,12 @@ def apply_pdl1_product_display_fields(
 
     if not isinstance(contract, Mapping) or not contract:
         return
+    missing_case_display = contract.get("missing_case_display") or {}
+    if isinstance(missing_case_display, Mapping):
+        report_data.set_field(
+            "pdl1_missing_value_display",
+            _clean(missing_case_display.get("scalar_value")) or "待补充",
+        )
     profile_id = _clean(report_data.get_field("pdl1_assay_profile_id"))
     profile = _candidate_profiles(contract).get(profile_id)
     if profile is None:

@@ -152,12 +152,17 @@ def _load_uat_release_policy(path: Path = UAT_POLICY_PATH) -> dict[str, Any]:
         raise RuntimeError(
             "lung588 risk-based UAT policy must not restore a fixed case count"
         )
+    case_requirements = policy.get("case_requirements") or {}
+    decisions_required = bool(
+        case_requirements.get("report_group_decision_required", True)
+    )
+    expected_fraction = 1.0 if decisions_required else 0.0
     for key in ("required_review_fraction", "required_pass_fraction"):
         value = case_policy.get(key)
         if (
             isinstance(value, bool)
             or not isinstance(value, (int, float))
-            or float(value) != 1.0
+            or float(value) != expected_fraction
         ):
             raise RuntimeError(f"lung588 UAT policy has invalid {key}: {value!r}")
     if not case_policy.get("require_non_empty_case_set"):
@@ -429,7 +434,7 @@ def _render_case(
         )
         required_texts = (
             "Gene List for MLseq (n=588)",
-            "肺癌专属知识当前未启用",
+            "第三部分：基因变异及相应靶向/免疫药物解析",
             "图1. 免疫组化：PD-L1",
             "报告组评审候选稿（非临床交付）",
         )
@@ -439,18 +444,19 @@ def _render_case(
             "n=329",
             "{{",
             "{%",
-            "colorectal",
-            "colon cancer",
-            "结直肠癌",
             "工程草案",
             "报告组二审",
             "报告组复核",
             "脱敏UAT",
-            "待报告组审核",
         )
         content_failures.extend(
             f"missing:{text}" for text in required_texts if text not in visible
         )
+        if (
+            int(case.get("expected_targeted_drug_count") or 0) > 0
+            and "【待报告组审】" not in visible
+        ):
+            content_failures.append("missing:【待报告组审】")
         lowered = visible.lower()
         content_failures.extend(
             f"forbidden:{text}" for text in forbidden_texts if text.lower() in lowered
@@ -463,8 +469,8 @@ def _render_case(
     status = (
         "PASS"
         if result.get("success")
-        and result.get("qa_status") == "PASS"
-        and qa_payload.get("status") == "PASS"
+        and result.get("qa_status") in {"PASS", "WARN"}
+        and qa_payload.get("status") in {"PASS", "WARN"}
         and not blank_pages
         and not low_content_pages
         and not content_failures
@@ -514,13 +520,24 @@ def _build_uat_readiness(
 
     policy = policy or _load_uat_release_policy()
     case_policy = policy["real_case_policy"]
-    report_group_decisions = (
-        report_group_decisions
-        if report_group_decisions is not None
-        else _load_report_group_uat_decisions(
-            expected_policy_id=str(policy["policy_id"])
-        )
+    case_requirements = policy.get("case_requirements") or {}
+    decisions_required = bool(
+        case_requirements.get("report_group_decision_required", True)
     )
+    reviewer_and_date_required = bool(
+        case_requirements.get("report_group_reviewer_and_date_required", True)
+    )
+    source_required = bool(
+        case_requirements.get("verified_case_specific_ihc_source_required", True)
+    )
+    if report_group_decisions is None:
+        report_group_decisions = (
+            _load_report_group_uat_decisions(
+                expected_policy_id=str(policy["policy_id"])
+            )
+            if decisions_required
+            else {}
+        )
     aliases = [str(row.get("alias") or "").strip() for row in rows]
     ngs_structure_pass_count = sum(
         row["auto_detection"]["detected"]
@@ -551,8 +568,13 @@ def _build_uat_readiness(
         for alias in aliases
         if alias in report_group_decisions
         and report_group_decisions[alias]["decision"] in {"pass", "fail"}
-        and report_group_decisions[alias]["reviewer"]
-        and report_group_decisions[alias]["reviewed_at"]
+        and (
+            not reviewer_and_date_required
+            or (
+                report_group_decisions[alias]["reviewer"]
+                and report_group_decisions[alias]["reviewed_at"]
+            )
+        )
         and isinstance(report_group_decisions[alias].get("p0_count"), int)
         and not isinstance(report_group_decisions[alias].get("p0_count"), bool)
     }
@@ -564,9 +586,18 @@ def _build_uat_readiness(
         item["decision"] == "fail" for item in complete_decisions.values()
     )
     p0_count = sum(int(item["p0_count"]) for item in complete_decisions.values())
-    required_review_case_count = len(rows)
+    required_review_case_count = len(rows) if decisions_required else 0
     p0_allowed = int(case_policy.get("p0_allowed", 0))
     blockers: list[dict[str, str]] = []
+    feedback_policy = policy.get("product_owner_feedback_source") or {}
+    feedback_entries = [
+        entry
+        for entry in feedback_policy.get("entries") or []
+        if isinstance(entry, dict) and str(entry.get("source") or "").strip()
+    ]
+    minimum_feedback_entries = int(
+        feedback_policy.get("minimum_entry_count", 1)
+    )
     if not rows:
         blockers.append(
             {
@@ -601,7 +632,7 @@ def _build_uat_readiness(
                 ),
             }
         )
-    if verified_case_pdl1_source_count != len(rows):
+    if source_required and verified_case_pdl1_source_count != len(rows):
         blockers.append(
             {
                 "code": "PDL1_CASE_SOURCE_NOT_VERIFIED",
@@ -612,7 +643,7 @@ def _build_uat_readiness(
                 ),
             }
         )
-    if missing_decision_aliases:
+    if decisions_required and missing_decision_aliases:
         blockers.append(
             {
                 "code": "REPORT_GROUP_UAT_RECORD_MISSING",
@@ -622,7 +653,7 @@ def _build_uat_readiness(
                 ),
             }
         )
-    if report_group_reviewed_case_count != required_review_case_count:
+    if decisions_required and report_group_reviewed_case_count != required_review_case_count:
         blockers.append(
             {
                 "code": "REPORT_GROUP_UAT_INCOMPLETE",
@@ -633,6 +664,8 @@ def _build_uat_readiness(
                 ),
             }
         )
+    # A decision is optional for pilot draft access, but an explicitly recorded
+    # FAIL remains material evidence for formal release readiness.
     if report_group_failed_case_count:
         blockers.append(
             {
@@ -650,6 +683,19 @@ def _build_uat_readiness(
                 "message": f"P0 count {p0_count} exceeds allowed count {p0_allowed}",
             }
         )
+    if (
+        feedback_policy.get("required")
+        and len(feedback_entries) < minimum_feedback_entries
+    ):
+        blockers.append(
+            {
+                "code": "PRODUCT_OWNER_FEEDBACK_SOURCE_MISSING",
+                "message": (
+                    f"{len(feedback_entries)}/{minimum_feedback_entries} "
+                    "product-owner feedback source entries are recorded"
+                ),
+            }
+        )
     formal_uat_status = "PASS" if not blockers else "BLOCKED"
     return {
         "scope": "risk_based_all_available_real_cases",
@@ -658,6 +704,9 @@ def _build_uat_readiness(
         "fixed_minimum_real_case_count": None,
         "observed_real_input_count": len(rows),
         "required_report_group_review_case_count": required_review_case_count,
+        "report_group_decision_required": decisions_required,
+        "report_group_reviewer_and_date_required": reviewer_and_date_required,
+        "product_owner_feedback_source_count": len(feedback_entries),
         "ngs_structure_pass_count": ngs_structure_pass_count,
         "ngs_structure_status": (
             "PASS" if ngs_structure_pass_count == len(rows) else "FAIL"

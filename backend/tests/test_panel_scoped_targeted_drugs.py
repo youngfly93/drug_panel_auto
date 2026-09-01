@@ -74,11 +74,15 @@ def test_targeted_drug_rule_context_matrix():
     assert lung["allowed_source_dbs"] == []
     assert lung["allow_internal_rows"] is False
     assert lung["approved_drug_rows_enabled"] is False
-    assert lung["reviewed_variant_overrides"] == []
-    assert len(lung["blocked_reviewed_variant_overrides"]) == 2
+    assert len(lung["reviewed_variant_overrides"]) == 2
+    assert lung["blocked_reviewed_variant_overrides"] == []
     assert all(
-        row.get("_clinical_context_block_reasons")
-        for row in lung["blocked_reviewed_variant_overrides"]
+        row.get("_clinical_context_display_notice") == "临床背景未提供"
+        for row in lung["reviewed_variant_overrides"]
+    )
+    assert all(
+        row.get("_review_status_display_notice") == "待报告组审"
+        for row in lung["reviewed_variant_overrides"]
     )
     assert lung["applicability_rules"] == []
     assert lung["overrides"] == {}
@@ -212,7 +216,7 @@ def test_enhancer_panel_config_uses_same_request_scoped_drug_policy():
     )
 
     assert len(crc301_config.reviewed_variant_overrides) == 9
-    assert lung_config.reviewed_variant_overrides == []
+    assert len(lung_config.reviewed_variant_overrides) == 2
     assert len(crc301_config.approved_drug_rows) == 7
     assert lung_config.approved_drug_rows == []
 
@@ -255,10 +259,15 @@ def test_real_targeted_db_and_fixed_table_are_disabled_for_non_crc_panels():
             assert "西妥昔单抗" in caution
             assert approved_count == expected_approved_counts[panel_id]
 
-    for panel_id in ("lung_329_pdl1", "endometrial_29"):
-        for lookup, approved_count in observed[panel_id]:
-            assert lookup == ("--", "--", 0.0)
-            assert approved_count == 0
+    # The exact lung rule is transcript-bound. This lookup deliberately omits
+    # transcript, so neither the exact rule nor the disabled base DB may fire.
+    for lookup, approved_count in observed["lung_329_pdl1"]:
+        assert lookup == ("--", "--", 0.0)
+        assert approved_count == 0
+
+    for lookup, approved_count in observed["endometrial_29"]:
+        assert lookup == ("--", "--", 0.0)
+        assert approved_count == 0
 
 
 @pytest.mark.parametrize("panel_id", ["lung_329_pdl1", "lung_588_pdl1"])
@@ -299,16 +308,7 @@ def test_explicit_lung_policy_never_reopens_ctdrug_when_base_db_is_unavailable(
             ],
         },
     )
-    clinical_context = {
-        "lung_histology": "非小细胞肺癌",
-        "disease_extent": "转移性",
-        "prior_systemic_therapy": "已接受",
-        "companion_diagnostic_status": "已确认符合",
-    }
-    rules = load_targeted_drug_rule_context(
-        _package(panel_id),
-        clinical_context=clinical_context,
-    )
+    rules = load_targeted_drug_rule_context(_package(panel_id))
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
     mapper._targeted_drug_db = None
     monkeypatch.setattr(mapper, "_load_targeted_drug_db", lambda: None)
@@ -325,4 +325,6 @@ def test_explicit_lung_policy_never_reopens_ctdrug_when_base_db_is_unavailable(
     assert rows[0]["gene"] == "BRAF"
     assert "p.V600E" in rows[0]["variant_site"]
     assert "达拉非尼+曲美替尼" in rows[0]["benefit_drugs"]
+    assert "临床背景未提供" in rows[0]["benefit_drugs"]
+    assert "待报告组审" in rows[0]["benefit_drugs"]
     assert "SENTINEL-GENE-FALLBACK" not in str(rows)
