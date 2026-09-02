@@ -400,6 +400,8 @@ class PanelConfig:
     nccn_result_rows: List[Dict[str, Any]] = field(
         default_factory=lambda: [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS]
     )
+    lung_guideline_drug_rows: List[Dict[str, Any]] = field(default_factory=list)
+    chemotherapy_rule: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def all_immune_genes(self) -> Set[str]:
@@ -494,7 +496,32 @@ def _load_guideline_tables_rule(
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
-    return raw if isinstance(raw, dict) else {}
+    if not isinstance(raw, dict):
+        return {}
+
+    # Closely related products may deliberately share the same fixed report
+    # contract. Keep one source file and make the inheritance explicit so the
+    # 329/588 drug copy, regimen rows and display order cannot silently drift.
+    source_panel_id = str(raw.get("source_panel_id") or "").strip()
+    if source_panel_id:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", source_panel_id):
+            return {}
+        project_root = Path(__file__).resolve().parents[2]
+        source_path = (
+            project_root
+            / "panels"
+            / source_panel_id
+            / "rules"
+            / "guideline_tables.yaml"
+        )
+        if source_path.resolve() == path.resolve() or not source_path.is_file():
+            return {}
+        try:
+            inherited = yaml.safe_load(source_path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
+        return inherited if isinstance(inherited, dict) else {}
+    return raw
 
 
 def _resolve_drugs_rule_path(
@@ -600,7 +627,25 @@ def _load_biomarkers_rule(
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
-    return raw if isinstance(raw, dict) else {}
+    if not isinstance(raw, dict):
+        return {}
+
+    source_panel_id = str(raw.get("source_panel_id") or "").strip()
+    if source_panel_id:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", source_panel_id):
+            return {}
+        project_root = Path(__file__).resolve().parents[2]
+        source_path = (
+            project_root / "panels" / source_panel_id / "rules" / "biomarkers.yaml"
+        )
+        if source_path.resolve() == path.resolve() or not source_path.is_file():
+            return {}
+        try:
+            inherited = yaml.safe_load(source_path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
+        return inherited if isinstance(inherited, dict) else {}
+    return raw
 
 
 def _as_upper_gene_list(value: Any) -> List[str]:
@@ -730,6 +775,35 @@ def _normalize_nccn_result_rows(raw: Any) -> List[Dict[str, Any]]:
     return normalized
 
 
+def _normalize_lung_guideline_drug_rows(raw: Any) -> List[Dict[str, Any]]:
+    """Load the fixed lung-guideline rows without losing display metadata."""
+    if not isinstance(raw, dict):
+        return []
+    tables = raw.get("guideline_tables")
+    if not isinstance(tables, dict):
+        return []
+    section = tables.get("lung_guideline_drug_results")
+    if not isinstance(section, dict):
+        return []
+    rows = section.get("rows")
+    if not isinstance(rows, list):
+        return []
+
+    normalized: List[Dict[str, Any]] = []
+    for raw_row in rows:
+        if not isinstance(raw_row, dict):
+            continue
+        key = str(raw_row.get("key") or "").strip()
+        genes = _as_upper_gene_list(raw_row.get("genes"))
+        if not key or not genes:
+            continue
+        row = dict(raw_row)
+        row["key"] = key
+        row["genes"] = genes
+        normalized.append(row)
+    return normalized
+
+
 def load_panel_config(
     *,
     base_path: Optional[str] = None,
@@ -814,6 +888,9 @@ def load_panel_config(
         config_path=cfg_path,
     )
     nccn_rows = _normalize_nccn_result_rows(guideline_rule)
+    lung_guideline_drug_rows = _normalize_lung_guideline_drug_rows(
+        guideline_rule
+    )
     drugs_rule = _load_drugs_rule(
         base_path=base_path,
         panel_id=panel_id,
@@ -973,6 +1050,12 @@ def load_panel_config(
             nccn_rows
             if nccn_rule_declared
             else [dict(x) for x in _DEFAULT_NCCN_RESULT_ROWS]
+        ),
+        lung_guideline_drug_rows=lung_guideline_drug_rows,
+        chemotherapy_rule=(
+            dict(chemotherapy_rule)
+            if isinstance(chemotherapy_rule, dict)
+            else {}
         ),
     )
     if panel_display is not None:
@@ -1524,7 +1607,7 @@ def _research_drugs_from_override(override: Optional[Dict[str, Any]]) -> str:
 def _compact_drug_display_value(
     value: Any, *, max_items: Optional[int] = DRUG_DISPLAY_MAX_ITEMS
 ) -> str:
-    """Return a report-table friendly drug list while preserving full data elsewhere."""
+    """Compact drug names without hiding governed review/context notices."""
     if value is None:
         return ""
     if isinstance(value, (list, tuple, set)):
@@ -1541,10 +1624,16 @@ def _compact_drug_display_value(
         if not text:
             return text
         items = [line.strip() for line in text.splitlines() if line.strip()]
-    if max_items is None or max_items <= 0 or len(items) <= max_items:
-        return "\n".join(items)
-    omitted = len(items) - max_items
-    return "\n".join([*items[:max_items], f"另{omitted}项详见第三部分"])
+    notices = [
+        item for item in items if re.fullmatch(r"【[^【】]+】", item.strip())
+    ]
+    drug_items = [item for item in items if item not in notices]
+    if max_items is None or max_items <= 0 or len(drug_items) <= max_items:
+        return "\n".join([*drug_items, *notices])
+    omitted = len(drug_items) - max_items
+    return "\n".join(
+        [*drug_items[:max_items], f"另{omitted}项详见第三部分", *notices]
+    )
 
 
 def _compact_drug_display_tables(
@@ -1562,7 +1651,16 @@ def _compact_drug_display_tables(
         if not rows:
             continue
         changed = False
+        previous_gene = ""
         for row in rows:
+            if table_name == "targeted_drug_tips":
+                gene = str(row.get("gene") or "").strip()
+                gene_display = "" if gene and gene == previous_gene else gene
+                if row.get("gene_display") != gene_display:
+                    row["gene_display"] = gene_display
+                    changed = True
+                if gene:
+                    previous_gene = gene
             for field_name in ("benefit_drugs", "caution_drugs"):
                 value = row.get(field_name)
                 if value is None:
@@ -2173,7 +2271,11 @@ def build_tmb_summary(excel_data: ExcelDataSource) -> Dict[str, str]:
     """
     return build_tmb_fields(
         excel_data.single_values.get("TMB"),
-        sample_type=excel_data.single_values.get("样本类型") or "组织",
+        sample_type=(
+            excel_data.single_values.get("TMB样本类型")
+            or excel_data.single_values.get("样本类型")
+            or "组织"
+        ),
     )
 
 
@@ -2684,6 +2786,7 @@ def _build_nccn_and_immune_fields(
 
     # ===== T[5] NCCN 检测基因表 =====
     nccn_table_rows: List[Dict[str, str]] = []
+    previous_nccn_gene = ""
     for row in nccn_rows:
         key = str(row.get("key") or "").strip()
         genes = row.get("genes") or []
@@ -2708,15 +2811,100 @@ def _build_nccn_and_immune_fields(
         else:
             val = _first_detected(results, "未检出")
         report_data.set_field(f"nccn_{key}", val)
+        display_gene = _display_label(row)
+        visible_gene = "" if display_gene == previous_nccn_gene else display_gene
+        previous_nccn_gene = display_gene
         nccn_table_rows.append(
             _table_row(
                 key=key,
-                gene=_display_label(row),
+                gene=visible_gene,
                 content=match,
                 result=val,
             )
         )
     report_data.set_table("nccn_results", nccn_table_rows)
+
+    # ===== 肺癌固定指南药物提示表 =====
+    # Drugs and explanatory copy are a fixed historical product contract;
+    # only the final result column is derived from the current case.
+    def _matching_variant_text(gene: str, match: str) -> str:
+        value = _format_result(gene, match)
+        return "" if value in {"", "--", "未检出"} else value
+
+    def _pattern_variant_text(gene: str, patterns: List[str]) -> str:
+        matched: List[str] = []
+        for variant in gene_variants.get(gene.upper(), []):
+            haystack = " ".join(
+                str(variant.get(key) or "")
+                for key in ("cHGVS", "pHGVS", "exon")
+            ).upper()
+            if not any(pattern.upper() in haystack for pattern in patterns):
+                continue
+            c_hgvs = str(variant.get("cHGVS") or "").strip()
+            p_hgvs = str(variant.get("pHGVS") or "").strip()
+            if c_hgvs and p_hgvs and p_hgvs not in {"--", "*"}:
+                matched.append(f"{c_hgvs}，{p_hgvs}")
+            elif c_hgvs:
+                matched.append(c_hgvs)
+        return "\n".join(matched)
+
+    def _lung_guideline_result(row: Dict[str, Any]) -> str:
+        mode = str(row.get("result_mode") or "any_variant").strip().lower()
+        genes = _as_upper_gene_list(row.get("genes"))
+        missing = str(row.get("undetected_result") or "未见变异").strip()
+
+        if mode == "joint_met_amp_egfr_variant":
+            met = _matching_variant_text("MET", "扩增")
+            egfr = _matching_variant_text("EGFR", "突变")
+            if met and egfr:
+                return f"检出 MET：{met}\nEGFR：{egfr}"
+            return missing
+
+        if mode == "met_ex14_or_amp":
+            met_ex14 = _pattern_variant_text(
+                "MET", ["EX14", "EXON14", "外显子14", "C.2888", "C.2942"]
+            )
+            met_amp = _matching_variant_text("MET", "扩增")
+            found = [value for value in (met_ex14, met_amp) if value]
+            return f"检出 {'；'.join(found)}" if found else missing
+
+        patterns = [
+            str(pattern).strip()
+            for pattern in row.get("variant_patterns") or []
+            if str(pattern).strip()
+        ]
+        match = str(row.get("match") or "突变").strip()
+        found: List[str] = []
+        for gene in genes:
+            value = (
+                _pattern_variant_text(gene, patterns)
+                if patterns
+                else _matching_variant_text(gene, match)
+            )
+            if value:
+                found.append(f"{gene}：{value}" if len(genes) > 1 else value)
+        return f"检出 {'；'.join(found)}" if found else missing
+
+    lung_guideline_rows: List[Dict[str, str]] = []
+    for row in pc.lung_guideline_drug_rows:
+        result = _lung_guideline_result(row)
+        lung_guideline_rows.append(
+            {
+                "key": str(row.get("key") or ""),
+                "gene": str(row.get("display") or "/".join(row.get("genes") or [])),
+                "drugs": str(row.get("drugs") or ""),
+                "clinical_note": str(row.get("clinical_note") or ""),
+                "result": result,
+                "检测基因": str(row.get("display") or "/".join(row.get("genes") or [])),
+                "本癌种相关治疗药物": str(row.get("drugs") or ""),
+                "临床提示": str(row.get("clinical_note") or ""),
+                "检测结果": result,
+            }
+        )
+    report_data.set_table(
+        "lung_guideline_drug_results",
+        lung_guideline_rows,
+    )
 
     # ===== T[6] 免疫正相关基因 =====
     immune_positive_table_rows: List[Dict[str, str]] = []
@@ -3171,6 +3359,412 @@ def _patch_reviewed_variant_override_rows(
     report_data.set_table("targeted_drug_tips", tips)
 
 
+def _ctdrug_value(row: Dict[str, Any], keys: Tuple[str, ...]) -> str:
+    for key in keys:
+        value = _norm_text(row.get(key))
+        if value:
+            return value
+    return ""
+
+
+def _normalize_ctdrug_text(value: Any, uncovered_display: str = "未覆盖") -> str:
+    text = _norm_text(value)
+    return uncovered_display if text.lower() == "uncovered" else text
+
+
+def _chinese_drug_display(value: Any) -> str:
+    text = _norm_text(value)
+    match = re.match(r"^([^（(]+)[（(]([^）)]+)", text)
+    if not match:
+        return text
+    before = match.group(1).strip()
+    inside = match.group(2).strip()
+    if not re.search(r"[\u4e00-\u9fff]", before) and re.search(
+        r"[\u4e00-\u9fff]", inside
+    ):
+        return inside
+    return before
+
+
+def _ctdrug_dimension(values: List[str], *, dimension: str) -> str:
+    """Conservatively summarize explicit CtDrug direction words."""
+    text = " ".join(values)
+    if not text:
+        return "/"
+    if dimension == "efficacy":
+        high_terms = (
+            "疗效较好",
+            "疗效好",
+            "有效性可能较高",
+            "有效性较高",
+            "有效性高",
+            "药物敏感性可能较高",
+            "敏感性可能较高",
+            "敏感性较高",
+            "敏感性高",
+            "获益较高",
+        )
+        low_terms = (
+            "疗效较差",
+            "疗效差",
+            "有效性可能较低",
+            "有效性较低",
+            "有效性低",
+            "药物敏感性可能较低",
+            "敏感性可能较低",
+            "敏感性较低",
+            "敏感性低",
+            "获益较低",
+            "耐药",
+        )
+    else:
+        high_terms = (
+            "毒副作用风险可能较高",
+            "毒副作用可能较高",
+            "毒性可能较高",
+            "毒性较高",
+            "毒性高",
+            "毒副作用较高",
+            "毒副作用高",
+            "不良反应风险较高",
+            "不良反应风险高",
+            "副作用增加",
+            "毒性增加",
+        )
+        low_terms = (
+            "毒副作用风险可能较低",
+            "毒副作用可能较低",
+            "毒性可能较低",
+            "毒性较低",
+            "毒性低",
+            "毒副作用较低",
+            "毒副作用低",
+            "不良反应风险较低",
+            "不良反应风险低",
+            "副作用减少",
+            "毒性降低",
+        )
+    score = sum(text.count(term) for term in high_terms) - sum(
+        text.count(term) for term in low_terms
+    )
+    if score > 0:
+        return "可能较高"
+    if score < 0:
+        return "可能较低"
+    if any(term in text for term in ("居中", "中等", "一般")):
+        return "可能居中"
+    return "/"
+
+
+def _build_lung_chemotherapy_tables(
+    report_data: ReportData,
+    excel_data: ExcelDataSource,
+    panel_config: PanelConfig,
+) -> None:
+    rule = panel_config.chemotherapy_rule
+    if not panel_config.chemotherapy_module_enabled or not isinstance(rule, dict):
+        return
+    if str(rule.get("profile") or "") != "lung_historical_ctdrug_v1":
+        return
+
+    uncovered = str(rule.get("uncovered_display") or "未覆盖")
+    allowed_levels = {
+        str(value).strip().upper()
+        for value in rule.get("detail_allowed_levels") or []
+        if str(value).strip()
+    }
+
+    # The historical appendix only admits 1B/2A/2B evidence. Keep the mapped
+    # per-drug tables, but normalize their display-only fields in one place.
+    for table_name, rows in list(report_data.context.items()):
+        if not table_name.startswith("drug_") or not isinstance(rows, list):
+            continue
+        filtered: List[Dict[str, Any]] = []
+        for raw_row in rows:
+            if not isinstance(raw_row, dict):
+                continue
+            level = _ctdrug_value(raw_row, ("Level", "level", "等级", "Evidence"))
+            if allowed_levels and level.upper() not in allowed_levels:
+                continue
+            row = dict(raw_row)
+            raw_drug = _ctdrug_value(row, ("Drug", "药物", "药物名称"))
+            row["DrugDisplay"] = _chinese_drug_display(
+                row.get("DrugDisplay") or raw_drug
+            )
+            row["药物名称"] = row["DrugDisplay"]
+            for key in (
+                "Result",
+                "result",
+                "检测结果",
+                "用药提示",
+                "recommendation",
+            ):
+                if key in row:
+                    row[key] = _normalize_ctdrug_text(row.get(key), uncovered)
+            filtered.append(row)
+        report_data.set_table(table_name, filtered)
+
+    ctdrug_rows = [
+        row
+        for row in (excel_data.get_table_data("CtDrug") or [])
+        if isinstance(row, dict)
+    ]
+    ct1000_summaries = [
+        row
+        for row in (excel_data.get_table_data("Ct1000_summary") or [])
+        if isinstance(row, dict)
+    ]
+    base_summaries: Dict[str, Dict[str, str]] = {}
+    for item in rule.get("base_drugs") or []:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("key") or "").strip()
+        aliases = [
+            str(alias).strip()
+            for alias in item.get("aliases") or []
+            if str(alias).strip()
+        ]
+        source_summary = next(
+            (
+                row
+                for row in ct1000_summaries
+                if any(
+                    alias
+                    in " ".join(
+                        (
+                            str(row.get("source_drug") or ""),
+                            str(row.get("drug") or ""),
+                        )
+                    )
+                    for alias in aliases
+                )
+            ),
+            None,
+        )
+        if source_summary is not None:
+            source_genes = source_summary.get("genes") or []
+            if isinstance(source_genes, str):
+                source_genes = [
+                    value.strip()
+                    for value in re.split(r"[、,，]", source_genes)
+                    if value.strip()
+                ]
+            base_summaries[key] = {
+                "genes": (
+                    "、".join(str(value) for value in source_genes)
+                    if source_genes
+                    else "/"
+                ),
+                "efficacy": str(source_summary.get("efficacy") or "/"),
+                "toxicity": str(source_summary.get("toxicity") or "/"),
+            }
+            continue
+
+        prediction_genes = {
+            str(gene).strip().upper()
+            for gene in item.get("prediction_genes") or []
+            if str(gene).strip()
+        }
+        matched: List[Dict[str, Any]] = []
+        for row in ctdrug_rows:
+            drug_name = _ctdrug_value(row, ("药物", "Drug", "药物名称"))
+            if any(alias in drug_name for alias in aliases):
+                gene = _ctdrug_value(row, ("检测基因", "Gene", "基因"))
+                if prediction_genes and gene.upper() not in prediction_genes:
+                    continue
+                matched.append(row)
+        genes: List[str] = []
+        statements: List[str] = []
+        for row in matched:
+            gene = _ctdrug_value(row, ("检测基因", "Gene", "基因"))
+            if gene and gene not in genes:
+                genes.append(gene)
+            statement = _ctdrug_value(
+                row,
+                (
+                    "用药提示（仅供参考）",
+                    "用药提示",
+                    "Recommendation",
+                    "检测结果",
+                    "Result",
+                    "用药详细描述",
+                ),
+            )
+            if statement:
+                statements.append(_normalize_ctdrug_text(statement, uncovered))
+        base_summaries[key] = {
+            "genes": "、".join(genes) if genes else "/",
+            "efficacy": _ctdrug_dimension(statements, dimension="efficacy"),
+            "toxicity": _ctdrug_dimension(statements, dimension="toxicity"),
+        }
+
+    def _combined_row(item: Dict[str, Any], *, regimen: bool = False) -> Dict[str, str]:
+        component_rows = [
+            base_summaries.get(str(key), {})
+            for key in item.get("components") or []
+        ]
+        genes: List[str] = []
+        for component in component_rows:
+            for gene in str(component.get("genes") or "").split("、"):
+                if gene and gene != "/" and gene not in genes:
+                    genes.append(gene)
+
+        def combine(field: str) -> str:
+            values = [str(component.get(field) or "/") for component in component_rows]
+            # A multi-drug conclusion requires a source conclusion for every
+            # component; otherwise displaying the known component alone would
+            # silently overstate the evidence for the whole regimen.
+            if not values or any(value == "/" for value in values):
+                return "/"
+            scores = {
+                "可能较低": 0.0,
+                "低": 0.0,
+                "可能居中": 1.0,
+                "中": 1.0,
+                "可能较高": 2.0,
+                "高": 2.0,
+            }
+            numeric = [scores[value] for value in values if value in scores]
+            if not numeric:
+                return values[0] if len(set(values)) == 1 else "/"
+            average = sum(numeric) / len(numeric)
+            if average >= 1.5:
+                return "可能较高"
+            if average >= 0.5:
+                return "可能居中"
+            return "可能较低"
+
+        display = str(item.get("display") or "")
+        row = {
+            "drug": display,
+            "regimen": display,
+            "genes": "、".join(genes) if genes else "/",
+            "efficacy": combine("efficacy"),
+            "toxicity": combine("toxicity"),
+            "药物": display,
+            "化疗方案": display,
+            "相关基因": "、".join(genes) if genes else "/",
+            "有效性": combine("efficacy"),
+            "毒副作用": combine("toxicity"),
+        }
+        if regimen:
+            row["方案"] = display
+        return row
+
+    prediction_rows = [
+        _combined_row(item)
+        for item in rule.get("prediction_rows") or []
+        if isinstance(item, dict)
+    ]
+    regimen_rows = [
+        _combined_row(item, regimen=True)
+        for item in rule.get("regimen_rows") or []
+        if isinstance(item, dict)
+    ]
+    dosage_rows = []
+    for item in rule.get("dosage_rows") or []:
+        if not isinstance(item, dict):
+            continue
+        regimen = str(item.get("regimen") or "")
+        dosage = str(item.get("dosage") or "")
+        dosage_rows.append(
+            {
+                "regimen": regimen,
+                "dosage": dosage,
+                "化疗方案": regimen,
+                "用法用量": dosage,
+            }
+        )
+
+    base_drug_displays = {
+        str(item.get("display") or "")
+        for item in rule.get("base_drugs") or []
+        if isinstance(item, dict)
+    }
+    summary_rank = {
+        str(item.get("display") or ""): int(item.get("summary_rank"))
+        for item in rule.get("prediction_rows") or []
+        if isinstance(item, dict) and item.get("summary_rank") is not None
+    }
+    preferred_rows = [
+        (index, row)
+        for index, row in enumerate(prediction_rows)
+        if row["drug"] not in base_drug_displays
+        and row["efficacy"] == "可能较高"
+        and row["toxicity"] == "可能较低"
+    ]
+    preferred_rows.sort(
+        key=lambda item: (summary_rank.get(item[1]["drug"], 10_000 + item[0]))
+    )
+    preferred = [row["drug"] for _index, row in preferred_rows]
+    summary = (
+        "经分析，可考虑优先选择的化疗方案有" + "、".join(preferred) + "。"
+        if preferred
+        else "经分析，未形成可优先选择的化疗方案。"
+    )
+    report_data.set_field("chemotherapy_summary_text", summary)
+    report_data.set_table("chemotherapy_predictions", prediction_rows)
+    report_data.set_table("chemotherapy_regimen_predictions", regimen_rows)
+    report_data.set_table("chemotherapy_dosage_rows", dosage_rows)
+    report_data.set_table(
+        "chemotherapy_summary_rows",
+        [{"summary": summary, "化疗药物小结": summary}],
+    )
+
+
+def _build_targeted_drug_introductions(
+    report_data: ReportData,
+    *,
+    max_items: Optional[int] = DRUG_DISPLAY_MAX_ITEMS,
+) -> None:
+    rows: List[Dict[str, str]] = []
+    for tip in report_data.get_table("targeted_drug_tips") or []:
+        if not isinstance(tip, dict):
+            continue
+        benefit = str(tip.get("benefit_drugs") or "--").strip()
+        caution = str(tip.get("caution_drugs") or "--").strip()
+        if benefit in {"", "--", "-"} and caution in {"", "--", "-"}:
+            continue
+        gene = str(tip.get("gene") or "").strip()
+        locus = str(tip.get("variant_site") or tip.get("locus") or "").strip()
+        def compact_drugs(value: str) -> str:
+            items: List[str] = []
+            for line in value.splitlines():
+                clean = line.strip()
+                if not clean or clean in {"--", "-"} or clean.startswith("【"):
+                    continue
+                if clean not in items:
+                    items.append(clean)
+            if max_items is not None and max_items > 0 and len(items) > max_items:
+                omitted = len(items) - max_items
+                items = [*items[:max_items], f"另{omitted}项详见第三部分"]
+            return "、".join(items)
+
+        benefit_text = compact_drugs(benefit)
+        caution_text = compact_drugs(caution)
+        if benefit_text and caution_text:
+            drug_text = f"获益：{benefit_text}\n慎用：{caution_text}"
+        else:
+            drug_text = benefit_text or caution_text
+        introduction = (
+            "本条由病例变异与Panel登记药物知识匹配生成；"
+            "具体适用性及证据等级待报告组审。"
+        )
+        rows.append(
+            {
+                "gene": gene,
+                "variant_site": locus,
+                "drug_name": drug_text,
+                "introduction": introduction,
+                "基因": gene,
+                "变异位点": locus,
+                "药物名称": drug_text,
+                "药物介绍": introduction,
+            }
+        )
+    report_data.set_table("targeted_drug_introductions", rows)
+
+
 def enhance_report_data(
     report_data: ReportData,
     excel_data: ExcelDataSource,
@@ -3446,6 +4040,16 @@ def enhance_report_data(
 
     # 2.1/摘要表中的人工复核变异覆盖口径由 panel YAML 配置驱动。
     _patch_reviewed_variant_override_rows(report_data, pc)
+    _build_targeted_drug_introductions(
+        report_data,
+        max_items=pc.drug_display_max_items,
+    )
+
+    # Lung comprehensive panels consume the same CtDrug source as the
+    # historical final reports. Only the appendix is evidence-level filtered;
+    # the compact summary/regimen tables remain deterministic source-derived
+    # views of the full case sheet.
+    _build_lung_chemotherapy_tables(report_data, excel_data, pc)
 
     # 2.2 来自 Panel 审核药物全集，不来自 CtDrug 全量药敏表。CRC358
     # 按报告组 2026-07-20 书面反馈所述候选口径，从全集中剔除已在最终

@@ -125,7 +125,7 @@ templates:
       - "underlines_and_styles"
   - id: "lung_588_pdl1_historical_golden_v1"
     file: "templates/lung_588_pdl1_historical_golden_v1.docx"
-    version: "0.4.0-review.4"
+    version: "0.5.1-review.5"
     status: "pilot"
     description: >
       Full-layout report-group review candidate distilled in place from the
@@ -243,9 +243,9 @@ template_contract:
   required_variables:
     - "patient_name"
     - "sample_id"
-    - "pdl1_tps"
-    - "pdl1_cps"
-    - "pdl1_result"
+    - "pdl1_tps_display"
+    - "pdl1_cps_display"
+    - "pdl1_result_display"
     - "pdl1_classification_notice"
   required_lists:
     - "variants_2_1"
@@ -254,6 +254,12 @@ template_contract:
     - "immune_positive_results"
     - "immune_negative_results"
     - "immune_hyperprogression_results"
+    - "lung_guideline_drug_results"
+    - "targeted_drug_introductions"
+    - "chemotherapy_summary_rows"
+    - "chemotherapy_predictions"
+    - "chemotherapy_regimen_predictions"
+    - "chemotherapy_dosage_rows"
   required_markers:
     - "__PART3_MARKER__"
     - "__PDL1_CASE_IMAGE__"

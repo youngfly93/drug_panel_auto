@@ -60,7 +60,9 @@ def iter_excel_inputs(inputs: List[str]) -> List[Path]:
     seen: set[Path] = set()
     result: List[Path] = []
     for p in excel_files:
-        if p.name.startswith("~$"):
+        # Ignore Office lock files and macOS AppleDouble resource-fork files;
+        # both can carry an .xlsx suffix but are not Excel workbooks.
+        if p.name.startswith(("~$", "._")):
             continue
         rp = p.resolve()
         if rp in seen:
@@ -287,6 +289,9 @@ def run_batch_generate_validate(
         warnings: List[str] = []
         validation: Dict[str, Any] = {}
         artifacts: Dict[str, Any] = {}
+        # Keep the failure record serializable even when parsing, detection, or
+        # generation raises before a context can be returned.
+        patient_snapshot: Dict[str, Any] = {}
 
         try:
             excel_data = excel_reader.read(str(excel_path), include_tables=True)

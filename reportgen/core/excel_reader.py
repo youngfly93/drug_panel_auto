@@ -246,14 +246,16 @@ class ExcelReader:
             return None
         return value
 
-    def _extract_tmb_value(self, df: pd.DataFrame) -> Optional[float]:
-        """从TMB sheet中尽量提取与报告一致的TMB值。
+    def _extract_tmb_measurement(
+        self, df: pd.DataFrame
+    ) -> tuple[Optional[float], str]:
+        """从 TMB sheet 提取数值及其实际测定样本类型。
 
         真实业务Excel里常见多个TMB计算块（all cosmic / de cosmic50 / TCGA fit 等）。
         本项目终版报告通常使用“TCGA fit”块的TMB（更接近6.x这类值）。
         """
         if df is None or df.empty:
-            return None
+            return None, ""
 
         # 将整张表按“行”扫描，尽量容错各种空行/不同header布局
         values = df.to_numpy()
@@ -345,7 +347,8 @@ class ExcelReader:
                 if candidates:
                     # 默认优先 tissue，其次取第一个
                     candidates.sort(key=lambda x: (0 if x[2] == "tissue" else 1, x[0]))
-                    return float(candidates[0][1])
+                    selected = candidates[0]
+                    return float(selected[1]), selected[2]
 
         # 2) 回退：若只有一个明显的TMB数值块（Var_num/Bed_size/TMB），取其首个数值
         for i in range(len(values)):
@@ -359,9 +362,84 @@ class ExcelReader:
                     for k in range(row_len - 1, -1, -1):
                         v = try_float(values[j][k])
                         if v is not None:
-                            return float(v)
+                            return float(v), ""
 
-        return None
+        return None, ""
+
+    def _extract_tmb_value(self, df: pd.DataFrame) -> Optional[float]:
+        """兼容旧调用：只返回 TMB 数值。"""
+        value, _sample_type = self._extract_tmb_measurement(df)
+        return value
+
+    @staticmethod
+    def _extract_ct1000_summaries(df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Parse historical PGx blocks and their explicit H/M/L summaries.
+
+        Ct1000 has no header row. Each drug block ends with one of
+        ``sensitive H/M/L!``, ``Toxicity H/M/L!`` or a combined marker. The
+        marker is source data, so prefer it over recomputing a case conclusion
+        from free text.
+        """
+        if df is None or df.empty:
+            return []
+
+        def text(value: Any) -> str:
+            if value is None or (isinstance(value, float) and pd.isna(value)):
+                return ""
+            return str(value).strip()
+
+        def display_drug(value: str) -> str:
+            match = re.match(r"^([^（(]+)[（(]([^）)]+)", value)
+            if not match:
+                return value
+            before = match.group(1).strip()
+            inside = match.group(2).strip()
+            if not re.search(r"[\u4e00-\u9fff]", before) and re.search(
+                r"[\u4e00-\u9fff]", inside
+            ):
+                return inside
+            return before
+
+        labels = {"H": "可能较高", "M": "可能居中", "L": "可能较低"}
+        block: List[List[Any]] = []
+        summaries: List[Dict[str, Any]] = []
+        for raw_row in df.to_numpy().tolist():
+            first = text(raw_row[0] if raw_row else "")
+            sensitive = re.search(r"sensitive\s*([HML])!", first, re.I)
+            toxicity = re.search(r"Toxicity\s*([HML])!", first, re.I)
+            if sensitive or toxicity:
+                drugs: List[str] = []
+                genes: List[str] = []
+                for row in block:
+                    drug = text(row[1] if len(row) > 1 else "")
+                    gene = text(row[4] if len(row) > 4 else "")
+                    if drug and drug not in drugs:
+                        drugs.append(drug)
+                    if gene and gene not in genes:
+                        genes.append(gene)
+                if drugs:
+                    source_drug = drugs[0]
+                    sensitive_code = (
+                        sensitive.group(1).upper() if sensitive else ""
+                    )
+                    toxicity_code = toxicity.group(1).upper() if toxicity else ""
+                    summaries.append(
+                        {
+                            "source_drug": source_drug,
+                            "drug": display_drug(source_drug),
+                            "genes": genes,
+                            "gene_display": "、".join(genes) if genes else "/",
+                            "efficacy_code": sensitive_code,
+                            "toxicity_code": toxicity_code,
+                            "efficacy": labels.get(sensitive_code, "/"),
+                            "toxicity": labels.get(toxicity_code, "/"),
+                        }
+                    )
+                block = []
+                continue
+            if any(text(value) for value in raw_row):
+                block.append(raw_row)
+        return summaries
 
     def _load_skip_rows_config(self) -> Dict[str, int]:
         """
@@ -471,9 +549,11 @@ class ExcelReader:
                 tmb_df = self._parse_sheet(
                     excel_file, "TMB", sheet_cache, skip_rows=0, header=None
                 )
-                tmb_value = self._extract_tmb_value(tmb_df)
+                tmb_value, tmb_sample_type = self._extract_tmb_measurement(tmb_df)
                 if tmb_value is not None:
                     data_source.single_values["TMB"] = tmb_value
+                    if tmb_sample_type:
+                        data_source.single_values["TMB样本类型"] = tmb_sample_type
                     self.logger.info("提取TMB值成功", tmb_value=tmb_value)
 
             # 提取 MSI：兼容大小写/空格别名，并按表头定位 tumor 结果。
@@ -592,6 +672,18 @@ class ExcelReader:
                     )
                     self._extract_hla_data(file_path, data_source, df_raw=df_raw)
                     continue
+
+                if sheet_name == "Ct1000":
+                    ct1000_raw = self._parse_sheet(
+                        excel_file,
+                        "Ct1000",
+                        sheet_cache,
+                        skip_rows=0,
+                        header=None,
+                    )
+                    summaries = self._extract_ct1000_summaries(ct1000_raw)
+                    if summaries:
+                        data_source.table_data["Ct1000_summary"] = summaries
 
                 # 检查是否需要跳过行
                 skip_rows = self.skip_rows_config.get(sheet_name, 0)

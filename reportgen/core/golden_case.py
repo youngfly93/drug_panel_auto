@@ -192,7 +192,7 @@ LUNG_329_PDL1_EXPECTATIONS: Dict[str, Any] = {
         "msi_status": "MSS",
     },
     "required_qa_checks": list(_LUNG_PDL1_REQUIRED_QA_CHECKS),
-    "required_text": ["肺癌329基因+PD-L1", *_LUNG_PDL1_REQUIRED_TEXT],
+    "required_text": ["肺癌329基因检测", *_LUNG_PDL1_REQUIRED_TEXT],
 }
 
 LUNG_588_PDL1_EXPECTATIONS: Dict[str, Any] = {

@@ -26,6 +26,45 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
+HISTORICAL_CHEMOTHERAPY_GENES = {
+    "顺铂": "XPC、MTHFR、GSTP1、ERCC1、XRCC1、GSTM1",
+    "长春瑞滨": "ABCB1、CEP72",
+    "依托泊苷": "SLCO1B1、DYNC2H1",
+    "吉西他滨": "CDA、RRM1",
+    "多西他赛": "ERCC1、VEGFA",
+    "培美曲塞": "SLC19A1、GGH",
+    "紫杉醇": "ERCC1、ABCB1、SOD2、TP53",
+    "卡铂": "MTHFR、ERCC1、XRCC1",
+}
+HISTORICAL_CHEMOTHERAPY_RATINGS = {
+    "CASE-LUNG-B": {
+        "顺铂": ("可能居中", "可能较高"),
+        "长春瑞滨": ("可能较低", "可能较低"),
+        "依托泊苷": ("可能较高", "可能较高"),
+        "吉西他滨": ("可能较高", "可能较低"),
+        "多西他赛": ("可能较低", "可能较高"),
+        "培美曲塞": ("可能居中", "可能较高"),
+        "紫杉醇": ("可能较低", "可能较高"),
+        "卡铂": ("可能较低", "可能居中"),
+    },
+    "CASE-LUNG-C": {
+        "顺铂": ("可能较高", "可能较高"),
+        "长春瑞滨": ("可能较高", "可能较低"),
+        "依托泊苷": ("可能较高", "可能较高"),
+        "吉西他滨": ("可能较高", "可能较低"),
+        "多西他赛": ("可能较高", "可能居中"),
+        "培美曲塞": ("可能居中", "可能较高"),
+        "紫杉醇": ("可能较高", "可能较低"),
+        "卡铂": ("可能较高", "可能居中"),
+    },
+}
+HISTORICAL_CHEMOTHERAPY_SUMMARIES = {
+    "CASE-LUNG-B": "经分析，可考虑优先选择的化疗方案有吉西他滨单药方案。",
+    "CASE-LUNG-C": (
+        "经分析，可考虑优先选择的化疗方案有吉西他滨+长春瑞滨、"
+        "吉西他滨单药方案、白蛋白结合型紫杉醇单药方案、紫杉醇单药方案。"
+    ),
+}
 KNOWN_INPUTS = {
     "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646": {
         "alias": "CASE-LUNG-A",
@@ -33,9 +72,9 @@ KNOWN_INPUTS = {
         "pdl1_tps": 1.0,
         "pdl1_cps": 1.0,
         "pdl1_result": "阳性（低表达）",
-        "expected_targeted_drug_count": 0,
-        "expected_immune_positive_count": 0,
-        "expected_immune_negative_count": 0,
+        "expected_targeted_drug_count": 2,
+        "expected_immune_positive_count": 1,
+        "expected_immune_negative_count": 1,
     },
     "623c96cee1eb7b16cacb62cababba3b790e82007a00a59d0f159efbe025db000": {
         "alias": "CASE-LUNG-B",
@@ -43,7 +82,7 @@ KNOWN_INPUTS = {
         "pdl1_tps": 50.0,
         "pdl1_cps": 52.0,
         "pdl1_result": "阳性（高表达）",
-        "expected_targeted_drug_count": 0,
+        "expected_targeted_drug_count": 8,
         "expected_immune_positive_count": 5,
         "expected_immune_negative_count": 0,
     },
@@ -53,7 +92,7 @@ KNOWN_INPUTS = {
         "pdl1_tps": 5.0,
         "pdl1_cps": 6.0,
         "pdl1_result": "阳性（低表达）",
-        "expected_targeted_drug_count": 2,
+        "expected_targeted_drug_count": 4,
         "expected_immune_positive_count": 2,
         "expected_immune_negative_count": 1,
     },
@@ -282,7 +321,7 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
     report_data = bridge.data_cleaner.validate_and_clean(report_data)
     part3_policy = package.raw.get("part3_knowledge") or {}
     gene_knowledge_provider = (
-        bridge._build_gene_knowledge_provider()
+        bridge._build_gene_knowledge_provider(package)
         if part3_policy.get("enabled", True)
         else None
     )
@@ -323,6 +362,15 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
             load_context_contract(contract_path),
             contract_path=contract_path,
         )
+    chemotherapy_rows = list(report_data.get_table("chemotherapy_predictions") or [])
+    chemotherapy_detail_rows = [
+        row
+        for table_name, table_rows in report_data.context.items()
+        if table_name.startswith("drug_") and isinstance(table_rows, list)
+        for row in table_rows
+        if isinstance(row, dict)
+        and any(key in row for key in ("Level", "level", "等级", "Evidence"))
+    ]
     return {
         "variant_rows": _safe_variant_rows(
             list(report_data.get_table("all_variants") or [])
@@ -336,6 +384,71 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
         "immune_negative_count": len(
             list(report_data.get_table("immune_negative_variants") or [])
         ),
+        "lung_guideline_row_count": len(
+            list(report_data.get_table("lung_guideline_drug_results") or [])
+        ),
+        "immune_fixed_row_counts": {
+            category: len(list(report_data.get_table(table_name) or []))
+            for category, table_name in (
+                ("positive", "immune_positive_results"),
+                ("negative", "immune_negative_results"),
+                ("hyperprogression", "immune_hyperprogression_results"),
+            )
+        },
+        "chemotherapy_row_counts": {
+            category: len(list(report_data.get_table(table_name) or []))
+            for category, table_name in (
+                ("prediction", "chemotherapy_predictions"),
+                ("regimen", "chemotherapy_regimen_predictions"),
+                ("dosage", "chemotherapy_dosage_rows"),
+            )
+        },
+        "chemotherapy_base_rows": [
+            {
+                "drug": str(row.get("drug") or ""),
+                "genes": str(row.get("genes") or ""),
+                "efficacy": str(row.get("efficacy") or ""),
+                "toxicity": str(row.get("toxicity") or ""),
+            }
+            for row in chemotherapy_rows[:8]
+            if isinstance(row, dict)
+        ],
+        "chemotherapy_summary_text": report_data.get_field(
+            "chemotherapy_summary_text"
+        ),
+        "chemotherapy_detail_quality": {
+            "blank_result_count": sum(
+                not str(row.get("Result") or "").strip()
+                for row in chemotherapy_detail_rows
+            ),
+            "level_3_count": sum(
+                str(row.get("Level") or row.get("level") or "").strip().upper()
+                == "3"
+                for row in chemotherapy_detail_rows
+            ),
+            "english_uncovered_count": sum(
+                str(row.get("Result") or "").strip().lower() == "uncovered"
+                for row in chemotherapy_detail_rows
+            ),
+            "english_prefix_drug_count": sum(
+                bool(
+                    re.match(
+                        r"^[A-Za-z]",
+                        str(row.get("DrugDisplay") or row.get("药物名称") or "").strip(),
+                    )
+                )
+                for row in chemotherapy_detail_rows
+            ),
+        },
+        "cisplatin_detail_row_count": len(
+            list(report_data.get_table("drug_shunbo") or [])
+        ),
+        "tmb_reference": report_data.get_field("tmb_reference"),
+        "undetected_gene_names": [
+            str(row.get("gene") or "")
+            for row in report_data.get_table("variants_2_1") or []
+            if str(row.get("locus") or "") == "未见突变"
+        ],
         "biomarkers": {
             "tmb_value": report_data.get_field("tmb_value"),
             "tmb_status": report_data.get_field("tmb_status"),
@@ -869,6 +982,54 @@ def validate_inputs(
             failures.append(
                 f"{row['alias']}: negative immune rows differ from the exact-event contract"
             )
+        if row["lung_guideline_row_count"] != 10:
+            failures.append(f"{row['alias']}: lung guideline table is not 10 rows")
+        if row["immune_fixed_row_counts"] != {
+            "positive": 15,
+            "negative": 12,
+            "hyperprogression": 8,
+        }:
+            failures.append(f"{row['alias']}: immune fixed-table rows differ")
+        if row["chemotherapy_row_counts"] != {
+            "prediction": 27,
+            "regimen": 22,
+            "dosage": 11,
+        }:
+            failures.append(f"{row['alias']}: chemotherapy table rows differ")
+        expected_ratings = HISTORICAL_CHEMOTHERAPY_RATINGS.get(row["alias"])
+        if expected_ratings is not None:
+            expected_base_rows = [
+                {
+                    "drug": drug,
+                    "genes": HISTORICAL_CHEMOTHERAPY_GENES[drug],
+                    "efficacy": ratings[0],
+                    "toxicity": ratings[1],
+                }
+                for drug, ratings in expected_ratings.items()
+            ]
+            if row["chemotherapy_base_rows"] != expected_base_rows:
+                failures.append(
+                    f"{row['alias']}: chemotherapy base rows differ from historical final"
+                )
+            if row["chemotherapy_summary_text"] != (
+                HISTORICAL_CHEMOTHERAPY_SUMMARIES[row["alias"]]
+            ):
+                failures.append(
+                    f"{row['alias']}: chemotherapy summary differs from historical final"
+                )
+        if any(row["chemotherapy_detail_quality"].values()):
+            failures.append(
+                f"{row['alias']}: chemotherapy appendix display normalization failed"
+            )
+        if row["alias"] in {"CASE-LUNG-B", "CASE-LUNG-C"} and not (
+            8 <= row["cisplatin_detail_row_count"] <= 10
+        ):
+            failures.append(f"{row['alias']}: cisplatin detail row count is unexpected")
+        if row["tmb_reference"] != 10:
+            failures.append(f"{row['alias']}: tissue TMB reference must be 10")
+        forbidden_crc_genes = {"FBXW7", "NF1", "NRAS", "SMAD4", "SMARCA4", "TCF7L2"}
+        if forbidden_crc_genes & set(row["undetected_gene_names"]):
+            failures.append(f"{row['alias']}: CRC undetected genes leaked into lung report")
         preview = row["web_preview"]
         if preview["targeted_drug_count"] != row["expected_targeted_drug_count"]:
             failures.append(

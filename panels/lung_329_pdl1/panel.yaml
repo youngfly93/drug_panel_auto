@@ -84,14 +84,13 @@ default_template: "lung_329_pdl1_golden_template_v2"
 templates:
   - id: "lung_329_pdl1_golden_template_v2"
     file: "templates/lung_329_pdl1_golden_template_v2.docx"
-    version: "0.3.0"
+    version: "0.5.1-review.5"
     status: "pilot"
     description: >
-      Hardened fail-closed template. Legacy migration inputs are not registered
-      or shipped because they contained historical case media. This template
-      removes fixed historical patient genotypes and unreviewed treatment prose,
-      uses dynamic variant/event tables, displays one validated case-specific
-      PD-L1 image, and keeps unreviewed clinical modules visibly blocked.
+      Comprehensive report-group review template sharing the historical lung
+      family geometry with the 588 product while retaining the frozen 329-gene
+      list. Fixed guideline and immune rows are source-aligned; patient results,
+      CtDrug summaries and review-pending drug matches remain data-driven.
     processors:
       - "part3_formatted_sections"
       - "rebuild_references"
@@ -199,13 +198,22 @@ template_contract:
   required_variables:
     - "patient_name"
     - "sample_id"
-    - "pdl1_tps"
-    - "pdl1_cps"
-    - "pdl1_result"
+    - "pdl1_tps_display"
+    - "pdl1_cps_display"
+    - "pdl1_result_display"
   required_lists:
     - "targeted_drug_tips"
     - "variants_2_1"
     - "nccn_results"
+    - "immune_positive_results"
+    - "immune_negative_results"
+    - "immune_hyperprogression_results"
+    - "lung_guideline_drug_results"
+    - "targeted_drug_introductions"
+    - "chemotherapy_summary_rows"
+    - "chemotherapy_predictions"
+    - "chemotherapy_regimen_predictions"
+    - "chemotherapy_dosage_rows"
   required_markers:
     - "__PART3_MARKER__"
     - "__PDL1_CASE_IMAGE__"

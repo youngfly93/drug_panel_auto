@@ -1,70 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 rule_id: "guideline_tables"
-version: "0.3.0"
-updated: "2026-07-25"
+version: "1.0.0"
+updated: "2026-09-02"
 status: "pilot"
-description: "肺癌核心分子事件结果表定义；药物结论由独立审核门禁控制。"
-
-guideline_tables:
-  nccn_results:
-    output_table: "nccn_results"
-    output_field_prefix: "nccn_"
-    required_columns:
-      - "检测基因"
-      - "检测内容"
-      - "检测结果"
-    rows:
-      - key: "EGFR_EX18"
-        genes: ["EGFR"]
-        match: "外显子18"
-      - key: "EGFR_EX19"
-        genes: ["EGFR"]
-        match: "外显子19"
-      - key: "EGFR_EX20"
-        genes: ["EGFR"]
-        match: "外显子20"
-      - key: "EGFR_EX21"
-        genes: ["EGFR"]
-        match: "外显子21"
-      - key: "KRAS_G12C"
-        genes: ["KRAS"]
-        match: "G12C"
-      - key: "ALK_FUSION"
-        genes: ["ALK"]
-        match: "融合"
-      - key: "ROS1_FUSION"
-        genes: ["ROS1"]
-        match: "融合"
-      - key: "RET_FUSION"
-        genes: ["RET"]
-        match: "融合"
-      - key: "ERBB2_MUT"
-        genes: ["ERBB2"]
-        display: "ERBB2\n（HER2）"
-        match: "突变"
-      - key: "ERBB2_AMP"
-        genes: ["ERBB2"]
-        display: "ERBB2\n（HER2）"
-        match: "扩增"
-      - key: "MET_EX14SKIP"
-        genes: ["MET"]
-        match: "外显子14跳跃"
-      - key: "MET_AMP"
-        genes: ["MET"]
-        match: "扩增"
-      - key: "BRAF_V600"
-        genes: ["BRAF"]
-        match: "密码子600"
-      - key: "NTRK123_FUSION"
-        genes: ["NTRK1", "NTRK2", "NTRK3"]
-        display: "NTRK1/2/3"
-        match: "融合"
-  chemotherapy:
-    enabled: false
-    output_table: "chemotherapy"
-    row_source: "drugs.yaml:approved_drug_rows"
-    required_columns:
-      - "药物名称"
-      - "相关基因"
-      - "药物适应情况"
+source_panel_id: "lung_588_pdl1"
+description: "与肺癌588共享同一历史终版指南/化疗结构；病例结果仍按329输入独立推导。"

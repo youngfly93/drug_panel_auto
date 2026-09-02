@@ -56,9 +56,9 @@ _MVP_SCALARS = [
     "sample_site",
     "tmb_summary",
     "msi_summary",
-    "pdl1_tps",
-    "pdl1_cps",
-    "pdl1_result",
+    "pdl1_tps_display",
+    "pdl1_cps_display",
+    "pdl1_result_display",
     "immune_positive_result",
     "immune_negative_result",
     "immune_hyperprogression_result",
@@ -84,11 +84,16 @@ def test_lung329_template_exists():
 
 
 def test_lung329_template_is_pii_clean():
-    """通用扫描器必须找不到病例变异、日期、丰度或调试残留。"""
+    """不得含病例硬命中；固定附录流行病学百分比是已登记软命中。"""
     from scripts.scan_hardcoded_literals import scan_docx
 
     result = scan_docx(TEMPLATE, tokens=[])
-    assert result.matches == []
+    assert [match for match in result.matches if match.tier == "HARD"] == []
+    assert {(match.kind, match.value) for match in result.matches} == {
+        ("af_pct", "11.6%"),
+        ("af_pct", "18.4%"),
+        ("af_pct", "19.7%"),
+    }
 
 
 def test_lung329_template_has_no_orphan_or_source_case_media():
@@ -107,7 +112,10 @@ def test_lung329_template_has_no_orphan_or_source_case_media():
         }
 
     assert media_parts == relationship_targets
-    assert len(media_parts) == 9
+    # Shared comprehensive-layout appendix has the same 25 referenced assets
+    # as the 588 family template; the relationship equality above is the
+    # privacy-critical orphan/source-case check.
+    assert len(media_parts) == 25
     assert "word/media/image6.jpeg" not in media_parts
 
 
@@ -164,7 +172,7 @@ def test_lung329_template_renders_with_scalars():
         doc = z.read("word/document.xml").decode("utf-8", "ignore")
     visible = re.sub(r"<[^>]+>", "", doc)
     assert "SENTINEL_patient_name_VAL" in visible
-    assert "SENTINEL_pdl1_result_VAL" in visible
+    assert "SENTINEL_pdl1_result_display_VAL" in visible
 
 
 def test_lung329_pdl1_form_keeps_case_fields_visible_but_optional_for_draft():
@@ -259,7 +267,7 @@ def test_lung329_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
     assert "先生成NGS报告草稿供报告解读组审核" in visible
     assert "未提供本病例PD-L1免疫组化图片" in visible
     assert "__PDL1_CASE_IMAGE__" not in visible
-    assert len(rendered.inline_shapes) == 0
+    assert len(rendered.inline_shapes) == len(Document(TEMPLATE).inline_shapes) == 19
     pdl1_rows = [
         [cell.text.strip() for cell in row.cells]
         for table in rendered.tables

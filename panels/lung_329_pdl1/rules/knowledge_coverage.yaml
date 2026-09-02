@@ -3,10 +3,10 @@ panel_id: "lung_329_pdl1"
 rule_id: "knowledge_coverage"
 status: "draft"
 source:
-  type: "hardened_controlled_pilot_template"
+  type: "historical_comprehensive_review_template"
   template_id: "lung_329_pdl1_golden_template_v2"
   template_path: "panels/lung_329_pdl1/templates/lung_329_pdl1_golden_template_v2.docx"
-  template_sha256: "f3d7ad62a455a5da41de3d440f091d6b7319cbbe7081d6935ac8984ec3906e88"
+  template_sha256: "3cf8b164157de3843b0cc9f835d111d57cc24e16c572b412268013eb2a66830d"
   extraction_anchor: "Gene List for MLseq"
   verified_gene_count: 329
 contract:

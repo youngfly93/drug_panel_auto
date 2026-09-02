@@ -184,12 +184,14 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
             panel_package,
             clinical_context=report_data.context,
         )
+        panel_id = str(getattr(panel_package, "panel_id", "") or "")
 
         # 映射表格数据
         self._map_tables(
             excel_data,
             report_data,
             targeted_drug_rules=targeted_drug_rules,
+            panel_id=panel_id,
         )
 
         # 兼容性别名：为历史模板提供 TMB / MSI状态 字段
@@ -236,7 +238,12 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
 
         # Block 3: TMB 参考值/分级计算
         try:
-            sample_type = str(report_data.get_field("sample_type") or "组织")
+            sample_type = str(
+                report_data.get_field("tmb_sample_type")
+                or (excel_data.single_values or {}).get("TMB样本类型")
+                or report_data.get_field("sample_type")
+                or "组织"
+            )
             tmb_val = report_data.get_field("tmb_value")
             if tmb_val is None:
                 for raw_key in ("TMB", "tmb_value", "TMB值", "Tumor Mutation Burden"):
@@ -244,6 +251,12 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                         tmb_val = excel_data.single_values.get(raw_key)
                         break
             normalized_tmb = build_tmb_fields(tmb_val, sample_type=sample_type)
+            if panel_id.startswith("lung_"):
+                normalized_tmb["tmb_summary"] = re.sub(
+                    r"(?<=\d)mutations/Mb",
+                    " mutations/Mb",
+                    str(normalized_tmb.get("tmb_summary") or ""),
+                )
             for field, value in normalized_tmb.items():
                 # TMB status/summary/reference are derived from the numeric TMB
                 # value. Always recompute them so mapping defaults like "未检测"
@@ -427,6 +440,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         report_data: ReportData,
         *,
         targeted_drug_rules: Optional[dict[str, Any]] = None,
+        panel_id: str = "",
     ) -> None:
         """
         映射表格数据
@@ -442,6 +456,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                     excel_data,
                     report_data,
                     targeted_drug_rules=targeted_drug_rules,
+                    panel_id=panel_id,
                 )
                 report_data.set_table(table_name, rows)
                 self.logger.debug("映射表格(聚合)", table=table_name, rows=len(rows))
@@ -920,7 +935,9 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         from reportgen.utils.text_utils import norm_text
         return norm_text(v)
 
-    def _load_variants_2_1_baseline(self) -> list[dict[str, str]]:
+    def _load_variants_2_1_baseline(
+        self, panel_id: str = ""
+    ) -> list[dict[str, str]]:
         """加载九列表"未见突变"基线行（模板契约）。"""
         try:
             cfg_path = (
@@ -938,7 +955,11 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
             )
             return []
 
-        rows = (cfg.get("variants_2_1", {}) or {}).get("unmutated_rows", [])
+        variants_cfg = cfg.get("variants_2_1", {}) or {}
+        panel_cfg = (variants_cfg.get("panels", {}) or {}).get(panel_id, {}) or {}
+        rows = panel_cfg.get("unmutated_rows")
+        if rows is None:
+            rows = variants_cfg.get("unmutated_rows", [])
         if not isinstance(rows, list):
             return []
         out = []
@@ -958,7 +979,11 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         tmb_val = report_data.get_field("tmb_value")
         if tmb_val is None:
             return None
-        sample_type = str(report_data.get_field("sample_type") or "组织")
+        sample_type = str(
+            report_data.get_field("tmb_sample_type")
+            or report_data.get_field("sample_type")
+            or "组织"
+        )
         summary = build_tmb_fields(tmb_val, sample_type=sample_type)["tmb_summary"]
         unit = str(report_data.get_field("tmb_unit") or "mutations/Mb")
         if unit != "mutations/Mb" and "mutations/Mb" in summary:
@@ -998,6 +1023,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         report_data: ReportData,
         *,
         targeted_drug_rules: Optional[dict[str, Any]] = None,
+        panel_id: str = "",
     ) -> list[dict]:
         """
         生成"2.1 基因变异检测结果及相关靶向药物信息"九列表数据。
@@ -1152,7 +1178,7 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         )
 
         # 补齐"未见突变"基线行（若配置存在）
-        for base in self._load_variants_2_1_baseline():
+        for base in self._load_variants_2_1_baseline(panel_id):
             gene = self._norm_text(base.get("gene"))
             if not gene or gene in mutated_genes:
                 continue
@@ -1199,6 +1225,8 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
             row["recommendation"] = tip
         if self._norm_text(row.get("result")) == "":
             row["result"] = tip
+        if self._norm_text(row.get("Result")) == "":
+            row["Result"] = tip
 
         # 3) 模板历史别名字段：仅在不存在时补齐，避免覆盖外部显式输入
         row.setdefault("药物适应情况", tip)
@@ -1265,6 +1293,32 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                 mapped_row = table_mapping.map_row(row)
                 if mapped_row:
                     self._apply_ctdrug_template_aliases(mapped_row)
+                    raw_drug = self._norm_text(drug_name)
+                    chinese_match = re.match(r"^([^（(]+)[（(]([^）)]+)", raw_drug)
+                    display_drug = raw_drug
+                    if chinese_match:
+                        before = chinese_match.group(1).strip()
+                        inside = chinese_match.group(2).strip()
+                        display_drug = (
+                            inside
+                            if not re.search(r"[\u4e00-\u9fff]", before)
+                            and re.search(r"[\u4e00-\u9fff]", inside)
+                            else before
+                        )
+                    mapped_row["Drug"] = raw_drug
+                    mapped_row["药物"] = raw_drug
+                    mapped_row["DrugDisplay"] = display_drug
+                    mapped_row["药物名称"] = display_drug
+                    for result_key in (
+                        "Result",
+                        "result",
+                        "检测结果",
+                        "用药提示",
+                        "recommendation",
+                    ):
+                        value = self._norm_text(mapped_row.get(result_key))
+                        if value.lower() == "uncovered":
+                            mapped_row[result_key] = "未覆盖"
                     filtered_rows.append(mapped_row)
 
         self.logger.debug(

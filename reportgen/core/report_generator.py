@@ -249,6 +249,9 @@ def apply_pdl1_display_fields(
             or "本次未提供PD-L1免疫组化TPS、CPS及结果判定；"
             "当前先生成NGS报告草稿供报告解读组审核，相关内容待核对后补充。"
         ).strip()
+        report_data.set_field("pdl1_tps_display", "未提供")
+        report_data.set_field("pdl1_cps_display", "未提供")
+        report_data.set_field("pdl1_result_display", "未提供")
         report_data.set_field("pdl1_table_interpretation", missing_notice)
         return
 
@@ -265,6 +268,15 @@ def apply_pdl1_display_fields(
         report_data.set_field("pdl1_tps", display(tps))
     if cps not in (None, ""):
         report_data.set_field("pdl1_cps", display(cps))
+    report_data.set_field(
+        "pdl1_tps_display",
+        f"{display(tps)}%" if tps not in (None, "") else "未提供",
+    )
+    report_data.set_field(
+        "pdl1_cps_display",
+        display(cps) if cps not in (None, "") else "未提供",
+    )
+    report_data.set_field("pdl1_result_display", result or "未提供")
 
     report_data.set_field(
         "pdl1_table_interpretation",

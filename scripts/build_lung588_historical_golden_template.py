@@ -74,7 +74,7 @@ REVIEW_CANDIDATE_CONTRACT = (
     / "review_baselines"
     / "lung588_historical_review_candidate_v1.yaml"
 )
-TEMPLATE_VERSION = "0.4.0-review.4"
+TEMPLATE_VERSION = "0.5.0-review.5"
 EXPECTED_REPAIRED_SOURCE_SHA256 = (
     "e9cde046db0a93a5b33f13961ff7be25fcce9644a6682b7c132ca9e3604dbb96"
 )
@@ -215,7 +215,7 @@ def _replace_biomarker_summary(table) -> None:
     values = {
         "肿瘤突变负荷（TMB）": ("{{ tmb_summary }}", "{{ immuno_tips }}"),
         "微卫星不稳定性（MSI）": ("{{ msi_summary }}", "{{ msi_tips }}"),
-        "PD-L1表达": ("{{ pdl1_result }}", "{{ pdl1_table_interpretation }}"),
+        "PD-L1表达": ("{{ pdl1_result_display }}", "{{ pdl1_table_interpretation }}"),
         "HLA-I分型": (
             "详见3.4 HLA-I分型检测结果",
             "研究性分型结果，不能单独用于治疗决策。",
@@ -253,9 +253,9 @@ def _replace_pdl1_table(table) -> None:
     values = (
         "PD-L1蛋白表达",
         "免疫组化",
-        "{{ pdl1_tps }}%",
-        "{{ pdl1_cps }}",
-        "{{ pdl1_result }}",
+        "{{ pdl1_tps_display }}",
+        "{{ pdl1_cps_display }}",
+        "{{ pdl1_result_display }}",
     )
     for cell, value in zip(table.rows[1].cells, values):
         _replace_cell_text(cell, value)
@@ -292,12 +292,11 @@ def _set_hla_loop(table) -> None:
 def _set_drug_detail_loop(table, collection: str) -> None:
     if len(table.columns) != 6 or len(table.rows) < 2:
         raise ValueError(f"unexpected drug detail table shape for {collection}")
-    drug_label = re.sub(r"\s+", " ", table.rows[1].cells[0].text).strip()
     _set_table_loop_expressions(
         table,
         collection,
         (
-            drug_label,
+            '{{ row.DrugDisplay or "" }}',
             '{{ row.Gene or "" }}',
             '{{ row.Locus or "" }}',
             '{{ row.Level or "" }}',
@@ -754,19 +753,25 @@ def _validate_template(
         "{{ sample_id }}",
         "{{ report_number }}",
         "{{ report_date_compact }}",
-        "{{ pdl1_tps }}",
-        "{{ pdl1_cps }}",
-        "{{ pdl1_result }}",
+        "{{ pdl1_tps_display }}",
+        "{{ pdl1_cps_display }}",
+        "{{ pdl1_result_display }}",
         PDL1_CLASSIFICATION_NOTICE_MARKER,
         "{%tr for row in variants_2_1 %}",
         "{%tr for row in targeted_drug_tips %}",
+        "{%tr for row in lung_guideline_drug_results %}",
+        "{%tr for row in targeted_drug_introductions %}",
         "{%tr for row in nccn_results %}",
+        "{%tr for row in immune_positive_results %}",
+        "{%tr for row in chemotherapy_predictions %}",
+        "{%tr for row in chemotherapy_regimen_predictions %}",
+        "{%tr for row in chemotherapy_dosage_rows %}",
         "{%tr for row in hla %}",
         "__PART3_MARKER__",
         "__PDL1_CASE_IMAGE__",
         "Gene List for MLseq (n=588)",
         REVIEW_DRAFT_NOTICE,
-        PGX_REVIEW_NOTICE,
+        "{{ chemotherapy_summary_text }}",
     )
     missing = [token for token in required if token not in visible]
     if missing:
@@ -835,7 +840,7 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
         source_tables[1],
         "targeted_drug_tips",
         (
-            "{{ row.gene }}",
+            "{{ row.gene_display }}",
             "{{ row.variant_site }}",
             "{{ row.benefit_drugs }}",
             "{{ row.caution_drugs }}",
@@ -857,14 +862,21 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
         "*本次共检出体细胞变异：{{ total_variants_count }}个，其中与靶向药物"
         "用药相关的变异有：{{ drug_related_count }}个。",
     )
-    _neutralize_table(
+    _set_table_loop_expressions(
         source_tables[2],
-        ("见精确事件", "见靶向用药表", TARGETED_REVIEW_NOTICE, "需病例级复核"),
+        "lung_guideline_drug_results",
+        (
+            "{{ row.gene }}",
+            "{{ row.drugs }}",
+            "{{ row.clinical_note }}",
+            "{{ row.result }}",
+        ),
     )
     _replace_biomarker_summary(source_tables[3])
-    _neutralize_table(
+    _set_table_loop_expressions(
         source_tables[4],
-        ("报告组评审中", "患者级化疗方案当前不自动生成；详见4.3原始CtDrug映射。"),
+        "chemotherapy_summary_rows",
+        ("化疗药物小结", "{{ row.summary }}"),
     )
     _set_table_loop_expressions(
         source_tables[5],
@@ -882,9 +894,10 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
         ),
         body_row_index=2,
     )
-    _neutralize_table(
+    _set_table_loop_expressions(
         source_tables[6],
-        ("报告组评审中", "-", "历史固定药物介绍已移除；以当前审核规则输出为准。"),
+        "targeted_drug_introductions",
+        ("{{ row.drug_name }}", "{{ row.gene }}", "{{ row.introduction }}"),
     )
     _set_table_loop_expressions(
         source_tables[7],
@@ -919,17 +932,20 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
             ),
         )
 
-    _neutralize_table(
+    _set_table_loop_expressions(
         source_tables[14],
-        ("报告组评审中", "-", "不自动给出有效性预测", "不自动给出毒性预测"),
+        "chemotherapy_predictions",
+        ("{{ row.drug }}", "{{ row.genes }}", "{{ row.efficacy }}", "{{ row.toxicity }}"),
     )
-    _neutralize_table(
+    _set_table_loop_expressions(
         source_tables[15],
-        ("报告组评审中", "-", "不自动给出有效性预测", "不自动给出毒性预测"),
+        "chemotherapy_regimen_predictions",
+        ("{{ row.regimen }}", "{{ row.genes }}", "{{ row.efficacy }}", "{{ row.toxicity }}"),
     )
-    _neutralize_table(
+    _set_table_loop_expressions(
         source_tables[16],
-        ("历史剂量方案未启用", "须由临床与报告组按当前指南重新审核"),
+        "chemotherapy_dosage_rows",
+        ("{{ row.regimen }}", "{{ row.dosage }}"),
     )
     for table_index, collection in DRUG_DETAIL_BINDINGS:
         _set_drug_detail_loop(source_tables[table_index], collection)
@@ -1028,7 +1044,7 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
             document,
             "化疗药物小结：经分析，可考虑优先选择的化疗方案有吉西他滨+长春瑞滨、吉西他滨单药方案、白蛋白结合型紫杉醇单药方案、紫杉醇单药方案。",
         ),
-        PGX_REVIEW_NOTICE,
+        "化疗药物小结：{{ chemotherapy_summary_text }}",
     )
     _replace_paragraph_text(
         _body_paragraph(

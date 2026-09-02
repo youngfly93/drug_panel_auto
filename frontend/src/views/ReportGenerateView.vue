@@ -524,6 +524,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useExcelStore } from '@/stores/excel'
@@ -542,6 +543,7 @@ import SheetPreview from '@/components/excel/SheetPreview.vue'
 
 const excelStore = useExcelStore()
 const authStore = useAuthStore()
+const router = useRouter()
 
 const projectType = ref<string | null>(null)
 const templateName = ref<string | null>(null)
@@ -736,7 +738,9 @@ const effectiveTmb = computed<Record<string, any>>(() => {
   if (numericValue === null) return original
 
   const sampleType = String(
-    form.formData.sample_type
+    form.formData.tmb_sample_type
+    || excelStore.singleValues?.tmb_sample_type
+    || form.formData.sample_type
     || excelStore.singleValues?.sample_type
     || excelStore.previewSummary?.patient?.sample_type
     || '组织',
@@ -751,7 +755,7 @@ const effectiveTmb = computed<Record<string, any>>(() => {
     ...original,
     value: displayValue,
     status,
-    summary: `${displayValue}mutations/Mb，TMB-${status}\n(本次检测结果${direction}参考值\n${threshold} mutations/Mb)`,
+    summary: `${displayValue} mutations/Mb，TMB-${status}\n(本次检测结果${direction}参考值\n${threshold} mutations/Mb)`,
   }
 })
 
@@ -1179,7 +1183,7 @@ async function startBatchGenerate() {
       },
       batchIdempotencyKey.value,
     )
-    ElMessage.info(
+    ElMessage.success(
       accepted.idempotent_replay
         ? '已识别为重试，继续查看原批量任务'
         : '批量任务已进入后台生成',
@@ -1204,7 +1208,7 @@ async function startBatchGenerate() {
       errors: [],
       warnings: [],
     }
-    startBatchPolling(accepted.task_id)
+    await router.push(`/tasks/${accepted.task_id}`)
   } catch (err: any) {
     ElMessage.error(err.response?.data?.detail || err.message || '批量任务提交失败')
     batchGenerating.value = false

@@ -1,13 +1,13 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "biomarkers"
-version: "0.2.0"
-updated: "2026-08-09"
+version: "1.0.0"
+updated: "2026-09-02"
 status: "pilot"
 description: >
-  Lung588 biomarker display policy. Immune associations are restricted to
-  transcript- and HGVS-exact historical display contracts and remain subject
-  to mandatory case-level report-group review.
+  Lung comprehensive-panel biomarker display contract transcribed from the
+  paired historical final reports. The fixed 15/12/8 rows are always rendered;
+  only the current-case result column is derived from source data.
 
 biomarkers:
   tmb:
@@ -24,95 +24,51 @@ biomarkers:
   immune_gene_tables:
     enabled: true
     positive:
-      genes: []
+      genes: [MLH1, MSH2, MSH6, PMS2, POLE, POLD1, CD274, PDCD1LG2, PBRM1, KRAS, TP53, TET1, SERPINB3, SERPINB4, ATM, ATR, BRCA1, BRCA2, PALB2, CHEK2, ARID1A, ATRX, CDK12, FANCI, FANCM, MRE11A, NBN, RAD50, RAD51]
       rows:
-        - key: "ATM_C1236_MINUS2"
-          genes: ["ATM"]
-          mode: "exact_variant"
-          transcript: "NM_000051.4"
-          c_hgvs: "c.1236-2A>T"
-          p_hgvs: ""
-          variant_level: ["Ⅰ类", "Ⅱ类"]
-          interpretation: "按历史报告组精确事件展示契约列示；交付前须结合病例证据复核。"
-          review_status: "provisional_runtime"
+        - {key: MLH1, genes: [MLH1], mode: direct, display: "MLH1", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: MSH2, genes: [MSH2], mode: direct, display: "MSH2", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: MSH6, genes: [MSH6], mode: direct, display: "MSH6", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: PMS2, genes: [PMS2], mode: direct, display: "PMS2", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: POLE, genes: [POLE], mode: direct, display: "POLE", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: POLD1, genes: [POLD1], mode: direct, display: "POLD1", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: CD274, genes: [CD274], mode: direct, display: "CD274（PD-L1）", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: PDCD1LG2, genes: [PDCD1LG2], mode: direct, display: "PDCD1LG2（PD-L2）", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: PBRM1, genes: [PBRM1], mode: direct, display: "PBRM1", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: KRAS, genes: [KRAS], mode: direct, display: "KRAS", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: KRAS_TP53, genes: [KRAS, TP53], mode: co_mutation, display: "KRAS/TP53共突变", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: TET1, genes: [TET1], mode: direct, display: "TET1", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: SERPINB3, genes: [SERPINB3], mode: direct, display: "SERPINB3", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: SERPINB4, genes: [SERPINB4], mode: direct, display: "SERPINB4", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - key: DDR
+          genes: [ATM, ATR, BRCA1, BRCA2, PALB2, CHEK2, ARID1A, ATRX, CDK12, FANCI, FANCM, MRE11A, NBN, RAD50, RAD51]
+          mode: gene_group
+          display: "DDR基因（DNA损伤修复相关基因）"
+          interpretation: "检出有害变异时可能疗效较好。"
           runtime_eligible: true
-          review_basis: "CASE-LUNG-B/C historical display contract; exact selector only"
-          secondary_review_status: "case_level_report_group_review_required"
-        - key: "BRIP1_W714STOP"
-          genes: ["BRIP1"]
-          mode: "exact_variant"
-          transcript: "NM_032043.3"
-          c_hgvs: "c.2142G>A"
-          p_hgvs: "p.W714*"
-          variant_level: ["Ⅰ类", "Ⅱ类"]
-          interpretation: "按历史报告组精确事件展示契约列示；交付前须结合病例证据复核。"
-          review_status: "provisional_runtime"
-          runtime_eligible: true
-          review_basis: "CASE-LUNG-C historical display contract; exact selector only"
-          secondary_review_status: "case_level_report_group_review_required"
-        - key: "MLH1_C790_PLUS1"
-          genes: ["MLH1"]
-          mode: "exact_variant"
-          transcript: "NM_000249.4"
-          c_hgvs: "c.790+1G>A"
-          p_hgvs: ""
-          variant_level: ["Ⅰ类", "Ⅱ类"]
-          interpretation: "按历史报告组精确事件展示契约列示；交付前须结合病例证据复核。"
-          review_status: "provisional_runtime"
-          runtime_eligible: true
-          review_basis: "CASE-LUNG-B historical display contract; exact selector only"
-          secondary_review_status: "case_level_report_group_review_required"
-        - key: "PMS2_R20Q"
-          genes: ["PMS2"]
-          mode: "exact_variant"
-          transcript: "NM_000535.7"
-          c_hgvs: "c.59G>A"
-          p_hgvs: "p.R20Q"
-          variant_level: ["Ⅰ类", "Ⅱ类"]
-          interpretation: "按历史报告组精确事件展示契约列示；交付前须结合病例证据复核。"
-          review_status: "provisional_runtime"
-          runtime_eligible: true
-          review_basis: "CASE-LUNG-B historical display contract; exact selector only"
-          secondary_review_status: "case_level_report_group_review_required"
-        - key: "MSH3_Q969STOP"
-          genes: ["MSH3"]
-          mode: "exact_variant"
-          transcript: "NM_002439.5"
-          c_hgvs: "c.2905C>T"
-          p_hgvs: "p.Q969*"
-          variant_level: ["Ⅰ类", "Ⅱ类"]
-          interpretation: "按历史报告组精确事件展示契约列示；交付前须结合病例证据复核。"
-          review_status: "provisional_runtime"
-          runtime_eligible: true
-          review_basis: "CASE-LUNG-B historical display contract; exact selector only"
-          secondary_review_status: "case_level_report_group_review_required"
-        - key: "BRCA2_R2336H"
-          genes: ["BRCA2"]
-          mode: "exact_variant"
-          transcript: "NM_000059.4"
-          c_hgvs: "c.7007G>A"
-          p_hgvs: "p.R2336H"
-          variant_level: ["Ⅰ类", "Ⅱ类"]
-          interpretation: "按历史报告组精确事件展示契约列示；交付前须结合病例证据复核。"
-          review_status: "provisional_runtime"
-          runtime_eligible: true
-          review_basis: "CASE-LUNG-B historical display contract; exact selector only"
-          secondary_review_status: "case_level_report_group_review_required"
     negative:
-      genes: []
+      genes: [PTEN, JAK1, JAK2, B2M, CTNNB1, EGFR, ALK, MET, STK11, KRAS, KEAP1, IFNGR1, IFNGR2]
       rows:
-        - key: "PTEN_C802_MINUS2"
-          genes: ["PTEN"]
-          mode: "exact_variant"
-          transcript: "NM_000314.8"
-          c_hgvs: "c.802-2A>T"
-          p_hgvs: ""
-          variant_level: ["Ⅰ类", "Ⅱ类"]
-          interpretation: "按历史报告组精确事件展示契约列示；交付前须结合病例证据复核。"
-          review_status: "provisional_runtime"
-          runtime_eligible: true
-          review_basis: "CASE-LUNG-C historical display contract; exact selector only"
-          secondary_review_status: "case_level_report_group_review_required"
+        - {key: PTEN, genes: [PTEN], mode: direct, display: "PTEN", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}
+        - {key: JAK1, genes: [JAK1], mode: direct, display: "JAK1", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}
+        - {key: JAK2, genes: [JAK2], mode: direct, display: "JAK2", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}
+        - {key: B2M, genes: [B2M], mode: direct, display: "B2M", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}
+        - {key: CTNNB1, genes: [CTNNB1], mode: direct, display: "CTNNB1", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}
+        - {key: EGFR_L858R, genes: [EGFR], mode: variant_pattern, patterns: [L858R, EX19], display: "EGFR（L858R/EX19del）", interpretation: "检出有害变异时可能疗效不佳。", runtime_eligible: true}
+        - {key: ALK, genes: [ALK], mode: direct, display: "ALK", interpretation: "检出有害变异时可能疗效不佳。", runtime_eligible: true}
+        - {key: MET, genes: [MET], mode: direct, display: "MET", interpretation: "检出有害变异时可能疗效不佳。", runtime_eligible: true}
+        - {key: STK11, genes: [STK11], mode: direct, display: "STK11", interpretation: "检出有害变异时可能疗效不佳。", runtime_eligible: true}
+        - {key: KRAS_STK11, genes: [KRAS, STK11], mode: co_mutation, display: "KRAS/STK11共突变", interpretation: "检出有害变异时可能疗效不佳。", runtime_eligible: true}
+        - {key: KEAP1, genes: [KEAP1], mode: direct, display: "KEAP1", interpretation: "检出有害变异时可能疗效不佳。", runtime_eligible: true}
+        - {key: IFNGR12, genes: [IFNGR1, IFNGR2], mode: gene_group, display: "IFNGR1/2", interpretation: "检出有害变异时可能疗效不佳。", runtime_eligible: true}
     hyperprogression:
-      genes: []
-      rows: []
+      genes: [MDM2, MDM4, DNMT3A, EGFR, CCND1, FGF3, FGF4, FGF19]
+      rows:
+        - {key: MDM2, genes: [MDM2], mode: direct, display: "MDM2", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
+        - {key: MDM4, genes: [MDM4], mode: direct, display: "MDM4", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
+        - {key: DNMT3A, genes: [DNMT3A], mode: direct, display: "DNMT3A", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
+        - {key: EGFR_AMP, genes: [EGFR], mode: cnv_amp, match: "扩增", display: "EGFR（扩增）", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
+        - {key: CCND1, genes: [CCND1], mode: direct, display: "CCND1", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
+        - {key: FGF3, genes: [FGF3], mode: direct, display: "FGF3", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
+        - {key: FGF4, genes: [FGF4], mode: direct, display: "FGF4", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
+        - {key: FGF19, genes: [FGF19], mode: direct, display: "FGF19", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}

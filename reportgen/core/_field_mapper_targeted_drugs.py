@@ -290,11 +290,15 @@ class TargetedDrugMixin:
 
     @staticmethod
     def _as_text_list(value: Any) -> list[str]:
-        if value is None:
-            return []
+        def clean(item: Any) -> str:
+            if item is None:
+                return ""
+            text = str(item).strip()
+            return "" if text.lower() in {"", "nan", "none", "null"} else text
+
         if isinstance(value, (list, tuple, set)):
-            return [str(item).strip() for item in value if str(item).strip()]
-        text = str(value).strip()
+            return [text for item in value if (text := clean(item))]
+        text = clean(value)
         return [text] if text else []
 
     def _lookup_reviewed_variant_override_drugs(
@@ -756,6 +760,111 @@ class TargetedDrugMixin:
             benefit = str(ov.get("benefit_drugs", "")).strip() or "--"
             caution = str(ov.get("caution_drugs", "")).strip() or "--"
             return benefit, caution, 100.0
+
+        # Lung pilot: expose only explicitly registered gene-level C/D rows,
+        # visibly marked for report-group review. This is intentionally
+        # narrower than enabling the generic database fallback.
+        pending_policy = (
+            targeted_drug_rules.get("gene_level_review_pending")
+            if isinstance(targeted_drug_rules, dict)
+            else None
+        )
+        if isinstance(pending_policy, dict) and pending_policy.get("enabled"):
+            allowed_genes = {
+                str(value).strip().upper()
+                for value in pending_policy.get("allowed_genes") or []
+                if str(value).strip()
+            }
+            allowed_levels = [
+                str(value).strip()
+                for value in pending_policy.get("allowed_variant_levels") or []
+                if str(value).strip()
+            ]
+            if (
+                gene_norm in allowed_genes
+                and (
+                    not allowed_levels
+                    or self._variant_level_matches(variant_level, allowed_levels)
+                )
+            ):
+                fallback = (
+                    (pending_policy.get("fallback_overrides") or {}).get(gene_norm)
+                    if isinstance(pending_policy.get("fallback_overrides"), dict)
+                    else None
+                )
+                benefit_items: list[str] = []
+                caution_items: list[str] = []
+                if isinstance(fallback, dict):
+                    benefit_items.extend(
+                        self._as_text_list(fallback.get("benefit_drugs"))
+                    )
+                    caution_items.extend(
+                        self._as_text_list(fallback.get("caution_drugs"))
+                    )
+                else:
+                    self._load_targeted_drug_db()
+                    cols = self._targeted_drug_db_cols
+                    df = self._targeted_drug_db
+                    gene_col = cols.get("gene")
+                    if df is not None and gene_col and gene_col in df.columns:
+                        sub = df[
+                            df[gene_col]
+                            .astype(str)
+                            .str.strip()
+                            .str.upper()
+                            .eq(gene_norm)
+                        ]
+                        allowed_sources = {
+                            str(value).strip().upper()
+                            for value in pending_policy.get("allowed_source_dbs")
+                            or ["INTERNAL"]
+                            if str(value).strip()
+                        }
+                        for _, db_row in sub.iterrows():
+                            source = self._norm_text(
+                                db_row.get("source_db")
+                            ).upper()
+                            if source not in allowed_sources:
+                                continue
+                            db_c = self._norm_text(db_row.get(cols.get("c")))
+                            db_p = self._norm_text(db_row.get(cols.get("p")))
+                            if db_c or db_p:
+                                continue
+                            db_level = self._norm_text(db_row.get(cols.get("level")))
+                            if db_level and allowed_levels and not self._variant_level_matches(
+                                variant_level, [db_level]
+                            ):
+                                continue
+                            benefit_items.extend(
+                                self._as_text_list(db_row.get(cols.get("benefit")))
+                            )
+                            caution_items.extend(
+                                self._as_text_list(db_row.get(cols.get("caution")))
+                            )
+
+                def unique(values: list[str]) -> list[str]:
+                    output: list[str] = []
+                    for value in values:
+                        clean = str(value).strip()
+                        if clean and clean not in {"--", "-"} and clean not in output:
+                            output.append(clean)
+                    return output
+
+                benefit_items = unique(benefit_items)
+                caution_items = unique(caution_items)
+                if benefit_items or caution_items:
+                    notice = str(
+                        pending_policy.get("notice") or "待报告组审"
+                    ).strip()
+                    suffix = f"【{notice}】" if notice else ""
+                    benefit = "\n".join(benefit_items) or "--"
+                    caution = "\n".join(caution_items) or "--"
+                    if suffix:
+                        if benefit != "--":
+                            benefit = f"{benefit}\n{suffix}"
+                        elif caution != "--":
+                            caution = f"{caution}\n{suffix}"
+                    return benefit, caution, 50.0
 
         if targeted_drug_rules is not None and not targeted_drug_rules.get(
             "base_db_enabled", False

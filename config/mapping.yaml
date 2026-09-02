@@ -232,6 +232,13 @@ single_values:
     default_value: "mutations/Mb"
     description: "TMB单位"
 
+  tmb_sample_type:
+    synonyms: ["TMB样本类型", "TMB Sample Type", "sampletp"]
+    type: string
+    required: false
+    default_value: ""
+    description: "TMB测定所使用的样本类型；混合送检时优先于报告总体样本类型确定参考值"
+
   # PD-L1 IHC 指标。肺癌 NGS Excel 不包含这些字段；由受控 Web 表单逐病例录入，
   # Panel input_contract 校验数值范围，具体检测方案合同校验结果分层一致性。
   pdl1_tps:

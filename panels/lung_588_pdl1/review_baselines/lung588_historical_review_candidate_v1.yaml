@@ -21,9 +21,9 @@ privacy:
 
 template:
   id: "lung_588_pdl1_historical_golden_v1"
-  version: "0.4.0-review.4"
+  version: "0.5.1-review.5"
   status: "pilot"
-  sha256: "b37735da11e9c572732522fdccf8f9f85f451b4a6704bb7344476c46489d506d"
+  sha256: "fe53e15483f7d397ac0507a98a0b9116fce71fe86efad6e8ffdafddf0ac88732"
   structure:
     table_count: 69
     section_count: 5
@@ -33,6 +33,12 @@ template:
     - "__PDL1_CASE_IMAGE__"
     - "{%tr for row in variants_2_1 %}"
     - "{%tr for row in targeted_drug_tips %}"
+    - "{%tr for row in lung_guideline_drug_results %}"
+    - "{%tr for row in targeted_drug_introductions %}"
+    - "{%tr for row in immune_positive_results %}"
+    - "{%tr for row in chemotherapy_predictions %}"
+    - "{%tr for row in chemotherapy_regimen_predictions %}"
+    - "{%tr for row in chemotherapy_dosage_rows %}"
   required_texts:
     - "报告组评审候选稿（非临床交付）"
     - "本表仅展示当前面板已输出的精确事件结果"
@@ -87,7 +93,11 @@ rendered_output:
   qa:
     allowed_statuses: ["PASS", "WARN"]
     visual_render: "all"
-    page_count_min: 80
-    page_count_max: 100
+    # The completed controlled cases render to 59-67 pages after compacting
+    # former placeholder-only pages; paired historical finals reach 99/117
+    # pages. Keep a small renderer margin while still rejecting the obsolete
+    # 25-page engineering draft. This is a QA guard, not a fixed page target.
+    page_count_min: 55
+    page_count_max: 130
     max_blank_pages: 0
     max_low_content_pages: 0

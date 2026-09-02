@@ -63,7 +63,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阴性",
         "tmb": 0,
         "msi": "MSS",
-        "expected_targeted_drug_count": 0,
+        "expected_targeted_drug_count": 1,
         "variants": [
             _variant(
                 "TP53",
@@ -105,7 +105,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（低表达）",
         "tmb": 9.9,
         "msi": "MSS",
-        "expected_targeted_drug_count": 0,
+        "expected_targeted_drug_count": 1,
         "variants": [
             _variant(
                 "BRAF",
@@ -189,7 +189,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（低表达）",
         "tmb": 6.3,
         "msi": "MSS",
-        "expected_targeted_drug_count": 0,
+        "expected_targeted_drug_count": 12,
         "variants": [
             _variant(
                 "TP53",
@@ -394,10 +394,10 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
                 failures.append("missing_part3_heading")
             if "肺癌专属知识当前未启用" in visible:
                 failures.append("stale_part3_disabled_notice")
-            if "3.4 免疫相关基因模块（未启用）" not in visible:
-                failures.append("missing_immune_module_disabled_heading")
-            if "免疫治疗正相关基因检测结果" in visible:
-                failures.append("legacy_immune_gene_table_visible")
+            if "3.4 免疫相关基因模块（未启用）" in visible:
+                failures.append("stale_immune_module_disabled_heading")
+            if "免疫治疗正相关基因检测结果" not in visible:
+                failures.append("immune_gene_table_missing")
             if (
                 scenario["expected_targeted_drug_count"]
                 and "【待报告组审】" not in visible
@@ -407,18 +407,74 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
                 if other_id in visible:
                     failures.append(f"cross_case_leak:{other_id}")
         context = result.get("context") or {}
-        targeted_count = len(context.get("targeted_drug_tips") or [])
+        targeted_rows = list(context.get("targeted_drug_tips") or [])
+        targeted_count = len(targeted_rows)
         if targeted_count != scenario["expected_targeted_drug_count"]:
             failures.append("exact_targeted_drug_count_mismatch")
+        expected_gene_displays: list[str] = []
+        previous_gene = ""
+        for row in targeted_rows:
+            gene = str(row.get("gene") or "").strip()
+            expected_gene_displays.append(
+                "" if gene and gene == previous_gene else gene
+            )
+            if gene:
+                previous_gene = gene
+        targeted_gene_displays = [
+            str(row.get("gene_display") or "") for row in targeted_rows
+        ]
+        if targeted_gene_displays != expected_gene_displays:
+            failures.append("targeted_gene_continuation_display_mismatch")
         if not context.get("gene_knowledge_sections"):
             failures.append("part3_sections_missing")
-        for table_name in (
-            "immune_positive_results",
-            "immune_negative_results",
-            "immune_hyperprogression_results",
-        ):
-            if context.get(table_name):
-                failures.append(f"disabled_immune_rows_present:{table_name}")
+        expected_immune_counts = {
+            "immune_positive_results": 15,
+            "immune_negative_results": 12,
+            "immune_hyperprogression_results": 8,
+        }
+        for table_name, expected_count in expected_immune_counts.items():
+            if len(context.get(table_name) or []) != expected_count:
+                failures.append(f"immune_row_count_mismatch:{table_name}")
+        guideline_row_count = len(context.get("lung_guideline_drug_results") or [])
+        if guideline_row_count != 10:
+            failures.append("lung_guideline_row_count_mismatch")
+        chemotherapy_row_counts = {
+            table_name: len(context.get(table_name) or [])
+            for table_name in (
+                "chemotherapy_predictions",
+                "chemotherapy_regimen_predictions",
+                "chemotherapy_dosage_rows",
+            )
+        }
+        if chemotherapy_row_counts != {
+            "chemotherapy_predictions": 27,
+            "chemotherapy_regimen_predictions": 22,
+            "chemotherapy_dosage_rows": 11,
+        }:
+            failures.append("chemotherapy_structure_mismatch")
+        forbidden_crc_genes = {
+            "FBXW7",
+            "NF1",
+            "NRAS",
+            "SMAD4",
+            "SMARCA4",
+            "TCF7L2",
+        }
+        undetected_genes = {
+            str(row.get("gene") or "")
+            for row in context.get("variants_2_1") or []
+            if isinstance(row, dict) and str(row.get("locus") or "") == "未见突变"
+        }
+        if forbidden_crc_genes & undetected_genes:
+            failures.append("crc_undetected_gene_leak")
+        if context.get("tmb_reference") != 10:
+            failures.append("tissue_tmb_reference_mismatch")
+        expected_tps_display = f"{float(scenario['tps']):g}%"
+        expected_cps_display = f"{float(scenario['cps']):g}"
+        if context.get("pdl1_tps_display") != expected_tps_display:
+            failures.append("pdl1_tps_display_format_mismatch")
+        if context.get("pdl1_cps_display") != expected_cps_display:
+            failures.append("pdl1_cps_display_format_mismatch")
 
         qa_status = result.get("qa_status")
         qa_payload: dict[str, Any] = {}
@@ -458,9 +514,22 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
                     "expected_targeted_drug_count"
                 ],
                 "runtime_targeted_drug_count": targeted_count,
+                "targeted_gene_displays": targeted_gene_displays,
                 "runtime_part3_section_count": len(
                     context.get("gene_knowledge_sections") or []
                 ),
+                "lung_guideline_row_count": guideline_row_count,
+                "immune_fixed_row_counts": {
+                    table_name: len(context.get(table_name) or [])
+                    for table_name in expected_immune_counts
+                },
+                "chemotherapy_row_counts": chemotherapy_row_counts,
+                "tmb_reference": context.get("tmb_reference"),
+                "forbidden_crc_undetected_genes": sorted(
+                    forbidden_crc_genes & undetected_genes
+                ),
+                "pdl1_tps_display": context.get("pdl1_tps_display"),
+                "pdl1_cps_display": context.get("pdl1_cps_display"),
                 "qa_status": qa_status,
                 "part3_cross_cancer_residual_status": residual_status,
                 "visual_qa_status": visual_status,

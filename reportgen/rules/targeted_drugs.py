@@ -517,6 +517,7 @@ def _disabled_context(panel_id: str, *, reason: str) -> dict[str, Any]:
         "clinical_context_contract": {},
         "clinical_context_enforced": False,
         "review_status_display": {},
+        "gene_level_review_pending": {},
     }
 
 
@@ -662,4 +663,9 @@ def load_targeted_drug_rule_context(
         "clinical_context_contract": context_contract or {},
         "clinical_context_enforced": bool(context_contract),
         "review_status_display": review_status_display,
+        "gene_level_review_pending": (
+            dict(policy.get("gene_level_review_pending"))
+            if isinstance(policy.get("gene_level_review_pending"), Mapping)
+            else {}
+        ),
     }

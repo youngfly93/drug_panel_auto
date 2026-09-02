@@ -74,6 +74,17 @@ def test_targeted_drug_rule_context_matrix():
     assert lung["allowed_source_dbs"] == []
     assert lung["allow_internal_rows"] is False
     assert lung["approved_drug_rows_enabled"] is False
+    assert lung["gene_level_review_pending"]["enabled"] is True
+    assert set(lung["gene_level_review_pending"]["allowed_genes"]) == {
+        "TP53",
+        "ATM",
+        "TSC1",
+        "MSH3",
+        "BRCA2",
+        "MLH1",
+        "PMS2",
+        "BRAF",
+    }
     assert len(lung["reviewed_variant_overrides"]) == 2
     assert lung["blocked_reviewed_variant_overrides"] == []
     notices = {
@@ -228,7 +239,7 @@ def test_enhancer_panel_config_uses_same_request_scoped_drug_policy():
     assert lung_config.approved_drug_rows == []
 
 
-def test_real_targeted_db_and_fixed_table_are_disabled_for_non_crc_panels():
+def test_real_targeted_db_stays_scoped_while_lung_review_overlay_is_visible():
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
     observed = {}
     for panel_id, cancer_type in (
@@ -266,10 +277,13 @@ def test_real_targeted_db_and_fixed_table_are_disabled_for_non_crc_panels():
             assert "西妥昔单抗" in caution
             assert approved_count == expected_approved_counts[panel_id]
 
-    # The exact lung rule is transcript-bound. This lookup deliberately omits
-    # transcript, so neither the exact rule nor the disabled base DB may fire.
-    for lookup, approved_count in observed["lung_329_pdl1"]:
-        assert lookup == ("--", "--", 0.0)
+    # Lung keeps the generic database fail-closed, but its explicit BRAF
+    # gene-level C/D review overlay is intentionally visible and labelled.
+    for (benefit, caution, score), approved_count in observed["lung_329_pdl1"]:
+        assert score == 50.0
+        assert "康奈非尼+贝美替尼（C）" in benefit
+        assert benefit.endswith("【待报告组审】")
+        assert caution == "--"
         assert approved_count == 0
 
     for lookup, approved_count in observed["endometrial_29"]:

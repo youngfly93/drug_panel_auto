@@ -138,10 +138,10 @@ def test_lung588_review_candidate_contract_freezes_default_template(tmp_path):
     assert identity == {
         "panel_id": "lung_588_pdl1",
         "template_id": "lung_588_pdl1_historical_golden_v1",
-        "version": "0.4.0-review.4",
+            "version": "0.5.1-review.5",
         "status": "pilot",
         "filename": "lung_588_pdl1_historical_golden_v1.docx",
-        "sha256": "b37735da11e9c572732522fdccf8f9f85f451b4a6704bb7344476c46489d506d",
+            "sha256": "fe53e15483f7d397ac0507a98a0b9116fce71fe86efad6e8ffdafddf0ac88732",
         "is_default": True,
     }
     assert contract["lifecycle"]["clinical_release_status"] == "blocked"
@@ -362,9 +362,12 @@ def test_lung588_template_is_hardened_and_byte_reproducible(tmp_path):
     context = {
         "patient_name": "SYNTHETIC_PATIENT",
         "sample_id": "SYNTHETIC_CASE",
-        "pdl1_tps": "50",
-        "pdl1_cps": "52",
-        "pdl1_result": "阳性（高表达）",
+            "pdl1_tps": "50",
+            "pdl1_cps": "52",
+            "pdl1_result": "阳性（高表达）",
+            "pdl1_tps_display": "50%",
+            "pdl1_cps_display": "52",
+            "pdl1_result_display": "阳性（高表达）",
         "variants_2_1": [],
         "targeted_drug_tips": [],
         "nccn_results": [],
@@ -728,9 +731,10 @@ def test_lung588_explicit_classes_drive_variant_filter(tmp_path):
     assert config.variant_filter_values == ["Ⅰ类", "Ⅱ类", "Ⅲ类"]
     assert len(config.crc_important_genes) == 588
     assert config.nccn_result_rows == []
-    assert config.immune_positive_genes == set()
-    assert config.immune_negative_genes == set()
-    assert config.immune_hyperprogression_genes == set()
+    assert len(config.immune_positive_rows) == 15
+    assert len(config.immune_negative_rows) == 12
+    assert len(config.immune_hyperprogression_rows) == 8
+    assert config.immune_module_enabled is True
 
 
 def test_lung588_pdl1_form_is_project_scoped_and_optional_for_draft():
@@ -1189,7 +1193,7 @@ def test_lung588_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
     assert result["qa_status"] == "WARN"
     assert result["template_identity"]["template_id"] == ("lung_588_pdl1_historical_golden_v1")
     assert result["template_identity"]["sha256"] == (
-        "b37735da11e9c572732522fdccf8f9f85f451b4a6704bb7344476c46489d506d"
+        "fe53e15483f7d397ac0507a98a0b9116fce71fe86efad6e8ffdafddf0ac88732"
     )
     assert result["report_summary"]["template"]["id"] == ("lung_588_pdl1_historical_golden_v1")
     assert any("PD-L1逐病例结果" in warning for warning in result["warnings"])

@@ -50,6 +50,24 @@ targeted_drug_rules:
     notice: "待报告组审"
   summary_display_scope: "drug_matched_variants"
   summary_display_variant_levels: ["Ⅰ类", "Ⅱ类"]
+  gene_level_review_pending:
+    enabled: true
+    allowed_variant_levels: ["Ⅰ类", "Ⅱ类"]
+    allowed_source_dbs: ["INTERNAL"]
+    allowed_genes: ["TP53", "ATM", "TSC1", "MSH3", "BRCA2", "MLH1", "PMS2", "BRAF"]
+    notice: "待报告组审"
+    fallback_overrides:
+      TSC1:
+        benefit_drugs:
+          - "依维莫司（C）"
+          - "西罗莫司（C）"
+          - "替西罗莫司（C）"
+          - "依维莫司+Buparlisib（C）"
+          - "Sapanisertib（C）"
+        caution_drugs: ["--"]
+      MSH3:
+        benefit_drugs: ["奥拉帕利（D）"]
+        caution_drugs: ["--"]
   overrides: {}
   reviewed_variant_overrides:
     - rule_id: "lung_braf_v600e_regulatory_combinations"
