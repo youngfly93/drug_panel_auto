@@ -138,10 +138,10 @@ def test_lung588_review_candidate_contract_freezes_default_template(tmp_path):
     assert identity == {
         "panel_id": "lung_588_pdl1",
         "template_id": "lung_588_pdl1_historical_golden_v1",
-        "version": "0.5.2-review.5",
+        "version": "0.5.3-review.1",
         "status": "pilot",
         "filename": "lung_588_pdl1_historical_golden_v1.docx",
-        "sha256": "4f61e20d4a2d7a3dc0a28228e06ed85d094a7e2c2c927ee3184e523005590f02",
+        "sha256": "4164ed4851a20330e9b1aea1195501f3786abe88cd435cc57dc9199ecc9becb8",
         "is_default": True,
     }
     assert contract["lifecycle"]["clinical_release_status"] == "blocked"
@@ -1193,7 +1193,7 @@ def test_lung588_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
     assert result["qa_status"] == "WARN"
     assert result["template_identity"]["template_id"] == ("lung_588_pdl1_historical_golden_v1")
     assert result["template_identity"]["sha256"] == (
-        "4f61e20d4a2d7a3dc0a28228e06ed85d094a7e2c2c927ee3184e523005590f02"
+        "4164ed4851a20330e9b1aea1195501f3786abe88cd435cc57dc9199ecc9becb8"
     )
     assert result["report_summary"]["template"]["id"] == ("lung_588_pdl1_historical_golden_v1")
     assert any("PD-L1逐病例结果" in warning for warning in result["warnings"])

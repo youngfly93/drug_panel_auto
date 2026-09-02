@@ -16,7 +16,11 @@ from docx import Document
 from docx.oxml.ns import qn
 
 from build_lung588_historical_golden_template import _set_table_loop_expressions
-from build_lung588_template import _normalize_zip_metadata, _replace_cell_text
+from build_lung588_template import (
+    _normalize_zip_metadata,
+    _remove_explicit_page_break_before,
+    _replace_cell_text,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -118,6 +122,11 @@ def _align_588(document) -> None:
         "chemotherapy_dosage_rows",
         ("{{ row.regimen }}", "{{ row.dosage }}"),
     )
+    _set_or_update_loop(
+        tables[25],
+        "irinotecan_safety_rows",
+        ("{{ row.drug }}", "{{ row.result }}", "{{ row.dose_evaluation }}"),
+    )
     for table in tables[16:49]:
         text = _table_text(table)
         if "{%tr for row in drug_" not in text:
@@ -142,16 +151,17 @@ def _align_588(document) -> None:
             _set_paragraph_text_with_cjk_font(
                 paragraph, "化疗药物小结：{{ chemotherapy_summary_text }}"
             )
-        if (
-            "映射Excel中的药物基因组学明细供报告组评审；当前不自动形成患者级化疗方案"
-            in text
-            or text.startswith("依据病例Excel的CtDrug表生成化疗药物小结")
-        ):
+        if text.startswith("依据病例Excel的CtDrug表生成化疗药物小结"):
             _set_paragraph_text_with_cjk_font(
                 paragraph,
-                "依据病例Excel的CtDrug表生成化疗药物小结、有效性/毒副作用表、"
-                "方案用法表及分级位点附录，供报告组评审。",
+                "分析与化疗药物相关的基因变异，评估化疗的敏感性或毒副作用，"
+                "为化疗方案的制订提供参考。",
             )
+        if text.startswith("伊立替康剂量参考（未启用"):
+            _set_paragraph_text_with_cjk_font(paragraph, "伊立替康剂量安全性评价")
+
+    _remove_explicit_page_break_before(document, "2.靶向药物相关检测结果")
+    _remove_explicit_page_break_before(document, "肺癌诊疗知识")
 
 
 def _replace_package_text(document, replacements: tuple[tuple[str, str], ...]) -> None:

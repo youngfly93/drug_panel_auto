@@ -1,13 +1,14 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "drugs"
-version: "0.3.0"
-updated: "2026-09-01"
+version: "0.4.0"
+updated: "2026-09-02"
 status: "pilot"
 description: >
-  Exact-event lung treatment policy. Two exact events yield three evidence-
-  bounded treatment combinations during the controlled pilot; broad historical
-  and cross-cancer rows remain disabled.
+  Exact-event lung treatment policy plus gene-level C/D drug rows transcribed
+  from paired historical lung finals for report-group review. All gene-level
+  rows remain visibly marked pending review; broad cross-cancer fallback stays
+  disabled.
 
 governance:
   schema_version: "1.0"
@@ -54,7 +55,19 @@ targeted_drug_rules:
     enabled: true
     allowed_variant_levels: ["Ⅰ类", "Ⅱ类"]
     allowed_source_dbs: ["INTERNAL"]
-    allowed_genes: ["TP53", "ATM", "TSC1", "MSH3", "BRCA2", "MLH1", "PMS2", "BRAF"]
+    allowed_genes:
+      - "TP53"
+      - "ATM"
+      - "TSC1"
+      - "MSH3"
+      - "BRCA2"
+      - "MLH1"
+      - "PMS2"
+      - "BRAF"
+      - "PTEN"
+      - "TSC2"
+      - "BRIP1"
+      - "PIK3CA"
     notice: "待报告组审"
     fallback_overrides:
       TSC1:
@@ -67,6 +80,94 @@ targeted_drug_rules:
         caution_drugs: ["--"]
       MSH3:
         benefit_drugs: ["奥拉帕利（D）"]
+        caution_drugs: ["--"]
+      PTEN:
+        benefit_drugs:
+          - "替西罗莫司（C）"
+          - "尼拉帕利（C）"
+          - "他拉唑帕利（C）"
+          - "依维莫司（C）"
+          - "依维莫司+培唑帕尼（C）"
+          - "Buparlisib（C）"
+          - "Taselisib（C）"
+          - "盐酸可泮利塞（C）"
+          - "Serabelisib（C）"
+          - "阿培利司（C）"
+          - "奥拉帕利（C）"
+          - "卡匹色替（C）"
+          - "GSK2636771（C）"
+          - "AZD8186（C）"
+          - "Dactolisib（D）"
+        caution_drugs: ["--"]
+      TSC2:
+        benefit_drugs:
+          - "依维莫司（C）"
+          - "西罗莫司（C）"
+          - "替西罗莫司（C）"
+          - "依维莫司+Buparlisib（C）"
+          - "Sapanisertib（C）"
+        caution_drugs: ["--"]
+        part3_historical_event:
+          c_hgvs: "c.2647C>T"
+          p_hgvs: "p.Q883*"
+          reference_granularity: "event_block_not_drug_specific"
+          source_reference_docx_sha256: >-
+            4754ededa67eeeef1b716dd7fb9e907d03c8fd79904a64f48bd271119c9a401b
+          source_refs:
+            - "PMID:19966866"
+            - "PMID:25724664"
+            - "PMID:26795955"
+            - "PMID:27751352"
+            - "PMID:29720580"
+            - "NCT01470209"
+            - "NCT02465060"
+            - "NCT03297606"
+            - "NCT03817515"
+            - "NCT05103358"
+      BRIP1:
+        benefit_drugs:
+          - "奥拉帕利（C）"
+          - "芦卡帕利（C）"
+          - "尼拉帕利（C）"
+          - "他拉唑帕利（C）"
+          - "盐酸可泮利塞+奥拉帕利+度伐利尤单抗（C）"
+          - "奥拉帕利+帕博利珠单抗（C）"
+          - "帕米帕利+替雷利珠单抗（C）"
+          - "芦卡帕利+阿替利珠单抗（C）"
+        caution_drugs: ["--"]
+        part3_historical_event:
+          c_hgvs: "c.2142G>A"
+          p_hgvs: "p.W714*"
+          reference_granularity: "event_block_not_drug_specific"
+          source_reference_docx_sha256: >-
+            4754ededa67eeeef1b716dd7fb9e907d03c8fd79904a64f48bd271119c9a401b
+          source_refs:
+            - "PMID:19935797"
+            - "NCT03207347"
+            - "NCT03377556"
+            - "NCT03842228"
+            - "NCT04042831"
+            - "NCT04171700"
+            - "NCT04276376"
+            - "NCT04633902"
+            - "NCT04985721"
+      PIK3CA:
+        benefit_drugs:
+          - "依维莫司（C）"
+          - "西罗莫司（C）"
+          - "替西罗莫司（C）"
+          - "阿培利司（C）"
+          - "盐酸可泮利塞（C）"
+          - "培唑帕尼+依维莫司（C）"
+          - "Buparlisib（C）"
+          - "Taselisib（C）"
+          - "Serabelisib（C）"
+          - "伊那利塞（C）"
+          - "伊那利塞+哌柏西利（C）"
+          - "RLY-2608（C）"
+          - "卡匹色替（C）"
+          - "WX390（C）"
+          - "Dactolisib（D）"
         caution_drugs: ["--"]
   overrides: {}
   reviewed_variant_overrides:

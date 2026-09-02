@@ -56,7 +56,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阴性",
         "tmb": 0,
         "msi": "MSS",
-        "expected_targeted_drug_count": 0,
+        "expected_targeted_drug_count": 1,
         "variants": [
             _variant(
                 "TP53",
@@ -98,7 +98,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（低表达）",
         "tmb": 9.9,
         "msi": "MSS",
-        "expected_targeted_drug_count": 0,
+        "expected_targeted_drug_count": 1,
         "variants": [
             _variant(
                 "BRAF",
@@ -182,7 +182,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         "result": "阳性（低表达）",
         "tmb": 6.3,
         "msi": "MSS",
-        "expected_targeted_drug_count": 0,
+        "expected_targeted_drug_count": 12,
         "variants": [
             _variant(
                 "TP53",
@@ -403,7 +403,7 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
         context = result.get("context") or {}
         targeted_count = len(context.get("targeted_drug_tips") or [])
         if targeted_count != scenario["expected_targeted_drug_count"]:
-            failures.append("exact_targeted_drug_count_mismatch")
+            failures.append("targeted_drug_count_mismatch")
         if not context.get("gene_knowledge_sections"):
             failures.append("part3_sections_missing")
 

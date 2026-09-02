@@ -6,7 +6,7 @@ source:
   type: "historical_comprehensive_review_template"
   template_id: "lung_329_pdl1_golden_template_v2"
   template_path: "panels/lung_329_pdl1/templates/lung_329_pdl1_golden_template_v2.docx"
-  template_sha256: "c5296997e9c53d95cafae1cc2f21f9f6379347f8d30a10ca91a17473c028204a"
+  template_sha256: "e71f700660f732a0fff0a1df40b48fd28e56f35ca840d9614312adb2665610c8"
   extraction_anchor: "Gene List for MLseq"
   verified_gene_count: 329
 contract:

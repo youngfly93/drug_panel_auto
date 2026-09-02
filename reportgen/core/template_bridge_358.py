@@ -2877,7 +2877,9 @@ def _build_nccn_and_immune_fields(
     # only the final result column is derived from the current case.
     def _matching_variant_text(gene: str, match: str) -> str:
         value = _format_result(gene, match)
-        return "" if value in {"", "--", "未检出"} else value
+        if value in {"", "--", "未检出"}:
+            return ""
+        return value.replace("，", ",").replace(", ", ",")
 
     def _pattern_variant_text(gene: str, patterns: List[str]) -> str:
         matched: List[str] = []
@@ -2891,7 +2893,7 @@ def _build_nccn_and_immune_fields(
             c_hgvs = str(variant.get("cHGVS") or "").strip()
             p_hgvs = str(variant.get("pHGVS") or "").strip()
             if c_hgvs and p_hgvs and p_hgvs not in {"--", "*"}:
-                matched.append(f"{c_hgvs}，{p_hgvs}")
+                matched.append(f"{c_hgvs},{p_hgvs}")
             elif c_hgvs:
                 matched.append(c_hgvs)
         return "\n".join(matched)
@@ -2905,7 +2907,7 @@ def _build_nccn_and_immune_fields(
             met = _matching_variant_text("MET", "扩增")
             egfr = _matching_variant_text("EGFR", "突变")
             if met and egfr:
-                return f"检出 MET：{met}\nEGFR：{egfr}"
+                return f"MET：{met}\nEGFR：{egfr}"
             return missing
 
         if mode == "met_ex14_or_amp":
@@ -2914,7 +2916,7 @@ def _build_nccn_and_immune_fields(
             )
             met_amp = _matching_variant_text("MET", "扩增")
             found = [value for value in (met_ex14, met_amp) if value]
-            return f"检出 {'；'.join(found)}" if found else missing
+            return "；".join(found) if found else missing
 
         patterns = [
             str(pattern).strip()
@@ -2931,7 +2933,7 @@ def _build_nccn_and_immune_fields(
             )
             if value:
                 found.append(f"{gene}：{value}" if len(genes) > 1 else value)
-        return f"检出 {'；'.join(found)}" if found else missing
+        return "；".join(found) if found else missing
 
     lung_guideline_rows: List[Dict[str, str]] = []
     for row in pc.lung_guideline_drug_rows:
@@ -3751,6 +3753,74 @@ def _build_lung_chemotherapy_tables(
         else "经分析，未形成可优先选择的化疗方案。"
     )
     report_data.set_field("chemotherapy_summary_text", summary)
+
+    irinotecan_rule = rule.get("irinotecan_safety") or {}
+    if isinstance(irinotecan_rule, dict) and irinotecan_rule.get("enabled"):
+        selectors = irinotecan_rule.get("selectors") or {}
+
+        def genotype_for(selector_name: str) -> str:
+            selector = selectors.get(selector_name) or {}
+            expected_gene = str(selector.get("gene") or "").strip().upper()
+            expected_site = str(selector.get("site") or "").strip().lower()
+            values: List[str] = []
+            for row in ctdrug_rows:
+                drug = _ctdrug_value(row, ("药物", "Drug", "药物名称"))
+                if "伊立替康" not in drug and "irinotecan" not in drug.lower():
+                    continue
+                gene = _ctdrug_value(row, ("检测基因", "Gene", "基因")).upper()
+                site = _ctdrug_value(row, ("检测位点", "Site", "位点")).lower()
+                if gene != expected_gene or site != expected_site:
+                    continue
+                genotype = _ctdrug_value(
+                    row,
+                    ("基因型", "Genotype", "genotype"),
+                )
+                if genotype and genotype not in values:
+                    values.append(genotype)
+            # Duplicate CtDrug rows are common. Conflicting calls must not be
+            # collapsed into a patient-level dose statement.
+            return values[0] if len(values) == 1 else ""
+
+        star28 = genotype_for("star28")
+        star6 = genotype_for("star6")
+        matched_rule = next(
+            (
+                item
+                for item in irinotecan_rule.get("historical_rules") or []
+                if isinstance(item, dict)
+                and str(item.get("star28") or "").strip() == star28
+                and str(item.get("star6") or "").strip() == star6
+            ),
+            None,
+        )
+        result = str(
+            (matched_rule or {}).get("result")
+            or irinotecan_rule.get("unsupported_result")
+            or "UGT1A1分型未形成历史剂量建议"
+        )
+        dose_evaluation = str(
+            (matched_rule or {}).get("dose_evaluation")
+            or irinotecan_rule.get("unsupported_dose_evaluation")
+            or "未形成剂量建议"
+        )
+        drug_display = str(
+            irinotecan_rule.get("drug_display") or "伊立替康剂量安全性"
+        )
+        report_data.set_field("ugt1a1_star28_genotype", star28 or "未提供")
+        report_data.set_field("ugt1a1_star6_genotype", star6 or "未提供")
+        report_data.set_table(
+            "irinotecan_safety_rows",
+            [
+                {
+                    "drug": drug_display,
+                    "result": result,
+                    "dose_evaluation": dose_evaluation,
+                    "药物": drug_display,
+                    "检测结果": result,
+                    "剂量评价": dose_evaluation,
+                }
+            ],
+        )
     report_data.set_table("chemotherapy_predictions", prediction_rows)
     report_data.set_table("chemotherapy_regimen_predictions", regimen_rows)
     report_data.set_table("chemotherapy_dosage_rows", dosage_rows)
@@ -4380,6 +4450,145 @@ def enhance_report_data(
                     variants=drug_variants
                 )
             )
+
+            # Some lung historical-final rows are deliberately absent from the
+            # generic drug KB. For exact events with an explicitly registered
+            # historical source, retain a small review-only Part-3 bridge so a
+            # visible Part-2 drug row is not left without its event and source
+            # trail. This does not generalize the source to other variants.
+            pending_policy = (
+                targeted_drug_rules.get("gene_level_review_pending")
+                if isinstance(targeted_drug_rules, dict)
+                else None
+            )
+            pending_fallbacks = (
+                pending_policy.get("fallback_overrides")
+                if isinstance(pending_policy, dict)
+                and isinstance(pending_policy.get("fallback_overrides"), dict)
+                else {}
+            )
+            reviewed_overrides = (
+                targeted_drug_rules.get("reviewed_variant_overrides") or []
+                if isinstance(targeted_drug_rules, dict)
+                else []
+            )
+
+            def _source_reference_labels(raw_refs: Any) -> List[str]:
+                labels: List[str] = []
+                for raw_ref in raw_refs or []:
+                    if isinstance(raw_ref, str):
+                        label = raw_ref.strip()
+                    elif isinstance(raw_ref, dict):
+                        ref_type = str(raw_ref.get("type") or "").strip().lower()
+                        ref_id = str(raw_ref.get("id") or "").strip()
+                        if ref_type == "pubmed" and ref_id:
+                            label = f"PMID:{ref_id}"
+                        elif ref_type in {"clinical_trial", "clinicaltrials"}:
+                            label = ref_id
+                        else:
+                            label = ""
+                    else:
+                        label = ""
+                    if label and label not in labels:
+                        labels.append(label)
+                return labels
+
+            def _visible_drug_text(value: Any) -> str:
+                return "\n".join(
+                    line.strip()
+                    for line in str(value or "").splitlines()
+                    if line.strip() and not line.strip().startswith("【")
+                )
+
+            covered_drug_genes = {
+                str(section.get("gene") or "").strip().upper()
+                for section in drug_analysis_sections
+                if isinstance(section, dict)
+            }
+            for variant in drug_variants:
+                gene = str(variant.get("gene") or "").strip().upper()
+                if not gene or gene in covered_drug_genes:
+                    continue
+                c_hgvs = str(variant.get("cHGVS") or "").strip()
+                p_hgvs = str(variant.get("pHGVS") or "").strip()
+                benefit = _visible_drug_text(variant.get("benefit_drugs"))
+                caution = _visible_drug_text(variant.get("caution_drugs"))
+                if not benefit and not caution:
+                    continue
+
+                source_refs: List[str] = []
+                fallback = pending_fallbacks.get(gene) or {}
+                historical_event = (
+                    fallback.get("part3_historical_event")
+                    if isinstance(fallback, dict)
+                    else None
+                )
+                if isinstance(historical_event, dict):
+                    event_c = str(historical_event.get("c_hgvs") or "").strip()
+                    event_p = str(historical_event.get("p_hgvs") or "").strip()
+                    if event_c == c_hgvs and event_p == p_hgvs:
+                        source_refs = _source_reference_labels(
+                            historical_event.get("source_refs")
+                        )
+
+                if not source_refs:
+                    for override in reviewed_overrides:
+                        if not isinstance(override, dict):
+                            continue
+                        if str(override.get("gene") or "").strip().upper() != gene:
+                            continue
+                        if str(override.get("c_hgvs") or "").strip() != c_hgvs:
+                            continue
+                        override_p = str(override.get("p_hgvs") or "").strip()
+                        if override_p and override_p != p_hgvs:
+                            continue
+                        source_refs = _source_reference_labels(
+                            override.get("source_refs")
+                        )
+                        break
+                if not source_refs:
+                    continue
+
+                build_lead = getattr(
+                    getattr(gene_knowledge_provider, "_mutation_desc_gen", None),
+                    "build_variant_lead",
+                    None,
+                )
+                lead = (
+                    build_lead(gene, c_hgvs, p_hgvs)
+                    if callable(build_lead)
+                    else ""
+                )
+                if not lead:
+                    locus = f"{c_hgvs}，{p_hgvs}" if p_hgvs else c_hgvs
+                    lead = f"该样本检出{gene}基因{locus}变异。"
+                drug_name = benefit or caution
+                direction = "benefit" if benefit else "caution"
+                drug_analysis_sections.append(
+                    {
+                        "gene": gene,
+                        "c_hgvs": c_hgvs,
+                        "p_hgvs": p_hgvs,
+                        "variant": (
+                            f"{c_hgvs}，{p_hgvs}" if p_hgvs else c_hgvs
+                        ),
+                        "drug_name": f"{drug_name}\n【待报告组审】",
+                        "drug_type": direction,
+                        "drug_type_cn": (
+                            "潜在获益药物" if direction == "benefit" else "慎用药物"
+                        ),
+                        "relation": (
+                            f"{lead}上述药物类别来自配套历史终版的事件块转录，"
+                            "当前仅作为报告组评审内容展示。"
+                        ),
+                        "clinical": (
+                            "历史终版事件块登记参考标识（非药物逐项对应）："
+                            + "、".join(source_refs)
+                            + "。上述药物类别、证据等级及病例级适用性待报告组审。"
+                        ),
+                    }
+                )
+                covered_drug_genes.add(gene)
             report_data.set_table("drug_analysis_sections", drug_analysis_sections)
 
             # 拆分为获益/负相关两组（模板中分别循环）

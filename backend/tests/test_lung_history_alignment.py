@@ -36,6 +36,7 @@ from reportgen.core.template_bridge_358 import (
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
 from reportgen.panels.loader import load_panel_package
+from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 
 GUIDELINE_KEYS = [
     "EGFR",
@@ -128,6 +129,8 @@ def test_lung_comprehensive_panels_share_historical_fixed_tables(panel_id):
     assert len(config.chemotherapy_rule["prediction_rows"]) == 27
     assert len(config.chemotherapy_rule["regimen_rows"]) == 22
     assert len(config.chemotherapy_rule["dosage_rows"]) == 11
+    assert config.lung_guideline_drug_rows[1]["undetected_result"] == "未见变异"
+    assert config.chemotherapy_rule["irinotecan_safety"]["enabled"] is True
 
 
 @pytest.mark.parametrize("panel_id", ["lung_588_pdl1", "lung_329_pdl1"])
@@ -268,7 +271,8 @@ def test_lung_guideline_results_are_derived_while_fixed_copy_is_preserved(tmp_pa
     rows = data.get_table("lung_guideline_drug_results")
     assert len(rows) == 10
     by_key = {row["key"]: row for row in rows}
-    assert "c.1799T>A，p.V600E" in by_key["BRAF"]["检测结果"]
+    assert by_key["BRAF"]["检测结果"] == "c.1799T>A,p.V600E"
+    assert not by_key["BRAF"]["检测结果"].startswith("检出 ")
     assert "融合:EML4-ALK" in by_key["ALK"]["检测结果"]
     assert by_key["EGFR"]["检测结果"] == "未见变异"
     assert "奥希替尼" in by_key["EGFR"]["本癌种相关治疗药物"]
@@ -327,21 +331,23 @@ def test_lung_absent_gene_baseline_has_no_crc_rows(panel_id):
     ]
 
     assert genes == [
-        "ALK",
-        "EGFR",
-        "KRAS",
-        "MET",
-        "RET",
-        "ROS1",
-        "NTRK1",
-        "NTRK2",
-        "NTRK3",
-        "ERBB2",
-        "BRAF",
+        "MLH1",
+        "PMS2",
         "NOTCH1",
         "MSH2",
         "MSH6",
+        "NTRK1",
         "PIK3CA",
+        "ALK",
+        "BRAF",
+        "EGFR",
+        "ERBB2",
+        "KRAS",
+        "MET",
+        "NTRK2",
+        "NTRK3",
+        "RET",
+        "ROS1",
     ]
     assert not {"FBXW7", "NF1", "NRAS", "SMAD4", "SMARCA4", "TCF7L2"} & set(
         genes
@@ -457,6 +463,105 @@ def test_ct1000_explicit_summary_is_preferred_and_reproduces_history(tmp_path):
     }
     assert data.get_field("chemotherapy_summary_text") == (
         "经分析，可考虑优先选择的化疗方案有吉西他滨单药方案。"
+    )
+
+
+@pytest.mark.parametrize(
+    ("star28", "expected_result", "expected_dose"),
+    [
+        ("6TA/6TA", "UGT1A1基因型为6TA/6TA", "正常剂量使用"),
+        ("6TA/7TA", "UGT1A1基因型为6TA/7TA", "减少剂量使用"),
+    ],
+)
+def test_irinotecan_safety_uses_exact_ugt1a1_star28_star6_history(
+    tmp_path,
+    star28,
+    expected_result,
+    expected_dose,
+):
+    source_path = tmp_path / "SYNTHETIC-LUNG.xlsx"
+    source_path.write_bytes(b"synthetic")
+    source = ExcelDataSource(
+        file_path=str(source_path),
+        table_data={
+            "CtDrug": [
+                {
+                    "药物": "伊立替康（irinotecan）",
+                    "检测基因": "UGT1A1",
+                    "检测位点": "rs8175347",
+                    "基因型": star28,
+                },
+                # Duplicate rows from CtDrug must collapse deterministically.
+                {
+                    "药物": "伊立替康（irinotecan）",
+                    "检测基因": "UGT1A1",
+                    "检测位点": "rs8175347",
+                    "基因型": star28,
+                },
+                {
+                    "药物": "伊立替康（irinotecan）",
+                    "检测基因": "UGT1A1",
+                    "检测位点": "rs4148323",
+                    "基因型": "GG",
+                },
+            ]
+        },
+        sheet_names=["CtDrug"],
+    )
+    data = ReportData()
+
+    _build_lung_chemotherapy_tables(data, source, _panel_config("lung_588_pdl1"))
+
+    assert data.get_field("ugt1a1_star28_genotype") == star28
+    assert data.get_field("ugt1a1_star6_genotype") == "GG"
+    assert data.get_table("irinotecan_safety_rows") == [
+        {
+            "drug": "伊立替康剂量安全性",
+            "result": expected_result,
+            "dose_evaluation": expected_dose,
+            "药物": "伊立替康剂量安全性",
+            "检测结果": expected_result,
+            "剂量评价": expected_dose,
+        }
+    ]
+
+
+@pytest.mark.parametrize("panel_id", ["lung_588_pdl1", "lung_329_pdl1"])
+def test_lung_gene_level_pending_drugs_cover_historical_case_c(panel_id):
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    rules = load_targeted_drug_rule_context(
+        load_panel_package(panel_id, project_root=ROOT)
+    )
+    expected = {
+        "PTEN": "替西罗莫司（C）",
+        "TSC2": "西罗莫司（C）",
+        "BRIP1": "芦卡帕利（C）",
+        "PIK3CA": "阿培利司（C）",
+    }
+
+    for gene, expected_drug in expected.items():
+        benefit, caution, score = mapper._lookup_targeted_drugs_for_variant(
+            gene,
+            c_point="c.1A>T",
+            p_point="p.K1N",
+            variant_level="Ⅱ类",
+            cancer_type="肺癌",
+            targeted_drug_rules=rules,
+        )
+        assert expected_drug in benefit
+        assert benefit.endswith("【待报告组审】")
+        assert caution == "--"
+        assert score == 50.0
+
+
+def test_lung_chemotherapy_dosage_matches_historical_final_copy():
+    rows = _panel_config("lung_588_pdl1").chemotherapy_rule["dosage_rows"]
+    by_regimen = {row["regimen"]: row["dosage"] for row in rows}
+
+    assert "；" not in "".join(by_regimen.values())
+    assert by_regimen["DP（多西他赛+顺铂）"].endswith(
+        "顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 "
+        "或根据患者耐受状况，总剂量分 3-5 日输注。"
     )
 
 
@@ -619,7 +724,7 @@ def test_batch_missing_pdl1_displays_explicit_not_provided():
     assert data.get_field("pdl1_result_display") == "未提供"
 
 
-def test_lung329_template_has_panel_specific_gene_count_and_cjk_notice_font():
+def test_lung329_template_has_panel_specific_gene_count_and_no_chemo_placeholder():
     document = Document(
         ROOT / "panels/lung_329_pdl1/templates/lung_329_pdl1_golden_template_v2.docx"
     )
@@ -627,13 +732,38 @@ def test_lung329_template_has_panel_specific_gene_count_and_cjk_notice_font():
 
     assert "与肿瘤密切相关的329个基因进行检测" in full_text
     assert "与肿瘤密切相关的588个基因进行检测" not in full_text
-    notice = next(
+    introduction = next(
         paragraph
         for paragraph in document.paragraphs
-        if paragraph.text.startswith("依据病例Excel的CtDrug表生成化疗药物小结")
+        if paragraph.text.startswith("分析与化疗药物相关的基因变异")
     )
-    assert notice.runs
-    assert notice.runs[0]._element.rPr.rFonts.get(qn("w:eastAsia")) == "微软雅黑"
+    assert introduction.runs
+    assert introduction.runs[0]._element.rPr.rFonts.get(qn("w:eastAsia")) == (
+        "微软雅黑"
+    )
+    assert "依据病例Excel的CtDrug表生成" not in full_text
+    assert "报告组评审中" not in full_text
+    assert "伊立替康剂量参考（未启用" not in full_text
+    assert "伊立替康剂量安全性评价" in full_text
+
+    marker = "{%tr for row in irinotecan_safety_rows %}"
+    assert any(
+        marker in "\n".join(cell.text for row in table.rows for cell in row.cells)
+        for table in document.tables
+    )
+
+    for heading_text in ("2.靶向药物相关检测结果", "肺癌诊疗知识"):
+        heading = next(
+            paragraph
+            for paragraph in document.paragraphs
+            if paragraph.text.strip() == heading_text
+        )
+        previous = heading._p.getprevious()
+        assert previous is not None
+        assert not any(
+            node.get(qn("w:type")) == "page"
+            for node in previous.iter(qn("w:br"))
+        )
 
 
 def test_batch_failure_before_context_returns_a_serializable_failure(tmp_path):

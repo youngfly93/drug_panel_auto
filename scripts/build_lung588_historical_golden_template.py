@@ -74,7 +74,7 @@ REVIEW_CANDIDATE_CONTRACT = (
     / "review_baselines"
     / "lung588_historical_review_candidate_v1.yaml"
 )
-TEMPLATE_VERSION = "0.5.2-review.5"
+TEMPLATE_VERSION = "0.5.3-review.1"
 EXPECTED_REPAIRED_SOURCE_SHA256 = (
     "e9cde046db0a93a5b33f13961ff7be25fcce9644a6682b7c132ca9e3604dbb96"
 )
@@ -617,8 +617,8 @@ def _replace_introductory_copy(document: DocumentObject) -> None:
             "分析样本基因变异并展示当前规则输出；报告组需逐事件复核后方可形成正式结论。"
         ),
         "分析与化疗药物相关的基因变异，评估化疗的敏感性或毒副作用，为化疗方案的制订提供参考。": (
-            "依据病例Excel的CtDrug表生成化疗药物小结、有效性/毒副作用表、"
-            "方案用法表及分级位点附录，供报告组评审。"
+            "分析与化疗药物相关的基因变异，评估化疗的敏感性或毒副作用，"
+            "为化疗方案的制订提供参考。"
         ),
     }
     for old, new in replacements.items():
@@ -779,6 +779,7 @@ def _validate_template(
         "{%tr for row in chemotherapy_predictions %}",
         "{%tr for row in chemotherapy_regimen_predictions %}",
         "{%tr for row in chemotherapy_dosage_rows %}",
+        "{%tr for row in irinotecan_safety_rows %}",
         "{%tr for row in hla %}",
         "__PART3_MARKER__",
         "__PDL1_CASE_IMAGE__",
@@ -962,9 +963,10 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
     )
     for table_index, collection in DRUG_DETAIL_BINDINGS:
         _set_drug_detail_loop(source_tables[table_index], collection)
-    _neutralize_table(
+    _set_table_loop_expressions(
         source_tables[26],
-        ("伊立替康剂量安全性", "报告组评审中", "当前不自动输出剂量调整结论"),
+        "irinotecan_safety_rows",
+        ("{{ row.drug }}", "{{ row.result }}", "{{ row.dose_evaluation }}"),
     )
     for table_index in (33, 34):
         title = source_tables[table_index].rows[0].cells[0].text.strip()
@@ -1075,10 +1077,12 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
     )
     _replace_paragraph_text(
         _body_paragraph(document, "v 伊立替康用药剂量参考"),
-        "伊立替康剂量参考（未启用，等待当前指南与药物基因组学复核）",
+        "伊立替康剂量安全性评价",
     )
     _remove_explicit_page_break_before(document, "具体的用药方案如下：")
     _remove_explicit_page_break_before(document, "5. 检测结果说明")
+    _remove_explicit_page_break_before(document, "2.靶向药物相关检测结果")
+    _remove_explicit_page_break_before(document, "肺癌诊疗知识")
     _collapse_between(
         document,
         "第三部分：基因变异及相应靶向/免疫药物解析",

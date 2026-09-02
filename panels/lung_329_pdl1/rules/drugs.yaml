@@ -1,12 +1,12 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 rule_id: "drugs"
-version: "0.5.1"
-updated: "2026-09-01"
+version: "0.5.2"
+updated: "2026-09-02"
 status: "pilot"
 description: >
-  Lung329 inherits only the exact-event, context-bounded pilot rules from the
-  lung588 knowledge source. Broad historical and cross-cancer rows stay closed.
+  Lung329 inherits the exact-event and explicitly registered gene-level C/D
+  review rows from the lung588 source. Broad cross-cancer fallback stays closed.
 
 drug_rules:
   approved_drug_rows_source: "none"
