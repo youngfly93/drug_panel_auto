@@ -4209,7 +4209,7 @@ def enhance_report_data(
     _compact_drug_display_tables(
         report_data,
         max_items=pc.drug_display_max_items,
-        blank_repeated_gene=pc.panel_id in {"lung_329_pdl1", "lung_588_pdl1"},
+        blank_repeated_gene=bool(pc.lung_guideline_drug_rows),
     )
 
     report_content_cfg = report_data.get_field("report_content")
