@@ -2830,6 +2830,7 @@ def _build_nccn_and_immune_fields(
     # ===== T[5] NCCN 检测基因表 =====
     nccn_table_rows: List[Dict[str, str]] = []
     previous_nccn_gene = ""
+    blank_repeated_nccn_gene = bool(pc.lung_guideline_drug_rows)
     for row in nccn_rows:
         key = str(row.get("key") or "").strip()
         genes = row.get("genes") or []
@@ -2855,7 +2856,11 @@ def _build_nccn_and_immune_fields(
             val = _first_detected(results, "未检出")
         report_data.set_field(f"nccn_{key}", val)
         display_gene = _display_label(row)
-        visible_gene = "" if display_gene == previous_nccn_gene else display_gene
+        visible_gene = (
+            ""
+            if blank_repeated_nccn_gene and display_gene == previous_nccn_gene
+            else display_gene
+        )
         previous_nccn_gene = display_gene
         nccn_table_rows.append(
             _table_row(

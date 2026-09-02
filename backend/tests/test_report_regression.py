@@ -416,6 +416,43 @@ def test_nccn_result_rows_are_driven_by_guideline_rules(tmp_path):
     ]
 
 
+def test_repeated_nccn_gene_labels_are_blank_only_for_lung_tables(tmp_path):
+    excel_data = _excel(tmp_path, variations=[])
+    rows = [
+        {"key": "EGFR_EX19", "genes": ["EGFR"], "match": "外显子19"},
+        {"key": "EGFR_EX21", "genes": ["EGFR"], "match": "外显子21"},
+    ]
+
+    crc_data = ReportData()
+    _build_nccn_and_immune_fields(
+        crc_data,
+        [],
+        excel_data,
+        panel_config=PanelConfig(nccn_result_rows=rows),
+    )
+    assert [row["gene"] for row in crc_data.get_table("nccn_results")] == [
+        "EGFR",
+        "EGFR",
+    ]
+
+    lung_data = ReportData()
+    _build_nccn_and_immune_fields(
+        lung_data,
+        [],
+        excel_data,
+        panel_config=PanelConfig(
+            nccn_result_rows=rows,
+            lung_guideline_drug_rows=[
+                {"key": "EGFR", "genes": ["EGFR"], "display": "EGFR"}
+            ],
+        ),
+    )
+    assert [row["gene"] for row in lung_data.get_table("nccn_results")] == [
+        "EGFR",
+        "",
+    ]
+
+
 def test_grouped_nccn_and_immune_rows_keep_gene_identity_and_vaf_order(tmp_path):
     report_data = ReportData()
     variants = [
