@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 rule_id: "style"
-version: "0.3.0"
-updated: "2026-07-25"
+version: "0.3.1"
+updated: "2026-09-02"
 status: "pilot"
 description: "肺癌329报告DOCX后处理所需的表格样式令牌。"
 
@@ -62,3 +62,11 @@ style:
     item_bold: false
     content_top_padding_pt: 57
     diagnosis_knowledge_label: "肺癌诊疗知识"
+  front_matter:
+    guide_spacer_count: 30
+    # The comprehensive template already carries a next-page section after
+    # the report guide. An additional explicit break can spill onto a blank
+    # page when long cover fields consume the remaining first-page space.
+    insert_page_break: false
+    remove_page_break_after_text_prefixes:
+      - "备注：正体为国内大型三甲医院在临床中用到的化疗方案"
