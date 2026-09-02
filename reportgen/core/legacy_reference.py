@@ -41,6 +41,13 @@ MSI_RESULT_RE = re.compile(
     r"(?P<msil>低度不稳定[（(]MSI-L[）)]|低度不稳定型[，,]?MSI-L)"
     r")"
 )
+PDL1_RESULT_RE = re.compile(
+    r"本次\s*PD\s*[-‐‑‒–—]?\s*L1\s*免疫组化检测结果[:：]\s*"
+    r"TPS\s*(?P<tps>\d+(?:\.\d+)?)\s*%?\s*[，,]\s*"
+    r"CPS\s*(?P<cps>\d+(?:\.\d+)?)\s*[，,]\s*"
+    r"(?P<result>[^。；;\n]+)",
+    re.IGNORECASE,
+)
 GENE_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}\b")
 PATIENT_NAME_FIELD_RE = re.compile(
     r"(?:患者姓名|受检者姓名|姓名|委托人)\s*[:：]?\s*([\u4e00-\u9fff·]{2,8})"
@@ -281,6 +288,7 @@ def _extract_features(text: str, *, tables: Iterable[Mapping[str, Any]]) -> dict
     drug_variants = _first_int(DRUG_VARIANTS_RE, text)
     tmb_value, tmb_status = _extract_tmb(text)
     msi_status = _extract_msi_status(text)
+    pdl1_tps, pdl1_cps, pdl1_result = _extract_pdl1(text)
     genes = [
         gene
         for gene, _count in Counter(GENE_RE.findall(text)).most_common(20)
@@ -295,9 +303,26 @@ def _extract_features(text: str, *, tables: Iterable[Mapping[str, Any]]) -> dict
         "tmb_value": tmb_value,
         "tmb_status": tmb_status,
         "msi_status": msi_status,
+        "pdl1_tps": pdl1_tps,
+        "pdl1_cps": pdl1_cps,
+        "pdl1_result": pdl1_result,
         "top_gene_tokens": genes[:12],
         "table_shape_counts": dict(sorted(table_shapes.items())),
     }
+
+
+def _extract_pdl1(
+    text: str,
+) -> tuple[Optional[float], Optional[float], Optional[str]]:
+    """Extract the neutral PD-L1 transcription sentence from a report."""
+    match = PDL1_RESULT_RE.search(text)
+    if not match:
+        return None, None, None
+    return (
+        float(match.group("tps")),
+        float(match.group("cps")),
+        match.group("result").strip(),
+    )
 
 
 def _select_representative_snapshots(

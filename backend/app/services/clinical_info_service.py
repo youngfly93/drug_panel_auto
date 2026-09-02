@@ -199,6 +199,10 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
             "pdl1_cps",
             "pdl1_result",
             "pdl1_image_path",
+            "pdl1_assay_profile_id",
+            "pdl1_source_record_id",
+            "pdl1_source_record_date",
+            "pdl1_specimen_id",
             "lung_histology",
             "disease_extent",
             "prior_systemic_therapy",
@@ -212,6 +216,10 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
             "pdl1_cps",
             "pdl1_result",
             "pdl1_image_path",
+            "pdl1_assay_profile_id",
+            "pdl1_source_record_id",
+            "pdl1_source_record_date",
+            "pdl1_specimen_id",
             "lung_histology",
             "disease_extent",
             "prior_systemic_therapy",
@@ -612,7 +620,6 @@ def fill_missing_report_date(values: dict[str, Any]) -> dict[str, Any]:
 
 
 PDL1_IMAGE_PROJECT_TYPES = {"lung_329_pdl1", "lung_588_pdl1"}
-PDL1_CONTROLLED_PROFILE_ID = "legacy_unspecified_ihc_transcription_v1"
 
 
 def apply_pdl1_image_metadata(
@@ -621,11 +628,12 @@ def apply_pdl1_image_metadata(
     *,
     owner_user_id: int,
 ) -> dict[str, Any]:
-    """Derive hidden PD-L1 provenance from a verified case-image upload.
+    """Verify a case-image upload without fabricating its source provenance.
 
-    The browser only supplies TPS, CPS, result and the receipt path.  Source
-    identity fields are rebuilt server-side so a client cannot pair another
-    image's provenance with the current report.
+    A storage receipt proves only which sanitized image was uploaded by the
+    current account.  It is not the original IHC record, its signing date, or
+    its specimen identifier.  Those case-source fields therefore remain
+    explicit user inputs and are never overwritten by upload metadata.
     """
 
     normalized = dict(values or {})
@@ -642,18 +650,17 @@ def apply_pdl1_image_metadata(
         owner_user_id=owner_user_id,
         sample_id=sample_id,
     )
-    uploaded_at = str(metadata.get("uploaded_at") or "").strip()
-    uploaded_date = uploaded_at.split("T", 1)[0] if uploaded_at else ""
     image_id = str(metadata.get("image_id") or "").strip()
     digest = str(metadata.get("sha256") or "").strip()
     normalized.update(
         {
             "pdl1_image_path": str(metadata["resolved_path"]),
-            "pdl1_assay_profile_id": PDL1_CONTROLLED_PROFILE_ID,
-            "pdl1_source_record_id": f"PDL1-IMG-{image_id}-{digest[:12]}",
-            "pdl1_source_record_date": uploaded_date,
-            "pdl1_specimen_id": sample_id,
             "pdl1_image_disposition": "病例专属图像（报告展示）",
+            "pdl1_image_upload_receipt_id": f"PDL1-IMG-{image_id}-{digest[:12]}",
+            "pdl1_image_uploaded_at": str(metadata.get("uploaded_at") or "").strip(),
+            "pdl1_image_bound_sample_id": str(
+                metadata.get("bound_sample_id") or ""
+            ).strip(),
         }
     )
     return normalized

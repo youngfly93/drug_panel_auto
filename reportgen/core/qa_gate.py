@@ -54,6 +54,7 @@ DEFAULT_RUFF_PATHS = (
     "reportgen/knowledge/gene_knowledge.py",
     "reportgen/knowledge/governance.py",
     "reportgen/knowledge/release_gate.py",
+    "reportgen/rules/part3.py",
     "scripts/check_knowledge_release_ready.py",
     "reportgen/panels/loader.py",
     "reportgen/panels/validation.py",

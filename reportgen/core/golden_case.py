@@ -1,9 +1,7 @@
-"""
-Golden case runner for end-to-end report regression checks.
+"""Golden case runner for end-to-end report regression checks.
 
-The golden case deliberately uses a synthetic CRC 358 + MSI workbook. It gives
-the project a reproducible one-command regression target without committing
-real patient source files.
+All fixtures are synthetic.  They provide reproducible release checks without
+committing real patient source files.
 """
 
 from __future__ import annotations
@@ -17,9 +15,11 @@ from typing import Any, Dict, List, Mapping, Optional
 
 import pandas as pd
 from docx import Document
+from PIL import Image, ImageDraw
 
 from reportgen.core.enhancer_registry import get_panel_registry
 from reportgen.core.report_generator import ReportGenerator
+from reportgen.models.excel_data import ExcelDataSource
 from reportgen.utils.artifacts import write_json
 from reportgen.utils.docx_render import render_docx_to_pngs
 
@@ -32,6 +32,12 @@ SUPPORTED_PANELS = {
     "crc_358": "crc_358_msi",
     "crc358": "crc_358_msi",
     "lung_methylation": "lung_methylation",
+    "lung_329": "lung_329_pdl1",
+    "lung329": "lung_329_pdl1",
+    "lung_329_pdl1": "lung_329_pdl1",
+    "lung_588": "lung_588_pdl1",
+    "lung588": "lung_588_pdl1",
+    "lung_588_pdl1": "lung_588_pdl1",
 }
 
 
@@ -51,6 +57,14 @@ class GoldenCaseOptions:
     render_timeout_seconds: int = 120
     render_required: bool = False
     render_tmp_dir: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class GoldenCaseInput:
+    """A fixture path plus optional pre-resolved form-enriched input data."""
+
+    excel_file: Path
+    excel_data: Optional[ExcelDataSource] = None
 
 
 CRC_358_MSI_EXPECTATIONS: Dict[str, Any] = {
@@ -143,6 +157,59 @@ LUNG_METHYLATION_EXPECTATIONS: Dict[str, Any] = {
 }
 
 
+_LUNG_PDL1_REQUIRED_QA_CHECKS = [
+    "template_contract",
+    "rules",
+    "docx_openable",
+    "unrendered_placeholders",
+    "empty_numbered_paragraphs",
+    "toc_page_numbers",
+    "field_provenance",
+    "post_processors",
+    "part3_cross_cancer_residuals",
+    "pipeline",
+]
+
+_LUNG_PDL1_REQUIRED_TEXT = [
+    "第三部分：基因变异及相应靶向/免疫药物解析",
+    "ERBB2",
+    "c.1979G>A",
+    "p.G660D",
+    "德曲妥珠单抗",
+    "【待报告组审】",
+    "TPS 50%，CPS 52",
+    "阳性（高表达）",
+]
+
+LUNG_329_PDL1_EXPECTATIONS: Dict[str, Any] = {
+    "project_type": "lung_329_pdl1",
+    "project_name": "肺癌329基因+PD-L1",
+    "expected_context": {
+        "project_name": "肺癌329基因+PD-L1",
+        "total_variants_count": 1,
+        "drug_related_count": 1,
+        "tmb_status": "H",
+        "msi_status": "MSS",
+    },
+    "required_qa_checks": list(_LUNG_PDL1_REQUIRED_QA_CHECKS),
+    "required_text": ["肺癌329基因+PD-L1", *_LUNG_PDL1_REQUIRED_TEXT],
+}
+
+LUNG_588_PDL1_EXPECTATIONS: Dict[str, Any] = {
+    "project_type": "lung_588_pdl1",
+    "project_name": "肺癌588基因+PD-L1",
+    "expected_context": {
+        "project_name": "肺癌588基因+PD-L1",
+        "total_variants_count": 1,
+        "drug_related_count": 1,
+        "tmb_status": "H",
+        "msi_status": "MSS",
+    },
+    "required_qa_checks": list(_LUNG_PDL1_REQUIRED_QA_CHECKS),
+    "required_text": ["肺癌588基因检测", *_LUNG_PDL1_REQUIRED_TEXT],
+}
+
+
 def run_golden_case(
     options: Optional[GoldenCaseOptions] = None, **kwargs: Any
 ) -> Dict[str, Any]:
@@ -158,7 +225,13 @@ def run_golden_case(
     input_dir.mkdir(parents=True, exist_ok=True)
     report_dir.mkdir(parents=True, exist_ok=True)
 
-    excel_file = case["builder"](input_dir / case["input_filename"])
+    built_input = case["builder"](input_dir / case["input_filename"])
+    if isinstance(built_input, GoldenCaseInput):
+        excel_file = built_input.excel_file
+        excel_data = built_input.excel_data
+    else:
+        excel_file = Path(built_input)
+        excel_data = None
     template_file = _resolve_template_file(opts)
 
     generator = ReportGenerator(
@@ -168,6 +241,7 @@ def run_golden_case(
     )
     generation = generator.generate(
         excel_file=str(excel_file),
+        excel_data=excel_data,
         template_file=str(template_file),
         output_dir=str(report_dir),
         output_filename=case["output_filename"],
@@ -332,6 +406,20 @@ def _golden_case_spec(panel: str) -> Dict[str, Any]:
             "builder": build_lung_methylation_golden_excel,
             "input_filename": "LUNG999001_lung_methylation_golden.xlsx",
             "output_filename": "golden_lung_methylation.docx",
+        }
+    if panel == "lung_329_pdl1":
+        return {
+            "expectations": LUNG_329_PDL1_EXPECTATIONS,
+            "builder": build_lung_329_pdl1_golden_input,
+            "input_filename": "SYN-L329-GOLDEN.xlsx",
+            "output_filename": "golden_lung_329_pdl1.docx",
+        }
+    if panel == "lung_588_pdl1":
+        return {
+            "expectations": LUNG_588_PDL1_EXPECTATIONS,
+            "builder": build_lung_588_pdl1_golden_input,
+            "input_filename": "SYN-L588-GOLDEN.xlsx",
+            "output_filename": "golden_lung_588_pdl1.docx",
         }
     return {
         "expectations": CRC_358_MSI_EXPECTATIONS,
@@ -513,6 +601,167 @@ def build_lung_methylation_golden_excel(path: Path | str) -> Path:
         sites.to_excel(writer, sheet_name="甲基化位点", index=False)
 
     return out
+
+
+def build_lung_329_pdl1_golden_input(path: Path | str) -> GoldenCaseInput:
+    """Create the synthetic report-group golden input for lung 329 + PD-L1."""
+    return _build_lung_pdl1_golden_input(
+        path,
+        panel_id="lung_329_pdl1",
+        project_name="肺癌329基因+PD-L1",
+        sample_id="SYN-L329-GOLDEN",
+    )
+
+
+def build_lung_588_pdl1_golden_input(path: Path | str) -> GoldenCaseInput:
+    """Create the synthetic report-group golden input for lung 588 + PD-L1."""
+    return _build_lung_pdl1_golden_input(
+        path,
+        panel_id="lung_588_pdl1",
+        project_name="肺癌588基因+PD-L1",
+        sample_id="SYN-L588-GOLDEN",
+    )
+
+
+def _build_lung_pdl1_golden_input(
+    path: Path | str,
+    *,
+    panel_id: str,
+    project_name: str,
+    sample_id: str,
+) -> GoldenCaseInput:
+    """Build a deterministic NGS workbook plus explicit synthetic form data."""
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    image_path = out.with_suffix(".pdl1.png")
+    _write_synthetic_pdl1_image(image_path)
+
+    meta = pd.DataFrame(
+        [
+            {
+                "患者姓名": sample_id,
+                "样本编号": sample_id,
+                "报告编号": f"MLJY-{sample_id}",
+                "性别": "男",
+                "年龄": 60,
+                "临床诊断": "肺癌",
+                "肿瘤类型": "肺癌",
+                "样本类型": "组织",
+                "送检医院": "合成验证机构",
+                "项目名称": project_name,
+                "检测项目": project_name,
+                "报告日期": "2026-07-24",
+            }
+        ]
+    )
+    variation = {
+        "ExistIn552": "Ⅰ类",
+        "ExistInsmall588": "Ⅰ类",
+        "Gene_Symbol": "ERBB2",
+        "Transcript": "NM_004448.4",
+        "Chr": "17",
+        "Exon": "17",
+        "cHGVS": "c.1979G>A",
+        "pHGVS_S": "p.G660D",
+        "Mutation_Type": "SNV",
+        "Freq(%)": 8.5,
+    }
+    tmb = pd.DataFrame(
+        [
+            ["TCGA fit", None, None, None],
+            ["SampleTP", "Var_num", "Bed_size", "TMB"],
+            ["tissue", 100, 10_000_000, 10.0],
+        ]
+    )
+    msisensor = pd.DataFrame(
+        [["tumor", 1000, 10, 1.0, "MSS"]],
+        columns=["Sample", "Total", "Unstable", "Percent", "Status"],
+    )
+    hereditary = pd.DataFrame(
+        columns=["Gene_Symbol", "ExistInsmall588", "ExistIn178"]
+    )
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        meta.to_excel(writer, sheet_name="Meta", index=False)
+        pd.DataFrame([variation]).to_excel(
+            writer, sheet_name="Variations", index=False
+        )
+        tmb.to_excel(writer, sheet_name="TMB", index=False, header=False)
+        msisensor.to_excel(writer, sheet_name="Msisensor", index=False)
+        hereditary.to_excel(writer, sheet_name="Hereditary_tumor", index=False)
+
+    form_fields = (
+        "pdl1_tps",
+        "pdl1_cps",
+        "pdl1_result",
+        "pdl1_image_path",
+        "pdl1_assay_profile_id",
+        "pdl1_source_record_id",
+        "pdl1_source_record_date",
+        "pdl1_specimen_id",
+        "pdl1_image_disposition",
+        "lung_histology",
+        "disease_extent",
+        "prior_systemic_therapy",
+        "companion_diagnostic_status",
+    )
+    excel_data = ExcelDataSource(
+        file_path=str(out),
+        single_values={
+            **meta.iloc[0].to_dict(),
+            "癌种": "肺癌",
+            "TMB": 10,
+            "MSI状态": "MSS",
+            "PD-L1 TPS": 50,
+            "PD-L1 CPS": 52,
+            "PD-L1结果": "阳性（高表达）",
+            "PD-L1病例图片": str(image_path),
+            "PD-L1检测方案": "legacy_unspecified_ihc_transcription_v1",
+            "PD-L1原始记录编号": f"SYNTHETIC-IHC-{sample_id}",
+            "PD-L1原始记录日期": "2026-07-24",
+            "PD-L1检测标本标识": f"SYNTHETIC-SPECIMEN-{sample_id}",
+            "PD-L1图像处置": "病例专属图像（报告展示）",
+            "肺癌病理类型": "非小细胞肺癌",
+            "疾病范围": "转移性",
+            "既往系统治疗": "已接受",
+            "伴随诊断适配状态": "已确认符合",
+        },
+        table_data={
+            "Variations": [variation],
+            "TMB": [],
+            "Msisensor": [],
+            "Hereditary_tumor": [],
+        },
+        sheet_names=["Meta", "Variations", "TMB", "Msisensor", "Hereditary_tumor"],
+        metadata={
+            "field_source_overrides": {
+                field: {
+                    "source": "form",
+                    "source_key": field,
+                    "source_detail": "synthetic_golden_case_form",
+                }
+                for field in form_fields
+            },
+            "synthetic_fixture": True,
+            "panel_id": panel_id,
+        },
+    )
+    return GoldenCaseInput(excel_file=out, excel_data=excel_data)
+
+
+def _write_synthetic_pdl1_image(path: Path) -> None:
+    """Write a visibly synthetic image that exercises the media pipeline."""
+    image = Image.new("RGB", (960, 640), "white")
+    draw = ImageDraw.Draw(image)
+    for index in range(72):
+        x = (index * 127 + 41) % 920
+        y = (index * 83 + 29) % 600
+        diameter = 12 + (index * 7) % 22
+        draw.ellipse(
+            (x, y, x + diameter, y + diameter),
+            fill=(110, 75, 145 + (index * 11) % 70),
+        )
+    draw.rectangle((10, 10, 949, 629), outline=(75, 75, 75), width=3)
+    image.save(path, format="PNG", optimize=True)
 
 
 def assert_golden_case_output(

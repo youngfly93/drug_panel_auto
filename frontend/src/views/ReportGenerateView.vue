@@ -188,8 +188,8 @@
           <el-descriptions-item label="大小">{{ (excelStore.upload.file_size_bytes / 1024).toFixed(1) }} KB</el-descriptions-item>
           <el-descriptions-item label="Sheet 数量">{{ excelStore.upload.sheet_names.length }}</el-descriptions-item>
           <el-descriptions-item label="检测项目类型">
-            <el-tag v-if="excelStore.upload.detected_project_type" type="success">
-              {{ excelStore.upload.detected_project_name || excelStore.upload.detected_project_type }}
+            <el-tag v-if="projectType" :type="isManualProjectSelection ? 'warning' : 'success'">
+              {{ selectedProjectDisplayName }}
             </el-tag>
             <el-tag v-else type="warning">未识别</el-tag>
           </el-descriptions-item>
@@ -583,14 +583,12 @@ const disabledProjectTypes = new Set(
 const generationProjectOptions = [
   { label: '结直肠癌301基因+MSI', value: 'crc_301_msi' },
   { label: '结直肠癌358基因+MSI', value: 'crc_358_msi' },
-  { label: '肺癌329基因+PD-L1（单份受控试运行）', value: 'lung_329_pdl1' },
-  { label: '肺癌588基因+PD-L1（单份验证）', value: 'lung_588_pdl1' },
+  { label: '肺癌329基因+PD-L1（报告组评审）', value: 'lung_329_pdl1' },
+  { label: '肺癌588基因+PD-L1（报告组评审）', value: 'lung_588_pdl1' },
   { label: 'MLF基因检测', value: 'mlf_result' },
   { label: '肺癌甲基化', value: 'lung_methylation' },
 ].filter((option) => !disabledProjectTypes.has(option.value))
-const batchGenerationProjectOptions = generationProjectOptions.filter(
-  (option) => !['lung_329_pdl1', 'lung_588_pdl1'].includes(option.value),
-)
+const batchGenerationProjectOptions = generationProjectOptions
 let batchPollTimer: number | null = null
 let singlePollTimer: number | null = null
 
@@ -626,7 +624,22 @@ const selectedTemplateLabel = computed(() => {
   return templateOptions.value.find((option) => option.value === templateName.value)?.label || templateName.value
 })
 
+const selectedProjectDisplayName = computed(
+  () => projectDisplayName(projectType.value) || projectType.value || '项目未识别',
+)
+
+const isManualProjectSelection = computed(() => Boolean(
+  projectType.value
+  && projectType.value !== excelStore.upload?.detected_project_type,
+))
+
+const previewSummaryMatchesSelection = computed(() => Boolean(
+  projectType.value
+  && projectType.value === excelStore.previewSummary?.project_type,
+))
+
 const detectionConfidenceLabel = computed(() => {
+  if (isManualProjectSelection.value) return '人工确认'
   const value = excelStore.upload?.detection_confidence
   if (typeof value !== 'number') return '-'
   return `${Math.round(value * 100)}%`
@@ -717,10 +730,34 @@ const missingRequiredClinicalFields = computed(() => {
   })
 })
 
+const effectiveTmb = computed<Record<string, any>>(() => {
+  const original = excelStore.previewSummary?.biomarkers?.tmb || {}
+  const numericValue = parseTmbNumericValue(original.value, original.summary)
+  if (numericValue === null) return original
+
+  const sampleType = String(
+    form.formData.sample_type
+    || excelStore.singleValues?.sample_type
+    || excelStore.previewSummary?.patient?.sample_type
+    || '组织',
+  )
+  const threshold = sampleType.includes('血') || sampleType.toLowerCase().includes('blood')
+    ? 16
+    : 10
+  const status = numericValue >= threshold ? 'H' : 'L'
+  const direction = status === 'H' ? '高于' : '低于'
+  const displayValue = numericValue.toFixed(1)
+  return {
+    ...original,
+    value: displayValue,
+    status,
+    summary: `${displayValue}mutations/Mb，TMB-${status}\n(本次检测结果${direction}参考值\n${threshold} mutations/Mb)`,
+  }
+})
+
 const productionCheckSubtitle = computed(() => {
-  const project = excelStore.upload?.detected_project_name || excelStore.upload?.detected_project_type || '项目未识别'
   const patient = form.formData.patient_name || excelStore.singleValues?.patient_name || '患者未填写'
-  return `${project} · ${patient}`
+  return `${selectedProjectDisplayName.value} · ${patient}`
 })
 
 const productionCheckCards = computed(() => {
@@ -728,7 +765,6 @@ const productionCheckCards = computed(() => {
   const drugs = excelStore.previewSummary?.drugs || {}
   const biomarkers = excelStore.previewSummary?.biomarkers || {}
   const msi = biomarkers.msi || {}
-  const tmb = biomarkers.tmb || {}
   return [
     {
       label: '患者信息',
@@ -740,13 +776,13 @@ const productionCheckCards = computed(() => {
     },
     {
       label: '项目与模板',
-      value: stringifyValue(excelStore.upload?.detected_project_name || projectType.value),
+      value: selectedProjectDisplayName.value,
       detail: selectedTemplateLabel.value,
     },
     {
       label: '关键结果',
       value: `${stringifyValue(variants.total)} 个变异`,
-      detail: `MSI ${stringifyValue(msi.status)} · TMB ${stringifyValue(tmb.status || tmb.value)}`,
+      detail: `MSI ${stringifyValue(msi.status)} · TMB ${stringifyValue(effectiveTmb.value.status || effectiveTmb.value.value)}`,
     },
     {
       label: '用药提示',
@@ -773,14 +809,18 @@ const deliveryRiskItems = computed(() => {
   const panel = excelStore.previewSummary?.panel || {}
   const qa = excelStore.previewSummary?.qa || {}
   const confidence = upload?.detection_confidence
-  if (!upload?.detected_project_type) {
+  if (!projectType.value) {
     risks.push({
       key: 'project_missing',
       level: '阻断',
       type: 'danger',
       message: '检测项目未识别，请先手动确认项目类型和模板。',
     })
-  } else if (typeof confidence === 'number' && confidence < 0.8) {
+  } else if (
+    projectType.value === upload?.detected_project_type
+    && typeof confidence === 'number'
+    && confidence < 0.8
+  ) {
     risks.push({
       key: 'project_low_confidence',
       level: '警告',
@@ -788,7 +828,15 @@ const deliveryRiskItems = computed(() => {
       message: `项目识别置信度 ${Math.round(confidence * 100)}%，建议人工确认。`,
     })
   }
-  if (panel.status && panel.status !== 'active') {
+  if (isManualProjectSelection.value) {
+    risks.push({
+      key: 'project_manual_selection',
+      level: '提示',
+      type: 'info',
+      message: `已人工确认使用${selectedProjectDisplayName.value}；最终报告将以该选择为准。`,
+    })
+  }
+  if (previewSummaryMatchesSelection.value && panel.status && panel.status !== 'active') {
     risks.push({
       key: 'panel_status',
       level: '警告',
@@ -796,7 +844,11 @@ const deliveryRiskItems = computed(() => {
       message: `Panel 状态为 ${panel.status}，生成结果需人工复核。`,
     })
   }
-  if (panel.template_status && panel.template_status !== 'active') {
+  if (
+    previewSummaryMatchesSelection.value
+    && panel.template_status
+    && panel.template_status !== 'active'
+  ) {
     risks.push({
       key: 'template_status',
       level: '警告',
@@ -822,7 +874,7 @@ const deliveryRiskItems = computed(() => {
       })
     }
   }
-  if (qa.status && qa.status !== 'PASS') {
+  if (previewSummaryMatchesSelection.value && qa.status && qa.status !== 'PASS') {
     risks.push({
       key: 'preview_qa',
       level: qa.status === 'FAIL' ? '阻断' : '警告',
@@ -882,7 +934,7 @@ const previewMetricCards = computed(() => {
 
 const previewBiomarkerCards = computed(() => {
   const biomarkers = excelStore.previewSummary?.biomarkers || {}
-  const tmb = biomarkers.tmb || {}
+  const tmb = effectiveTmb.value
   const msi = biomarkers.msi || {}
   const immune = biomarkers.immune || {}
   const immuneUnavailable = immune.status && immune.status !== '已启用'
@@ -945,6 +997,19 @@ function stringifyValue(value: unknown) {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'string') return value || '-'
   return JSON.stringify(value)
+}
+
+function parseTmbNumericValue(value: unknown, summary: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const valueText = String(value ?? '').trim()
+  if (valueText) {
+    const direct = Number(valueText)
+    if (Number.isFinite(direct)) return direct
+  }
+  const match = String(summary ?? '').match(/-?\d+(?:\.\d+)?/)
+  if (!match) return null
+  const parsed = Number(match[0])
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function normalizeSummaryRow(row: Record<string, any>) {

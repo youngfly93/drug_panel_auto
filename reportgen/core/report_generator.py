@@ -58,6 +58,7 @@ from reportgen.rules import (
     validate_pdl1_product_contract,
 )
 from reportgen.rules.evaluators import apply_report_text_rules, collect_report_texts
+from reportgen.rules.part3 import apply_part3_cross_cancer_policy
 from reportgen.utils.file_utils import (
     ensure_directory_exists,
     get_unique_filename,
@@ -967,6 +968,20 @@ class ReportGenerator:
             project_type=state.canonical_project_type,
             panel_package=state.panel_package,
         )
+        suppression = apply_part3_cross_cancer_policy(
+            state.report_data,
+            part3_policy,
+        )
+        if suppression.get("suppressed_field_count"):
+            stage.warn(
+                "PART3_CROSS_CANCER_FIELDS_SUPPRESSED",
+                "Part-3 historical fields outside the lung-specific review scope "
+                "were hidden from the report-group draft.",
+                details=suppression,
+            )
+            stage.metrics["part3_cross_cancer_suppressed_fields"] = suppression[
+                "suppressed_field_count"
+            ]
         residual_scan = part3_policy.get("cross_cancer_residual_scan") or {}
         if part3_enabled and isinstance(residual_scan, dict) and residual_scan.get(
             "enabled"

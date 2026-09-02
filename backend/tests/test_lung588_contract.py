@@ -745,21 +745,26 @@ def test_lung588_pdl1_form_is_project_scoped_and_optional_for_draft():
         "pdl1_result",
         "pdl1_image_path",
     }
-    hidden_derived = {
+    source_fields = {
         "pdl1_assay_profile_id",
         "pdl1_source_record_id",
         "pdl1_source_record_date",
         "pdl1_specimen_id",
+    }
+    hidden_derived = {
         "pdl1_image_disposition",
     }
-    assert pdl1_fields <= set(lung_fields)
-    assert all(not lung_fields[key].required for key in pdl1_fields)
+    assert pdl1_fields | source_fields <= set(lung_fields)
+    assert all(not lung_fields[key].required for key in pdl1_fields | source_fields)
     assert lung_fields["pdl1_result"].ui.options == [
         "阳性（高表达）",
         "阳性（低表达）",
         "阴性",
     ]
     assert not hidden_derived & set(lung_fields)
+    assert lung_fields["pdl1_assay_profile_id"].ui.options == [
+        "legacy_unspecified_ihc_transcription_v1"
+    ]
     assert lung_fields["pdl1_image_path"].ui.component == "pdl1-image-upload"
     assert not pdl1_fields & crc_fields
 
@@ -1119,11 +1124,19 @@ def test_lung588_generation_surfaces_pending_pdl1_profile_in_draft(tmp_path):
     assert result["qa_status"] == "WARN"
     qa = json.loads(Path(result["qa_report_file"]).read_text(encoding="utf-8"))
     residual_check = qa["checks"]["part3_cross_cancer_residuals"]
-    assert residual_check["status"] == "WARN"
-    assert residual_check["matched_terms"]
+    assert residual_check["status"] == "PASS"
+    assert residual_check["matched_terms"] == []
+    suppression_check = qa["checks"]["part3_cross_cancer_suppression"]
+    assert suppression_check["status"] == "WARN"
+    assert suppression_check["suppressed_field_count"] > 0
     assert any(
-        issue["code"] == "PART3_CROSS_CANCER_RESIDUALS"
+        issue["code"] == "PART3_CROSS_CANCER_SUPPRESSION"
         for issue in qa["issues"]
+    )
+    assert any(
+        issue["code"] == "PART3_CROSS_CANCER_FIELDS_SUPPRESSED"
+        for stage in result["stage_results"]
+        for issue in stage.get("issues") or []
     )
     assert any(
         issue["code"] == "PANEL_PDL1_PRODUCT_CONTRACT_WARNING"

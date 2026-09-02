@@ -999,13 +999,72 @@ def test_generate_file_async_accepts_complete_lung588_pdl1_preflight(
         assert task.project_type == "lung_588_pdl1"
         snapshot = json.loads(task.clinical_info_snapshot)
         assert snapshot["project_name"] == "肺癌588基因+PD-L1"
-        assert snapshot["pdl1_source_record_id"].startswith("PDL1-IMG-")
+        assert "pdl1_source_record_id" not in snapshot
+        assert "pdl1_source_record_date" not in snapshot
+        assert "pdl1_specimen_id" not in snapshot
+        assert "pdl1_assay_profile_id" not in snapshot
+        assert snapshot["pdl1_image_upload_receipt_id"].startswith("PDL1-IMG-")
+        assert snapshot["pdl1_image_uploaded_at"]
+        assert snapshot["pdl1_image_bound_sample_id"] == "CASE-LUNG-C"
         assert snapshot["pdl1_image_disposition"] == "病例专属图像（报告展示）"
-        assert snapshot["pdl1_specimen_id"] == "CASE-LUNG-C"
         resolved_image = Path(snapshot["pdl1_image_path"])
         assert resolved_image.is_absolute()
         assert resolved_image.is_file()
         assert resolved_image.is_relative_to(report_api.settings.storage_root.resolve())
+    finally:
+        db.close()
+
+
+def test_generate_file_async_preserves_explicit_lung588_pdl1_source_provenance(
+    tmp_path,
+    monkeypatch,
+):
+    bridge = FakeBridge()
+    bridge.detect_result = {
+        "project_type": "lung_588_pdl1",
+        "project_name": "肺癌588基因+PD-L1",
+        "confidence": 1.0,
+        "detected": True,
+    }
+    monkeypatch.setattr(report_api, "submit_generation_job", lambda *args, **kwargs: None)
+    with _client(tmp_path, monkeypatch, bridge=bridge) as client:
+        image_response = client.post(
+            "/api/v1/pdl1-images",
+            files={"file": ("case.png", _synthetic_png_bytes(), "image/png")},
+        )
+        assert image_response.status_code == 200
+        image_ref = image_response.json()["data"]["stored_path"]
+        clinical_info = {
+            "patient_name": "测试患者",
+            "sample_id": "CASE-LUNG-C",
+            "pdl1_tps": 5,
+            "pdl1_cps": 6,
+            "pdl1_result": "阳性（低表达）",
+            "pdl1_image_path": image_ref,
+            "pdl1_assay_profile_id": "legacy_unspecified_ihc_transcription_v1",
+            "pdl1_source_record_id": "SYNTHETIC-IHC-SOURCE-001",
+            "pdl1_source_record_date": "2026-07-30",
+            "pdl1_specimen_id": "SYNTHETIC-BLOCK-001",
+        }
+        response = client.post(
+            "/api/v1/reports/generate-file-async",
+            files={"file": ("CASE-LUNG-C.xlsx", b"placeholder", "application/vnd.ms-excel")},
+            data={
+                "clinical_info": json.dumps(clinical_info, ensure_ascii=False),
+                "project_type": "lung_588_pdl1",
+                "project_name": "肺癌588基因+PD-L1",
+            },
+        )
+
+    assert response.status_code == 200
+    db = report_api.SessionLocal()
+    try:
+        snapshot = json.loads(db.query(Task).one().clinical_info_snapshot)
+        assert snapshot["pdl1_assay_profile_id"] == clinical_info["pdl1_assay_profile_id"]
+        assert snapshot["pdl1_source_record_id"] == clinical_info["pdl1_source_record_id"]
+        assert snapshot["pdl1_source_record_date"] == clinical_info["pdl1_source_record_date"]
+        assert snapshot["pdl1_specimen_id"] == clinical_info["pdl1_specimen_id"]
+        assert snapshot["pdl1_image_upload_receipt_id"].startswith("PDL1-IMG-")
     finally:
         db.close()
 

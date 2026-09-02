@@ -195,6 +195,7 @@ def build_docx_qa_report(
     paragraphs = list(_iter_all_paragraphs(doc))
     text = _read_docx_text(doc)
     compact_text = _compact(text)
+    part3_text = _read_part3_text(doc)
     table_metrics = _inspect_tables(doc)
     metrics.update(
         {
@@ -334,7 +335,14 @@ def build_docx_qa_report(
     for style_issue in _style_issues(style_checks):
         issue(**style_issue)
 
-    business_checks = _build_business_checks(compact_text, context, project_type)
+    business_checks = _build_business_checks(
+        compact_text,
+        context,
+        project_type,
+        part3_compact_text=(
+            _compact(part3_text) if part3_text is not None else None
+        ),
+    )
     checks.update(business_checks)
     for business_issue in _business_issues(business_checks):
         issue(**business_issue)
@@ -1055,6 +1063,26 @@ def _read_docx_text(doc) -> str:
         if value:
             parts.append(value)
     return "\n".join(parts)
+
+
+def _read_part3_text(doc) -> Optional[str]:
+    """Return the body text inside the dynamic Part-3 section, if present."""
+
+    started = False
+    parts: List[str] = []
+    for paragraph in doc.paragraphs:
+        value = str(paragraph.text or "").strip()
+        compact = _compact(value)
+        if not started:
+            if compact.startswith("第三部分：基因变异及相应靶向/免疫药物解析"):
+                started = True
+                parts.append(value)
+            continue
+        if compact.startswith("3.阅读说明") or compact.startswith("第四部分：附录"):
+            break
+        if value:
+            parts.append(value)
+    return "\n".join(parts) if started else None
 
 
 def _compact(text: str) -> str:
@@ -1840,6 +1868,7 @@ def _build_business_checks(
     compact_text: str,
     context: Mapping[str, Any],
     project_type: Optional[str],
+    part3_compact_text: Optional[str] = None,
 ) -> Dict[str, Any]:
     checks: Dict[str, Any] = {}
     residual_scan = context.get("part3_cross_cancer_residual_scan")
@@ -1849,19 +1878,43 @@ def _build_business_checks(
             for term in residual_scan.get("terms") or []
             if str(term).strip()
         ]
+        scan_scope = str(residual_scan.get("scan_scope") or "document").strip()
+        scan_text = (
+            part3_compact_text
+            if scan_scope == "part3" and part3_compact_text is not None
+            else compact_text
+        )
         matched_terms = [
-            term for term in configured_terms if _compact(term) in compact_text
+            term for term in configured_terms if _compact(term) in scan_text
         ]
         checks["part3_cross_cancer_residuals"] = {
             "status": "WARN" if matched_terms else "PASS",
             "severity": "warning",
+            "scan_scope": scan_scope,
             "configured_term_count": len(configured_terms),
             "matched_terms": matched_terms,
             "message": str(
                 residual_scan.get("notice")
                 or "Part 3 contains cross-cancer historical wording pending review."
-            ).strip(),
+                ).strip(),
         }
+    suppression = context.get("part3_cross_cancer_suppression")
+    if isinstance(suppression, Mapping):
+        suppressed_count = _as_int(suppression.get("suppressed_field_count")) or 0
+        if suppressed_count:
+            checks["part3_cross_cancer_suppression"] = {
+                "status": "WARN",
+                "severity": "warning",
+                "suppressed_field_count": suppressed_count,
+                "suppressed_row_count": (
+                    _as_int(suppression.get("suppressed_row_count")) or 0
+                ),
+                "message": (
+                    "Part-3 historical fields outside the lung-specific review "
+                    "scope were hidden; lung-specific replacement wording remains "
+                    "pending report-group review."
+                ),
+            }
     if not _is_crc(project_type):
         return checks
 
@@ -2002,6 +2055,9 @@ def _business_issues(checks: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
         "msi_status_text": "MSI status from context was not found in rendered text.",
         "part3_cross_cancer_residuals": (
             "Part 3 contains cross-cancer historical wording pending review."
+        ),
+        "part3_cross_cancer_suppression": (
+            "Part-3 historical fields were hidden pending lung-specific review."
         ),
     }
     for key, check in checks.items():

@@ -37,6 +37,8 @@ from reportgen.models.excel_data import ExcelDataSource  # noqa: E402
 from reportgen.panels.release_scope import (  # noqa: E402
     ensure_project_type_enabled as ensure_release_project_type_enabled,
 )
+from reportgen.rules.evaluators import apply_report_text_rules  # noqa: E402
+from reportgen.rules.part3 import apply_part3_cross_cancer_policy  # noqa: E402
 
 DERIVED_REPORT_FIELDS = {
     "TMB",
@@ -238,17 +240,25 @@ class ReportGenBridge:
         panel_style = self.generator._load_panel_style_config(panel_package)
         if panel_style:
             report_data.set_field("panel_style", panel_style)
+        report_text_rules = self.generator._load_report_text_rules(panel_package)
+        apply_report_text_rules(report_data, report_text_rules)
 
         enhancer = get_enhancer(canonical_project_type)
         report_data = enhancer.enhance(
             report_data,
             working,
             field_mapper=self.field_mapper,
-            gene_knowledge_provider=self._build_gene_knowledge_provider(),
+            gene_knowledge_provider=self._build_gene_knowledge_provider(panel_package),
             base_path=str(Path(self.config_dir).parent),
             project_type=canonical_project_type,
             panel_package=panel_package,
         )
+        part3_policy = (
+            (getattr(panel_package, "raw", None) or {}).get("part3_knowledge")
+            if panel_package is not None
+            else {}
+        ) or {}
+        apply_part3_cross_cancer_policy(report_data, part3_policy)
         self.generator._apply_clinical_diagnosis_for_display(report_data)
         self.generator._set_patient_salutation(report_data)
         summary = build_report_summary(
@@ -632,7 +642,7 @@ class ReportGenBridge:
         if "sample_id" in clinical_info and clinical_info["sample_id"]:
             excel_data.metadata["sample_id_from_filename"] = clinical_info["sample_id"]
 
-    def _build_gene_knowledge_provider(self):
+    def _build_gene_knowledge_provider(self, panel_package=None):
         try:
             kb_enabled = bool(
                 self.generator.config_loader.get_setting(
@@ -645,14 +655,34 @@ class ReportGenBridge:
             )
             if not kb_enabled:
                 return None
-            from reportgen.knowledge import GeneKnowledgeProvider
+            from reportgen.knowledge import (
+                GeneKnowledgeProvider,
+                load_panel_knowledge_redactions,
+            )
 
             kb_cfg = self.generator.config_loader.get_setting("knowledge_bases", {}) or {}
+            gene_config = dict(kb_cfg.get("gene_knowledge_db", {}) or {})
+            panel_raw = getattr(panel_package, "raw", None) or {}
+            if panel_package is not None:
+                gene_config["reviewed_part3_overlay_path"] = ""
+                gene_config["reviewed_part3_overlay_paths"] = (
+                    self.generator._resolve_panel_reviewed_part3_overlays(panel_package)
+                )
             return GeneKnowledgeProvider(
                 {
                     "enabled": True,
-                    "gene_knowledge_db": kb_cfg.get("gene_knowledge_db", {}),
+                    "panel_id": getattr(panel_package, "panel_id", ""),
+                    "fixed_domain_source_policy": panel_raw.get(
+                        "fixed_domain_source_policy", ""
+                    ),
+                    "gene_symbol_aliases": panel_raw.get("gene_symbol_aliases", {}),
+                    "gene_knowledge_db": gene_config,
                     "gene_transcript_db": kb_cfg.get("gene_transcript_db", {}),
+                    "knowledge_redactions": (
+                        load_panel_knowledge_redactions(panel_package)
+                        if panel_package is not None
+                        else []
+                    ),
                 }
             )
         except Exception:

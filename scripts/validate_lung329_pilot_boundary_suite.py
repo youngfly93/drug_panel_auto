@@ -427,6 +427,15 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
             qa_payload = json.loads(qa_path.read_text(encoding="utf-8"))
         if qa_status not in {"PASS", "WARN"}:
             failures.append(f"qa_not_nonblocking:{qa_status or 'missing'}")
+        residual_status = (
+            ((qa_payload.get("checks") or {}).get("part3_cross_cancer_residuals") or {}).get(
+                "status"
+            )
+        )
+        if residual_status != "PASS":
+            failures.append(
+                f"part3_cross_cancer_residuals:{residual_status or 'missing'}"
+            )
         visual_status = (
             ((qa_payload.get("checks") or {}).get("visual_render") or {}).get(
                 "status"
@@ -453,6 +462,7 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
                     context.get("gene_knowledge_sections") or []
                 ),
                 "qa_status": qa_status,
+                "part3_cross_cancer_residual_status": residual_status,
                 "visual_qa_status": visual_status,
                 "output_sha256": (
                     _sha256(output_path) if output_path.is_file() else ""

@@ -75,6 +75,11 @@ part3_knowledge:
   cross_cancer_residual_scan:
     enabled: true
     severity: "warn"
+    scan_scope: "part3"
+    runtime_action: "suppress_unsafe_fields"
+    suppressed_text: >
+      该段历史知识尚未完成肺癌专属审核，本轮评审稿不展示原文；
+      待报告组完成肺癌专属复核后补充。
     terms:
       - "结直肠癌"
       - "结肠癌"
@@ -84,8 +89,8 @@ part3_knowledge:
       - "colorectal"
       - "colon cancer"
     notice: >
-      第三部分检出跨癌种历史叙述残留；本报告仍可作为报告组 pilot 评审稿生成，
-      但命中内容须在正式临床放行前复核。
+      第三部分仍检出未被结构化隐藏的跨癌种历史叙述；当前报告只可作为
+      报告组 pilot 评审稿，命中内容须在正式临床放行前修复并复核。
 
 reviewed_part3_overlay_additions:
   - "rules/reviewed_part3_domain_candidates.yaml"

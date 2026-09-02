@@ -7,6 +7,7 @@
 
 import io
 import hashlib
+import json
 import re
 import sys
 import zipfile
@@ -181,16 +182,18 @@ def test_lung329_pdl1_form_keeps_case_fields_visible_but_optional_for_draft():
         "prior_systemic_therapy",
         "companion_diagnostic_status",
     }
-    hidden_derived = {
+    source_fields = {
         "pdl1_assay_profile_id",
         "pdl1_source_record_id",
         "pdl1_source_record_date",
         "pdl1_specimen_id",
+    }
+    hidden_derived = {
         "pdl1_image_disposition",
     }
 
-    assert required <= set(fields)
-    assert all(not fields[key].required for key in required)
+    assert required | source_fields <= set(fields)
+    assert all(not fields[key].required for key in required | source_fields)
     assert not hidden_derived & set(fields)
     assert fields["pdl1_image_path"].ui.component == "pdl1-image-upload"
     assert fields["pdl1_image_path"].ui.accept == ".png,.jpg,.jpeg,.webp"
@@ -266,6 +269,10 @@ def test_lung329_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
     assert any(row[2:5] == ["未提供", "未提供", "未提供"] for row in pdl1_rows)
     assert "第三部分：基因变异及相应靶向/免疫药物解析" in visible
     assert "TP53基因" in visible
+    qa = json.loads(Path(result["qa_report_file"]).read_text(encoding="utf-8"))
+    residual_check = qa["checks"]["part3_cross_cancer_residuals"]
+    assert residual_check["status"] == "PASS"
+    assert residual_check["matched_terms"] == []
 
 
 def test_lung329_batch_is_enabled_and_strips_shared_pdl1():

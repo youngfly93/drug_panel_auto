@@ -44,10 +44,13 @@ from reportgen.core.golden_case import (
     assert_golden_case_output,
     build_crc_301_msi_golden_excel,
     build_crc_358_msi_golden_excel,
+    build_lung_329_pdl1_golden_input,
+    build_lung_588_pdl1_golden_input,
     build_lung_methylation_golden_excel,
     run_golden_case,
     run_visual_render,
 )
+from reportgen.core.legacy_reference import snapshot_docx_report
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.processors import (
     CRITICAL_DOCX_PROCESSOR_NAMES,
@@ -8353,6 +8356,61 @@ def test_lung_methylation_golden_case_passes(tmp_path):
     assert result["qa_status"] == "PASS"
     assert Path(result["output_file"]).exists()
     assert result["panel"] == LUNG_METHYLATION_EXPECTATIONS["project_type"]
+
+
+@pytest.mark.parametrize(
+    ("builder", "filename", "panel_id", "project_name"),
+    [
+        (
+            build_lung_329_pdl1_golden_input,
+            "SYN-L329-GOLDEN.xlsx",
+            "lung_329_pdl1",
+            "肺癌329基因+PD-L1",
+        ),
+        (
+            build_lung_588_pdl1_golden_input,
+            "SYN-L588-GOLDEN.xlsx",
+            "lung_588_pdl1",
+            "肺癌588基因+PD-L1",
+        ),
+    ],
+)
+def test_lung_pdl1_golden_input_has_explicit_synthetic_provenance(
+    tmp_path, builder, filename, panel_id, project_name
+):
+    fixture = builder(tmp_path / filename)
+
+    assert fixture.excel_file.is_file()
+    assert ZipFile(fixture.excel_file).testzip() is None
+    assert fixture.excel_data is not None
+    assert fixture.excel_data.metadata["synthetic_fixture"] is True
+    assert fixture.excel_data.metadata["panel_id"] == panel_id
+    assert fixture.excel_data.single_values["检测项目"] == project_name
+    assert fixture.excel_data.single_values["PD-L1 TPS"] == 50
+    assert fixture.excel_data.single_values["PD-L1 CPS"] == 52
+    assert fixture.excel_data.single_values["PD-L1原始记录编号"].startswith(
+        "SYNTHETIC-IHC-"
+    )
+    assert Path(fixture.excel_data.single_values["PD-L1病例图片"]).is_file()
+    assert (
+        fixture.excel_data.metadata["field_source_overrides"]["pdl1_tps"]["source"]
+        == "form"
+    )
+
+
+def test_current_output_snapshot_extracts_pdl1_integer_display(tmp_path):
+    output = tmp_path / "synthetic_lung_pdl1.docx"
+    document = Document()
+    document.add_paragraph(
+        "本次PD-L1免疫组化检测结果：TPS 50%，CPS 52，阳性（高表达）。"
+    )
+    document.save(output)
+
+    snapshot = snapshot_docx_report(output, panel="lung_588_pdl1")
+
+    assert snapshot["features"]["pdl1_tps"] == 50.0
+    assert snapshot["features"]["pdl1_cps"] == 52.0
+    assert snapshot["features"]["pdl1_result"] == "阳性（高表达）"
 
 
 def test_golden_case_assertions_pass_on_expected_report_shape(tmp_path):

@@ -72,7 +72,10 @@ export function useDynamicForm(projectType: Ref<string | null>) {
           for (const group of schema.value.groups) {
             for (const field of group.fields) {
               if (!(field.key in formData) || formData[field.key] === undefined) {
-                formData[field.key] = field.default ?? ''
+                // Element Plus input-number treats an empty string as zero in
+                // some browser paths. Preserve schema nulls so an optional,
+                // unknown age remains truly blank instead of becoming age 0.
+                formData[field.key] = field.default === null ? null : (field.default ?? '')
               }
             }
           }
