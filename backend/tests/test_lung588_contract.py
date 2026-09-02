@@ -138,10 +138,10 @@ def test_lung588_review_candidate_contract_freezes_default_template(tmp_path):
     assert identity == {
         "panel_id": "lung_588_pdl1",
         "template_id": "lung_588_pdl1_historical_golden_v1",
-            "version": "0.5.1-review.5",
+        "version": "0.5.2-review.5",
         "status": "pilot",
         "filename": "lung_588_pdl1_historical_golden_v1.docx",
-            "sha256": "fe53e15483f7d397ac0507a98a0b9116fce71fe86efad6e8ffdafddf0ac88732",
+        "sha256": "4f61e20d4a2d7a3dc0a28228e06ed85d094a7e2c2c927ee3184e523005590f02",
         "is_default": True,
     }
     assert contract["lifecycle"]["clinical_release_status"] == "blocked"
@@ -344,8 +344,8 @@ def test_lung588_template_is_hardened_and_byte_reproducible(tmp_path):
     assert "__PART3_MARKER__" in visible
     assert "__PDL1_CASE_IMAGE__" in visible
     assert "图1. 免疫组化：PD-L1" in visible
-    assert "本表仅展示当前面板已输出的精确事件结果" in visible
-    assert "未复核内容不得用于临床决策" in visible
+    assert "本表仅展示当前面板已输出的精确事件结果" not in visible
+    assert "肺癌临床指南说明（历史内容已移除" not in visible
     assert "肺癌专属治疗知识和事件级药物规则当前未启用" not in visible
     assert "本病例未提供可追溯的PD-L1免疫组化图像" not in visible
     assert "原始记录未提供抗体克隆" not in visible
@@ -1193,7 +1193,7 @@ def test_lung588_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
     assert result["qa_status"] == "WARN"
     assert result["template_identity"]["template_id"] == ("lung_588_pdl1_historical_golden_v1")
     assert result["template_identity"]["sha256"] == (
-        "fe53e15483f7d397ac0507a98a0b9116fce71fe86efad6e8ffdafddf0ac88732"
+        "4f61e20d4a2d7a3dc0a28228e06ed85d094a7e2c2c927ee3184e523005590f02"
     )
     assert result["report_summary"]["template"]["id"] == ("lung_588_pdl1_historical_golden_v1")
     assert any("PD-L1逐病例结果" in warning for warning in result["warnings"])

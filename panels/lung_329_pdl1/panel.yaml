@@ -84,7 +84,7 @@ default_template: "lung_329_pdl1_golden_template_v2"
 templates:
   - id: "lung_329_pdl1_golden_template_v2"
     file: "templates/lung_329_pdl1_golden_template_v2.docx"
-    version: "0.5.1-review.5"
+    version: "0.5.2-review.5"
     status: "pilot"
     description: >
       Comprehensive report-group review template sharing the historical lung

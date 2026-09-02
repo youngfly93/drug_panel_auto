@@ -74,7 +74,7 @@ REVIEW_CANDIDATE_CONTRACT = (
     / "review_baselines"
     / "lung588_historical_review_candidate_v1.yaml"
 )
-TEMPLATE_VERSION = "0.5.0-review.5"
+TEMPLATE_VERSION = "0.5.2-review.5"
 EXPECTED_REPAIRED_SOURCE_SHA256 = (
     "e9cde046db0a93a5b33f13961ff7be25fcce9644a6682b7c132ca9e3604dbb96"
 )
@@ -85,10 +85,6 @@ EXPECTED_ORIGINAL_SOURCE_SHA256 = (
 REVIEW_DRAFT_NOTICE = (
     "报告组评审候选稿（非临床交付）：版式源自历史肺癌588终版；固定医学内容、"
     "规则命中和病例级结论均需报告组逐页复核后方可发布。"
-)
-TARGETED_REVIEW_NOTICE = (
-    "本表仅展示当前面板已输出的精确事件结果；报告组需复核事件、证据等级、"
-    "适应证范围及排版，未复核内容不得用于临床决策。"
 )
 PGX_REVIEW_NOTICE = (
     "以下药物基因组学明细由本病例Excel的CtDrug表原样映射，用于报告组检查"
@@ -621,11 +617,28 @@ def _replace_introductory_copy(document: DocumentObject) -> None:
             "分析样本基因变异并展示当前规则输出；报告组需逐事件复核后方可形成正式结论。"
         ),
         "分析与化疗药物相关的基因变异，评估化疗的敏感性或毒副作用，为化疗方案的制订提供参考。": (
-            "映射Excel中的药物基因组学明细供报告组评审；当前不自动形成患者级化疗方案。"
+            "依据病例Excel的CtDrug表生成化疗药物小结、有效性/毒副作用表、"
+            "方案用法表及分级位点附录，供报告组评审。"
         ),
     }
     for old, new in replacements.items():
-        _replace_paragraph_text(_body_paragraph(document, old), new)
+        paragraph = _body_paragraph(document, old)
+        if old.startswith("分析与化疗药物相关的基因变异"):
+            _set_paragraph_text_with_cjk_font(paragraph, new)
+        else:
+            _replace_paragraph_text(paragraph, new)
+
+
+def _set_paragraph_text_with_cjk_font(paragraph, value: str) -> None:
+    """Replace one paragraph while preserving an explicit CJK-safe font."""
+
+    paragraph.text = value
+    for run in paragraph.runs:
+        run.font.name = "微软雅黑"
+        r_fonts = run._element.get_or_add_rPr().get_or_add_rFonts()
+        r_fonts.set(qn("w:ascii"), "微软雅黑")
+        r_fonts.set(qn("w:hAnsi"), "微软雅黑")
+        r_fonts.set(qn("w:eastAsia"), "微软雅黑")
 
 
 def _insert_appendix_review_notices(document: DocumentObject) -> None:
@@ -977,13 +990,14 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
         run.font.size = Pt(9)
     _remove_signature_artifacts(document)
 
+    obsolete_guideline_heading = "非小细胞肺癌NCCN指南（2022 V3）"
     _collapse_between(
         document,
-        "非小细胞肺癌NCCN指南（2022 V3）",
+        obsolete_guideline_heading,
         "3. 免疫治疗疗效评估",
-        (TARGETED_REVIEW_NOTICE,),
-        replacement_heading="肺癌临床指南说明（历史内容已移除，等待当前版本复核）",
+        (),
     )
+    _remove_paragraph(_body_paragraph(document, obsolete_guideline_heading))
     _collapse_between(
         document,
         "3.1 肿瘤突变负荷（TMB）水平提示",
@@ -1039,7 +1053,7 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
         ),
         IMMUNE_REVIEW_NOTICE,
     )
-    _replace_paragraph_text(
+    _set_paragraph_text_with_cjk_font(
         _body_paragraph(
             document,
             "化疗药物小结：经分析，可考虑优先选择的化疗方案有吉西他滨+长春瑞滨、吉西他滨单药方案、白蛋白结合型紫杉醇单药方案、紫杉醇单药方案。",
@@ -1099,6 +1113,12 @@ def build_template(source: Path, output: Path, scrub_manifest_path: Path) -> dic
 
     output.parent.mkdir(parents=True, exist_ok=True)
     document.save(output)
+    _normalize_zip_metadata(output)
+    # A reload/save pass canonicalises namespace declarations exactly as the
+    # family-alignment tool does, so the standalone builder reproduces the
+    # registered template byte-for-byte instead of only semantically.
+    canonical_document = Document(output)
+    canonical_document.save(output)
     _normalize_zip_metadata(output)
     _scan_package_tokens(output, scrub_manifest["forbidden_tokens"])
     contract = load_review_candidate_contract(REVIEW_CANDIDATE_CONTRACT)
