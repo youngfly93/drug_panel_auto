@@ -1,13 +1,15 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "biomarkers"
-version: "1.0.0"
+version: "1.0.1"
 updated: "2026-09-02"
 status: "pilot"
 description: >
   Lung comprehensive-panel biomarker display contract transcribed from the
   paired historical final reports. The fixed 15/12/8 rows are always rendered;
-  only the current-case result column is derived from source data.
+  only the current-case result column is derived from source data. Historical
+  B/C event associations remain transcript- and HGVS-exact; fixed rows do not
+  broaden those reviewed event rules to arbitrary variants in the same gene.
 
 biomarkers:
   tmb:
@@ -24,12 +26,12 @@ biomarkers:
   immune_gene_tables:
     enabled: true
     positive:
-      genes: [MLH1, MSH2, MSH6, PMS2, POLE, POLD1, CD274, PDCD1LG2, PBRM1, KRAS, TP53, TET1, SERPINB3, SERPINB4, ATM, ATR, BRCA1, BRCA2, PALB2, CHEK2, ARID1A, ATRX, CDK12, FANCI, FANCM, MRE11A, NBN, RAD50, RAD51]
+      genes: [MLH1, MSH2, MSH6, PMS2, POLE, POLD1, CD274, PDCD1LG2, PBRM1, KRAS, TET1, SERPINB3, SERPINB4, ATM, ATR, BRCA1, BRCA2, BRIP1, MSH3, PALB2, CHEK2, ARID1A, ATRX, CDK12, FANCI, FANCM, MRE11A, NBN, RAD50, RAD51]
       rows:
-        - {key: MLH1, genes: [MLH1], mode: direct, display: "MLH1", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: MLH1, genes: [MLH1], mode: exact_variant, transcript: "NM_000249.4", c_hgvs: "c.790+1G>A", p_hgvs: "", variant_level: ["Ⅰ类", "Ⅱ类"], display: "MLH1", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
         - {key: MSH2, genes: [MSH2], mode: direct, display: "MSH2", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
         - {key: MSH6, genes: [MSH6], mode: direct, display: "MSH6", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
-        - {key: PMS2, genes: [PMS2], mode: direct, display: "PMS2", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
+        - {key: PMS2, genes: [PMS2], mode: exact_variant, transcript: "NM_000535.7", c_hgvs: "c.59G>A", p_hgvs: "p.R20Q", variant_level: ["Ⅰ类", "Ⅱ类"], display: "PMS2", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
         - {key: POLE, genes: [POLE], mode: direct, display: "POLE", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
         - {key: POLD1, genes: [POLD1], mode: direct, display: "POLD1", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
         - {key: CD274, genes: [CD274], mode: direct, display: "CD274（PD-L1）", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
@@ -41,15 +43,20 @@ biomarkers:
         - {key: SERPINB3, genes: [SERPINB3], mode: direct, display: "SERPINB3", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
         - {key: SERPINB4, genes: [SERPINB4], mode: direct, display: "SERPINB4", interpretation: "检出有害变异时可能疗效较好。", runtime_eligible: true}
         - key: DDR
-          genes: [ATM, ATR, BRCA1, BRCA2, PALB2, CHEK2, ARID1A, ATRX, CDK12, FANCI, FANCM, MRE11A, NBN, RAD50, RAD51]
-          mode: gene_group
+          genes: [ATM, ATR, BRCA1, BRCA2, BRIP1, MSH3, PALB2, CHEK2, ARID1A, ATRX, CDK12, FANCI, FANCM, MRE11A, NBN, RAD50, RAD51]
+          mode: exact_variant_group
+          selectors:
+            - {genes: [ATM], transcript: "NM_000051.4", c_hgvs: "c.1236-2A>T", p_hgvs: "", variant_level: ["Ⅰ类", "Ⅱ类"]}
+            - {genes: [BRIP1], transcript: "NM_032043.3", c_hgvs: "c.2142G>A", p_hgvs: "p.W714*", variant_level: ["Ⅰ类", "Ⅱ类"]}
+            - {genes: [MSH3], transcript: "NM_002439.5", c_hgvs: "c.2905C>T", p_hgvs: "p.Q969*", variant_level: ["Ⅰ类", "Ⅱ类"]}
+            - {genes: [BRCA2], transcript: "NM_000059.4", c_hgvs: "c.7007G>A", p_hgvs: "p.R2336H", variant_level: ["Ⅰ类", "Ⅱ类"]}
           display: "DDR基因（DNA损伤修复相关基因）"
           interpretation: "检出有害变异时可能疗效较好。"
           runtime_eligible: true
     negative:
-      genes: [PTEN, JAK1, JAK2, B2M, CTNNB1, EGFR, ALK, MET, STK11, KRAS, KEAP1, IFNGR1, IFNGR2]
+      genes: [PTEN, JAK1, JAK2, B2M, CTNNB1, EGFR, ALK, MET, STK11, KEAP1, IFNGR1, IFNGR2]
       rows:
-        - {key: PTEN, genes: [PTEN], mode: direct, display: "PTEN", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}
+        - {key: PTEN, genes: [PTEN], mode: exact_variant, transcript: "NM_000314.8", c_hgvs: "c.802-2A>T", p_hgvs: "", variant_level: ["Ⅰ类", "Ⅱ类"], display: "PTEN", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}
         - {key: JAK1, genes: [JAK1], mode: direct, display: "JAK1", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}
         - {key: JAK2, genes: [JAK2], mode: direct, display: "JAK2", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}
         - {key: B2M, genes: [B2M], mode: direct, display: "B2M", interpretation: "检出有害变异时可能耐药。", runtime_eligible: true}

@@ -57,12 +57,14 @@ current_release_boundaries:
   part3_cross_cancer_residual_policy: "qa_warn_non_blocking"
   targeted_drug_rules_enabled: true
   targeted_drug_scope: >
-    Inherits two exact lung588 events yielding three treatment combinations;
-    missing or uncertain clinical context is displayed with a notice, while
-    invalid or out-of-scope context remains blocked.
-  immune_gene_claims_enabled: false
-  immune_gene_scope: "staged exact historical rows pending panel-specific review"
-  chemotherapy_pharmacogenomics_enabled: false
+    Reviewed exact A-level events plus inherited historical gene-matched C/D
+    candidates; C/D candidates remain visibly marked pending report-group review.
+  immune_gene_claims_enabled: true
+  immune_gene_scope: >
+    Fixed historical 15/12/8 display rows; inherited B/C event associations
+    remain transcript-and-HGVS exact.
+  chemotherapy_pharmacogenomics_enabled: true
+  chemotherapy_detail_levels: ["1B", "2A", "2B"]
   external_delivery_without_manual_review: false
   pdl1_treatment_inference_allowed: false
   visible_release_label: "report_group_pilot_draft"

@@ -29,6 +29,7 @@ from reportgen.core.template_bridge_358 import (
     _build_targeted_drug_introductions,
     _compact_drug_display_tables,
     _compact_drug_display_value,
+    build_immune_variants,
     load_panel_config,
 )
 from reportgen.models.excel_data import ExcelDataSource
@@ -111,11 +112,123 @@ def test_lung_comprehensive_panels_share_historical_fixed_tables(panel_id):
     assert [row["display"] for row in config.immune_hyperprogression_rows] == (
         IMMUNE_DISPLAYS["hyperprogression"]
     )
+    positive_by_key = {row["key"]: row for row in config.immune_positive_rows}
+    negative_by_key = {row["key"]: row for row in config.immune_negative_rows}
+    assert positive_by_key["MLH1"]["mode"] == "exact_variant"
+    assert positive_by_key["PMS2"]["mode"] == "exact_variant"
+    assert positive_by_key["DDR"]["mode"] == "exact_variant_group"
+    assert {
+        selector["genes"][0]
+        for selector in positive_by_key["DDR"]["selectors"]
+    } == {"ATM", "BRIP1", "MSH3", "BRCA2"}
+    assert negative_by_key["PTEN"]["mode"] == "exact_variant"
     assert config.chemotherapy_module_enabled is True
     assert config.chemotherapy_rule["detail_allowed_levels"] == ["1B", "2A", "2B"]
     assert len(config.chemotherapy_rule["prediction_rows"]) == 27
     assert len(config.chemotherapy_rule["regimen_rows"]) == 22
     assert len(config.chemotherapy_rule["dosage_rows"]) == 11
+
+
+def test_lung_fixed_immune_tables_keep_historical_event_exactness(tmp_path):
+    config = _panel_config("lung_588_pdl1")
+    source_path = tmp_path / "SYNTHETIC-LUNG-IMMUNE-EXACT.xlsx"
+    source_path.write_bytes(b"synthetic")
+    raw_rows = [
+        {
+            "ExistIn552": "Ⅱ类",
+            "Gene_Symbol": "ATM",
+            "Transcript": "NM_000051.4",
+            "cHGVS": "c.1236-2A>T",
+            "pHGVS_S": "",
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "Gene_Symbol": "ATM",
+            "Transcript": "NM_000051.3",
+            "cHGVS": "c.1236-2A>T",
+            "pHGVS_S": "",
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "Gene_Symbol": "BRIP1",
+            "Transcript": "NM_032043.3",
+            "cHGVS": "c.2142G>A",
+            "pHGVS_S": "p.W714*",
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "Gene_Symbol": "MSH3",
+            "Transcript": "NM_002439.5",
+            "cHGVS": "c.2905C>T",
+            "pHGVS_S": "p.Q969*",
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "Gene_Symbol": "BRCA2",
+            "Transcript": "NM_000059.4",
+            "cHGVS": "c.7007G>A",
+            "pHGVS_S": "p.R2336H",
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "Gene_Symbol": "PTEN",
+            "Transcript": "NM_000314.8",
+            "cHGVS": "c.802-2A>T",
+            "pHGVS_S": "",
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "Gene_Symbol": "PTEN",
+            "Transcript": "NM_000314.8",
+            "cHGVS": "c.801A>T",
+            "pHGVS_S": "p.K267N",
+        },
+        {
+            "ExistIn552": "Ⅱ类",
+            "Gene_Symbol": "TP53",
+            "Transcript": "NM_000546.6",
+            "cHGVS": "c.734G>A",
+            "pHGVS_S": "p.G245D",
+        },
+    ]
+    excel = ExcelDataSource(
+        file_path=str(source_path),
+        table_data={"Variations": raw_rows},
+        sheet_names=["Variations"],
+    )
+
+    immune = build_immune_variants(
+        excel,
+        filter_column="ExistIn552",
+        panel_config=config,
+    )
+    assert [row["gene"] for row in immune["positive"]] == [
+        "ATM",
+        "BRIP1",
+        "MSH3",
+        "BRCA2",
+    ]
+    assert [row["gene"] for row in immune["negative"]] == ["PTEN"]
+    assert all(row["gene"] != "TP53" for row in immune["positive"])
+
+    report_data = ReportData()
+    _build_nccn_and_immune_fields(
+        report_data,
+        [],
+        excel,
+        panel_config=config,
+    )
+    positive_rows = {
+        row["key"]: row for row in report_data.get_table("immune_positive_results")
+    }
+    negative_rows = {
+        row["key"]: row for row in report_data.get_table("immune_negative_results")
+    }
+    ddr_result = positive_rows["DDR"]["result"]
+    assert all(gene in ddr_result for gene in ("ATM", "BRIP1", "MSH3", "BRCA2"))
+    assert "TP53" not in ddr_result
+    assert "c.802-2A>T" in negative_rows["PTEN"]["result"]
+    assert "c.801A>T" not in negative_rows["PTEN"]["result"]
 
 
 def test_lung_guideline_results_are_derived_while_fixed_copy_is_preserved(tmp_path):

@@ -73,7 +73,10 @@ KNOWN_INPUTS = {
         "pdl1_cps": 1.0,
         "pdl1_result": "阳性（低表达）",
         "expected_targeted_drug_count": 2,
-        "expected_immune_positive_count": 1,
+        # CASE-LUNG-A has no paired historical final from which a positive
+        # exact-event association can be transcribed. Its IFNGR1 event remains
+        # covered by the fixed historical IFNGR1/2 gene-group row.
+        "expected_immune_positive_count": 0,
         "expected_immune_negative_count": 1,
     },
     "623c96cee1eb7b16cacb62cababba3b790e82007a00a59d0f159efbe025db000": {

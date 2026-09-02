@@ -42,6 +42,9 @@ audit_date: 2026-09-02
   `frontend/src/views/ReportGenerateView.vue:1211`。
 - 最终复验汇总见 `fix_log.md:49`：588 A/B/C 整本渲染全部 PASS，329 七场景
   7/7 PASS，相关回归 115 passed，肺癌 QA gate PASS。
+- 首轮远端全回归额外检出 PTEN 同基因非登记事件被误纳入的问题；修复没有放宽旧断言，
+  而是将固定 15/12/8 版式与 B/C 精确事件选择器分离。精确性回归 46 项通过，A/B/C
+  真实输入结构合同 3/3 PASS，详见 `fix_log.md` 的 R5。
 
 ## 保留边界
 

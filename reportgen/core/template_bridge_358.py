@@ -712,6 +712,20 @@ def _normalize_immune_rows(tables: Dict[str, Any], category: str) -> List[Dict[s
             patterns = [patterns]
         if isinstance(patterns, list):
             item["patterns"] = [str(x).strip() for x in patterns if str(x).strip()]
+        selectors = row.get("selectors")
+        if isinstance(selectors, list):
+            normalized_selectors: List[Dict[str, Any]] = []
+            for selector in selectors:
+                if not isinstance(selector, dict):
+                    continue
+                selector_item = dict(selector)
+                selector_genes = _as_upper_gene_list(selector.get("genes"))
+                if not selector_genes:
+                    continue
+                selector_item["genes"] = selector_genes
+                normalized_selectors.append(selector_item)
+            if normalized_selectors:
+                item["selectors"] = normalized_selectors
         normalized.append(item)
     return normalized
 
@@ -2036,6 +2050,7 @@ def build_immune_variants(
             if mode in {
                 "variant_pattern",
                 "exact_variant",
+                "exact_variant_group",
                 "cnv_amp",
                 "confirmed_functional_loss",
                 "non_sequence_biomarker",
@@ -2100,21 +2115,34 @@ def build_immune_variants(
         """
 
         for row in rows:
-            if str(row.get("mode") or "direct").strip() != "exact_variant":
+            mode = str(row.get("mode") or "direct").strip()
+            if mode not in {"exact_variant", "exact_variant_group"}:
                 continue
-            for variant in variants:
-                if not _is_immune_eligible(variant):
+            selectors = (
+                row.get("selectors")
+                if mode == "exact_variant_group"
+                else [row]
+            )
+            for selector in selectors or []:
+                if not isinstance(selector, dict):
                     continue
-                if _variant_override_matches(
-                    row,
-                    str(variant.get("gene") or ""),
-                    str(variant.get("cHGVS") or ""),
-                    str(variant.get("pHGVS") or ""),
-                    str(variant.get("locus") or variant.get("variant_site") or ""),
-                    gene_class=str(variant.get("gene_class") or ""),
-                    transcript=str(variant.get("transcript") or ""),
-                ):
-                    _append_unique(group, _prepare_immune_variant(variant))
+                for variant in variants:
+                    if not _is_immune_eligible(variant):
+                        continue
+                    if _variant_override_matches(
+                        selector,
+                        str(variant.get("gene") or ""),
+                        str(variant.get("cHGVS") or ""),
+                        str(variant.get("pHGVS") or ""),
+                        str(
+                            variant.get("locus")
+                            or variant.get("variant_site")
+                            or ""
+                        ),
+                        gene_class=str(variant.get("gene_class") or ""),
+                        transcript=str(variant.get("transcript") or ""),
+                    ):
+                        _append_unique(group, _prepare_immune_variant(variant))
 
     def _add_cnv_amp_rows(group: str, rows: List[Dict[str, Any]]) -> None:
         cnv_data = excel_data.get_table_data("Cnv") or []
@@ -2731,27 +2759,39 @@ def _build_nccn_and_immune_fields(
         if mode == "gene_group":
             return _format_gene_prefixed_variants(_immune_variants_for_genes(genes))
 
-        if mode == "exact_variant":
+        if mode in {"exact_variant", "exact_variant_group"}:
             matched = []
-            for gene in genes:
-                for variant in _immune_eligible_variants(gene):
-                    if _variant_override_matches(
-                        row,
-                        str(variant.get("gene") or gene),
-                        str(variant.get("cHGVS") or ""),
-                        str(variant.get("pHGVS") or ""),
-                        str(
-                            variant.get("locus")
-                            or variant.get("variant_site")
-                            or ""
-                        ),
-                        gene_class=str(variant.get("gene_class") or ""),
-                        transcript=str(variant.get("transcript") or ""),
-                    ):
-                        matched.append(variant)
+            selectors = (
+                row.get("selectors")
+                if mode == "exact_variant_group"
+                else [row]
+            )
+            for selector in selectors or []:
+                if not isinstance(selector, dict):
+                    continue
+                selector_genes = _as_upper_gene_list(selector.get("genes"))
+                for gene in selector_genes:
+                    for variant in _immune_eligible_variants(gene):
+                        if _variant_override_matches(
+                            selector,
+                            str(variant.get("gene") or gene),
+                            str(variant.get("cHGVS") or ""),
+                            str(variant.get("pHGVS") or ""),
+                            str(
+                                variant.get("locus")
+                                or variant.get("variant_site")
+                                or ""
+                            ),
+                            gene_class=str(variant.get("gene_class") or ""),
+                            transcript=str(variant.get("transcript") or ""),
+                        ):
+                            matched.append(variant)
             return _format_gene_prefixed_variants(
                 _sort_variants_by_grouped_vaf(matched)
             )
+
+        if mode == "display_only":
+            return "未检出有害变异"
 
         if mode == "variant_pattern":
             patterns = [str(x) for x in row.get("patterns") or [] if str(x)]

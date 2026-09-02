@@ -68,3 +68,16 @@
   PASS。外部历史目录未配置时 `legacy_reference` 仍如实 SKIPPED。
 - 边界不变：本轮是工程与报告组 pilot 对齐，不把合成/未核实 PD-L1 来源冒充临床真源，
   也不替代报告组医学签署和 Windows Word/WPS 正式 UAT。
+
+## R5 — 2026-09-02 远端回归发现的免疫事件精确性修复
+
+- 首轮 GitHub 全后端回归为 `821 passed, 2 skipped, 1 failed`；唯一失败证明固定免疫表
+  曾把 PTEN 的历史精确事件错误放宽到同基因另一个变异。该失败未被忽略或改写测试。
+- 固定正相关 15 / 负相关 12 / 超进展 8 行继续完整输出；B/C 已登记的 MLH1、PMS2、
+  ATM、BRIP1、MSH3、BRCA2、PTEN 关联恢复为转录本与 HGVS 精确匹配。
+- DDR 固定行支持一组精确事件选择器；同基因错误转录本、PTEN 非登记事件以及单独 TP53
+  不再进入 B/C 免疫结果。CASE-LUNG-A 没有配对历史终版，不增加未登记的精确事件主张；
+  固定 IFNGR1/2 基因组行仍按其确定性规则展示。
+- 精确性及历史对齐回归 `46 passed`，冻结前组合回归 `142 passed, 2 skipped`；A/B/C
+  真实输入结构合同和整本渲染均为 `3/3 PASS`，B/C 免疫计数恢复为 `5/0` 与 `2/1`；
+  329 七场景 `7/7 PASS`，329/588 Panel package validation 均为 0 issue。
