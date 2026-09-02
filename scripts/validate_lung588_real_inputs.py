@@ -65,6 +65,16 @@ HISTORICAL_CHEMOTHERAPY_SUMMARIES = {
         "吉西他滨单药方案、白蛋白结合型紫杉醇单药方案、紫杉醇单药方案。"
     ),
 }
+HISTORICAL_IRINOTECAN_SAFETY = {
+    "CASE-LUNG-B": {
+        "result": "UGT1A1基因型为6TA/6TA",
+        "dose_evaluation": "正常剂量使用",
+    },
+    "CASE-LUNG-C": {
+        "result": "UGT1A1基因型为6TA/7TA",
+        "dose_evaluation": "减少剂量使用",
+    },
+}
 KNOWN_INPUTS = {
     "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646": {
         "alias": "CASE-LUNG-A",
@@ -86,6 +96,16 @@ KNOWN_INPUTS = {
         "pdl1_cps": 52.0,
         "pdl1_result": "阳性（高表达）",
         "expected_targeted_drug_count": 8,
+        "expected_targeted_drug_genes": [
+            "TP53",
+            "ATM",
+            "TSC1",
+            "MSH3",
+            "BRCA2",
+            "MLH1",
+            "PMS2",
+            "BRAF",
+        ],
         "expected_immune_positive_count": 5,
         "expected_immune_negative_count": 0,
     },
@@ -95,7 +115,17 @@ KNOWN_INPUTS = {
         "pdl1_tps": 5.0,
         "pdl1_cps": 6.0,
         "pdl1_result": "阳性（低表达）",
-        "expected_targeted_drug_count": 4,
+        "expected_targeted_drug_count": 8,
+        "expected_targeted_drug_genes": [
+            "BRAF",
+            "PTEN",
+            "ERBB2",
+            "ATM",
+            "TP53",
+            "TSC2",
+            "BRIP1",
+            "PIK3CA",
+        ],
         "expected_immune_positive_count": 2,
         "expected_immune_negative_count": 1,
     },
@@ -366,6 +396,9 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
             contract_path=contract_path,
         )
     chemotherapy_rows = list(report_data.get_table("chemotherapy_predictions") or [])
+    targeted_rows = list(report_data.get_table("targeted_drug_tips") or [])
+    guideline_rows = list(report_data.get_table("lung_guideline_drug_results") or [])
+    drug_analysis_rows = list(report_data.get_table("drug_analysis_sections") or [])
     chemotherapy_detail_rows = [
         row
         for table_name, table_rows in report_data.context.items()
@@ -379,8 +412,30 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
             list(report_data.get_table("all_variants") or [])
         ),
         "targeted_drug_count": len(
-            list(report_data.get_table("targeted_drug_tips") or [])
+            targeted_rows
         ),
+        "targeted_drug_genes": [
+            str(row.get("gene") or "")
+            for row in targeted_rows
+            if isinstance(row, dict) and str(row.get("gene") or "")
+        ],
+        "targeted_drug_intro_count": len(
+            list(report_data.get_table("targeted_drug_introductions") or [])
+        ),
+        "part3_drug_analysis_count": len(drug_analysis_rows),
+        "part3_drug_analysis_genes": sorted(
+            {
+                str(row.get("gene") or "")
+                for row in drug_analysis_rows
+                if isinstance(row, dict) and str(row.get("gene") or "")
+            }
+        ),
+        "part3_detected_lead_count": sum(
+            str(row.get("relation") or "").lstrip().startswith("该样本检出")
+            for row in drug_analysis_rows
+            if isinstance(row, dict)
+        ),
+        "reference_count": len(list(report_data.get_table("references") or [])),
         "immune_positive_count": len(
             list(report_data.get_table("immune_positive_variants") or [])
         ),
@@ -388,8 +443,13 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
             list(report_data.get_table("immune_negative_variants") or [])
         ),
         "lung_guideline_row_count": len(
-            list(report_data.get_table("lung_guideline_drug_results") or [])
+            guideline_rows
         ),
+        "lung_guideline_results": {
+            str(row.get("key") or ""): str(row.get("result") or "")
+            for row in guideline_rows
+            if isinstance(row, dict)
+        },
         "immune_fixed_row_counts": {
             category: len(list(report_data.get_table(table_name) or []))
             for category, table_name in (
@@ -419,6 +479,14 @@ def _enhance_case(bridge, excel_data, case: dict[str, Any]) -> dict[str, Any]:
         "chemotherapy_summary_text": report_data.get_field(
             "chemotherapy_summary_text"
         ),
+        "irinotecan_safety_rows": [
+            {
+                "result": str(row.get("result") or ""),
+                "dose_evaluation": str(row.get("dose_evaluation") or ""),
+            }
+            for row in report_data.get_table("irinotecan_safety_rows") or []
+            if isinstance(row, dict)
+        ],
         "chemotherapy_detail_quality": {
             "blank_result_count": sum(
                 not str(row.get("Result") or "").strip()
@@ -537,6 +605,7 @@ def _render_case(
     )
 
     content_failures: list[str] = []
+    rendered_semantics: dict[str, Any] = {}
     if output_file.is_file():
         document = Document(output_file)
         visible = "\n".join(
@@ -548,12 +617,31 @@ def _render_case(
                 for cell in row.cells
             ]
         )
-        required_texts = (
+        required_texts = [
             "Gene List for MLseq (n=588)",
             "第三部分：基因变异及相应靶向/免疫药物解析",
             "图1. 免疫组化：PD-L1",
             "报告组评审候选稿（非临床交付）",
-        )
+        ]
+        alias = str(case.get("alias") or "")
+        if alias in HISTORICAL_CHEMOTHERAPY_SUMMARIES:
+            required_texts.extend(
+                (
+                    HISTORICAL_CHEMOTHERAPY_SUMMARIES[alias],
+                    HISTORICAL_IRINOTECAN_SAFETY[alias]["result"],
+                    HISTORICAL_IRINOTECAN_SAFETY[alias]["dose_evaluation"],
+                )
+            )
+        if alias == "CASE-LUNG-C":
+            required_texts.extend(
+                (
+                    "c.1799T>A,p.V600E",
+                    "c.1979G>A,p.G660D",
+                    "PMID:19935797",
+                    "PMID:19966866",
+                    "PMID:30449325",
+                )
+            )
         forbidden_texts = (
             "__PART3_MARKER__",
             "__PDL1_CASE_IMAGE__",
@@ -564,10 +652,62 @@ def _render_case(
             "报告组二审",
             "报告组复核",
             "脱敏UAT",
+            "报告组评审中",
+            "依据病例Excel的CtDrug表生成",
+            "伊立替康剂量参考（未启用",
         )
         content_failures.extend(
             f"missing:{text}" for text in required_texts if text not in visible
         )
+
+        def matching_table(*tokens: str, column_count: int):
+            return next(
+                (
+                    table
+                    for table in document.tables
+                    if len(table.columns) == column_count
+                    and all(
+                        token
+                        in "\n".join(cell.text for cell in table.rows[0].cells)
+                        for token in tokens
+                    )
+                ),
+                None,
+            )
+
+        targeted_table = matching_table(
+            "潜在获益靶向药物",
+            "可能耐药或慎重药物",
+            column_count=4,
+        )
+        introduction_table = matching_table("药物介绍", column_count=3)
+        irinotecan_table = matching_table("剂量安全性评价", column_count=3)
+        rendered_semantics = {
+            "targeted_summary_row_count": (
+                len(targeted_table.rows) - 1 if targeted_table is not None else -1
+            ),
+            "targeted_intro_row_count": (
+                len(introduction_table.rows) - 1
+                if introduction_table is not None
+                else -1
+            ),
+            "irinotecan_row_count": (
+                len(irinotecan_table.rows) - 1
+                if irinotecan_table is not None
+                else -1
+            ),
+        }
+        expected_targeted_count = int(case.get("expected_targeted_drug_count") or 0)
+        for key in ("targeted_summary_row_count", "targeted_intro_row_count"):
+            if rendered_semantics[key] != expected_targeted_count:
+                content_failures.append(
+                    f"rendered_count:{key}={rendered_semantics[key]}"
+                )
+        if rendered_semantics["irinotecan_row_count"] != 1:
+            content_failures.append(
+                "rendered_count:irinotecan_row_count="
+                f"{rendered_semantics['irinotecan_row_count']}"
+            )
         if (
             int(case.get("expected_targeted_drug_count") or 0) > 0
             and "【待报告组审】" not in visible
@@ -610,6 +750,7 @@ def _render_case(
         "blank_page_count": len(blank_pages),
         "unexpected_low_content_page_count": len(low_content_pages),
         "content_failures": content_failures,
+        "rendered_semantics": rendered_semantics,
         "template_identity": template_identity,
         "review_candidate_contract": {
             "contract_id": contract["contract_id"],
@@ -977,6 +1118,23 @@ def validate_inputs(
             failures.append(
                 f"{row['alias']}: targeted drug rows differ from the exact-event contract"
             )
+        expected_targeted_genes = set(row.get("expected_targeted_drug_genes") or [])
+        if expected_targeted_genes and set(row["targeted_drug_genes"]) != (
+            expected_targeted_genes
+        ):
+            failures.append(
+                f"{row['alias']}: targeted drug genes differ from the historical final"
+            )
+        if row["targeted_drug_intro_count"] != row["targeted_drug_count"]:
+            failures.append(
+                f"{row['alias']}: targeted drug introductions are incomplete"
+            )
+        if row["alias"] == "CASE-LUNG-C" and not expected_targeted_genes <= set(
+            row["part3_drug_analysis_genes"]
+        ):
+            failures.append(
+                "CASE-LUNG-C: Part-3 drug analysis does not cover all target genes"
+            )
         if row["immune_positive_count"] != row["expected_immune_positive_count"]:
             failures.append(
                 f"{row['alias']}: positive immune rows differ from the exact-event contract"
@@ -987,6 +1145,13 @@ def validate_inputs(
             )
         if row["lung_guideline_row_count"] != 10:
             failures.append(f"{row['alias']}: lung guideline table is not 10 rows")
+        if row["lung_guideline_results"].get("ALK") != "未见变异":
+            failures.append(f"{row['alias']}: ALK guideline wording differs")
+        if row["alias"] == "CASE-LUNG-C":
+            if row["lung_guideline_results"].get("BRAF") != "c.1799T>A,p.V600E":
+                failures.append("CASE-LUNG-C: BRAF guideline wording differs")
+            if row["lung_guideline_results"].get("ERBB2") != "c.1979G>A,p.G660D":
+                failures.append("CASE-LUNG-C: ERBB2 guideline wording differs")
         if row["immune_fixed_row_counts"] != {
             "positive": 15,
             "negative": 12,
@@ -1020,6 +1185,11 @@ def validate_inputs(
                 failures.append(
                     f"{row['alias']}: chemotherapy summary differs from historical final"
                 )
+            expected_irinotecan = HISTORICAL_IRINOTECAN_SAFETY[row["alias"]]
+            if row["irinotecan_safety_rows"] != [expected_irinotecan]:
+                failures.append(
+                    f"{row['alias']}: irinotecan safety differs from historical final"
+                )
         if any(row["chemotherapy_detail_quality"].values()):
             failures.append(
                 f"{row['alias']}: chemotherapy appendix display normalization failed"
@@ -1033,6 +1203,10 @@ def validate_inputs(
         forbidden_crc_genes = {"FBXW7", "NF1", "NRAS", "SMAD4", "SMARCA4", "TCF7L2"}
         if forbidden_crc_genes & set(row["undetected_gene_names"]):
             failures.append(f"{row['alias']}: CRC undetected genes leaked into lung report")
+        if row["alias"] == "CASE-LUNG-C" and not {"MLH1", "PMS2"} <= set(
+            row["undetected_gene_names"]
+        ):
+            failures.append("CASE-LUNG-C: MLH1/PMS2 are missing from undetected genes")
         preview = row["web_preview"]
         if preview["targeted_drug_count"] != row["expected_targeted_drug_count"]:
             failures.append(

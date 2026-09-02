@@ -84,6 +84,10 @@ def test_targeted_drug_rule_context_matrix():
         "MLH1",
         "PMS2",
         "BRAF",
+        "PTEN",
+        "TSC2",
+        "BRIP1",
+        "PIK3CA",
     }
     assert len(lung["reviewed_variant_overrides"]) == 2
     assert lung["blocked_reviewed_variant_overrides"] == []

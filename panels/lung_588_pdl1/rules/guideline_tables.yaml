@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "guideline_tables"
-version: "1.0.0"
+version: "1.1.0"
 updated: "2026-09-02"
 status: "pilot"
 description: >
@@ -58,7 +58,7 @@ guideline_tables:
         display: "ALK"
         result_mode: "fusion"
         match: "融合"
-        undetected_result: "未见融合变异"
+        undetected_result: "未见变异"
         drugs: |-
           阿来替尼
           布格替尼
@@ -182,6 +182,31 @@ guideline_tables:
     detail_allowed_levels: ["1B", "2A", "2B"]
     detail_drug_name_style: "chinese_only"
     uncovered_display: "未覆盖"
+    irinotecan_safety:
+      enabled: true
+      drug_display: "伊立替康剂量安全性"
+      selectors:
+        star28: {gene: "UGT1A1", site: "rs8175347"}
+        star6: {gene: "UGT1A1", site: "rs4148323"}
+      historical_rules:
+        - star28: "6TA/6TA"
+          star6: "GG"
+          result: "UGT1A1基因型为6TA/6TA"
+          dose_evaluation: "正常剂量使用"
+        - star28: "6TA/6TA"
+          star6: "AG"
+          result: "UGT1A1基因型为6TA/6TA"
+          dose_evaluation: "正常剂量使用"
+        - star28: "6TA/7TA"
+          star6: "GG"
+          result: "UGT1A1基因型为6TA/7TA"
+          dose_evaluation: "减少剂量使用"
+        - star28: "6TA/7TA"
+          star6: "AG"
+          result: "UGT1A1基因型为6TA/7TA"
+          dose_evaluation: "减少剂量使用"
+      unsupported_result: "UGT1A1分型未形成历史剂量建议"
+      unsupported_dose_evaluation: "未形成剂量建议"
     base_drugs:
       - {key: "cisplatin", display: "顺铂", aliases: ["顺铂"], prediction_genes: [XPC, MTHFR, GSTP1, ERCC1, XRCC1, GSTM1]}
       - {key: "carboplatin", display: "卡铂", aliases: ["卡铂"], prediction_genes: [MTHFR, ERCC1, XRCC1]}
@@ -243,14 +268,14 @@ guideline_tables:
       - {display: "培美曲塞单药方案(仅限于非鳞癌)", components: ["pemetrexed"]}
       - {display: "吉西他滨单药方案", components: ["gemcitabine"]}
     dosage_rows:
-      - {regimen: "GP（吉西他滨+顺铂）", dosage: "吉西他滨：1000-1250 mg/(m2.d) 静脉滴注 d1,8 每三~四周*4-6；顺铂：75 mg/(m2.d) 静脉滴注 d1 每三~四周*4-6，或根据患者耐受状况分3-5日输注。"}
-      - {regimen: "GC（吉西他滨+卡铂）", dosage: "吉西他滨：1000-1250 mg/(m2.d) 静脉滴注 d1,8 每三~四周*4-6；卡铂：AUC 4.5-6 静脉滴注 d1 每三~四周*4-6，或根据患者耐受状况分2-3日输注。"}
-      - {regimen: "DP（多西他赛+顺铂）", dosage: "多西他赛：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分2日输注；顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分3-5日输注。"}
-      - {regimen: "DC（多西他赛+卡铂）", dosage: "多西他赛：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分2日输注；卡铂：AUC 4.5-6 静脉滴注 d1 每三~四周*4-6，或根据患者耐受状况分2-3日输注。"}
-      - {regimen: "NP（长春瑞滨+顺铂）", dosage: "长春瑞滨：25 mg/(m2.d) 静脉推注 d1,8 每三～四周*4-6；顺铂：75-80 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分3-5日输注。"}
-      - {regimen: "NC（长春瑞滨+卡铂）", dosage: "长春瑞滨：25 mg/(m2.d) 静脉推注 d1,8 每三～四周*4-6；卡铂：AUC 4.5-6 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分2-3日输注。"}
-      - {regimen: "EP（依托泊苷+顺铂）", dosage: "依托泊苷：100 mg/(m2.d) 静脉滴注 d1-5 每三～四周*4-6；顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分3-5日输注。"}
-      - {regimen: "PP（培美曲塞+顺铂）*（仅限于非鳞癌）", dosage: "培美曲塞：500 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6；顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分3-5日输注。"}
-      - {regimen: "PC（培美曲塞+卡铂）*（仅限于非鳞癌）", dosage: "培美曲塞：500 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6；卡铂：AUC 4.5-6 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分2-3日输注。"}
-      - {regimen: "TP（紫杉醇+顺铂）", dosage: "紫杉醇：135-175 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6；顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分3-5日输注。"}
-      - {regimen: "TC（紫杉醇+卡铂）", dosage: "紫杉醇：135-175 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6；卡铂：AUC 4.5-6 静脉滴注 d1 每三～四周*4-6，或根据患者耐受状况分2-3日输注。"}
+      - {regimen: "GP（吉西他滨+顺铂）", dosage: "吉西他滨：1000-1250 mg/(m2.d) 静脉滴注 d1,8 每三~四周*4-6顺铂：75 mg/(m2.d) 静脉滴注 d1 每三~四周*4-6或根据患者耐受状况，总剂量分3-5日输注。"}
+      - {regimen: "GC（吉西他滨+卡铂）", dosage: "吉西他滨：1000-1250 mg/(m2.d) 静脉滴注 d1,8 每三~四周*4-6卡铂：AUC 4.5-6 静脉滴注 d1 每三~四周*4-6或根据患者耐受状况，总剂量分2-3日输注。"}
+      - {regimen: "DP（多西他赛+顺铂）", dosage: "多西他赛：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2 日输注。顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 3-5 日输注。"}
+      - {regimen: "DC（多西他赛+卡铂）", dosage: "多西他赛：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2 日输注。卡铂：AUC 4.5-6 静脉滴注 d1 每三~四周*4-6或根据患者耐受状况，总剂量分2-3日输注。"}
+      - {regimen: "NP（长春瑞滨+顺铂）", dosage: "长春瑞滨：25 mg/(m2.d) 静脉推注 d1,8 每三～四周*4-6顺铂：75-80 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 3-5 日输注。"}
+      - {regimen: "NC（长春瑞滨+卡铂）", dosage: "长春瑞滨：25 mg/(m2.d) 静脉推注 d1,8 每三～四周*4-6卡铂：AUC 4.5-6 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2-3 日输注。"}
+      - {regimen: "EP（依托泊苷+顺铂）", dosage: "依托泊苷：100 mg/(m2.d) 静脉滴注 d1-5 每三～四周*4-6顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 3-5 日输注。"}
+      - {regimen: "PP（培美曲塞+顺铂）*（仅限于非鳞癌）", dosage: "培美曲塞：500 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 3-5 日输注。"}
+      - {regimen: "PC（培美曲塞+卡铂）*（仅限于非鳞癌）", dosage: "培美曲塞：500 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6卡铂：AUC 4.5-6 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2-3 日输注。"}
+      - {regimen: "TP（紫杉醇+顺铂）", dosage: "紫杉醇：135-175 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 3-5 日输注。"}
+      - {regimen: "TC（紫杉醇+卡铂）", dosage: "紫杉醇：135-175 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6卡铂：AUC 4.5-6 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2-3 日输注。"}

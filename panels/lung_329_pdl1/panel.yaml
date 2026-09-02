@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "lung_329_pdl1"
 display_name: "肺癌329基因+PD-L1"
-version: "0.5.1"
+version: "0.5.2"
 status: "pilot"
 description: >
   Lung 329-gene + PD-L1 controlled-pilot package. It reports structured
@@ -9,7 +9,8 @@ description: >
   only context-bounded exact-event targeted rules plus exact historical immune
   display contracts. Part-3 knowledge is visible in report-group pilot drafts
   with a non-blocking cross-cancer residual scan; broad treatment/immune and
-  chemotherapy-PGx inference remain fail-closed.
+  historical C/D drug classes and the UGT1A1 irinotecan table are exposed with
+  the report-group review boundary.
 
 aliases:
   - "lung_329"
@@ -84,7 +85,7 @@ default_template: "lung_329_pdl1_golden_template_v2"
 templates:
   - id: "lung_329_pdl1_golden_template_v2"
     file: "templates/lung_329_pdl1_golden_template_v2.docx"
-    version: "0.5.2-review.5"
+    version: "0.5.3-review.1"
     status: "pilot"
     description: >
       Comprehensive report-group review template sharing the historical lung

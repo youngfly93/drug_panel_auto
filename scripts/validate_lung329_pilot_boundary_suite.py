@@ -410,7 +410,7 @@ def run(output_dir: Path, *, require_visual: bool, dpi: int) -> dict[str, Any]:
         targeted_rows = list(context.get("targeted_drug_tips") or [])
         targeted_count = len(targeted_rows)
         if targeted_count != scenario["expected_targeted_drug_count"]:
-            failures.append("exact_targeted_drug_count_mismatch")
+            failures.append("targeted_drug_count_mismatch")
         expected_gene_displays: list[str] = []
         previous_gene = ""
         for row in targeted_rows:

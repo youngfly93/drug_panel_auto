@@ -21,9 +21,9 @@ privacy:
 
 template:
   id: "lung_588_pdl1_historical_golden_v1"
-  version: "0.5.2-review.5"
+  version: "0.5.3-review.1"
   status: "pilot"
-  sha256: "4f61e20d4a2d7a3dc0a28228e06ed85d094a7e2c2c927ee3184e523005590f02"
+  sha256: "4164ed4851a20330e9b1aea1195501f3786abe88cd435cc57dc9199ecc9becb8"
   structure:
     table_count: 69
     section_count: 5
@@ -39,6 +39,7 @@ template:
     - "{%tr for row in chemotherapy_predictions %}"
     - "{%tr for row in chemotherapy_regimen_predictions %}"
     - "{%tr for row in chemotherapy_dosage_rows %}"
+    - "{%tr for row in irinotecan_safety_rows %}"
   required_texts:
     - "报告组评审候选稿（非临床交付）"
     - "以下固定附录沿用历史终版版式"
@@ -49,6 +50,9 @@ template:
     - "n=329"
     - "肺癌临床指南说明（历史内容已移除，等待当前版本复核）"
     - "本表仅展示当前面板已输出的精确事件结果"
+    - "报告组评审中"
+    - "依据病例Excel的CtDrug表生成"
+    - "伊立替康剂量参考（未启用"
   dynamic_scope:
     end_heading: "第四部分：附录"
     forbidden_texts: []
@@ -89,6 +93,9 @@ rendered_output:
     - "待报告组审核"
     - "肺癌临床指南说明（历史内容已移除，等待当前版本复核）"
     - "本表仅展示当前面板已输出的精确事件结果"
+    - "报告组评审中"
+    - "依据病例Excel的CtDrug表生成"
+    - "伊立替康剂量参考（未启用"
   dynamic_scope:
     end_heading: "第四部分：附录"
     forbidden_texts: []
