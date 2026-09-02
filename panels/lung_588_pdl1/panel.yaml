@@ -125,7 +125,7 @@ templates:
       - "underlines_and_styles"
   - id: "lung_588_pdl1_historical_golden_v1"
     file: "templates/lung_588_pdl1_historical_golden_v1.docx"
-    version: "0.5.1-review.5"
+    version: "0.5.2-review.5"
     status: "pilot"
     description: >
       Full-layout report-group review candidate distilled in place from the

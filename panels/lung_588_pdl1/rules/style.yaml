@@ -1,7 +1,7 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "style"
-version: "0.2.1"
+version: "0.2.2"
 updated: "2026-09-01"
 status: "draft"
 description: "Lung588 DOCX style tokens."
@@ -56,5 +56,4 @@ style:
     # A second explicit page break creates an empty page in LibreOffice/Linux.
     insert_page_break: false
     remove_page_break_after_text_prefixes:
-      - "本表仅展示当前面板已输出的精确事件结果"
       - "备注：正体为国内大型三甲医院在临床中用到的化疗方案"

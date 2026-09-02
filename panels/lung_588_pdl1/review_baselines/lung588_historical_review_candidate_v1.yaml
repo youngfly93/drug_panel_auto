@@ -21,9 +21,9 @@ privacy:
 
 template:
   id: "lung_588_pdl1_historical_golden_v1"
-  version: "0.5.1-review.5"
+  version: "0.5.2-review.5"
   status: "pilot"
-  sha256: "fe53e15483f7d397ac0507a98a0b9116fce71fe86efad6e8ffdafddf0ac88732"
+  sha256: "4f61e20d4a2d7a3dc0a28228e06ed85d094a7e2c2c927ee3184e523005590f02"
   structure:
     table_count: 69
     section_count: 5
@@ -41,13 +41,14 @@ template:
     - "{%tr for row in chemotherapy_dosage_rows %}"
   required_texts:
     - "报告组评审候选稿（非临床交付）"
-    - "本表仅展示当前面板已输出的精确事件结果"
     - "以下固定附录沿用历史终版版式"
     - "Gene List for MLseq (n=588)"
     - "图1. 免疫组化：PD-L1"
   forbidden_texts:
     - "肺癌329"
     - "n=329"
+    - "肺癌临床指南说明（历史内容已移除，等待当前版本复核）"
+    - "本表仅展示当前面板已输出的精确事件结果"
   dynamic_scope:
     end_heading: "第四部分：附录"
     forbidden_texts: []
@@ -73,7 +74,6 @@ rendered_output:
     inline_shape_count_min: 19
   required_texts:
     - "报告组评审候选稿（非临床交付）"
-    - "本表仅展示当前面板已输出的精确事件结果"
     - "以下固定附录沿用历史终版版式"
     - "第三部分：基因变异及相应靶向/免疫药物解析"
     - "Gene List for MLseq (n=588)"
@@ -87,6 +87,8 @@ rendered_output:
     - "n=329"
     - "工程草案"
     - "待报告组审核"
+    - "肺癌临床指南说明（历史内容已移除，等待当前版本复核）"
+    - "本表仅展示当前面板已输出的精确事件结果"
   dynamic_scope:
     end_heading: "第四部分：附录"
     forbidden_texts: []
