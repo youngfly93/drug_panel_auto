@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml
 from docx import Document
 from docx.oxml.ns import qn
 
@@ -127,6 +128,16 @@ def test_lung_comprehensive_panels_share_historical_fixed_tables(panel_id):
     assert len(config.chemotherapy_rule["prediction_rows"]) == 27
     assert len(config.chemotherapy_rule["regimen_rows"]) == 22
     assert len(config.chemotherapy_rule["dosage_rows"]) == 11
+
+
+@pytest.mark.parametrize("panel_id", ["lung_588_pdl1", "lung_329_pdl1"])
+def test_lung_comprehensive_front_matter_uses_existing_section_break(panel_id):
+    package = load_panel_package(panel_id, project_root=ROOT)
+    payload = yaml.safe_load(package.resolve_rule_file("style").read_text())
+    front_matter = payload["style"]["front_matter"]
+
+    assert front_matter["guide_spacer_count"] == 30
+    assert front_matter["insert_page_break"] is False
 
 
 def test_lung_fixed_immune_tables_keep_historical_event_exactness(tmp_path):
