@@ -2015,6 +2015,22 @@ def test_crc_panel_can_show_all_drugs_in_part2():
     assert "另" not in report_data.get_table("variants_2_1")[0]["benefit_drugs"]
 
 
+def test_crc_compaction_does_not_blank_repeated_targeted_gene_cells():
+    report_data = ReportData(
+        context={
+            "targeted_drug_tips": [
+                {"gene": "EGFR", "benefit_drugs": "药物1（A）"},
+                {"gene": "EGFR", "benefit_drugs": "药物2（B）"},
+            ]
+        }
+    )
+
+    _compact_drug_display_tables(report_data, max_items=None)
+
+    rows = report_data.get_table("targeted_drug_tips")
+    assert all("gene_display" not in row for row in rows)
+
+
 def test_fanca_reviewed_rule_only_matches_class_ii_loss_of_function():
     rule = {
         "gene": "FANCA",

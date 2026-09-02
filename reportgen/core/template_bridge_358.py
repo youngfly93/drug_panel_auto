@@ -1651,7 +1651,10 @@ def _compact_drug_display_value(
 
 
 def _compact_drug_display_tables(
-    report_data: ReportData, *, max_items: Optional[int] = DRUG_DISPLAY_MAX_ITEMS
+    report_data: ReportData,
+    *,
+    max_items: Optional[int] = DRUG_DISPLAY_MAX_ITEMS,
+    blank_repeated_gene: bool = False,
 ) -> None:
     """Compact long drug lists in Word summary tables without losing full values.
 
@@ -1667,7 +1670,7 @@ def _compact_drug_display_tables(
         changed = False
         previous_gene = ""
         for row in rows:
-            if table_name == "targeted_drug_tips":
+            if table_name == "targeted_drug_tips" and blank_repeated_gene:
                 gene = str(row.get("gene") or "").strip()
                 gene_display = "" if gene and gene == previous_gene else gene
                 if row.get("gene_display") != gene_display:
@@ -4206,6 +4209,7 @@ def enhance_report_data(
     _compact_drug_display_tables(
         report_data,
         max_items=pc.drug_display_max_items,
+        blank_repeated_gene=pc.panel_id in {"lung_329_pdl1", "lung_588_pdl1"},
     )
 
     report_content_cfg = report_data.get_field("report_content")

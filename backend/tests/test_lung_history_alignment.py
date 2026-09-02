@@ -522,7 +522,11 @@ def test_targeted_summary_blanks_only_consecutive_repeated_gene_displays():
         }
     )
 
-    _compact_drug_display_tables(data, max_items=5)
+    _compact_drug_display_tables(
+        data,
+        max_items=5,
+        blank_repeated_gene=True,
+    )
 
     rows = data.get_table("targeted_drug_tips")
     assert [row["gene"] for row in rows] == ["TP53", "TP53", "ATM", "TP53"]
