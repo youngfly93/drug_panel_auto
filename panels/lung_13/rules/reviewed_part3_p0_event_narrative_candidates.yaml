@@ -1,0 +1,91 @@
+schema_version: '1.0'
+source:
+  panel: lung_588_pdl1
+  purpose: 'First-review, exact-event narrative candidates for detected lung588 P0 events that still fall back to
+    generic Part-3 prose.
+
+    '
+  source_type: official_gene_identity_plus_hgvs_consequence_boundary
+  curated_at: '2026-07-24'
+  evidence_as_of: '2026-07-24'
+  activation_mode: candidate_only_pending_secondary_review
+  consumer_panels:
+  - lung_13
+  privacy: Only de-identified CASE aliases and structured events are used.
+  inherited_from_panel: lung_588_pdl1
+  inherited_rule_sha256: 6ba3d8773cac00a1b95bb5b39d38cddc826c252cc0fab1d5641fa1df51a9650a
+governance:
+  schema_version: '1.0'
+  policy_id: lung588_p0_exact_event_narrative_first_review_v1
+  purpose: 'Replace generic fallback prose with source-bounded candidate wording without making the wording patient-visible
+    or runtime-eligible.
+
+    '
+  defaults:
+    gene:
+      review_status: needs_review
+      runtime_eligible: false
+      report_text_allowed: false
+      patient_visible: false
+      review_basis: codex_first_review_ncbi_gene_and_hgvs_consequence
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: '2026-07-24'
+      evidence_as_of: '2026-07-24'
+      evidence_level: official_gene_function_plus_predicted_sequence_consequence
+      cancer_scope: lung_panel_detected_exact_event_candidate
+      secondary_review_status: pending_report_group_review
+      risk_level: content_requires_secondary_review
+  runtime_selector_contract:
+    current_overlay_matches_transcript: false
+    disposition: promotion_blocked_until_transcript_is_enforced
+    reason: 'The current reviewed-overlay runtime key uses gene, c_hgvs and p_hgvs. Transcript is preserved below
+      for review identity but is not yet enforced by the runtime loader.
+
+      '
+  promotion_requires:
+  - report_group_event_level_secondary_review
+  - exact_transcript_c_hgvs_p_hgvs_identity_check
+  - runtime_selector_enforces_transcript
+  - direct_source_supports_every_patient_visible_claim
+  - positive_and_negative_rule_tests
+  - case_level_uat
+gene_sections:
+- candidate_id: lung588_event_narrative_erbb2_g660d
+  gene: ERBB2
+  transcript: NM_004448.4
+  c_hgvs: c.1979G>A
+  p_hgvs: p.G660D
+  variant_kind: missense
+  intro: 'ERBB2编码表皮生长因子受体家族的受体酪氨酸激酶。该蛋白本身没有配体结合域， 可与其他已结合配体的家族成员形成异二聚体，并增强MAPK、PI3K等下游信号通路。
+
+    '
+  mutation_analysis: '在转录本NM_004448.4上，c.1979G>A对应p.G660D，为第660位甘氨酸替换为天冬氨酸的错义事件。 本候选文案不将G660D自动等同于HER2扩增、过表达或其他ERBB2变异；
+    精确位点功能、肺癌治疗适用性及伴随诊断条件须在独立药物候选审核中逐项确认， 不得由本段直接形成治疗、免疫或预后结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:2064
+    url: https://www.ncbi.nlm.nih.gov/gene/2064
+    supports: gene_identity_and_function_only
+  linked_candidate_ids:
+  - lung588_erbb2_g660d_trastuzumab_deruxtecan
+  - lung588_erbb2_g660d_trastuzumab_rezetecan
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: reviewed_in_separate_candidate_contract
+    direct_lung_clinical_evidence: requires_separate_candidate_review
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_13
+drug_sections: []
+panel_id: lung_13

@@ -1,0 +1,2371 @@
+schema_version: '1.0'
+panel_id: lung_588
+rule_id: panel
+version: 0.1.0
+updated: '2026-07-23'
+status: draft
+description: Lung588 variant membership and display contract.
+variant_filter:
+  columns:
+  - ExistIn552
+  allowed_values:
+  - Ⅰ类
+  - Ⅱ类
+  - Ⅲ类
+class_i_genes: []
+class_ii_genes: []
+important_genes:
+- ABCB1
+- ABI1
+- ABL1
+- ABL2
+- AFF1
+- AFF3
+- AFF4
+- AKT1
+- AKT2
+- AKT3
+- ALDH1A1
+- ALK
+- AMER1
+- APC
+- AR
+- ARAF
+- AREG
+- ARID1A
+- ARID1B
+- ARID2
+- ASXL1
+- ASXL2
+- ATF1
+- ATIC
+- ATM
+- ATR
+- ATRX
+- AXIN1
+- AXIN2
+- B2M
+- BACH2
+- BAP1
+- BARD1
+- BAX
+- BCL10
+- BCL11A
+- BCL11B
+- BCL2
+- BCL2L1
+- BCL2L11
+- BCOR
+- BCORL1
+- BCR
+- BLM
+- BMPR1A
+- BRAF
+- BRCA1
+- BRCA2
+- BRD4
+- BRIP1
+- BTK
+- C8ORF34
+- CALR
+- CARD11
+- CBL
+- CBR3
+- CCDC6
+- CCNB3
+- CCND1
+- CCND2
+- CCND3
+- CCNE1
+- CD22
+- CD27
+- CD274
+- CD276
+- CD28
+- CD36
+- CD47
+- CD58
+- CD70
+- CD74
+- CD79A
+- CD79B
+- CD8A
+- CDA
+- CDC42
+- CDC73
+- CDH1
+- CDH11
+- CDH2
+- CDK12
+- CDK4
+- CDK6
+- CDK8
+- CDKN1A
+- CDKN1B
+- CDKN2A
+- CDKN2B
+- CDKN2C
+- CDX2
+- CEBPA
+- CEP72
+- CHD2
+- CHD4
+- CHEK1
+- CHEK2
+- CIC
+- CREBBP
+- CRKL
+- CSF1R
+- CSF3R
+- CTCF
+- CTLA4
+- CTNNA1
+- CTNNB1
+- CUL3
+- CUX1
+- CXCL12
+- CYLD
+- CYP19A1
+- CYP2D6
+- CYP2E1
+- DCK
+- DDR1
+- DDR2
+- DEK
+- DNM2
+- DNMT1
+- DNMT3A
+- DNMT3B
+- DOK5
+- DOT1L
+- DPYD
+- DYNC2H1
+- E2F3
+- EGFR
+- EGR1
+- EP300
+- EP400
+- EPAS1
+- EPCAM
+- EPHA2
+- EPHA3
+- EPHA5
+- EPHA7
+- EPHB1
+- EPHB4
+- EPHB6
+- EPOR
+- ERBB2
+- ERBB3
+- ERBB4
+- ERCC1
+- ERCC2
+- ERRFI1
+- ESR1
+- ESR2
+- ETS1
+- ETV1
+- ETV4
+- ETV5
+- ETV6
+- EXT1
+- EXT2
+- EZH1
+- EZH2
+- FAF1
+- FAM175A
+- FANCA
+- FANCC
+- FANCD2
+- FANCE
+- FANCF
+- FANCG
+- FANCI
+- FANCL
+- FANCM
+- FAT1
+- FAT3
+- FAT4
+- FBXW7
+- FGF1
+- FGF10
+- FGF12
+- FGF14
+- FGF19
+- FGF2
+- FGF23
+- FGF3
+- FGF4
+- FGF5
+- FGF6
+- FGF7
+- FGF8
+- FGF9
+- FGFR1
+- FGFR2
+- FGFR3
+- FGFR4
+- FGR
+- FH
+- FLCN
+- FLI1
+- FLT1
+- FLT3
+- FLT4
+- FOXA1
+- FOXF1
+- FOXL2
+- FOXO1
+- FOXO3
+- FOXO4
+- FOXP1
+- FUBP1
+- FURIN
+- GAB1
+- GAB2
+- GALNT12
+- GALNT14
+- GATA3
+- GGH
+- GNA11
+- GNAQ
+- GNAS
+- GSTM1
+- GSTP1
+- H3F3A
+- H3F3B
+- H3F3C
+- HAVCR2
+- HDAC1
+- HDAC2
+- HDAC4
+- HDAC7
+- HDAC9
+- HGF
+- HIF1A
+- HIP1
+- HIRA
+- HIST1H1B
+- HIST1H1C
+- HIST1H1D
+- HIST1H1E
+- HIST1H2AC
+- HIST1H2AG
+- HIST1H2AL
+- HIST1H2AM
+- HIST1H2BC
+- HIST1H2BD
+- HIST1H2BG
+- HIST1H2BJ
+- HIST1H2BK
+- HIST1H2BO
+- HIST1H3A
+- HIST1H3B
+- HIST1H3C
+- HIST1H3D
+- HIST1H3E
+- HIST1H3F
+- HIST1H3G
+- HIST1H3H
+- HIST1H3I
+- HIST1H3J
+- HIST1H4I
+- HIST2H3C
+- HIST2H3D
+- HIST3H3
+- HLA-A
+- HLA-B
+- HLA-C
+- HLA-DPA1
+- HLA-DPB1
+- HLA-DQA1
+- HLA-DQB1
+- HLA-DRB1
+- HLA-DRB5
+- HLA-G
+- HLF
+- HNF1A
+- HOXB13
+- HRAS
+- HSP90AA1
+- HSP90AB1
+- IDH1
+- IDH2
+- IDO1
+- IDO2
+- IGF1
+- IGF1R
+- IGF2
+- IKBKB
+- IKBKE
+- IKZF1
+- IKZF2
+- IKZF3
+- IL10
+- IL2
+- IL21R
+- IL3
+- IL6
+- IL6ST
+- IL7R
+- INHA
+- INHBA
+- INPP4A
+- INPP4B
+- INPP5D
+- INPPL1
+- INSR
+- IRF1
+- IRF2
+- IRF4
+- IRF8
+- IRS1
+- IRS2
+- IRS4
+- JAK1
+- JAK2
+- JAK3
+- JUN
+- KAT6A
+- KAT6B
+- KDM2B
+- KDM4C
+- KDM5A
+- KDM5C
+- KDM6A
+- KDR
+- KEAP1
+- KEL
+- KIF5B
+- KIT
+- KMT2A
+- KMT2B
+- KMT2C
+- KMT2D
+- KMT5A
+- KRAS
+- LAMP1
+- LBP1B
+- LCK
+- LCP1
+- LEF1
+- LMO1
+- LMO2
+- LRP1B
+- MAF
+- MAP2K1
+- MAP2K2
+- MAP2K4
+- MAP2K7
+- MAP3K1
+- MAP3K13
+- MAP3K14
+- MAP3K4
+- MAP3K6
+- MAP3K7
+- MAPK1
+- MAPK3
+- MAPKAP1
+- MAX
+- MDM2
+- MDM4
+- MED12
+- MEN1
+- MET
+- MGA
+- MGAM
+- MLH1
+- MLH3
+- MN1
+- MPL
+- MRE11A
+- MSH2
+- MSH3
+- MSH6
+- MTHFR
+- MTOR
+- MTRR
+- MUTYH
+- MYB
+- MYC
+- MYCL
+- MYCL1
+- MYCN
+- MYD88
+- MYH11
+- MYH9
+- NBN
+- NCOA1
+- NCOA2
+- NCOA3
+- NCOA4
+- NCOR1
+- NCOR2
+- NF1
+- NF2
+- NFE2
+- NFE2L2
+- NOTCH1
+- NOTCH2
+- NOTCH3
+- NOTCH4
+- NPM1
+- NQO1
+- NRAS
+- NRG1
+- NSD1
+- NSD2
+- NT5C3A
+- NTRK1
+- NTRK2
+- NTRK3
+- PALB2
+- PARD3B
+- PARP1
+- PARP2
+- PARP3
+- PBRM1
+- PCLO
+- PDCD1
+- PDCD11
+- PDCD1LG2
+- PDE4DIP
+- PDGFB
+- PDGFRA
+- PDGFRB
+- PHOX2B
+- PIK3C2B
+- PIK3C2G
+- PIK3C3
+- PIK3CA
+- PIK3CB
+- PIK3CD
+- PIK3CG
+- PIK3R1
+- PIK3R2
+- PIK3R3
+- PIM1
+- PLAG1
+- PLCG1
+- PLCG2
+- PLK2
+- PMS1
+- PMS2
+- POLD1
+- POLE
+- POLQ
+- POT1
+- PPP2R2A
+- PRSS1
+- PRSS8
+- PTCH1
+- PTCH2
+- PTEN
+- PTPN11
+- PTPN13
+- PTPRB
+- PTPRC
+- PTPRD
+- PTPRK
+- PTPRO
+- PTPRS
+- PTPRT
+- RAD21
+- RAD50
+- RAD51
+- RAD51B
+- RAD51C
+- RAD51D
+- RAD52
+- RAD54B
+- RAD54L
+- RAF1
+- RARA
+- RB1
+- RBM10
+- RBM15
+- RECQL
+- RECQL4
+- REL
+- RET
+- RHEB
+- RHOA
+- RHOH
+- RICTOR
+- RIT1
+- ROS1
+- RPTOR
+- RRM1
+- RUNX1
+- SDHA
+- SDHAF2
+- SDHB
+- SDHC
+- SDHD
+- SEMA3C
+- SET
+- SETD2
+- SETD3
+- SETD4
+- SETD5
+- SETD6
+- SETD7
+- SETDB1
+- SETDB2
+- SF3B1
+- SLC12A5
+- SLC19A1
+- SLC22A12
+- SLC28A3
+- SLC29A1
+- SLCO1B1
+- SLIT2
+- SMAD2
+- SMAD3
+- SMAD4
+- SMARCA1
+- SMARCA2
+- SMARCA4
+- SMARCB1
+- SMO
+- SOD2
+- SOS1
+- SPEN
+- SRSF2
+- STAG1
+- STAG2
+- STAT1
+- STAT2
+- STAT3
+- STAT4
+- STAT6
+- STIL
+- STK11
+- SYK
+- TAF1
+- TAL1
+- TAL2
+- TCF7L2
+- TEK
+- TERC
+- TERT
+- TET1
+- TET2
+- TET3
+- TFE3
+- TGFBR1
+- TGFBR2
+- TMEM127
+- TNFAIP3
+- TOP2A
+- TP53
+- TP53BP1
+- TP63
+- TPM3
+- TPM4
+- TPR
+- TRAF2
+- TRAF3
+- TRAF5
+- TRAF7
+- TRIM24
+- TRIM27
+- TRIM33
+- TRIP11
+- TRIP13
+- TRRAP
+- TSC1
+- TSC2
+- TSHR
+- U2AF1
+- UGT1A1
+- UMPS
+- VEGFA
+- VHL
+- WHSC1
+- WHSC1L1
+- WRN
+- WT1
+- XIAP
+- XPA
+- XPC
+- XPO1
+- XRCC1
+- XRCC2
+- XRCC3
+- YAP1
+- YES1
+- ZFHX3
+- ZMYM2
+- ZMYM3
+- ZNF217
+- ZNF278
+- ZNF521
+- ZNF703
+- ZRSR2
+panel_display_genes:
+- name: ABCB1
+  transcript: ''
+  chromosome: ''
+- name: ABI1
+  transcript: ''
+  chromosome: ''
+- name: ABL1
+  transcript: ''
+  chromosome: ''
+- name: ABL2
+  transcript: ''
+  chromosome: ''
+- name: AFF1
+  transcript: ''
+  chromosome: ''
+- name: AFF3
+  transcript: ''
+  chromosome: ''
+- name: AFF4
+  transcript: ''
+  chromosome: ''
+- name: AKT1
+  transcript: ''
+  chromosome: ''
+- name: AKT2
+  transcript: ''
+  chromosome: ''
+- name: AKT3
+  transcript: ''
+  chromosome: ''
+- name: ALDH1A1
+  transcript: ''
+  chromosome: ''
+- name: ALK
+  transcript: ''
+  chromosome: ''
+- name: AMER1
+  transcript: ''
+  chromosome: ''
+- name: APC
+  transcript: ''
+  chromosome: ''
+- name: AR
+  transcript: ''
+  chromosome: ''
+- name: ARAF
+  transcript: ''
+  chromosome: ''
+- name: AREG
+  transcript: ''
+  chromosome: ''
+- name: ARID1A
+  transcript: ''
+  chromosome: ''
+- name: ARID1B
+  transcript: ''
+  chromosome: ''
+- name: ARID2
+  transcript: ''
+  chromosome: ''
+- name: ASXL1
+  transcript: ''
+  chromosome: ''
+- name: ASXL2
+  transcript: ''
+  chromosome: ''
+- name: ATF1
+  transcript: ''
+  chromosome: ''
+- name: ATIC
+  transcript: ''
+  chromosome: ''
+- name: ATM
+  transcript: ''
+  chromosome: ''
+- name: ATR
+  transcript: ''
+  chromosome: ''
+- name: ATRX
+  transcript: ''
+  chromosome: ''
+- name: AXIN1
+  transcript: ''
+  chromosome: ''
+- name: AXIN2
+  transcript: ''
+  chromosome: ''
+- name: B2M
+  transcript: ''
+  chromosome: ''
+- name: BACH2
+  transcript: ''
+  chromosome: ''
+- name: BAP1
+  transcript: ''
+  chromosome: ''
+- name: BARD1
+  transcript: ''
+  chromosome: ''
+- name: BAX
+  transcript: ''
+  chromosome: ''
+- name: BCL10
+  transcript: ''
+  chromosome: ''
+- name: BCL11A
+  transcript: ''
+  chromosome: ''
+- name: BCL11B
+  transcript: ''
+  chromosome: ''
+- name: BCL2
+  transcript: ''
+  chromosome: ''
+- name: BCL2L1
+  transcript: ''
+  chromosome: ''
+- name: BCL2L11
+  transcript: ''
+  chromosome: ''
+- name: BCOR
+  transcript: ''
+  chromosome: ''
+- name: BCORL1
+  transcript: ''
+  chromosome: ''
+- name: BCR
+  transcript: ''
+  chromosome: ''
+- name: BLM
+  transcript: ''
+  chromosome: ''
+- name: BMPR1A
+  transcript: ''
+  chromosome: ''
+- name: BRAF
+  transcript: ''
+  chromosome: ''
+- name: BRCA1
+  transcript: ''
+  chromosome: ''
+- name: BRCA2
+  transcript: ''
+  chromosome: ''
+- name: BRD4
+  transcript: ''
+  chromosome: ''
+- name: BRIP1
+  transcript: ''
+  chromosome: ''
+- name: BTK
+  transcript: ''
+  chromosome: ''
+- name: C8ORF34
+  transcript: ''
+  chromosome: ''
+- name: CALR
+  transcript: ''
+  chromosome: ''
+- name: CARD11
+  transcript: ''
+  chromosome: ''
+- name: CBL
+  transcript: ''
+  chromosome: ''
+- name: CBR3
+  transcript: ''
+  chromosome: ''
+- name: CCDC6
+  transcript: ''
+  chromosome: ''
+- name: CCNB3
+  transcript: ''
+  chromosome: ''
+- name: CCND1
+  transcript: ''
+  chromosome: ''
+- name: CCND2
+  transcript: ''
+  chromosome: ''
+- name: CCND3
+  transcript: ''
+  chromosome: ''
+- name: CCNE1
+  transcript: ''
+  chromosome: ''
+- name: CD22
+  transcript: ''
+  chromosome: ''
+- name: CD27
+  transcript: ''
+  chromosome: ''
+- name: CD274
+  transcript: ''
+  chromosome: ''
+- name: CD276
+  transcript: ''
+  chromosome: ''
+- name: CD28
+  transcript: ''
+  chromosome: ''
+- name: CD36
+  transcript: ''
+  chromosome: ''
+- name: CD47
+  transcript: ''
+  chromosome: ''
+- name: CD58
+  transcript: ''
+  chromosome: ''
+- name: CD70
+  transcript: ''
+  chromosome: ''
+- name: CD74
+  transcript: ''
+  chromosome: ''
+- name: CD79A
+  transcript: ''
+  chromosome: ''
+- name: CD79B
+  transcript: ''
+  chromosome: ''
+- name: CD8A
+  transcript: ''
+  chromosome: ''
+- name: CDA
+  transcript: ''
+  chromosome: ''
+- name: CDC42
+  transcript: ''
+  chromosome: ''
+- name: CDC73
+  transcript: ''
+  chromosome: ''
+- name: CDH1
+  transcript: ''
+  chromosome: ''
+- name: CDH11
+  transcript: ''
+  chromosome: ''
+- name: CDH2
+  transcript: ''
+  chromosome: ''
+- name: CDK12
+  transcript: ''
+  chromosome: ''
+- name: CDK4
+  transcript: ''
+  chromosome: ''
+- name: CDK6
+  transcript: ''
+  chromosome: ''
+- name: CDK8
+  transcript: ''
+  chromosome: ''
+- name: CDKN1A
+  transcript: ''
+  chromosome: ''
+- name: CDKN1B
+  transcript: ''
+  chromosome: ''
+- name: CDKN2A
+  transcript: ''
+  chromosome: ''
+- name: CDKN2B
+  transcript: ''
+  chromosome: ''
+- name: CDKN2C
+  transcript: ''
+  chromosome: ''
+- name: CDX2
+  transcript: ''
+  chromosome: ''
+- name: CEBPA
+  transcript: ''
+  chromosome: ''
+- name: CEP72
+  transcript: ''
+  chromosome: ''
+- name: CHD2
+  transcript: ''
+  chromosome: ''
+- name: CHD4
+  transcript: ''
+  chromosome: ''
+- name: CHEK1
+  transcript: ''
+  chromosome: ''
+- name: CHEK2
+  transcript: ''
+  chromosome: ''
+- name: CIC
+  transcript: ''
+  chromosome: ''
+- name: CREBBP
+  transcript: ''
+  chromosome: ''
+- name: CRKL
+  transcript: ''
+  chromosome: ''
+- name: CSF1R
+  transcript: ''
+  chromosome: ''
+- name: CSF3R
+  transcript: ''
+  chromosome: ''
+- name: CTCF
+  transcript: ''
+  chromosome: ''
+- name: CTLA4
+  transcript: ''
+  chromosome: ''
+- name: CTNNA1
+  transcript: ''
+  chromosome: ''
+- name: CTNNB1
+  transcript: ''
+  chromosome: ''
+- name: CUL3
+  transcript: ''
+  chromosome: ''
+- name: CUX1
+  transcript: ''
+  chromosome: ''
+- name: CXCL12
+  transcript: ''
+  chromosome: ''
+- name: CYLD
+  transcript: ''
+  chromosome: ''
+- name: CYP19A1
+  transcript: ''
+  chromosome: ''
+- name: CYP2D6
+  transcript: ''
+  chromosome: ''
+- name: CYP2E1
+  transcript: ''
+  chromosome: ''
+- name: DCK
+  transcript: ''
+  chromosome: ''
+- name: DDR1
+  transcript: ''
+  chromosome: ''
+- name: DDR2
+  transcript: ''
+  chromosome: ''
+- name: DEK
+  transcript: ''
+  chromosome: ''
+- name: DNM2
+  transcript: ''
+  chromosome: ''
+- name: DNMT1
+  transcript: ''
+  chromosome: ''
+- name: DNMT3A
+  transcript: ''
+  chromosome: ''
+- name: DNMT3B
+  transcript: ''
+  chromosome: ''
+- name: DOK5
+  transcript: ''
+  chromosome: ''
+- name: DOT1L
+  transcript: ''
+  chromosome: ''
+- name: DPYD
+  transcript: ''
+  chromosome: ''
+- name: DYNC2H1
+  transcript: ''
+  chromosome: ''
+- name: E2F3
+  transcript: ''
+  chromosome: ''
+- name: EGFR
+  transcript: ''
+  chromosome: ''
+- name: EGR1
+  transcript: ''
+  chromosome: ''
+- name: EP300
+  transcript: ''
+  chromosome: ''
+- name: EP400
+  transcript: ''
+  chromosome: ''
+- name: EPAS1
+  transcript: ''
+  chromosome: ''
+- name: EPCAM
+  transcript: ''
+  chromosome: ''
+- name: EPHA2
+  transcript: ''
+  chromosome: ''
+- name: EPHA3
+  transcript: ''
+  chromosome: ''
+- name: EPHA5
+  transcript: ''
+  chromosome: ''
+- name: EPHA7
+  transcript: ''
+  chromosome: ''
+- name: EPHB1
+  transcript: ''
+  chromosome: ''
+- name: EPHB4
+  transcript: ''
+  chromosome: ''
+- name: EPHB6
+  transcript: ''
+  chromosome: ''
+- name: EPOR
+  transcript: ''
+  chromosome: ''
+- name: ERBB2
+  transcript: ''
+  chromosome: ''
+- name: ERBB3
+  transcript: ''
+  chromosome: ''
+- name: ERBB4
+  transcript: ''
+  chromosome: ''
+- name: ERCC1
+  transcript: ''
+  chromosome: ''
+- name: ERCC2
+  transcript: ''
+  chromosome: ''
+- name: ERRFI1
+  transcript: ''
+  chromosome: ''
+- name: ESR1
+  transcript: ''
+  chromosome: ''
+- name: ESR2
+  transcript: ''
+  chromosome: ''
+- name: ETS1
+  transcript: ''
+  chromosome: ''
+- name: ETV1
+  transcript: ''
+  chromosome: ''
+- name: ETV4
+  transcript: ''
+  chromosome: ''
+- name: ETV5
+  transcript: ''
+  chromosome: ''
+- name: ETV6
+  transcript: ''
+  chromosome: ''
+- name: EXT1
+  transcript: ''
+  chromosome: ''
+- name: EXT2
+  transcript: ''
+  chromosome: ''
+- name: EZH1
+  transcript: ''
+  chromosome: ''
+- name: EZH2
+  transcript: ''
+  chromosome: ''
+- name: FAF1
+  transcript: ''
+  chromosome: ''
+- name: FAM175A
+  transcript: ''
+  chromosome: ''
+- name: FANCA
+  transcript: ''
+  chromosome: ''
+- name: FANCC
+  transcript: ''
+  chromosome: ''
+- name: FANCD2
+  transcript: ''
+  chromosome: ''
+- name: FANCE
+  transcript: ''
+  chromosome: ''
+- name: FANCF
+  transcript: ''
+  chromosome: ''
+- name: FANCG
+  transcript: ''
+  chromosome: ''
+- name: FANCI
+  transcript: ''
+  chromosome: ''
+- name: FANCL
+  transcript: ''
+  chromosome: ''
+- name: FANCM
+  transcript: ''
+  chromosome: ''
+- name: FAT1
+  transcript: ''
+  chromosome: ''
+- name: FAT3
+  transcript: ''
+  chromosome: ''
+- name: FAT4
+  transcript: ''
+  chromosome: ''
+- name: FBXW7
+  transcript: ''
+  chromosome: ''
+- name: FGF1
+  transcript: ''
+  chromosome: ''
+- name: FGF10
+  transcript: ''
+  chromosome: ''
+- name: FGF12
+  transcript: ''
+  chromosome: ''
+- name: FGF14
+  transcript: ''
+  chromosome: ''
+- name: FGF19
+  transcript: ''
+  chromosome: ''
+- name: FGF2
+  transcript: ''
+  chromosome: ''
+- name: FGF23
+  transcript: ''
+  chromosome: ''
+- name: FGF3
+  transcript: ''
+  chromosome: ''
+- name: FGF4
+  transcript: ''
+  chromosome: ''
+- name: FGF5
+  transcript: ''
+  chromosome: ''
+- name: FGF6
+  transcript: ''
+  chromosome: ''
+- name: FGF7
+  transcript: ''
+  chromosome: ''
+- name: FGF8
+  transcript: ''
+  chromosome: ''
+- name: FGF9
+  transcript: ''
+  chromosome: ''
+- name: FGFR1
+  transcript: ''
+  chromosome: ''
+- name: FGFR2
+  transcript: ''
+  chromosome: ''
+- name: FGFR3
+  transcript: ''
+  chromosome: ''
+- name: FGFR4
+  transcript: ''
+  chromosome: ''
+- name: FGR
+  transcript: ''
+  chromosome: ''
+- name: FH
+  transcript: ''
+  chromosome: ''
+- name: FLCN
+  transcript: ''
+  chromosome: ''
+- name: FLI1
+  transcript: ''
+  chromosome: ''
+- name: FLT1
+  transcript: ''
+  chromosome: ''
+- name: FLT3
+  transcript: ''
+  chromosome: ''
+- name: FLT4
+  transcript: ''
+  chromosome: ''
+- name: FOXA1
+  transcript: ''
+  chromosome: ''
+- name: FOXF1
+  transcript: ''
+  chromosome: ''
+- name: FOXL2
+  transcript: ''
+  chromosome: ''
+- name: FOXO1
+  transcript: ''
+  chromosome: ''
+- name: FOXO3
+  transcript: ''
+  chromosome: ''
+- name: FOXO4
+  transcript: ''
+  chromosome: ''
+- name: FOXP1
+  transcript: ''
+  chromosome: ''
+- name: FUBP1
+  transcript: ''
+  chromosome: ''
+- name: FURIN
+  transcript: ''
+  chromosome: ''
+- name: GAB1
+  transcript: ''
+  chromosome: ''
+- name: GAB2
+  transcript: ''
+  chromosome: ''
+- name: GALNT12
+  transcript: ''
+  chromosome: ''
+- name: GALNT14
+  transcript: ''
+  chromosome: ''
+- name: GATA3
+  transcript: ''
+  chromosome: ''
+- name: GGH
+  transcript: ''
+  chromosome: ''
+- name: GNA11
+  transcript: ''
+  chromosome: ''
+- name: GNAQ
+  transcript: ''
+  chromosome: ''
+- name: GNAS
+  transcript: ''
+  chromosome: ''
+- name: GSTM1
+  transcript: ''
+  chromosome: ''
+- name: GSTP1
+  transcript: ''
+  chromosome: ''
+- name: H3F3A
+  transcript: ''
+  chromosome: ''
+- name: H3F3B
+  transcript: ''
+  chromosome: ''
+- name: H3F3C
+  transcript: ''
+  chromosome: ''
+- name: HAVCR2
+  transcript: ''
+  chromosome: ''
+- name: HDAC1
+  transcript: ''
+  chromosome: ''
+- name: HDAC2
+  transcript: ''
+  chromosome: ''
+- name: HDAC4
+  transcript: ''
+  chromosome: ''
+- name: HDAC7
+  transcript: ''
+  chromosome: ''
+- name: HDAC9
+  transcript: ''
+  chromosome: ''
+- name: HGF
+  transcript: ''
+  chromosome: ''
+- name: HIF1A
+  transcript: ''
+  chromosome: ''
+- name: HIP1
+  transcript: ''
+  chromosome: ''
+- name: HIRA
+  transcript: ''
+  chromosome: ''
+- name: HIST1H1B
+  transcript: ''
+  chromosome: ''
+- name: HIST1H1C
+  transcript: ''
+  chromosome: ''
+- name: HIST1H1D
+  transcript: ''
+  chromosome: ''
+- name: HIST1H1E
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2AC
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2AG
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2AL
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2AM
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2BC
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2BD
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2BG
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2BJ
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2BK
+  transcript: ''
+  chromosome: ''
+- name: HIST1H2BO
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3A
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3B
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3C
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3D
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3E
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3F
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3G
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3H
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3I
+  transcript: ''
+  chromosome: ''
+- name: HIST1H3J
+  transcript: ''
+  chromosome: ''
+- name: HIST1H4I
+  transcript: ''
+  chromosome: ''
+- name: HIST2H3C
+  transcript: ''
+  chromosome: ''
+- name: HIST2H3D
+  transcript: ''
+  chromosome: ''
+- name: HIST3H3
+  transcript: ''
+  chromosome: ''
+- name: HLA-A
+  transcript: ''
+  chromosome: ''
+- name: HLA-B
+  transcript: ''
+  chromosome: ''
+- name: HLA-C
+  transcript: ''
+  chromosome: ''
+- name: HLA-DPA1
+  transcript: ''
+  chromosome: ''
+- name: HLA-DPB1
+  transcript: ''
+  chromosome: ''
+- name: HLA-DQA1
+  transcript: ''
+  chromosome: ''
+- name: HLA-DQB1
+  transcript: ''
+  chromosome: ''
+- name: HLA-DRB1
+  transcript: ''
+  chromosome: ''
+- name: HLA-DRB5
+  transcript: ''
+  chromosome: ''
+- name: HLA-G
+  transcript: ''
+  chromosome: ''
+- name: HLF
+  transcript: ''
+  chromosome: ''
+- name: HNF1A
+  transcript: ''
+  chromosome: ''
+- name: HOXB13
+  transcript: ''
+  chromosome: ''
+- name: HRAS
+  transcript: ''
+  chromosome: ''
+- name: HSP90AA1
+  transcript: ''
+  chromosome: ''
+- name: HSP90AB1
+  transcript: ''
+  chromosome: ''
+- name: IDH1
+  transcript: ''
+  chromosome: ''
+- name: IDH2
+  transcript: ''
+  chromosome: ''
+- name: IDO1
+  transcript: ''
+  chromosome: ''
+- name: IDO2
+  transcript: ''
+  chromosome: ''
+- name: IGF1
+  transcript: ''
+  chromosome: ''
+- name: IGF1R
+  transcript: ''
+  chromosome: ''
+- name: IGF2
+  transcript: ''
+  chromosome: ''
+- name: IKBKB
+  transcript: ''
+  chromosome: ''
+- name: IKBKE
+  transcript: ''
+  chromosome: ''
+- name: IKZF1
+  transcript: ''
+  chromosome: ''
+- name: IKZF2
+  transcript: ''
+  chromosome: ''
+- name: IKZF3
+  transcript: ''
+  chromosome: ''
+- name: IL10
+  transcript: ''
+  chromosome: ''
+- name: IL2
+  transcript: ''
+  chromosome: ''
+- name: IL21R
+  transcript: ''
+  chromosome: ''
+- name: IL3
+  transcript: ''
+  chromosome: ''
+- name: IL6
+  transcript: ''
+  chromosome: ''
+- name: IL6ST
+  transcript: ''
+  chromosome: ''
+- name: IL7R
+  transcript: ''
+  chromosome: ''
+- name: INHA
+  transcript: ''
+  chromosome: ''
+- name: INHBA
+  transcript: ''
+  chromosome: ''
+- name: INPP4A
+  transcript: ''
+  chromosome: ''
+- name: INPP4B
+  transcript: ''
+  chromosome: ''
+- name: INPP5D
+  transcript: ''
+  chromosome: ''
+- name: INPPL1
+  transcript: ''
+  chromosome: ''
+- name: INSR
+  transcript: ''
+  chromosome: ''
+- name: IRF1
+  transcript: ''
+  chromosome: ''
+- name: IRF2
+  transcript: ''
+  chromosome: ''
+- name: IRF4
+  transcript: ''
+  chromosome: ''
+- name: IRF8
+  transcript: ''
+  chromosome: ''
+- name: IRS1
+  transcript: ''
+  chromosome: ''
+- name: IRS2
+  transcript: ''
+  chromosome: ''
+- name: IRS4
+  transcript: ''
+  chromosome: ''
+- name: JAK1
+  transcript: ''
+  chromosome: ''
+- name: JAK2
+  transcript: ''
+  chromosome: ''
+- name: JAK3
+  transcript: ''
+  chromosome: ''
+- name: JUN
+  transcript: ''
+  chromosome: ''
+- name: KAT6A
+  transcript: ''
+  chromosome: ''
+- name: KAT6B
+  transcript: ''
+  chromosome: ''
+- name: KDM2B
+  transcript: ''
+  chromosome: ''
+- name: KDM4C
+  transcript: ''
+  chromosome: ''
+- name: KDM5A
+  transcript: ''
+  chromosome: ''
+- name: KDM5C
+  transcript: ''
+  chromosome: ''
+- name: KDM6A
+  transcript: ''
+  chromosome: ''
+- name: KDR
+  transcript: ''
+  chromosome: ''
+- name: KEAP1
+  transcript: ''
+  chromosome: ''
+- name: KEL
+  transcript: ''
+  chromosome: ''
+- name: KIF5B
+  transcript: ''
+  chromosome: ''
+- name: KIT
+  transcript: ''
+  chromosome: ''
+- name: KMT2A
+  transcript: ''
+  chromosome: ''
+- name: KMT2B
+  transcript: ''
+  chromosome: ''
+- name: KMT2C
+  transcript: ''
+  chromosome: ''
+- name: KMT2D
+  transcript: ''
+  chromosome: ''
+- name: KMT5A
+  transcript: ''
+  chromosome: ''
+- name: KRAS
+  transcript: ''
+  chromosome: ''
+- name: LAMP1
+  transcript: ''
+  chromosome: ''
+- name: LBP1B
+  transcript: ''
+  chromosome: ''
+- name: LCK
+  transcript: ''
+  chromosome: ''
+- name: LCP1
+  transcript: ''
+  chromosome: ''
+- name: LEF1
+  transcript: ''
+  chromosome: ''
+- name: LMO1
+  transcript: ''
+  chromosome: ''
+- name: LMO2
+  transcript: ''
+  chromosome: ''
+- name: LRP1B
+  transcript: ''
+  chromosome: ''
+- name: MAF
+  transcript: ''
+  chromosome: ''
+- name: MAP2K1
+  transcript: ''
+  chromosome: ''
+- name: MAP2K2
+  transcript: ''
+  chromosome: ''
+- name: MAP2K4
+  transcript: ''
+  chromosome: ''
+- name: MAP2K7
+  transcript: ''
+  chromosome: ''
+- name: MAP3K1
+  transcript: ''
+  chromosome: ''
+- name: MAP3K13
+  transcript: ''
+  chromosome: ''
+- name: MAP3K14
+  transcript: ''
+  chromosome: ''
+- name: MAP3K4
+  transcript: ''
+  chromosome: ''
+- name: MAP3K6
+  transcript: ''
+  chromosome: ''
+- name: MAP3K7
+  transcript: ''
+  chromosome: ''
+- name: MAPK1
+  transcript: ''
+  chromosome: ''
+- name: MAPK3
+  transcript: ''
+  chromosome: ''
+- name: MAPKAP1
+  transcript: ''
+  chromosome: ''
+- name: MAX
+  transcript: ''
+  chromosome: ''
+- name: MDM2
+  transcript: ''
+  chromosome: ''
+- name: MDM4
+  transcript: ''
+  chromosome: ''
+- name: MED12
+  transcript: ''
+  chromosome: ''
+- name: MEN1
+  transcript: ''
+  chromosome: ''
+- name: MET
+  transcript: ''
+  chromosome: ''
+- name: MGA
+  transcript: ''
+  chromosome: ''
+- name: MGAM
+  transcript: ''
+  chromosome: ''
+- name: MLH1
+  transcript: ''
+  chromosome: ''
+- name: MLH3
+  transcript: ''
+  chromosome: ''
+- name: MN1
+  transcript: ''
+  chromosome: ''
+- name: MPL
+  transcript: ''
+  chromosome: ''
+- name: MRE11A
+  transcript: ''
+  chromosome: ''
+- name: MSH2
+  transcript: ''
+  chromosome: ''
+- name: MSH3
+  transcript: ''
+  chromosome: ''
+- name: MSH6
+  transcript: ''
+  chromosome: ''
+- name: MTHFR
+  transcript: ''
+  chromosome: ''
+- name: MTOR
+  transcript: ''
+  chromosome: ''
+- name: MTRR
+  transcript: ''
+  chromosome: ''
+- name: MUTYH
+  transcript: ''
+  chromosome: ''
+- name: MYB
+  transcript: ''
+  chromosome: ''
+- name: MYC
+  transcript: ''
+  chromosome: ''
+- name: MYCL
+  transcript: ''
+  chromosome: ''
+- name: MYCL1
+  transcript: ''
+  chromosome: ''
+- name: MYCN
+  transcript: ''
+  chromosome: ''
+- name: MYD88
+  transcript: ''
+  chromosome: ''
+- name: MYH11
+  transcript: ''
+  chromosome: ''
+- name: MYH9
+  transcript: ''
+  chromosome: ''
+- name: NBN
+  transcript: ''
+  chromosome: ''
+- name: NCOA1
+  transcript: ''
+  chromosome: ''
+- name: NCOA2
+  transcript: ''
+  chromosome: ''
+- name: NCOA3
+  transcript: ''
+  chromosome: ''
+- name: NCOA4
+  transcript: ''
+  chromosome: ''
+- name: NCOR1
+  transcript: ''
+  chromosome: ''
+- name: NCOR2
+  transcript: ''
+  chromosome: ''
+- name: NF1
+  transcript: ''
+  chromosome: ''
+- name: NF2
+  transcript: ''
+  chromosome: ''
+- name: NFE2
+  transcript: ''
+  chromosome: ''
+- name: NFE2L2
+  transcript: ''
+  chromosome: ''
+- name: NOTCH1
+  transcript: ''
+  chromosome: ''
+- name: NOTCH2
+  transcript: ''
+  chromosome: ''
+- name: NOTCH3
+  transcript: ''
+  chromosome: ''
+- name: NOTCH4
+  transcript: ''
+  chromosome: ''
+- name: NPM1
+  transcript: ''
+  chromosome: ''
+- name: NQO1
+  transcript: ''
+  chromosome: ''
+- name: NRAS
+  transcript: ''
+  chromosome: ''
+- name: NRG1
+  transcript: ''
+  chromosome: ''
+- name: NSD1
+  transcript: ''
+  chromosome: ''
+- name: NSD2
+  transcript: ''
+  chromosome: ''
+- name: NT5C3A
+  transcript: ''
+  chromosome: ''
+- name: NTRK1
+  transcript: ''
+  chromosome: ''
+- name: NTRK2
+  transcript: ''
+  chromosome: ''
+- name: NTRK3
+  transcript: ''
+  chromosome: ''
+- name: PALB2
+  transcript: ''
+  chromosome: ''
+- name: PARD3B
+  transcript: ''
+  chromosome: ''
+- name: PARP1
+  transcript: ''
+  chromosome: ''
+- name: PARP2
+  transcript: ''
+  chromosome: ''
+- name: PARP3
+  transcript: ''
+  chromosome: ''
+- name: PBRM1
+  transcript: ''
+  chromosome: ''
+- name: PCLO
+  transcript: ''
+  chromosome: ''
+- name: PDCD1
+  transcript: ''
+  chromosome: ''
+- name: PDCD11
+  transcript: ''
+  chromosome: ''
+- name: PDCD1LG2
+  transcript: ''
+  chromosome: ''
+- name: PDE4DIP
+  transcript: ''
+  chromosome: ''
+- name: PDGFB
+  transcript: ''
+  chromosome: ''
+- name: PDGFRA
+  transcript: ''
+  chromosome: ''
+- name: PDGFRB
+  transcript: ''
+  chromosome: ''
+- name: PHOX2B
+  transcript: ''
+  chromosome: ''
+- name: PIK3C2B
+  transcript: ''
+  chromosome: ''
+- name: PIK3C2G
+  transcript: ''
+  chromosome: ''
+- name: PIK3C3
+  transcript: ''
+  chromosome: ''
+- name: PIK3CA
+  transcript: ''
+  chromosome: ''
+- name: PIK3CB
+  transcript: ''
+  chromosome: ''
+- name: PIK3CD
+  transcript: ''
+  chromosome: ''
+- name: PIK3CG
+  transcript: ''
+  chromosome: ''
+- name: PIK3R1
+  transcript: ''
+  chromosome: ''
+- name: PIK3R2
+  transcript: ''
+  chromosome: ''
+- name: PIK3R3
+  transcript: ''
+  chromosome: ''
+- name: PIM1
+  transcript: ''
+  chromosome: ''
+- name: PLAG1
+  transcript: ''
+  chromosome: ''
+- name: PLCG1
+  transcript: ''
+  chromosome: ''
+- name: PLCG2
+  transcript: ''
+  chromosome: ''
+- name: PLK2
+  transcript: ''
+  chromosome: ''
+- name: PMS1
+  transcript: ''
+  chromosome: ''
+- name: PMS2
+  transcript: ''
+  chromosome: ''
+- name: POLD1
+  transcript: ''
+  chromosome: ''
+- name: POLE
+  transcript: ''
+  chromosome: ''
+- name: POLQ
+  transcript: ''
+  chromosome: ''
+- name: POT1
+  transcript: ''
+  chromosome: ''
+- name: PPP2R2A
+  transcript: ''
+  chromosome: ''
+- name: PRSS1
+  transcript: ''
+  chromosome: ''
+- name: PRSS8
+  transcript: ''
+  chromosome: ''
+- name: PTCH1
+  transcript: ''
+  chromosome: ''
+- name: PTCH2
+  transcript: ''
+  chromosome: ''
+- name: PTEN
+  transcript: ''
+  chromosome: ''
+- name: PTPN11
+  transcript: ''
+  chromosome: ''
+- name: PTPN13
+  transcript: ''
+  chromosome: ''
+- name: PTPRB
+  transcript: ''
+  chromosome: ''
+- name: PTPRC
+  transcript: ''
+  chromosome: ''
+- name: PTPRD
+  transcript: ''
+  chromosome: ''
+- name: PTPRK
+  transcript: ''
+  chromosome: ''
+- name: PTPRO
+  transcript: ''
+  chromosome: ''
+- name: PTPRS
+  transcript: ''
+  chromosome: ''
+- name: PTPRT
+  transcript: ''
+  chromosome: ''
+- name: RAD21
+  transcript: ''
+  chromosome: ''
+- name: RAD50
+  transcript: ''
+  chromosome: ''
+- name: RAD51
+  transcript: ''
+  chromosome: ''
+- name: RAD51B
+  transcript: ''
+  chromosome: ''
+- name: RAD51C
+  transcript: ''
+  chromosome: ''
+- name: RAD51D
+  transcript: ''
+  chromosome: ''
+- name: RAD52
+  transcript: ''
+  chromosome: ''
+- name: RAD54B
+  transcript: ''
+  chromosome: ''
+- name: RAD54L
+  transcript: ''
+  chromosome: ''
+- name: RAF1
+  transcript: ''
+  chromosome: ''
+- name: RARA
+  transcript: ''
+  chromosome: ''
+- name: RB1
+  transcript: ''
+  chromosome: ''
+- name: RBM10
+  transcript: ''
+  chromosome: ''
+- name: RBM15
+  transcript: ''
+  chromosome: ''
+- name: RECQL
+  transcript: ''
+  chromosome: ''
+- name: RECQL4
+  transcript: ''
+  chromosome: ''
+- name: REL
+  transcript: ''
+  chromosome: ''
+- name: RET
+  transcript: ''
+  chromosome: ''
+- name: RHEB
+  transcript: ''
+  chromosome: ''
+- name: RHOA
+  transcript: ''
+  chromosome: ''
+- name: RHOH
+  transcript: ''
+  chromosome: ''
+- name: RICTOR
+  transcript: ''
+  chromosome: ''
+- name: RIT1
+  transcript: ''
+  chromosome: ''
+- name: ROS1
+  transcript: ''
+  chromosome: ''
+- name: RPTOR
+  transcript: ''
+  chromosome: ''
+- name: RRM1
+  transcript: ''
+  chromosome: ''
+- name: RUNX1
+  transcript: ''
+  chromosome: ''
+- name: SDHA
+  transcript: ''
+  chromosome: ''
+- name: SDHAF2
+  transcript: ''
+  chromosome: ''
+- name: SDHB
+  transcript: ''
+  chromosome: ''
+- name: SDHC
+  transcript: ''
+  chromosome: ''
+- name: SDHD
+  transcript: ''
+  chromosome: ''
+- name: SEMA3C
+  transcript: ''
+  chromosome: ''
+- name: SET
+  transcript: ''
+  chromosome: ''
+- name: SETD2
+  transcript: ''
+  chromosome: ''
+- name: SETD3
+  transcript: ''
+  chromosome: ''
+- name: SETD4
+  transcript: ''
+  chromosome: ''
+- name: SETD5
+  transcript: ''
+  chromosome: ''
+- name: SETD6
+  transcript: ''
+  chromosome: ''
+- name: SETD7
+  transcript: ''
+  chromosome: ''
+- name: SETDB1
+  transcript: ''
+  chromosome: ''
+- name: SETDB2
+  transcript: ''
+  chromosome: ''
+- name: SF3B1
+  transcript: ''
+  chromosome: ''
+- name: SLC12A5
+  transcript: ''
+  chromosome: ''
+- name: SLC19A1
+  transcript: ''
+  chromosome: ''
+- name: SLC22A12
+  transcript: ''
+  chromosome: ''
+- name: SLC28A3
+  transcript: ''
+  chromosome: ''
+- name: SLC29A1
+  transcript: ''
+  chromosome: ''
+- name: SLCO1B1
+  transcript: ''
+  chromosome: ''
+- name: SLIT2
+  transcript: ''
+  chromosome: ''
+- name: SMAD2
+  transcript: ''
+  chromosome: ''
+- name: SMAD3
+  transcript: ''
+  chromosome: ''
+- name: SMAD4
+  transcript: ''
+  chromosome: ''
+- name: SMARCA1
+  transcript: ''
+  chromosome: ''
+- name: SMARCA2
+  transcript: ''
+  chromosome: ''
+- name: SMARCA4
+  transcript: ''
+  chromosome: ''
+- name: SMARCB1
+  transcript: ''
+  chromosome: ''
+- name: SMO
+  transcript: ''
+  chromosome: ''
+- name: SOD2
+  transcript: ''
+  chromosome: ''
+- name: SOS1
+  transcript: ''
+  chromosome: ''
+- name: SPEN
+  transcript: ''
+  chromosome: ''
+- name: SRSF2
+  transcript: ''
+  chromosome: ''
+- name: STAG1
+  transcript: ''
+  chromosome: ''
+- name: STAG2
+  transcript: ''
+  chromosome: ''
+- name: STAT1
+  transcript: ''
+  chromosome: ''
+- name: STAT2
+  transcript: ''
+  chromosome: ''
+- name: STAT3
+  transcript: ''
+  chromosome: ''
+- name: STAT4
+  transcript: ''
+  chromosome: ''
+- name: STAT6
+  transcript: ''
+  chromosome: ''
+- name: STIL
+  transcript: ''
+  chromosome: ''
+- name: STK11
+  transcript: ''
+  chromosome: ''
+- name: SYK
+  transcript: ''
+  chromosome: ''
+- name: TAF1
+  transcript: ''
+  chromosome: ''
+- name: TAL1
+  transcript: ''
+  chromosome: ''
+- name: TAL2
+  transcript: ''
+  chromosome: ''
+- name: TCF7L2
+  transcript: ''
+  chromosome: ''
+- name: TEK
+  transcript: ''
+  chromosome: ''
+- name: TERC
+  transcript: ''
+  chromosome: ''
+- name: TERT
+  transcript: ''
+  chromosome: ''
+- name: TET1
+  transcript: ''
+  chromosome: ''
+- name: TET2
+  transcript: ''
+  chromosome: ''
+- name: TET3
+  transcript: ''
+  chromosome: ''
+- name: TFE3
+  transcript: ''
+  chromosome: ''
+- name: TGFBR1
+  transcript: ''
+  chromosome: ''
+- name: TGFBR2
+  transcript: ''
+  chromosome: ''
+- name: TMEM127
+  transcript: ''
+  chromosome: ''
+- name: TNFAIP3
+  transcript: ''
+  chromosome: ''
+- name: TOP2A
+  transcript: ''
+  chromosome: ''
+- name: TP53
+  transcript: ''
+  chromosome: ''
+- name: TP53BP1
+  transcript: ''
+  chromosome: ''
+- name: TP63
+  transcript: ''
+  chromosome: ''
+- name: TPM3
+  transcript: ''
+  chromosome: ''
+- name: TPM4
+  transcript: ''
+  chromosome: ''
+- name: TPR
+  transcript: ''
+  chromosome: ''
+- name: TRAF2
+  transcript: ''
+  chromosome: ''
+- name: TRAF3
+  transcript: ''
+  chromosome: ''
+- name: TRAF5
+  transcript: ''
+  chromosome: ''
+- name: TRAF7
+  transcript: ''
+  chromosome: ''
+- name: TRIM24
+  transcript: ''
+  chromosome: ''
+- name: TRIM27
+  transcript: ''
+  chromosome: ''
+- name: TRIM33
+  transcript: ''
+  chromosome: ''
+- name: TRIP11
+  transcript: ''
+  chromosome: ''
+- name: TRIP13
+  transcript: ''
+  chromosome: ''
+- name: TRRAP
+  transcript: ''
+  chromosome: ''
+- name: TSC1
+  transcript: ''
+  chromosome: ''
+- name: TSC2
+  transcript: ''
+  chromosome: ''
+- name: TSHR
+  transcript: ''
+  chromosome: ''
+- name: U2AF1
+  transcript: ''
+  chromosome: ''
+- name: UGT1A1
+  transcript: ''
+  chromosome: ''
+- name: UMPS
+  transcript: ''
+  chromosome: ''
+- name: VEGFA
+  transcript: ''
+  chromosome: ''
+- name: VHL
+  transcript: ''
+  chromosome: ''
+- name: WHSC1
+  transcript: ''
+  chromosome: ''
+- name: WHSC1L1
+  transcript: ''
+  chromosome: ''
+- name: WRN
+  transcript: ''
+  chromosome: ''
+- name: WT1
+  transcript: ''
+  chromosome: ''
+- name: XIAP
+  transcript: ''
+  chromosome: ''
+- name: XPA
+  transcript: ''
+  chromosome: ''
+- name: XPC
+  transcript: ''
+  chromosome: ''
+- name: XPO1
+  transcript: ''
+  chromosome: ''
+- name: XRCC1
+  transcript: ''
+  chromosome: ''
+- name: XRCC2
+  transcript: ''
+  chromosome: ''
+- name: XRCC3
+  transcript: ''
+  chromosome: ''
+- name: YAP1
+  transcript: ''
+  chromosome: ''
+- name: YES1
+  transcript: ''
+  chromosome: ''
+- name: ZFHX3
+  transcript: ''
+  chromosome: ''
+- name: ZMYM2
+  transcript: ''
+  chromosome: ''
+- name: ZMYM3
+  transcript: ''
+  chromosome: ''
+- name: ZNF217
+  transcript: ''
+  chromosome: ''
+- name: ZNF278
+  transcript: ''
+  chromosome: ''
+- name: ZNF521
+  transcript: ''
+  chromosome: ''
+- name: ZNF703
+  transcript: ''
+  chromosome: ''
+- name: ZRSR2
+  transcript: ''
+  chromosome: ''
+reviewed_variant_overrides: []

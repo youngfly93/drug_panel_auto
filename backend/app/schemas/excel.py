@@ -1,6 +1,5 @@
 """Excel upload and preview schemas."""
 
-from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel
@@ -20,6 +19,9 @@ class UploadResponse(BaseModel):
     detected_project_type: Optional[str] = None
     detected_project_name: Optional[str] = None
     detection_confidence: Optional[float] = None
+    identity_family: Optional[str] = None
+    family_choices: list[dict[str, str]] = []
+    identity_source: Optional[str] = None
     validation_warnings: list[ValidationWarning] = []
 
 
@@ -54,3 +56,6 @@ class DetectResult(BaseModel):
     project_type: Optional[str] = None
     project_name: Optional[str] = None
     confidence: Optional[float] = None
+    identity_family: Optional[str] = None
+    family_choices: list[dict[str, str]] = []
+    identity_source: Optional[str] = None

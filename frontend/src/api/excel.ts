@@ -15,6 +15,9 @@ export interface UploadResult {
   detected_project_type: string | null
   detected_project_name: string | null
   detection_confidence: number | null
+  identity_family?: string | null
+  family_choices?: { id: string; name: string }[]
+  identity_source?: string | null
   validation_warnings: ValidationWarning[]
 }
 

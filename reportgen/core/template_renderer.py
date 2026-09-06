@@ -1326,7 +1326,9 @@ class TemplateRenderer:
             style_runs(paragraph, bold=False, underline=False, size=10.5)
             changed = True
 
-        if str(context.get("project_type") or "") in {"lung_329_pdl1", "lung_588_pdl1"}:
+        if str(context.get("project_type") or "") in {
+            "lung_329_pdl1", "lung_588_pdl1", "lung_13", "lung_62", "lung_62_pdl1", "lung_588",
+        }:
             # A short drug interpretation must not leave its final review
             # notice alone on a near-empty page. Bind bounded semantic blocks,
             # never page numbers or case-specific drug names. Long blocks keep

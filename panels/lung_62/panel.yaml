@@ -1,0 +1,253 @@
+schema_version: '1.0'
+panel_id: lung_62
+display_name: 肺癌62基因
+version: 0.1.0
+status: draft
+description: 报告组评审草稿（非临床交付）：本稿仅用于产品工程验证；尚未完成真实同案历史对照及报告组医学复核。
+aliases:
+- lung_62
+project_detector_rules:
+  keywords:
+  - 肺癌62基因
+  keyword_groups:
+  - any:
+    - type: regex
+      pattern: (?:肺癌\s*62(?:\s*基因)?|62\s*基因)(?!.*PD[\s-]*L1)
+    weight: 1
+  priority: 30
+  structural_fingerprints:
+  - id: lung62_ngs_family_v1
+    confidence: 1.0
+    required_tables:
+      Variations:
+        required_columns:
+        - ExistIn552
+        - ExistInsmall62
+      Hereditary_tumor:
+        required_columns:
+        - ExistInsmall62
+        - ExistIn178
+  identity_family:
+    id: lung_62
+    default_project_type: lung_62
+    pdl1: false
+batch_generation:
+  enabled: true
+  clinical_info_mode: case_isolated_optional
+  missing_display_defaults:
+    patient_name: 未提供
+  shared_field_exclusions:
+  - pdl1_tps
+  - pdl1_cps
+  - pdl1_result
+  - pdl1_image_path
+  - pdl1_assay_profile_id
+  - pdl1_source_record_id
+  - pdl1_source_record_date
+  - pdl1_specimen_id
+  - pdl1_image_disposition
+  reason: 'Batch generation is available for report-group pilot review. A patient name absent from both the workbook
+    and case enrichment is displayed explicitly as not provided. PD-L1 values, provenance and images are never copied
+    from the shared batch form or inferred from the NGS workbook; each batch report leaves them absent and displays
+    the configured not-provided marker.
+
+    '
+part3_knowledge:
+  enabled: true
+  release_mode: report_group_pilot_draft
+  cross_cancer_residual_scan:
+    enabled: true
+    severity: warn
+    scan_scope: part3
+    runtime_action: suppress_unsafe_fields
+    suppressed_text: '该段历史知识尚未完成肺癌专属审核，本轮评审稿不展示原文； 待报告组完成肺癌专属复核后补充。
+
+      '
+    terms:
+    - 结直肠癌
+    - 结肠癌
+    - 直肠癌
+    - 大肠癌
+    - 肠癌预后
+    - colorectal
+    - colon cancer
+    notice: '第三部分仍检出未被结构化隐藏的跨癌种历史叙述；当前报告只可作为 报告组 pilot 评审稿，命中内容须在正式临床放行前修复并复核。
+
+      '
+reviewed_part3_overlay_additions:
+- rules/reviewed_part3_domain_candidates.yaml
+- rules/reviewed_part3_p0_event_narrative_candidates.yaml
+- rules/reviewed_part3_p0_cross_cancer_narrative_candidates.yaml
+enhancer: reportgen.core.enhancer_registry:CRC358Enhancer
+default_template: lung_62_historical_draft_v1
+templates:
+- id: lung_62_historical_draft_v1
+  file: templates/lung_62_historical_draft_v1.docx
+  version: 0.1.0
+  status: draft
+  description: 报告组评审草稿（非临床交付）：本稿仅用于产品工程验证；尚未完成真实同案历史对照及报告组医学复核。
+  processors: &id001
+  - part3_formatted_sections
+  - rebuild_references
+  - signature_placeholder
+  - immune_table_notes
+  - bullet_lists
+  - blank_page_cleanup
+  - toc_refresh
+  - final_refresh_cleanup
+  - underlines_and_styles
+mappings:
+  default: config/mapping.yaml
+rules:
+  panel_rules: rules/panel.yaml
+  report_text: rules/report_text.yaml
+  biomarkers: rules/biomarkers.yaml
+  guideline_tables: rules/guideline_tables.yaml
+  drugs: rules/drugs.yaml
+  clinical_context: rules/clinical_context.yaml
+  medical_candidates: rules/medical_candidates.yaml
+  candidate_evidence_review: rules/candidate_evidence_review.yaml
+  knowledge_coverage: rules/knowledge_coverage.yaml
+  knowledge_redactions: rules/knowledge_redactions.yaml
+  style: rules/style.yaml
+  filtering: config/filtering.yaml
+  drug_brands: config/drug_brands.yaml
+input_contract:
+  required_tables:
+  - Variations
+  - TMB
+  - Msisensor
+  optional_tables:
+  - QC
+  - Hereditary_tumor
+  - CtDrug
+  - Hotspot
+  - Cnv
+  - Fusion
+  - HLA
+  - Ct1000
+  - Ct15
+  required_single_fields:
+  - patient_name
+  - sample_id
+  - project_name
+  - report_date
+  required_columns:
+    Variations:
+    - Gene_Symbol
+    - cHGVS
+    - ExistIn552
+    - Transcript
+    - ExistInsmall62
+    Hereditary_tumor:
+    - ExistInsmall62
+    - Gene_Symbol
+  required_any_columns:
+    Variations:
+    - pHGVS_S
+    - pHGVS_A
+  biomarkers:
+    tmb_value:
+      required: true
+      minimum: 0
+      source_priority:
+      - excel
+    msi_status:
+      required: true
+      allowed_values:
+      - MSS
+      - MSI-L
+      - MSI-H
+      source_priority:
+      - excel
+template_contract:
+  required_variables:
+  - patient_name
+  - total_variants_count
+  - tmb_detail_sentence
+  - msi_detail_sentence
+  required_lists:
+  - variants_2_1
+  - targeted_drug_tips
+  - lung_guideline_drug_results
+  - chemotherapy_predictions
+  - chemotherapy_regimen_predictions
+  required_markers:
+  - __PART3_MARKER__
+processors: *id001
+golden_cases:
+- id: lung_62_derived_draft_contract
+  runner: reportgen.core.golden_case:run_golden_case
+  command: pytest backend/tests/test_lung_small_panel_contract.py -q
+  synthetic: true
+  expected_qa_status: PASS
+derived_input:
+  membership_column: ExistInsmall62
+  genes:
+  - AKT1
+  - ALK
+  - APC
+  - AR
+  - ARID1A
+  - ATM
+  - BRAF
+  - BRCA1
+  - BRCA2
+  - CCND1
+  - CD274
+  - CDK4
+  - CDK6
+  - CDKN2A
+  - CTNNB1
+  - DDR2
+  - EGFR
+  - ERBB2
+  - ESR1
+  - FANCA
+  - FBXW7
+  - FGF3
+  - FGFR1
+  - FGFR2
+  - FGFR3
+  - FLT3
+  - HRAS
+  - IDH1
+  - IDH2
+  - JAK1
+  - JAK2
+  - KIT
+  - KRAS
+  - MAP2K1
+  - MAP2K2
+  - MET
+  - MLH1
+  - MSH2
+  - MSH6
+  - MTOR
+  - NOTCH1
+  - NRAS
+  - NTRK1
+  - NTRK2
+  - NTRK3
+  - PDGFRA
+  - PIK3CA
+  - PMS2
+  - POLD1
+  - POLE
+  - PTCH1
+  - PTEN
+  - RAF1
+  - RB1
+  - RET
+  - ROS1
+  - SMARCA4
+  - STK11
+  - TP53
+  - TSC1
+  - TSC2
+  - VHL
+  provenance: superset_derived_engineering_input_not_a_historical_pair
+golden_template_source:
+  sha256: a90010acad8e33c0d963b89c055f534b8162c90b5bcff0aa990eef57edf55b3c
+  family: A
+  builder: scripts/build_lung_draft_packages.py

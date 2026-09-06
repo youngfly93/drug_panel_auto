@@ -1,0 +1,476 @@
+schema_version: 1
+source:
+  panel: lung_588_pdl1
+  purpose: Panel-wide fixed protein/domain first-review catalog.
+  source_type: official_reviewed_protein_annotation
+  curated_at: '2026-07-24'
+  uniprot_release: '2026_02'
+  uniprot_release_date: 10-June-2026
+  scope: pan_cancer_protein_structure_only
+  activation_mode: candidate_only_pending_secondary_review
+  consumer_panels:
+  - lung_62_pdl1
+  privacy: No patient or sample identifiers are stored.
+  inherited_from_panel: lung_588_pdl1
+  inherited_rule_sha256: b5587a8386f8515d8a006bb53ccf4a2a26a33d070b792fdc48106716508f8d06
+governance:
+  schema_version: '1.0'
+  policy_id: lung_588_pdl1_fixed_domain_catalog_first_review
+  defaults:
+    gene:
+      review_status: needs_review
+      runtime_eligible: false
+      review_basis: codex_first_review_official_protein_annotation
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: '2026-07-24'
+      evidence_as_of: '2026-07-24'
+      evidence_level: curated_protein_structure
+      cancer_scope: pan_cancer_protein_structure_only
+      secondary_review_status: pending_report_group_review
+      risk_level: content_requires_secondary_review
+gene_sections:
+- gene: AKT1
+  fixed_domain_text: AKT1基因编码的蛋白全长为480个氨基酸，UniProt/InterPro注释的主要结构区域包括PH结构域（5-108位氨基酸）、Protein kinase结构域（150-408位氨基酸）、AGC-kinase
+    C-terminal结构域（409-480位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P31749
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P31749
+    url: https://www.uniprot.org/uniprotkb/P31749/entry
+  panels:
+  - lung_62_pdl1
+- gene: AR
+  fixed_domain_text: AR基因编码的蛋白全长为920个氨基酸，UniProt/InterPro注释的主要结构区域包括NR LBD结构域（669-900位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P10275
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P10275
+    url: https://www.uniprot.org/uniprotkb/P10275/entry
+  panels:
+  - lung_62_pdl1
+- gene: CCND1
+  fixed_domain_text: CCND1基因编码的蛋白全长为295个氨基酸，UniProt/InterPro注释的主要结构区域包括Cyclin N-terminal结构域（28-152位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P24385
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P24385
+    url: https://www.uniprot.org/uniprotkb/P24385/entry
+  panels:
+  - lung_62_pdl1
+- gene: CD274
+  fixed_domain_text: CD274基因编码的蛋白全长为290个氨基酸，UniProt/InterPro注释的主要结构区域包括Ig-like V-type结构域（19-127位氨基酸）、Ig-like C2-type结构域（133-225位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q9NZQ7
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q9NZQ7
+    url: https://www.uniprot.org/uniprotkb/Q9NZQ7/entry
+  panels:
+  - lung_62_pdl1
+- gene: CDK4
+  fixed_domain_text: CDK4基因编码的蛋白全长为303个氨基酸，UniProt/InterPro注释的主要结构区域包括Protein kinase结构域（6-295位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P11802
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P11802
+    url: https://www.uniprot.org/uniprotkb/P11802/entry
+  panels:
+  - lung_62_pdl1
+- gene: CDK6
+  fixed_domain_text: CDK6基因编码的蛋白全长为326个氨基酸，UniProt/InterPro注释的主要结构区域包括Protein kinase结构域（13-300位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q00534
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q00534
+    url: https://www.uniprot.org/uniprotkb/Q00534/entry
+  panels:
+  - lung_62_pdl1
+- gene: CDKN2A
+  fixed_domain_text: CDKN2A基因编码的蛋白全长为156个氨基酸，UniProt/InterPro注释的主要结构区域包括ANK 1重复区（11-40位氨基酸）、ANK 2重复区（44-72位氨基酸）、ANK
+    3重复区（77-106位氨基酸）、ANK 4重复区（110-139位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P42771
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P42771
+    url: https://www.uniprot.org/uniprotkb/P42771/entry
+  accession_selection:
+    status: pending_secondary_mapping_review
+    selected: P42771
+    alternatives:
+    - Q8N726
+    selection_basis: deterministic_accession_order_pending_transcript_product_review
+    exact_primary_gene_accessions:
+    - P42771
+    - Q8N726
+    requires_transcript_product_review: true
+  panels:
+  - lung_62_pdl1
+- gene: DDR2
+  fixed_domain_text: DDR2基因编码的蛋白全长为855个氨基酸，UniProt/InterPro注释的主要结构区域包括F5/8 type C结构域（30-185位氨基酸）、Protein kinase结构域（563-849位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q16832
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q16832
+    url: https://www.uniprot.org/uniprotkb/Q16832/entry
+  panels:
+  - lung_62_pdl1
+- gene: ESR1
+  fixed_domain_text: ESR1基因编码的蛋白全长为595个氨基酸，UniProt/InterPro注释的主要结构区域包括NR LBD结构域（311-547位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P03372
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P03372
+    url: https://www.uniprot.org/uniprotkb/P03372/entry
+  panels:
+  - lung_62_pdl1
+- gene: FANCA
+  fixed_domain_text: FANCA基因编码的蛋白全长为1455个氨基酸，UniProt/InterPro注释的主要结构区域包括Fanconi anaemia group A protein, N-terminal结构域（170-524位氨基酸）、Fanconi
+    anaemia group A protein, helical结构域（544-625位氨基酸）、Fanconi anaemia group A protein, arcN subdomain结构域（648-880位氨基酸）、Fanconi
+    anaemia group A protein, C-terminal结构域（1225-1431位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: O15360
+  interpro_entries:
+  - IPR031729
+  - IPR055277
+  - IPR055386
+  - IPR055387
+  source_refs:
+  - type: uniprot
+    id: O15360
+    url: https://www.uniprot.org/uniprotkb/O15360/entry
+  - type: interpro
+    id: O15360
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/O15360/?page_size=200
+  panels:
+  - lung_62_pdl1
+- gene: FGF3
+  fixed_domain_text: FGF3基因编码的蛋白全长为239个氨基酸，UniProt/InterPro注释的主要结构区域包括信号肽区域（1-17位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P11487
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P11487
+    url: https://www.uniprot.org/uniprotkb/P11487/entry
+  panels:
+  - lung_62_pdl1
+- gene: FGFR1
+  fixed_domain_text: FGFR1基因编码的蛋白全长为822个氨基酸，UniProt/InterPro注释的主要结构区域包括Ig-like C2-type 1结构域（25-119位氨基酸）、Ig-like
+    C2-type 2结构域（158-246位氨基酸）、Ig-like C2-type 3结构域（255-357位氨基酸）、Protein kinase结构域（478-767位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P11362
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P11362
+    url: https://www.uniprot.org/uniprotkb/P11362/entry
+  panels:
+  - lung_62_pdl1
+- gene: FGFR2
+  fixed_domain_text: FGFR2基因编码的蛋白全长为821个氨基酸，UniProt/InterPro注释的主要结构区域包括Ig-like C2-type 1结构域（25-125位氨基酸）、Ig-like
+    C2-type 2结构域（154-247位氨基酸）、Ig-like C2-type 3结构域（256-358位氨基酸）、Protein kinase结构域（481-770位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P21802
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P21802
+    url: https://www.uniprot.org/uniprotkb/P21802/entry
+  panels:
+  - lung_62_pdl1
+- gene: FGFR3
+  fixed_domain_text: FGFR3基因编码的蛋白全长为806个氨基酸，UniProt/InterPro注释的主要结构区域包括Ig-like C2-type 1结构域（24-126位氨基酸）、Ig-like
+    C2-type 2结构域（151-244位氨基酸）、Ig-like C2-type 3结构域（253-355位氨基酸）、Protein kinase结构域（472-761位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P22607
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P22607
+    url: https://www.uniprot.org/uniprotkb/P22607/entry
+  panels:
+  - lung_62_pdl1
+- gene: FLT3
+  fixed_domain_text: FLT3基因编码的蛋白全长为993个氨基酸，UniProt/InterPro注释的主要结构区域包括Ig-like C2-type结构域（253-343位氨基酸）、Protein kinase结构域（610-943位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P36888
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P36888
+    url: https://www.uniprot.org/uniprotkb/P36888/entry
+  panels:
+  - lung_62_pdl1
+- gene: HRAS
+  fixed_domain_text: HRAS基因编码的蛋白全长为189个氨基酸，UniProt/InterPro注释的主要结构区域包括Hypervariable region区域（166-185位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P01112
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P01112
+    url: https://www.uniprot.org/uniprotkb/P01112/entry
+  panels:
+  - lung_62_pdl1
+- gene: IDH1
+  fixed_domain_text: IDH1基因编码的蛋白全长为414个氨基酸，UniProt/InterPro注释的主要结构区域包括Isopropylmalate dehydrogenase-like结构域（9-401位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: O75874
+  interpro_entries:
+  - IPR024084
+  source_refs:
+  - type: uniprot
+    id: O75874
+    url: https://www.uniprot.org/uniprotkb/O75874/entry
+  - type: interpro
+    id: O75874
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/O75874/?page_size=200
+  panels:
+  - lung_62_pdl1
+- gene: IDH2
+  fixed_domain_text: IDH2基因编码的蛋白全长为452个氨基酸，UniProt/InterPro注释的主要结构区域包括Isopropylmalate dehydrogenase-like结构域（45-441位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P48735
+  interpro_entries:
+  - IPR024084
+  source_refs:
+  - type: uniprot
+    id: P48735
+    url: https://www.uniprot.org/uniprotkb/P48735/entry
+  - type: interpro
+    id: P48735
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/P48735/?page_size=200
+  panels:
+  - lung_62_pdl1
+- gene: JAK1
+  fixed_domain_text: JAK1基因编码的蛋白全长为1154个氨基酸，UniProt/InterPro注释的主要结构区域包括FERM结构域（34-420位氨基酸）、SH2结构域（439-544位氨基酸）、Protein
+    kinase 1结构域（583-855位氨基酸）、Protein kinase 2结构域（875-1153位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P23458
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P23458
+    url: https://www.uniprot.org/uniprotkb/P23458/entry
+  panels:
+  - lung_62_pdl1
+- gene: JAK2
+  fixed_domain_text: JAK2基因编码的蛋白全长为1132个氨基酸，UniProt/InterPro注释的主要结构区域包括FERM结构域（37-380位氨基酸）、SH2; atypical结构域（401-482位氨基酸）、Protein
+    kinase 1结构域（545-809位氨基酸）、Protein kinase 2结构域（849-1124位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: O60674
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: O60674
+    url: https://www.uniprot.org/uniprotkb/O60674/entry
+  panels:
+  - lung_62_pdl1
+- gene: MAP2K1
+  fixed_domain_text: MAP2K1基因编码的蛋白全长为393个氨基酸，UniProt/InterPro注释的主要结构区域包括Protein kinase结构域（68-361位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q02750
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q02750
+    url: https://www.uniprot.org/uniprotkb/Q02750/entry
+  panels:
+  - lung_62_pdl1
+- gene: MAP2K2
+  fixed_domain_text: MAP2K2基因编码的蛋白全长为400个氨基酸，UniProt/InterPro注释的主要结构区域包括Protein kinase结构域（72-369位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P36507
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P36507
+    url: https://www.uniprot.org/uniprotkb/P36507/entry
+  panels:
+  - lung_62_pdl1
+- gene: MTOR
+  fixed_domain_text: MTOR基因编码的蛋白全长为2549个氨基酸，UniProt/InterPro注释的主要结构区域包括HEAT 1重复区（16-53位氨基酸）、HEAT 2重复区（55-99位氨基酸）、HEAT
+    3重复区（100-137位氨基酸）、HEAT 4重复区（138-179位氨基酸）、HEAT 5重复区（180-220位氨基酸）、HEAT 6重复区（222-276位氨基酸）、HEAT 7重复区（277-313位氨基酸）、HEAT
+    8重复区（314-364位氨基酸）、HEAT 9重复区（365-409位氨基酸）、HEAT 10重复区（410-445位氨基酸）、HEAT 11重复区（446-494位氨基酸）、HEAT 12重复区（495-529位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P42345
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P42345
+    url: https://www.uniprot.org/uniprotkb/P42345/entry
+  panels:
+  - lung_62_pdl1
+- gene: NOTCH1
+  fixed_domain_text: NOTCH1基因编码的蛋白全长为2555个氨基酸，UniProt/InterPro注释的主要结构区域包括EGF-like 1结构域（20-58位氨基酸）、EGF-like 2结构域（59-99位氨基酸）、EGF-like
+    3结构域（102-139位氨基酸）、EGF-like 4结构域（140-176位氨基酸）、EGF-like 5; calcium-binding结构域（178-216位氨基酸）、EGF-like 6结构域（218-255位氨基酸）、EGF-like
+    7; calcium-binding结构域（257-293位氨基酸）、EGF-like 8; calcium-binding结构域（295-333位氨基酸）、EGF-like 9; calcium-binding结构域（335-371位氨基酸）、EGF-like
+    10结构域（372-410位氨基酸）、EGF-like 11; calcium-binding结构域（412-450位氨基酸）、EGF-like 12; calcium-binding结构域（452-488位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P46531
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P46531
+    url: https://www.uniprot.org/uniprotkb/P46531/entry
+  panels:
+  - lung_62_pdl1
+- gene: PDGFRA
+  fixed_domain_text: PDGFRA基因编码的蛋白全长为1089个氨基酸，UniProt/InterPro注释的主要结构区域包括Ig-like C2-type 1结构域（24-113位氨基酸）、Ig-like
+    C2-type 2结构域（117-201位氨基酸）、Ig-like C2-type 3结构域（202-306位氨基酸）、Ig-like C2-type 4结构域（319-410位氨基酸）、Ig-like C2-type
+    5结构域（414-517位氨基酸）、Protein kinase结构域（593-954位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P16234
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P16234
+    url: https://www.uniprot.org/uniprotkb/P16234/entry
+  panels:
+  - lung_62_pdl1
+- gene: POLD1
+  fixed_domain_text: POLD1基因编码的蛋白全长为1107个氨基酸，UniProt/InterPro注释的主要结构区域包括Ribonuclease H-like superfamily结构域（119-547位氨基酸）、DNA
+    polymerase delta/zeta catalytic subunit, N-terminal结构域（143-220位氨基酸）、DNA-directed DNA polymerase, family B, exonuclease结构域（243-477位氨基酸）、Ribonuclease
+    H superfamily结构域（309-527位氨基酸）、DNA-directed DNA polymerase, family B, multifunctional结构域（541-973位氨基酸）、DNA/RNA
+    polymerase superfamily结构域（567-976位氨基酸）、DNA polymerase, palm结构域（580-810位氨基酸）、DNA polymerase family B, thumb结构域（828-985位氨基酸）、C4-type
+    zinc-finger of DNA polymerase delta结构域（1012-1082位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P28340
+  interpro_entries:
+  - IPR006133
+  - IPR006134
+  - IPR012337
+  - IPR023211
+  - IPR025687
+  - IPR036397
+  - IPR042087
+  - IPR043502
+  - IPR056435
+  source_refs:
+  - type: uniprot
+    id: P28340
+    url: https://www.uniprot.org/uniprotkb/P28340/entry
+  - type: interpro
+    id: P28340
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/P28340/?page_size=200
+  panels:
+  - lung_62_pdl1
+- gene: POLE
+  fixed_domain_text: POLE基因编码的蛋白全长为2286个氨基酸，UniProt/InterPro注释的主要结构区域包括Ribonuclease H-like superfamily结构域（79-494位氨基酸）、DNA-directed
+    DNA polymerase, family B, exonuclease结构域（220-426位氨基酸）、Ribonuclease H superfamily结构域（268-495位氨基酸）、DNA/RNA polymerase
+    superfamily结构域（513-1166位氨基酸）、DNA polymerase, palm结构域（609-966位氨基酸）、DNA polymerase family B, thumb结构域（970-1157位氨基酸）、DNA
+    polymerase epsilon ,catalytic subunit A, thumb结构域（975-1152位氨基酸）、DNA polymerase epsilon, catalytic subunit A,
+    C-terminal结构域（1525-1925位氨基酸）、DNA polymerase-epsilon, first zinc finger结构域（2141-2213位氨基酸）、DNA polymerase-epsilon,
+    zinc finger结构域（2216-2271位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q07864
+  interpro_entries:
+  - IPR006133
+  - IPR012337
+  - IPR013697
+  - IPR023211
+  - IPR036397
+  - IPR042087
+  - IPR043502
+  - IPR054475
+  - IPR055191
+  - IPR063197
+  source_refs:
+  - type: uniprot
+    id: Q07864
+    url: https://www.uniprot.org/uniprotkb/Q07864/entry
+  - type: interpro
+    id: Q07864
+    url: https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/Q07864/?page_size=200
+  panels:
+  - lung_62_pdl1
+- gene: PTCH1
+  fixed_domain_text: PTCH1基因编码的蛋白全长为1447个氨基酸，UniProt/InterPro注释的主要结构区域包括SSD结构域（438-598位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q13635
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q13635
+    url: https://www.uniprot.org/uniprotkb/Q13635/entry
+  panels:
+  - lung_62_pdl1
+- gene: RAF1
+  fixed_domain_text: RAF1基因编码的蛋白全长为648个氨基酸，UniProt/InterPro注释的主要结构区域包括RBD结构域（56-131位氨基酸）、Protein kinase结构域（349-609位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P04049
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P04049
+    url: https://www.uniprot.org/uniprotkb/P04049/entry
+  panels:
+  - lung_62_pdl1
+- gene: RB1
+  fixed_domain_text: RB1基因编码的蛋白全长为928个氨基酸，UniProt/InterPro注释的主要结构区域包括Domain A区域（373-579位氨基酸）、Pocket; binds T and
+    E1A区域（373-771位氨基酸）、Spacer区域（580-639位氨基酸）、Domain B区域（640-771位氨基酸）、Domain C; mediates interaction with E4F1区域（771-928位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P06400
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P06400
+    url: https://www.uniprot.org/uniprotkb/P06400/entry
+  panels:
+  - lung_62_pdl1
+- gene: ROS1
+  fixed_domain_text: ROS1基因编码的蛋白全长为2347个氨基酸，UniProt/InterPro注释的主要结构区域包括Fibronectin type-III 1结构域（101-196位氨基酸）、Fibronectin
+    type-III 2结构域（197-285位氨基酸）、Fibronectin type-III 3结构域（557-671位氨基酸）、Fibronectin type-III 4结构域（947-1042位氨基酸）、Fibronectin
+    type-III 5结构域（1043-1150位氨基酸）、Fibronectin type-III 6结构域（1450-1556位氨基酸）、Fibronectin type-III 7结构域（1557-1656位氨基酸）、Fibronectin
+    type-III 8结构域（1658-1751位氨基酸）、Fibronectin type-III 9结构域（1752-1854位氨基酸）、Protein kinase结构域（1945-2222位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P08922
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P08922
+    url: https://www.uniprot.org/uniprotkb/P08922/entry
+  panels:
+  - lung_62_pdl1
+- gene: TSC1
+  fixed_domain_text: TSC1基因编码的蛋白全长为1164个氨基酸，UniProt/InterPro注释的主要结构区域包括卷曲螺旋区域（721-997位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q92574
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q92574
+    url: https://www.uniprot.org/uniprotkb/Q92574/entry
+  panels:
+  - lung_62_pdl1
+- gene: TSC2
+  fixed_domain_text: TSC2基因编码的蛋白全长为1807个氨基酸，UniProt/InterPro注释的主要结构区域包括Rap-GAP结构域（1531-1758位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P49815
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P49815
+    url: https://www.uniprot.org/uniprotkb/P49815/entry
+  panels:
+  - lung_62_pdl1
+drug_sections: []
+panel_id: lung_62_pdl1

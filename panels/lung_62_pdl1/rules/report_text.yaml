@@ -1,0 +1,40 @@
+schema_version: '1.0'
+panel_id: lung_62_pdl1
+rule_id: report_text
+version: 0.2.0
+updated: '2026-08-10'
+status: draft
+description: Neutral lung588 engineering wording without patient-level treatment claims.
+texts:
+  tmb_table_immuno_tips:
+    purpose: TMB result boundary.
+    source: engineering_draft
+    text: 仅报告检测值及分层；治疗意义须结合病理类型、分期和现行指南审核。
+  tmb_detail_interpretation:
+    purpose: TMB educational boundary.
+    source: engineering_draft
+    text: 肿瘤突变负荷为每兆碱基范围内的体细胞突变数量；本值不能单独决定治疗方案。
+  tmb_drug_note:
+    purpose: TMB drug boundary.
+    source: engineering_draft
+    text: 本报告不依据TMB单独生成患者级用药结论。
+  msi_educational_tips:
+    purpose: MSI result boundary.
+    source: engineering_draft
+    text: 仅报告微卫星状态；治疗意义须由专业医师结合病理类型、分期和现行诊疗规范综合判断。
+  msi_crc_interpretation:
+    purpose: Compatibility field retained without CRC-specific wording.
+    source: engineering_draft
+    text: 本报告不依据MSI单独生成患者级治疗结论。
+  pdl1_missing_interpretation:
+    purpose: Draft notice when the report group has not yet supplied PD-L1 values.
+    source: report_review_workflow
+    text: 本次未提供PD-L1免疫组化TPS、CPS及结果判定；当前先生成NGS报告草稿供报告解读组审核，相关内容待核对后补充。
+  pdl1_image_missing_notice:
+    purpose: Draft placeholder when no case-specific PD-L1 image was uploaded.
+    source: report_review_workflow
+    text: 未提供本病例PD-L1免疫组化图片；当前报告为待审核草稿。
+  patient_letter_project_label:
+    purpose: Patient letter panel name.
+    source: product_contract
+    text: 肺癌62基因+PD-L1检测项目

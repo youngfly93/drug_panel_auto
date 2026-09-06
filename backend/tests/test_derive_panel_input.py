@@ -101,11 +101,11 @@ def test_custom_product_flag_and_no_overwrite(tmp_path):
     kwargs = dict(
         panel_id="lung_62_pdl1",
         genes=GENES_13,
-        flag_column="ExistInsmall62pdl1",
+        flag_column="ExistInsmall620",
         output_dir=tmp_path / ".work",
     )
     receipt = derive_panel_input(source, **kwargs)
-    assert receipt["membership_column"] == "ExistInsmall62pdl1"
+    assert receipt["membership_column"] == "ExistInsmall620"
     with pytest.raises(FileExistsError):
         derive_panel_input(source, **kwargs)
 

@@ -1,0 +1,249 @@
+schema_version: '1.0'
+panel_id: lung_62
+rule_id: drugs
+version: 0.4.0
+updated: '2026-09-02'
+status: pilot
+description: 'Exact-event lung treatment policy plus gene-level C/D drug rows transcribed from paired historical
+  lung finals for report-group review. All gene-level rows remain visibly marked pending review; broad cross-cancer
+  fallback stays disabled.
+
+  '
+governance:
+  schema_version: '1.0'
+  policy_id: lung588_targeted_drug_governance_v1
+  defaults:
+    targeted_drug:
+      review_status: needs_review
+      runtime_eligible: false
+      review_basis: event_level_lung_cancer_review_required
+      evidence_level: not_assigned
+      evidence_as_of: '2026-07-23'
+      cancer_scope: lung_cancer_event_specific
+      secondary_review_status: pending_report_group_review
+      source_refs:
+      - type: panel_policy
+        id: lung588_fail_closed_targeted_drug_policy
+drug_rules:
+  approved_drug_rows_source: none
+  brand_lookup_source: config/drug_brands.yaml
+  immunotherapy_brand_list_source: config/drug_brands.yaml
+  evidence_levels:
+    allowed:
+    - A
+    - B
+    - C
+    - D
+targeted_drug_rules:
+  enabled: true
+  base_db_enabled: false
+  allowed_source_dbs: []
+  allow_internal_rows: false
+  require_cancer_profile_match: true
+  approved_drug_rows_enabled: false
+  clinical_context_rule: clinical_context
+  review_status_display:
+    mode: show_with_notice
+    visible_statuses:
+    - needs_review
+    - provisional_runtime
+    - pending_report_group_review
+    - case_level_report_group_review_required
+    notice: 待报告组审
+  summary_display_scope: drug_matched_variants
+  summary_display_variant_levels:
+  - Ⅰ类
+  - Ⅱ类
+  gene_level_review_pending:
+    enabled: true
+    allowed_variant_levels:
+    - Ⅰ类
+    - Ⅱ类
+    allowed_source_dbs:
+    - INTERNAL
+    allowed_genes:
+    - TP53
+    - ATM
+    - TSC1
+    - BRCA2
+    - MLH1
+    - PMS2
+    - BRAF
+    - PTEN
+    - TSC2
+    - PIK3CA
+    notice: 待报告组审
+    fallback_overrides:
+      TSC1:
+        benefit_drugs:
+        - 依维莫司（C）
+        - 西罗莫司（C）
+        - 替西罗莫司（C）
+        - 依维莫司+Buparlisib（C）
+        - Sapanisertib（C）
+        caution_drugs:
+        - --
+      PTEN:
+        benefit_drugs:
+        - 替西罗莫司（C）
+        - 尼拉帕利（C）
+        - 他拉唑帕利（C）
+        - 依维莫司（C）
+        - 依维莫司+培唑帕尼（C）
+        - Buparlisib（C）
+        - Taselisib（C）
+        - 盐酸可泮利塞（C）
+        - Serabelisib（C）
+        - 阿培利司（C）
+        - 奥拉帕利（C）
+        - 卡匹色替（C）
+        - GSK2636771（C）
+        - AZD8186（C）
+        - Dactolisib（D）
+        caution_drugs:
+        - --
+      TSC2:
+        benefit_drugs:
+        - 依维莫司（C）
+        - 西罗莫司（C）
+        - 替西罗莫司（C）
+        - 依维莫司+Buparlisib（C）
+        - Sapanisertib（C）
+        caution_drugs:
+        - --
+        part3_historical_event:
+          c_hgvs: c.2647C>T
+          p_hgvs: p.Q883*
+          reference_granularity: event_block_not_drug_specific
+          source_reference_docx_sha256: 4754ededa67eeeef1b716dd7fb9e907d03c8fd79904a64f48bd271119c9a401b
+          source_refs:
+          - PMID:19966866
+          - PMID:25724664
+          - PMID:26795955
+          - PMID:27751352
+          - PMID:29720580
+          - NCT01470209
+          - NCT02465060
+          - NCT03297606
+          - NCT03817515
+          - NCT05103358
+      PIK3CA:
+        benefit_drugs:
+        - 依维莫司（C）
+        - 西罗莫司（C）
+        - 替西罗莫司（C）
+        - 阿培利司（C）
+        - 盐酸可泮利塞（C）
+        - 培唑帕尼+依维莫司（C）
+        - Buparlisib（C）
+        - Taselisib（C）
+        - Serabelisib（C）
+        - 伊那利塞（C）
+        - 伊那利塞+哌柏西利（C）
+        - RLY-2608（C）
+        - 卡匹色替（C）
+        - WX390（C）
+        - Dactolisib（D）
+        caution_drugs:
+        - --
+  overrides: {}
+  reviewed_variant_overrides:
+  - rule_id: lung_braf_v600e_regulatory_combinations
+    panels:
+    - lung_62
+    gene: BRAF
+    transcript: NM_004333.6
+    c_hgvs: c.1799T>A
+    p_hgvs: p.V600E
+    variant_level:
+    - Ⅰ类
+    - Ⅱ类
+    benefit_drugs:
+    - 达拉非尼+曲美替尼（A）
+    - 康奈非尼+贝美替尼（A）
+    caution_drugs:
+    - --
+    required_context_fields:
+    - lung_histology
+    - disease_extent
+    - companion_diagnostic_status
+    context_requirements:
+      lung_histology:
+      - 非小细胞肺癌
+      disease_extent:
+      - 转移性
+      companion_diagnostic_status:
+      - 已确认符合
+    review_status: provisional_runtime
+    runtime_eligible: true
+    review_basis: exact_event_primary_source_review_with_case_delivery_gate
+    evidence_level: regulatory_label_exact_variant_lung_cancer
+    evidence_as_of: '2026-08-09'
+    cancer_scope: metastatic_nsclc_braf_v600e
+    secondary_review_status: case_level_report_group_review_required
+    review_metadata:
+      reviewer: codex
+      reviewer_type: ai_delegated_report_group_first_review
+      reviewed_at: '2026-08-09'
+      risk_level: high
+      secondary_review_status: case_level_report_group_review_required
+    source_refs:
+    - type: regulatory_label
+      authority: FDA
+      id: Tafinlar-Mekinist-label-2024
+      url: https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/202806s031%2C217514s004lbl.pdf
+    - type: regulatory_approval
+      authority: FDA
+      id: FDA-2023-encorafenib-binimetinib-NSCLC
+      url: https://www.fda.gov/drugs/resources-information-approved-drugs/fda-approves-encorafenib-binimetinib-metastatic-non-small-cell-lung-cancer-braf-v600e-mutation
+  - rule_id: lung_erbb2_g660d_trastuzumab_deruxtecan
+    panels:
+    - lung_62
+    gene: ERBB2
+    transcript: NM_004448.4
+    c_hgvs: c.1979G>A
+    p_hgvs: p.G660D
+    variant_level:
+    - Ⅰ类
+    - Ⅱ类
+    benefit_drugs:
+    - 德曲妥珠单抗（A）
+    caution_drugs:
+    - --
+    required_context_fields:
+    - lung_histology
+    - disease_extent
+    - prior_systemic_therapy
+    - companion_diagnostic_status
+    context_requirements:
+      lung_histology:
+      - 非小细胞肺癌
+      disease_extent:
+      - 不可切除局部晚期
+      - 转移性
+      prior_systemic_therapy:
+      - 已接受
+      companion_diagnostic_status:
+      - 已确认符合
+    review_status: provisional_runtime
+    runtime_eligible: true
+    review_basis: exact_event_functional_plus_label_biomarker_chain_with_case_gate
+    evidence_level: functional_exact_event_plus_regulatory_biomarker_label
+    evidence_as_of: '2026-08-09'
+    cancer_scope: previously_treated_unresectable_or_metastatic_nsclc_activating_erbb2
+    secondary_review_status: case_level_report_group_review_required
+    review_metadata:
+      reviewer: codex
+      reviewer_type: ai_delegated_report_group_first_review
+      reviewed_at: '2026-08-09'
+      risk_level: high
+      secondary_review_status: case_level_report_group_review_required
+    source_refs:
+    - type: pubmed
+      id: PMID:30449325
+      url: https://pubmed.ncbi.nlm.nih.gov/30449325/
+    - type: regulatory_label
+      authority: FDA
+      id: Enhertu-label-2026
+      url: https://www.accessdata.fda.gov/drugsatfda_docs/label/2026/761139s041s043lbl.pdf
+approved_drug_rows: []

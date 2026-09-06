@@ -1,17 +1,19 @@
 schema_version: "1.0"
 panel_id: "lung_62_pdl1"
 product_name: "肺癌62基因+PD-L1"
-release_status: "NOT_BUILT"
+release_status: "DRAFT_BUILT_PENDING_ENGINEERING_QA"
 production_eligible: false
+draft_generation_eligible: false
 enforced_targets:
   - "iyun129"
 blocker_code: "draft_build_allowed_production_evidence_pending"
 draft_build_allowed: true
 decision: >-
-  Treat lung-62 plus PD-L1 as a distinct product. Reuse only the reviewed
-  small-panel structural base. Draft construction is allowed for report-group
-  evaluation; case-specific PD-L1 provenance and a dedicated reviewed golden
-  remain mandatory before any production entry is exposed.
+  The C-family draft is built and shares the NGS fingerprint with lung_62.
+  PD-L1 order/form selection chooses this sibling; no additional Excel flag is
+  invented. Only case-specific legacy transcription is allowed, with missing
+  source fields visibly absent. Deployment awaits engineering gates; clinical
+  promotion requires separate report-group approval and true paired inputs.
 
 aggregate_inventory:
   historical_final_docx_count: 55
@@ -36,9 +38,10 @@ promotion_evidence:
     sha256:
   same_case_verified: false
   pdl1_case_source_contract:
-    status: "NOT_REGISTERED"
-    clone_required: true
-    platform_required: true
+    status: "LEGACY_TRANSCRIPTION_REGISTERED_FOR_DRAFT"
+    profile_id: "legacy_unspecified_ihc_transcription_v1"
+    clone_required: false
+    platform_required: false
     score_type_required: true
     source_identity_required: true
   report_group_secondary_review:
@@ -55,7 +58,7 @@ promotion_evidence:
 development_requirements:
   - "Select and register a report-group-approved lung-62+PD-L1 final DOCX."
   - "Provide its exact same-case source Excel and one different real lung-62+PD-L1 Excel."
-  - "Register per-case PD-L1 clone, platform, score type/value, result and source identity."
+  - "Register per-case PD-L1 source identity and transcribed score/result; absent clone/platform stay explicitly not provided."
   - "Reuse only reviewed small-panel structure; do not inherit lung329/588 patient conclusions."
   - "Keep targeted-drug, immune and PD-L1 knowledge event- and cancer-specific."
   - "Pass hardcoding, two-case leak, missing-source, historical-diff and Linux visual gates."

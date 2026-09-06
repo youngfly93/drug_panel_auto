@@ -237,6 +237,17 @@ PROJECT_FIELD_OVERRIDES: dict[str, dict] = {
     "mlf_result": {"hide": ALWAYS_HIDE},
 }
 
+# NGS family members expose the same optional IHC entry fields. Entering a
+# value in the Web form selects the +PD-L1 variant; no value is inferred.
+for _panel_id in ("lung_62", "lung_62_pdl1", "lung_588"):
+    PROJECT_FIELD_OVERRIDES[_panel_id] = PROJECT_FIELD_OVERRIDES["lung_588_pdl1"]
+PROJECT_FIELD_OVERRIDES["lung_13"] = {
+    "show": [
+        "lung_histology", "disease_extent", "prior_systemic_therapy", "companion_diagnostic_status",
+    ],
+    "hide": ALWAYS_HIDE,
+}
+
 PROJECT_ONLY_FIELDS = {
     "pdl1_tps",
     "pdl1_cps",
@@ -301,7 +312,8 @@ def _runtime_pdl1_profile_ids(project_type: Optional[str] = None) -> list[str]:
     """Return PD-L1 profiles enabled for the selected lung-panel release tier."""
 
     panel_id = str(project_type or "lung_588_pdl1").strip().lower()
-    if panel_id not in {"lung_329_pdl1", "lung_588_pdl1"}:
+    panel_id = {"lung_62": "lung_62_pdl1", "lung_588": "lung_588_pdl1"}.get(panel_id, panel_id)
+    if panel_id not in {"lung_329_pdl1", "lung_588_pdl1", "lung_62_pdl1"}:
         return []
 
     try:
@@ -626,7 +638,7 @@ def fill_missing_report_date(values: dict[str, Any]) -> dict[str, Any]:
     return filled
 
 
-PDL1_IMAGE_PROJECT_TYPES = {"lung_329_pdl1", "lung_588_pdl1"}
+PDL1_IMAGE_PROJECT_TYPES = {"lung_329_pdl1", "lung_588_pdl1", "lung_62_pdl1"}
 
 
 def apply_pdl1_image_metadata(

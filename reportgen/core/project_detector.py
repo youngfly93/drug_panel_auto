@@ -96,6 +96,7 @@ class ProjectDetector:
                         or entry.get("structural_fingerprints")
                         or []
                     ),
+                    "identity_family": dict(rules.get("identity_family") or {}),
                     "template": template_file,
                     "priority": rules.get("priority", entry.get("priority", 10)),
                     "description": package.raw.get("description")
@@ -106,6 +107,41 @@ class ProjectDetector:
             by_id[package.panel_id] = entry
 
         return list(by_id.values())
+
+    def identity_family_id(self, project_type: str) -> str:
+        """Return a declared NGS identity family; undeclared panels stay distinct."""
+        for entry in self.project_types:
+            if entry["id"] == project_type:
+                return str((entry.get("identity_family") or {}).get("id") or project_type)
+        return project_type
+
+    def _resolve_structural_family(self, structural_types, detection_text, threshold):
+        """NGS headers identify a family, never the presence of an IHC order.
+
+        Only trusted project/order text may select an IHC variant automatically.
+        A filename (including a derived-input suffix) cannot supply that evidence.
+        """
+        families = {self.identity_family_id(value) for value in structural_types}
+        if len(families) != 1:
+            return None, [], None
+        members = [entry for entry in self.project_types if entry["id"] in structural_types]
+        defaults = {
+            (entry.get("identity_family") or {}).get("default_project_type")
+            for entry in members
+        }
+        if len(defaults) != 1 or None in defaults:
+            return None, [], None
+        default = next((entry for entry in members if entry["id"] in defaults), None)
+        if default is None:
+            return None, [], None
+        text_matches = [
+            entry for entry in members
+            if detection_text and self._calculate_match_score(entry, "", detection_text)[0] >= threshold
+        ]
+        selected = text_matches[0] if len(text_matches) == 1 else default
+        choices = [{"id": entry["id"], "name": entry["name"]} for entry in members]
+        source = "trusted_project_text" if len(text_matches) == 1 else "ngs_family_default"
+        return selected, choices, source
 
     def detect(
         self,
@@ -176,8 +212,15 @@ class ProjectDetector:
         identity_conflicts = sorted(
             item for item in structural_types | high_confidence_types if item
         )
-        if not structural_types or len(identity_conflicts) < 2:
+        if not structural_types or len({self.identity_family_id(value) for value in identity_conflicts}) < 2:
             identity_conflicts = []
+
+        family_match, family_choices, identity_source = self._resolve_structural_family(
+            structural_types, detection_text, threshold
+        )
+        if family_match is not None:
+            best_match = family_match
+            best_score = max(best_score, threshold)
 
         if best_match and best_score >= threshold:
             result = {
@@ -188,6 +231,9 @@ class ProjectDetector:
                 "confidence": best_score,
                 "match_details": match_details,
                 "identity_conflicts": identity_conflicts,
+                "identity_family": self.identity_family_id(best_match["id"]),
+                "family_choices": family_choices,
+                "identity_source": identity_source,
             }
             self.logger.info(
                 "项目类型检测成功",

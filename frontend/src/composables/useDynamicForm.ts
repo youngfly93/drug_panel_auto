@@ -6,6 +6,10 @@ const PROJECT_DISPLAY_NAMES: Record<string, string> = {
   crc_358_msi: '结直肠癌358基因+MSI',
   lung_329_pdl1: '肺癌329基因+PD-L1',
   lung_588_pdl1: '肺癌588基因+PD-L1',
+  lung_588: '肺癌588基因',
+  lung_13: '肺癌13基因',
+  lung_62: '肺癌62基因',
+  lung_62_pdl1: '肺癌62基因+PD-L1',
   mlf_result: 'MLF基因检测结果',
   lung_methylation: '肺癌甲基化',
 }

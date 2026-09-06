@@ -28,7 +28,7 @@ export RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.c
 # batch PD-L1 fields remain blank/not-provided and formal clinical promotion is
 # separate. CRC301, methylation and unbuilt small panels remain outside this
 # release. The same scope is enforced in the Web API, reportgen core, and UI.
-export RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1}"
+export RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1,lung_588}"
 export REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 export VITE_DISABLED_PROJECT_TYPES="${VITE_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 export ORIGIN_REMOTE="${ORIGIN_REMOTE:-origin}"

@@ -1,0 +1,61 @@
+schema_version: '1.0'
+panel_id: lung_62_pdl1
+rule_id: style
+version: 0.2.2
+updated: '2026-09-01'
+status: draft
+description: Lung588 DOCX style tokens.
+style:
+  defaults:
+    font_name: 微软雅黑
+    header_fill: 00B7C7
+    header_font_color: FFFFFF
+    body_font_color: '000000'
+    border_color: '000000'
+    border_size: '6'
+  variant_summary_table:
+    font_name: 微软雅黑
+    header_fill: 00B7C7
+    header_font_color: FFFFFF
+    body_font_color: '000000'
+    body_font_size: 9
+    header_font_size: 9
+    border_color: '000000'
+    border_size: '6'
+    link_underline: true
+    link_color: 0000FF
+    plain_texts:
+    - 未见突变
+    - 未检出
+    - '-'
+    - --
+    - —
+  biomarker_table:
+    font_name: 微软雅黑
+    header_fill: 00B7C7
+    header_font_color: FFFFFF
+    body_font_color: '000000'
+    body_font_size: 9
+    header_font_size: 10
+    border_color: '000000'
+    border_size: '6'
+  gene_list_table:
+    row_height_cm: 0.72
+    header_row_height_cm: 0.88
+    row_height_rule: exact
+    header_font_size: 14
+    body_font_size: 10
+  toc:
+    font_name: 微软雅黑
+    section_font_color: 00C4D8
+    section_font_size: 16
+    section_bold: true
+    item_font_color: '000000'
+    item_font_size: 11
+    item_bold: false
+    content_top_padding_pt: 57
+  front_matter:
+    guide_spacer_count: 30
+    insert_page_break: false
+    remove_page_break_after_text_prefixes:
+    - 备注：正体为国内大型三甲医院在临床中用到的化疗方案

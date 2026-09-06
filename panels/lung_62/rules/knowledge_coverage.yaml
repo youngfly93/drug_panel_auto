@@ -1,0 +1,104 @@
+schema_version: '1.0'
+panel_id: lung_62
+rule_id: knowledge_coverage
+version: 0.1.0
+updated: '2026-07-23'
+status: draft
+source: two de-identified historical lung588 final reports
+contract:
+  ordered_gene_list_sha256: 39204ef3c8fb34c65a44f867634afa305cc8129d87b37454758f246e75aeacda
+  gene_explanation: 基础解释、肺癌特异解释、来源和医学二审分别计数；非空文本不等于医学完成。
+  require_separate_mutation_narrative: true
+  mutation_narrative: 固定蛋白/结构域内容与变异级叙述分别计数；结构域文字不得单独满足变异解析门禁。
+  drug_knowledge: 候选证据不得直接进入患者报告；必须按癌种、事件、方向、证据和审核状态逐条放行。
+citation_source_reviews:
+- review_id: lung588_stk11_pmid_25980754_mismatch
+  gene: STK11
+  identifier: PMID:25980754
+  status: source_mismatch_confirmed
+  claim_contains: KRAS/STK11共突变可能预测免疫治疗的不良反应
+  disposition: exact_runtime_claim_retracted_replacement_review_pending
+  runtime_claim_retracted: true
+  runtime_retraction_ids:
+  - lung588_stk11_remove_unsupported_pmid_25980754_claim
+  runtime_eligible: false
+  secondary_review_status: pending_report_group_review
+  finding: 'PMID 25980754 reports germline cancer-predisposition findings in people evaluated for suspected Lynch
+    syndrome. It does not evaluate PD-1/PD-L1 treatment response in KRAS/STK11-mutant lung cancer.
+
+    '
+  suggested_replacement_identifier: PMID:29773717
+  suggested_replacement_scope: 'KRAS-mutant lung adenocarcinoma with STK11/LKB1 alteration and response to PD-1-axis
+    inhibition; wording and applicability require report-group secondary review before any patient-visible use.
+
+    '
+  source_refs:
+  - type: pubmed
+    id: PMID:25980754
+    url: https://pubmed.ncbi.nlm.nih.gov/25980754/
+  - type: pubmed
+    id: PMID:29773717
+    url: https://pubmed.ncbi.nlm.nih.gov/29773717/
+reportable_genes:
+- AKT1
+- ALK
+- APC
+- AR
+- ARID1A
+- ATM
+- BRAF
+- BRCA1
+- BRCA2
+- CCND1
+- CD274
+- CDK4
+- CDK6
+- CDKN2A
+- CTNNB1
+- DDR2
+- EGFR
+- ERBB2
+- ESR1
+- FANCA
+- FBXW7
+- FGF3
+- FGFR1
+- FGFR2
+- FGFR3
+- FLT3
+- HRAS
+- IDH1
+- IDH2
+- JAK1
+- JAK2
+- KIT
+- KRAS
+- MAP2K1
+- MAP2K2
+- MET
+- MLH1
+- MSH2
+- MSH6
+- MTOR
+- NOTCH1
+- NRAS
+- NTRK1
+- NTRK2
+- NTRK3
+- PDGFRA
+- PIK3CA
+- PMS2
+- POLD1
+- POLE
+- PTCH1
+- PTEN
+- RAF1
+- RB1
+- RET
+- ROS1
+- SMARCA4
+- STK11
+- TP53
+- TSC1
+- TSC2
+- VHL

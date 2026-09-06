@@ -1,17 +1,18 @@
 schema_version: "1.0"
 panel_id: "lung_13"
 product_name: "肺癌13基因"
-release_status: "NOT_BUILT"
+release_status: "DRAFT_BUILT_PENDING_ENGINEERING_QA"
 production_eligible: false
+draft_generation_eligible: false
 enforced_targets:
   - "iyun129"
 blocker_code: "draft_build_allowed_production_evidence_pending"
 draft_build_allowed: true
 decision: >-
-  Draft construction is allowed for report-group evaluation. Keep every
-  production entry point closed, and do not promote the product until a
-  report-group-selected final DOCX and real source Excel cases establish the
-  input and output contracts.
+  The historical-family draft is built. Derived superset inputs are authorized
+  for engineering review, not as historical same-case clinical evidence.
+  Keep deployment disabled until draft engineering gates pass; clinical
+  promotion additionally requires true paired inputs and report-group approval.
 
 aggregate_inventory:
   historical_final_docx_count: 246

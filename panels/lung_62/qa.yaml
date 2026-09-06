@@ -1,0 +1,36 @@
+schema_version: '1.0'
+panel_id: lung_62
+current_output:
+  enabled: true
+  source: golden_candidate
+  required_features:
+    total_variants_count: fail
+    msi_status: fail
+    tmb_value: fail
+  required_sections:
+    variant_summary: fail
+    biomarkers: fail
+    gene_list: fail
+  require_table_shapes: fail
+  privacy_checks:
+    report_id: fail
+    sample_id: fail
+    date: fail
+legacy_reference:
+  enabled: true
+  source_dir_name: external_runtime_registry_only
+  sample_count: 2
+  required_features:
+    total_variants_count: warn
+    msi_status: warn
+    tmb_value: warn
+  required_sections:
+    variant_summary: warn
+    biomarkers: warn
+    gene_list: warn
+  require_table_shapes: warn
+  privacy_checks:
+    source_dir: fail
+    report_id: fail
+    sample_id: fail
+    date: fail

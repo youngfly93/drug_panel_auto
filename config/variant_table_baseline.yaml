@@ -62,6 +62,12 @@ variants_2_1:
       chr: "9"
 
   panels:
+    # Derived drafts show detected events only in the nine-column table.
+    # Their negative gene set comes from the product's own panel_display_genes.
+    lung_13: {unmutated_rows: []}
+    lung_62: {unmutated_rows: []}
+    lung_62_pdl1: {unmutated_rows: []}
+    lung_588: {unmutated_rows: []}
     lung_588_pdl1: &lung_unmutated_rows
       unmutated_rows:
         - {gene: "MLH1", transcript: "NM_000249.4", chr: "3"}

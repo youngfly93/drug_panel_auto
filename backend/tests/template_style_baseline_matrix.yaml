@@ -5,6 +5,30 @@ policy:
   rendered_output_baseline: "only where an accepted deterministic golden-case baseline exists"
 
 templates:
+  - panel_id: "lung_13"
+    template_id: "lung_13_historical_draft_v1"
+    status: "draft"
+    default: true
+    source_baseline: "baselines/template_sources/lung_13_historical_draft_v1.json"
+
+  - panel_id: "lung_62"
+    template_id: "lung_62_historical_draft_v1"
+    status: "draft"
+    default: true
+    source_baseline: "baselines/template_sources/lung_62_historical_draft_v1.json"
+
+  - panel_id: "lung_62_pdl1"
+    template_id: "lung_62_pdl1_historical_draft_v1"
+    status: "draft"
+    default: true
+    source_baseline: "baselines/template_sources/lung_62_pdl1_historical_draft_v1.json"
+
+  - panel_id: "lung_588"
+    template_id: "lung_588_historical_draft_v1"
+    status: "draft"
+    default: true
+    source_baseline: "baselines/template_sources/lung_588_historical_draft_v1.json"
+
   - panel_id: "crc_301_msi"
     template_id: "crc_301_msi_standard_v1"
     status: "active"

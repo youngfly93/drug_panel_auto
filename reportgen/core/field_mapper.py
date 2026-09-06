@@ -152,6 +152,9 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         Returns:
             ReportData对象
         """
+        from reportgen.panels.input_scope import scope_panel_excel
+
+        excel_data = scope_panel_excel(excel_data, panel_package)
         self.logger.info("开始字段映射", source_file=excel_data.file_path)
 
         report_data = ReportData(

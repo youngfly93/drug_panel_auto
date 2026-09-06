@@ -1,0 +1,392 @@
+schema_version: '1.0'
+panel_id: lung_588
+rule_id: biomarkers
+version: 1.1.0
+updated: '2026-09-05'
+status: pilot
+description: 'Lung comprehensive-panel biomarker display contract transcribed from the paired historical final reports.
+  The fixed 15/12/8 rows are always rendered; only the current-case result column is derived from source data. Historical
+  B/C event associations remain transcript- and HGVS-exact; fixed rows do not broaden those reviewed event rules
+  to arbitrary variants in the same gene. CNV source observations remain explicit review items, not confirmed immune
+  claims.
+
+  '
+biomarkers:
+  tmb:
+    field: tmb_summary
+    low_label: TMB-L
+    high_label: TMB-H
+    reference_threshold: 10 mutations/Mb
+  msi:
+    field: msi_summary
+    allowed_values:
+    - MSS
+    - MSI-L
+    - MSI-H
+  pdl1:
+    source: controlled_form
+    fields:
+    - pdl1_tps
+    - pdl1_cps
+    - pdl1_result
+  immune_gene_tables:
+    enabled: true
+    positive:
+      genes:
+      - MLH1
+      - MSH2
+      - MSH6
+      - PMS2
+      - POLE
+      - POLD1
+      - CD274
+      - PDCD1LG2
+      - PBRM1
+      - KRAS
+      - TET1
+      - ATM
+      - ATR
+      - BRCA1
+      - BRCA2
+      - BRIP1
+      - MSH3
+      - PALB2
+      - CHEK2
+      - ARID1A
+      - ATRX
+      - CDK12
+      - FANCI
+      - FANCM
+      - MRE11A
+      - NBN
+      - RAD50
+      - RAD51
+      rows:
+      - key: MLH1
+        genes:
+        - MLH1
+        mode: exact_variant
+        transcript: NM_000249.4
+        c_hgvs: c.790+1G>A
+        p_hgvs: ''
+        variant_level:
+        - Ⅰ类
+        - Ⅱ类
+        display: MLH1
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: MSH2
+        genes:
+        - MSH2
+        mode: direct
+        display: MSH2
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: MSH6
+        genes:
+        - MSH6
+        mode: direct
+        display: MSH6
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: PMS2
+        genes:
+        - PMS2
+        mode: exact_variant
+        transcript: NM_000535.7
+        c_hgvs: c.59G>A
+        p_hgvs: p.R20Q
+        variant_level:
+        - Ⅰ类
+        - Ⅱ类
+        display: PMS2
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: POLE
+        genes:
+        - POLE
+        mode: direct
+        display: POLE
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: POLD1
+        genes:
+        - POLD1
+        mode: direct
+        display: POLD1
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: CD274
+        genes:
+        - CD274
+        mode: direct
+        display: CD274（PD-L1）
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: PDCD1LG2
+        genes:
+        - PDCD1LG2
+        mode: direct
+        display: PDCD1LG2（PD-L2）
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: PBRM1
+        genes:
+        - PBRM1
+        mode: direct
+        display: PBRM1
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: KRAS
+        genes:
+        - KRAS
+        mode: direct
+        display: KRAS
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: KRAS_TP53
+        genes:
+        - KRAS
+        - TP53
+        mode: co_mutation
+        display: KRAS/TP53共突变
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: TET1
+        genes:
+        - TET1
+        mode: direct
+        display: TET1
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: DDR
+        genes:
+        - ATM
+        - ATR
+        - BRCA1
+        - BRCA2
+        - BRIP1
+        - MSH3
+        - PALB2
+        - CHEK2
+        - ARID1A
+        - ATRX
+        - CDK12
+        - FANCI
+        - FANCM
+        - MRE11A
+        - NBN
+        - RAD50
+        - RAD51
+        mode: exact_variant_group
+        selectors:
+        - genes:
+          - ATM
+          transcript: NM_000051.4
+          c_hgvs: c.1236-2A>T
+          p_hgvs: ''
+          variant_level:
+          - Ⅰ类
+          - Ⅱ类
+        - genes:
+          - BRIP1
+          transcript: NM_032043.3
+          c_hgvs: c.2142G>A
+          p_hgvs: p.W714*
+          variant_level:
+          - Ⅰ类
+          - Ⅱ类
+        - genes:
+          - MSH3
+          transcript: NM_002439.5
+          c_hgvs: c.2905C>T
+          p_hgvs: p.Q969*
+          variant_level:
+          - Ⅰ类
+          - Ⅱ类
+        - genes:
+          - BRCA2
+          transcript: NM_000059.4
+          c_hgvs: c.7007G>A
+          p_hgvs: p.R2336H
+          variant_level:
+          - Ⅰ类
+          - Ⅱ类
+        display: DDR基因（DNA损伤修复相关基因）
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+    negative:
+      genes:
+      - PTEN
+      - JAK1
+      - JAK2
+      - B2M
+      - CTNNB1
+      - EGFR
+      - ALK
+      - MET
+      - STK11
+      - KEAP1
+      rows:
+      - key: PTEN
+        genes:
+        - PTEN
+        mode: exact_variant
+        transcript: NM_000314.8
+        c_hgvs: c.802-2A>T
+        p_hgvs: ''
+        variant_level:
+        - Ⅰ类
+        - Ⅱ类
+        display: PTEN
+        interpretation: 检出有害变异时可能耐药。
+        runtime_eligible: true
+      - key: JAK1
+        genes:
+        - JAK1
+        mode: direct
+        display: JAK1
+        interpretation: 检出有害变异时可能耐药。
+        runtime_eligible: true
+      - key: JAK2
+        genes:
+        - JAK2
+        mode: direct
+        display: JAK2
+        interpretation: 检出有害变异时可能耐药。
+        runtime_eligible: true
+      - key: B2M
+        genes:
+        - B2M
+        mode: direct
+        display: B2M
+        interpretation: 检出有害变异时可能耐药。
+        runtime_eligible: true
+      - key: CTNNB1
+        genes:
+        - CTNNB1
+        mode: direct
+        display: CTNNB1
+        interpretation: 检出有害变异时可能耐药。
+        runtime_eligible: true
+      - key: EGFR_L858R
+        genes:
+        - EGFR
+        mode: variant_pattern
+        patterns:
+        - L858R
+        - EX19
+        display: EGFR（L858R/EX19del）
+        interpretation: 检出有害变异时可能疗效不佳。
+        runtime_eligible: true
+      - key: ALK
+        genes:
+        - ALK
+        mode: direct
+        display: ALK
+        interpretation: 检出有害变异时可能疗效不佳。
+        runtime_eligible: true
+      - key: MET
+        genes:
+        - MET
+        mode: direct
+        display: MET
+        interpretation: 检出有害变异时可能疗效不佳。
+        runtime_eligible: true
+      - key: STK11
+        genes:
+        - STK11
+        mode: direct
+        display: STK11
+        interpretation: 检出有害变异时可能疗效不佳。
+        runtime_eligible: true
+      - key: KRAS_STK11
+        genes:
+        - KRAS
+        - STK11
+        mode: co_mutation
+        display: KRAS/STK11共突变
+        interpretation: 检出有害变异时可能疗效不佳。
+        runtime_eligible: true
+      - key: KEAP1
+        genes:
+        - KEAP1
+        mode: direct
+        display: KEAP1
+        interpretation: 检出有害变异时可能疗效不佳。
+        runtime_eligible: true
+    hyperprogression:
+      genes:
+      - MDM2
+      - MDM4
+      - DNMT3A
+      - EGFR
+      - CCND1
+      - FGF3
+      - FGF4
+      - FGF19
+      rows:
+      - key: MDM2
+        genes:
+        - MDM2
+        mode: direct
+        cnv_review: true
+        display: MDM2
+        interpretation: 检出有害变异时可能与超进展相关。CNV源表记录须另行复核。
+        runtime_eligible: true
+      - key: MDM4
+        genes:
+        - MDM4
+        mode: direct
+        cnv_review: true
+        display: MDM4
+        interpretation: 检出有害变异时可能与超进展相关。CNV源表记录须另行复核。
+        runtime_eligible: true
+      - key: DNMT3A
+        genes:
+        - DNMT3A
+        mode: direct
+        display: DNMT3A
+        interpretation: 检出有害变异时可能与超进展相关。
+        runtime_eligible: true
+      - key: EGFR_AMP
+        genes:
+        - EGFR
+        mode: cnv_amp
+        cnv_review: true
+        match: 扩增
+        display: EGFR（扩增）
+        interpretation: 检出有害变异时可能与超进展相关。CNV源表记录须另行复核。
+        runtime_eligible: true
+      - key: CCND1
+        genes:
+        - CCND1
+        mode: direct
+        cnv_review: true
+        display: CCND1
+        interpretation: 检出有害变异时可能与超进展相关。CNV源表记录须另行复核。
+        runtime_eligible: true
+      - key: FGF3
+        genes:
+        - FGF3
+        mode: direct
+        cnv_review: true
+        display: FGF3
+        interpretation: 检出有害变异时可能与超进展相关。CNV源表记录须另行复核。
+        runtime_eligible: true
+      - key: FGF4
+        genes:
+        - FGF4
+        mode: direct
+        cnv_review: true
+        display: FGF4
+        interpretation: 检出有害变异时可能与超进展相关。CNV源表记录须另行复核。
+        runtime_eligible: true
+      - key: FGF19
+        genes:
+        - FGF19
+        mode: direct
+        cnv_review: true
+        display: FGF19
+        interpretation: 检出有害变异时可能与超进展相关。CNV源表记录须另行复核。
+        runtime_eligible: true

@@ -1,0 +1,71 @@
+schema_version: 1
+source:
+  panel: lung_588_pdl1
+  purpose: Panel-wide fixed protein/domain first-review catalog.
+  source_type: official_reviewed_protein_annotation
+  curated_at: '2026-07-24'
+  uniprot_release: '2026_02'
+  uniprot_release_date: 10-June-2026
+  scope: pan_cancer_protein_structure_only
+  activation_mode: candidate_only_pending_secondary_review
+  consumer_panels:
+  - lung_13
+  privacy: No patient or sample identifiers are stored.
+  inherited_from_panel: lung_588_pdl1
+  inherited_rule_sha256: b5587a8386f8515d8a006bb53ccf4a2a26a33d070b792fdc48106716508f8d06
+governance:
+  schema_version: '1.0'
+  policy_id: lung_588_pdl1_fixed_domain_catalog_first_review
+  defaults:
+    gene:
+      review_status: needs_review
+      runtime_eligible: false
+      review_basis: codex_first_review_official_protein_annotation
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: '2026-07-24'
+      evidence_as_of: '2026-07-24'
+      evidence_level: curated_protein_structure
+      cancer_scope: pan_cancer_protein_structure_only
+      secondary_review_status: pending_report_group_review
+      risk_level: content_requires_secondary_review
+gene_sections:
+- gene: AKT1
+  fixed_domain_text: AKT1基因编码的蛋白全长为480个氨基酸，UniProt/InterPro注释的主要结构区域包括PH结构域（5-108位氨基酸）、Protein kinase结构域（150-408位氨基酸）、AGC-kinase
+    C-terminal结构域（409-480位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P31749
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P31749
+    url: https://www.uniprot.org/uniprotkb/P31749/entry
+  panels:
+  - lung_13
+- gene: MAP2K1
+  fixed_domain_text: MAP2K1基因编码的蛋白全长为393个氨基酸，UniProt/InterPro注释的主要结构区域包括Protein kinase结构域（68-361位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: Q02750
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: Q02750
+    url: https://www.uniprot.org/uniprotkb/Q02750/entry
+  panels:
+  - lung_13
+- gene: ROS1
+  fixed_domain_text: ROS1基因编码的蛋白全长为2347个氨基酸，UniProt/InterPro注释的主要结构区域包括Fibronectin type-III 1结构域（101-196位氨基酸）、Fibronectin
+    type-III 2结构域（197-285位氨基酸）、Fibronectin type-III 3结构域（557-671位氨基酸）、Fibronectin type-III 4结构域（947-1042位氨基酸）、Fibronectin
+    type-III 5结构域（1043-1150位氨基酸）、Fibronectin type-III 6结构域（1450-1556位氨基酸）、Fibronectin type-III 7结构域（1557-1656位氨基酸）、Fibronectin
+    type-III 8结构域（1658-1751位氨基酸）、Fibronectin type-III 9结构域（1752-1854位氨基酸）、Protein kinase结构域（1945-2222位氨基酸）。
+  annotation_status: official_feature_annotated
+  uniprot_accession: P08922
+  interpro_entries: []
+  source_refs:
+  - type: uniprot
+    id: P08922
+    url: https://www.uniprot.org/uniprotkb/P08922/entry
+  panels:
+  - lung_13
+drug_sections: []
+panel_id: lung_13

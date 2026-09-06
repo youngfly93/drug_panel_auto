@@ -1,7 +1,7 @@
 # HANDOFF —— 基因组 Panel 自动化报告系统（Web 平台）
 
 > 当前状态快照。更新就改这个文件，别新建 `_v2`。
-> 最近更新：**2026-09-06**（小 Panel 派生输入已验证；两项产品/验收口径待确认，发布已暂停）。
+> 最近更新：**2026-09-06**（产品负责人已确认四变异/三靶向及同族 PD-L1 消歧；draft 建包与验收进行中，尚未部署）。
 
 ---
 
@@ -25,17 +25,31 @@
 - `scripts/derive_panel_input.py` 只修改 Variations / Hereditary_tumor 的产品旗标；
   输出强制 `.work/` 且拒绝覆盖，其他 ZIP 成员逐字节保留。6 份真实派生输入
   （A/B/C × 13/62）已独立逐单元格验证，其余 10 张表不变；108 项专项回归通过。
-- **停止点一**：C 输入 SHA `7b39431044c4a9298f7663c97a47c4df83b5b1e0875d88a64b3e24c05bfa498a`
-  的 Variations 第 39 行为 PIK3CA c.3197C>T / p.A1066V，ExistIn552=Ⅱ类。
-  按指定 13 基因集合，纯成员旗标在 Variations 命中 40 行；与有效 HGVS/分级相交后
-  为 BRAF、ERBB2、TP53、PIK3CA 四个事件，不满足用户指定的三行。已询问是否另有
-  正式产品排除规则或不同版本 C 输入；不得做病例专属过滤。
-- **停止点二**：62 与 62+PD-L1 若同用 ExistInsmall62 且基因集相同，就没有不同的
-  结构指纹。已询问是否用可配置 ExistInsmall62pdl1 标识派生 PD-L1 产品。未收到答复
-  前不改自动识别、不手动 project_type 替代验收、不推断任何 PD-L1 结果。
-- 三份台账母版 SHA 与同一 62 基因清单已冻结，但**三个 draft 包尚未变量化或接入**。
-  Word / 硬编码 / 双病例泄漏 / 整本渲染 / Web 批量门禁均 NOT_RUN，不得写成 PASS。
-  工程稿不得使用 CRC 输入；同案逐字历史对照按用户授权延期；生产禁用名单不变。
+- 原两项停止点已由用户明确裁决：C 例保留 PIK3CA A1066V，13 基因变异表应为
+  BRAF V600E、ERBB2 G660D、TP53 G245D、PIK3CA A1066V 四行；靶向表为
+  BRAF、ERBB2、PIK3CA 三行。纯成员资格不排除任何产品内基因，TP53 仍进入变异表。
+- 62 / 62+PD-L1 共用 ExistInsmall62，588 / 588+PD-L1 共用 ExistInsmall588。
+  指纹仅识别 NGS 族；默认无 PD-L1，可信项目/订单文字或网页项目类型可在同族消歧。
+  网页填写病例 PD-L1 字段后默认切换 +PD-L1；禁止新增实验室不输出的 62pdl1 旗标。
+  跨癌种、跨基因数冲突仍须入队前阻断，批量共享 PD-L1 数据仍隔离。
+- 三个小 draft 及新增 588 无 PD-L1 的清洗/变量化已构建。
+  新建包脚本 `scripts/build_lung_draft_packages.py`，母版图/表定位和 SHA 位于
+  `config/lung_draft_template_maps.yaml`。四模板硬性文字扫描通过、源样式基线已建，但尚不代表
+  双病例、全页渲染、真实输入表格或 Web 3×3 已通过；以最终冻结回执为准。
+- 新增 B 族 588 无 PD-L1 母版：台账第 398 行，原始 SHA
+  `4f4314259d898dcbc95b5ccf64af6e05ad084ea7219970f4acf2f6cebc55d14d`；只修复副本中
+  1 个失效图片关系。工程稿不得使用 CRC 输入；同案逐字历史对照按用户授权延期。
+- 新服务器隔离工作目录：`/media/desk16/iy12922/apps/reportgen-lung-small-drafts-20260906.HySk3P`。
+  该目录不是生产运行目录。当前仍没有新候选部署或正式临床生产晋级。
+- 开发回归：122 项派生/输入/历史轻量测试通过；新增草稿发布范围测试及原发布合同
+  共 48 passed / 2 skipped；前端 lint、三项 PD-L1 消歧测试和类型检查/构建通过。
+  一次误含完整生成的本地旧 588 合同测试在进入重计算后被终止，不作为完整通过证据。
+- 服务器 SSH 传输反复中断，压缩、限速及 IPQoS=none 尝试未完成归档上传；公网
+  health 仍为 200。只读探测确认服务器可访问 GitHub codeload（HTTP 200），可在冻结
+  并推送草稿分支后由服务器下载已提交源码；真实输入仍必须走私有传输/校验，禁止入 Git。
+- `scripts/validate_lung_small_panel_drafts.py` 提供逐例 Word/上下文/源表/588 TMB-MSI-PGx
+  对照与完整渲染入口。新四产品 `draft_generation_eligible=false`，部署三处禁用范围
+  均保留；只有真实工程门禁回执及源码/模板 SHA 匹配才可开放报告组草稿。
 - 新证据目录 `.work/lung-small-panel-derived-inputs/`，审计真源
   `audit/lung-small-panel-derived-inputs.codex.md`。旧发布三次尝试、完整 295ebd2 CI、
   Linux QA 和历史门禁回执保留在 `.work/lung-report-accuracy-release/`，不可当作新候选

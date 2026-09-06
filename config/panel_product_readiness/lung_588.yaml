@@ -1,0 +1,23 @@
+schema_version: "1.0"
+panel_id: "lung_588"
+product_name: "肺癌588基因"
+release_status: "DRAFT_BUILT_PENDING_ENGINEERING_QA"
+production_eligible: false
+draft_generation_eligible: false
+draft_build_allowed: true
+enforced_targets: [iyun129]
+blocker_code: "draft_engineering_gates_pending"
+decision: >-
+  Build the non-PD-L1 sibling from a traceable non-IHC historical final.
+  NGS Excel shares ExistIn552 + ExistInsmall588 with lung_588_pdl1 and defaults
+  to this product. Draft deployment awaits engineering gates; this record
+  grants no clinical production promotion.
+historical_layout_source:
+  family: B
+  sha256: 4f4314259d898dcbc95b5ccf64af6e05ad084ea7219970f4acf2f6cebc55d14d
+  status: selected_historical_layout_not_same_case_parity
+promotion_evidence:
+  same_case_verified: false
+  report_group_secondary_review: {status: pending}
+  historical_golden_gate: {status: NOT_RUN}
+  linux_visual_qa: {status: NOT_RUN}

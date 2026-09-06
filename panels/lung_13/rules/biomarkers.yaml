@@ -1,0 +1,95 @@
+schema_version: '1.0'
+panel_id: lung_13
+rule_id: biomarkers
+version: 1.1.0
+updated: '2026-09-05'
+status: pilot
+description: 'Lung comprehensive-panel biomarker display contract transcribed from the paired historical final reports.
+  The fixed 15/12/8 rows are always rendered; only the current-case result column is derived from source data. Historical
+  B/C event associations remain transcript- and HGVS-exact; fixed rows do not broaden those reviewed event rules
+  to arbitrary variants in the same gene. CNV source observations remain explicit review items, not confirmed immune
+  claims.
+
+  '
+biomarkers:
+  tmb:
+    field: tmb_summary
+    low_label: TMB-L
+    high_label: TMB-H
+    reference_threshold: 10 mutations/Mb
+  msi:
+    field: msi_summary
+    allowed_values:
+    - MSS
+    - MSI-L
+    - MSI-H
+  pdl1:
+    source: controlled_form
+    fields:
+    - pdl1_tps
+    - pdl1_cps
+    - pdl1_result
+  immune_gene_tables:
+    enabled: true
+    positive:
+      genes:
+      - KRAS
+      rows:
+      - key: KRAS
+        genes:
+        - KRAS
+        mode: direct
+        display: KRAS
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+      - key: KRAS_TP53
+        genes:
+        - KRAS
+        - TP53
+        mode: co_mutation
+        display: KRAS/TP53共突变
+        interpretation: 检出有害变异时可能疗效较好。
+        runtime_eligible: true
+    negative:
+      genes:
+      - EGFR
+      - ALK
+      - MET
+      rows:
+      - key: EGFR_L858R
+        genes:
+        - EGFR
+        mode: variant_pattern
+        patterns:
+        - L858R
+        - EX19
+        display: EGFR（L858R/EX19del）
+        interpretation: 检出有害变异时可能疗效不佳。
+        runtime_eligible: true
+      - key: ALK
+        genes:
+        - ALK
+        mode: direct
+        display: ALK
+        interpretation: 检出有害变异时可能疗效不佳。
+        runtime_eligible: true
+      - key: MET
+        genes:
+        - MET
+        mode: direct
+        display: MET
+        interpretation: 检出有害变异时可能疗效不佳。
+        runtime_eligible: true
+    hyperprogression:
+      genes:
+      - EGFR
+      rows:
+      - key: EGFR_AMP
+        genes:
+        - EGFR
+        mode: cnv_amp
+        cnv_review: true
+        match: 扩增
+        display: EGFR（扩增）
+        interpretation: 检出有害变异时可能与超进展相关。CNV源表记录须另行复核。
+        runtime_eligible: true

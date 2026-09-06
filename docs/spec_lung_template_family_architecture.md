@@ -1,7 +1,7 @@
 # 肺癌模板族自动化建设规格
 
 状态：实施中
-最后更新：2026-08-26
+最后更新：2026-09-06
 
 ## 1. 决策
 
@@ -90,3 +90,31 @@ python scripts/validate_lung_excel_request_list.py \
 当前第 1-3 步可独立实施；第 4 步开始按收到的配套病例逐族推进，不要求 36 份全部到齐
 才开工。优先完成已有同案输入最多、最接近正式 UAT 的肺癌 588，再推进覆盖量最大的
 小 Panel 产品族。
+
+## 6. 2026-09-06 派生输入 draft 授权与验收
+
+用户授权用真实肺癌 552 基因超集 Excel 按产品基因集合派生工程输入，先建设
+`lung_13`、`lung_62`、`lung_62_pdl1` draft；同时补齐 `lung_588` 无 PD-L1 变体。
+母版从 487 台账按 SHA 追溯，先清洗再变量化，不从 CRC 母版新写肺癌报告。
+
+- 派生只更换 Variations / Hereditary_tumor 的 `ExistInsmall<N>` 旗标，集合内为 1、
+  其余空；保留分级与其余全部数据、工作表和 Cnv 的 `ExistIn137`。
+- 成员旗标不等于变异分级。C 例 13 基因变异表应为 BRAF V600E、ERBB2 G660D、
+  TP53 G245D、PIK3CA A1066V 四行；靶向提示为 BRAF、ERBB2、PIK3CA 三行。
+  没有为凑行数而排除 PIK3CA 的业务规则。
+- 62 与 62+PD-L1 共用 `ExistIn552 + ExistInsmall62`；588 两变体共用
+  `ExistIn552 + ExistInsmall588`。结构识别 NGS 家族，默认无 PD-L1；受信项目/订单
+  或网页下拉可选同族含 PD-L1 变体。填写 PD-L1 结果/来源字段自动选择同族含 PD-L1
+  产品，不以文件名或虚构的 Excel 列确定免疫组化订单，不允许跨 NGS 产品覆盖。
+- 62+PD-L1 复用 `legacy_unspecified_ihc_transcription_v1`，未知字段明确缺失。
+  批量表单不得跨病例共享 PD-L1 数值、来源或图片。
+- 保留 #13 CNV 误读修复；#14/#15 保持历史默认展示，见
+  `docs/analysis-decisions/lung-chemotherapy-pending-review.md`，不新增医学批准。
+- 部署为报告组草稿需 A/B/C × 3 包的真实派生输入、网页批量 3/3、独立 Word 表格
+  对照、硬编码扫描、双病例泄漏、Linux LibreOffice 全本无空白/孤行页及 QA 门禁。
+  页数参考历史同量级，不通过填充空页凑数。588 无 PD-L1 新变体亦须验收。
+- 用户明确允许通过工程验收后部署 draft 供复核，但 `production_eligible` 始终为
+  false；真实同案逐字对照、技术老师旗标确认和报告组医学签署仍是后续临床放行条件。
+
+可重复构建配置：`config/lung_draft_template_maps.yaml`。派生输入及全部病例产物留在
+忽略目录 `.work/`，工程记录集中于 `audit/lung-small-panel-derived-inputs.codex.md`。

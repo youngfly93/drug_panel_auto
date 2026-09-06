@@ -99,6 +99,9 @@ def upload_excel(
             detected_project_type=detect.get("project_type"),
             detected_project_name=detect.get("project_name"),
             detection_confidence=detect.get("confidence"),
+            identity_family=detect.get("identity_family"),
+            family_choices=detect.get("family_choices") or [],
+            identity_source=detect.get("identity_source"),
             validation_warnings=validation_warnings,
         )
     )
@@ -193,6 +196,9 @@ def inspect_excel(
         detected_project_type=detect.get("project_type"),
         detected_project_name=detect.get("project_name"),
         detection_confidence=detect.get("confidence"),
+        identity_family=detect.get("identity_family"),
+        family_choices=detect.get("family_choices") or [],
+        identity_source=detect.get("identity_source"),
         validation_warnings=validation_warnings,
     )
 
@@ -296,5 +302,8 @@ def detect_project_type(
             project_type=result.get("project_type"),
             project_name=result.get("project_name"),
             confidence=result.get("confidence"),
+            identity_family=result.get("identity_family"),
+            family_choices=result.get("family_choices") or [],
+            identity_source=result.get("identity_source"),
         )
     )

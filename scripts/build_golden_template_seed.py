@@ -76,7 +76,7 @@ def is_safe_default_output(path: Path, project_root: Path) -> bool:
         rel = path.resolve().relative_to(project_root.resolve())
     except ValueError:
         return True
-    return bool(rel.parts and rel.parts[0] in {"tmp", "output"})
+    return bool(rel.parts and rel.parts[0] in {"tmp", "output", ".work"})
 
 
 def should_text_process(name: str) -> bool:

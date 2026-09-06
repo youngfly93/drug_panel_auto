@@ -1,0 +1,499 @@
+schema_version: '1.0'
+source:
+  panel: lung_588_pdl1
+  purpose: 'First-review replacement candidates for detected P0 events whose existing specific prose contains cross-cancer,
+    other-event, treatment, prognostic or hereditary generalization that is not yet approved for lung588.
+
+    '
+  source_type: official_gene_identity_plus_hgvs_consequence_boundary
+  curated_at: '2026-07-24'
+  evidence_as_of: '2026-07-24'
+  activation_mode: candidate_only_pending_secondary_review
+  consumer_panels:
+  - lung_588
+  privacy: Only de-identified CASE aliases and structured events are used.
+  inherited_from_panel: lung_588_pdl1
+  inherited_rule_sha256: 5449e8914b59b03b9cca3996200f62286e9bea268e4120046bd2769d7d16b91f
+governance:
+  schema_version: '1.0'
+  policy_id: lung588_p0_cross_cancer_narrative_first_review_v1
+  purpose: 'Offer source-bounded replacement wording for secondary review while preventing any candidate from changing
+    the current runtime report.
+
+    '
+  defaults:
+    gene:
+      review_status: needs_review
+      runtime_eligible: false
+      report_text_allowed: false
+      patient_visible: false
+      review_basis: codex_first_review_ncbi_gene_and_hgvs_consequence
+      reviewer: codex
+      reviewer_type: ai_assisted_evidence_review
+      reviewed_at: '2026-07-24'
+      evidence_as_of: '2026-07-24'
+      evidence_level: official_gene_function_plus_predicted_sequence_consequence
+      cancer_scope: lung_panel_detected_exact_event_candidate
+      secondary_review_status: pending_report_group_review
+      risk_level: content_requires_secondary_review
+  runtime_selector_contract:
+    current_overlay_matches_transcript: false
+    disposition: promotion_blocked_until_transcript_is_enforced
+    reason: 'The current reviewed-overlay runtime key uses gene, c_hgvs and p_hgvs. Transcript is preserved below
+      for review identity but is not yet enforced by the runtime loader.
+
+      '
+  promotion_requires:
+  - report_group_event_level_secondary_review
+  - exact_transcript_c_hgvs_p_hgvs_identity_check
+  - runtime_selector_enforces_transcript
+  - direct_source_supports_every_patient_visible_claim
+  - positive_and_negative_rule_tests
+  - case_level_uat
+gene_sections:
+- candidate_id: lung588_scope_narrative_apc_w423ter
+  gene: APC
+  transcript: NM_000038.6
+  c_hgvs: c.1269G>A
+  p_hgvs: p.W423*
+  variant_kind: stop_gained
+  intro: 'APC编码Wnt信号通路拮抗相关的肿瘤抑制蛋白，也参与细胞迁移、黏附、 转录调控和凋亡等过程。
+
+    '
+  mutation_analysis: '在转录本NM_000038.6上，c.1269G>A对应p.W423*，按HGVS标注为终止获得事件， 预计在第423位引入提前终止密码子。是否发生无义介导的mRNA降解、是否形成稳定截短蛋白、
+    以及该事件在本例肺癌中的功能和临床意义仍需直接证据； 肿瘤样本中的单个APC事件不得直接推导治疗、预后或遗传性息肉病风险。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:324
+    url: https://www.ncbi.nlm.nih.gov/gene/324
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: colorectal_context_and_gene_level_function_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_atm_c1236_minus2
+  gene: ATM
+  transcript: NM_000051.4
+  c_hgvs: c.1236-2A>T
+  p_hgvs: ''
+  variant_kind: splice_region_or_site
+  intro: 'ATM编码PI3/PI4激酶家族的细胞周期检查点激酶，可调控p53、BRCA1、CHK2、 RAD17、RAD9和NBS1等DNA损伤应答相关蛋白。
+
+    '
+  mutation_analysis: '在转录本NM_000051.4上，c.1236-2A>T位于外显子前的剪接受体区域， 预测可能影响前体mRNA剪接；实际转录本后果、是否造成蛋白功能缺失及其肺癌临床意义 仍需RNA或其他直接证据确认。不得仅凭该事件推导治疗、免疫、预后或遗传风险结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:472
+    url: https://www.ncbi.nlm.nih.gov/gene/472
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: predicted_splice_effect_presented_as_function_loss
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_braf_d594g
+  gene: BRAF
+  transcript: NM_004333.6
+  c_hgvs: c.1781A>G
+  p_hgvs: p.D594G
+  variant_kind: missense
+  intro: 'BRAF编码RAF家族丝氨酸/苏氨酸蛋白激酶，参与调控MAPK/ERK信号通路， 该通路影响细胞分裂、分化和分泌。
+
+    '
+  mutation_analysis: '在转录本NM_004333.6上，c.1781A>G对应p.D594G，为第594位天冬氨酸替换为甘氨酸的错义事件。 该事件不得继承BRAF V600E或其他BRAF位点的功能、治疗和预后证据；
+    其精确功能及肺癌临床意义须按独立来源复核，当前不得形成治疗、免疫或预后结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:673
+    url: https://www.ncbi.nlm.nih.gov/gene/673
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: reviewed_in_separate_nonpromotion_contract
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: colorectal_prognostic_and_other_braf_event_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_braf_v600e
+  gene: BRAF
+  transcript: NM_004333.6
+  c_hgvs: c.1799T>A
+  p_hgvs: p.V600E
+  variant_kind: missense
+  intro: 'BRAF编码RAF家族丝氨酸/苏氨酸蛋白激酶，参与调控MAPK/ERK信号通路， 该通路影响细胞分裂、分化和分泌。
+
+    '
+  mutation_analysis: '在转录本NM_004333.6上，c.1799T>A对应p.V600E，为第600位缬氨酸替换为谷氨酸的错义事件。 本段仅确认精确事件身份；功能、肺癌亚型和疾病范围、伴随诊断及治疗适用性
+    必须在独立药物候选合同中逐项审核，不得沿用结直肠癌预后措辞或由本段直接形成用药结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:673
+    url: https://www.ncbi.nlm.nih.gov/gene/673
+    supports: gene_identity_and_function_only
+  linked_candidate_ids:
+  - lung588_braf_v600e_dabrafenib_trametinib
+  - lung588_braf_v600e_encorafenib_binimetinib
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: reviewed_in_separate_candidate_contract
+    direct_lung_clinical_evidence: requires_separate_candidate_review
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: colorectal_prognostic_wording_in_lung_panel
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_brca2_r2336h
+  gene: BRCA2
+  transcript: NM_000059.4
+  c_hgvs: c.7007G>A
+  p_hgvs: p.R2336H
+  variant_kind: missense
+  intro: 'BRCA2参与维持基因组稳定性、同源重组相关DNA双链断裂修复及复制叉保护， 其蛋白含有与PALB2、EMSY和RAD51等相互作用的区域。
+
+    '
+  mutation_analysis: '在转录本NM_000059.4上，c.7007G>A对应p.R2336H，为第2336位精氨酸替换为组氨酸的错义事件。 当前官方基因功能来源不能证明该精确位点导致BRCA2功能缺失；
+    也不得把其他BRCA2变异、胚系背景或其他癌种的PARP抑制剂证据外推至该事件。 其肺癌临床意义、治疗和遗传风险均需独立证据复核。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:675
+    url: https://www.ncbi.nlm.nih.gov/gene/675
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: gene_level_parp_and_function_loss_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_mlh1_c790_plus1
+  gene: MLH1
+  transcript: NM_000249.4
+  c_hgvs: c.790+1G>A
+  p_hgvs: ''
+  variant_kind: splice_region_or_site
+  intro: 'MLH1可与PMS2形成MutLα异二聚体，是DNA错配修复系统的组成部分； MutLα参与错配附近单链切口形成和后续错误链降解。
+
+    '
+  mutation_analysis: '在转录本NM_000249.4上，c.790+1G>A位于外显子后的剪接供体区域， 预测可能影响前体mRNA剪接；实际转录本后果及是否造成MLH1功能缺失仍需RNA或其他直接证据。
+    单个肿瘤MLH1事件不能单独确立dMMR、MSI表型或林奇综合征， 也不得由本段推导免疫治疗、预后或遗传风险结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:4292
+    url: https://www.ncbi.nlm.nih.gov/gene/4292
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: colorectal_methylation_and_lynch_context_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_pik3ca_a1066v
+  gene: PIK3CA
+  transcript: NM_006218.4
+  c_hgvs: c.3197C>T
+  p_hgvs: p.A1066V
+  variant_kind: missense
+  intro: 'PIK3CA编码磷脂酰肌醇3激酶的p110α催化亚基，可与调节亚基组成复合物并催化磷脂底物磷酸化。
+
+    '
+  mutation_analysis: '在转录本NM_006218.4上，c.3197C>T对应p.A1066V，为第1066位丙氨酸替换为缬氨酸的错义事件。 当前官方基因功能来源不能证明该精确位点激活PI3K/AKT通路；
+    不得把PIK3CA其他热点、扩增或其他癌种证据外推至该事件， 也不得由本段形成治疗、免疫、预后或遗传风险结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:5290
+    url: https://www.ncbi.nlm.nih.gov/gene/5290
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: gene_level_pathway_activation_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_pms2_r20q
+  gene: PMS2
+  transcript: NM_000535.7
+  c_hgvs: c.59G>A
+  p_hgvs: p.R20Q
+  variant_kind: missense
+  intro: 'PMS2是DNA错配修复系统的组成部分，可与MLH1形成MutLα异二聚体， 参与纠正DNA复制和同源重组过程中出现的错配及小片段插入缺失。
+
+    '
+  mutation_analysis: '在转录本NM_000535.7上，c.59G>A对应p.R20Q，为第20位精氨酸替换为谷氨酰胺的错义事件。 当前官方基因功能来源不能证明该精确位点导致PMS2功能缺失； 单个肿瘤PMS2事件不能单独确立dMMR、MSI表型或林奇综合征，
+    也不得外推PARP抑制剂、免疫治疗、预后或遗传风险结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:5395
+    url: https://www.ncbi.nlm.nih.gov/gene/5395
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: function_loss_and_parp_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_pten_c802_minus2
+  gene: PTEN
+  transcript: NM_000314.8
+  c_hgvs: c.802-2A>T
+  p_hgvs: ''
+  variant_kind: splice_region_or_site
+  intro: 'PTEN编码具有磷脂酰肌醇底物磷酸酶活性的肿瘤抑制蛋白， 含有张力蛋白样区域和催化区域。
+
+    '
+  mutation_analysis: '在转录本NM_000314.8上，c.802-2A>T位于外显子前的剪接受体区域， 预测可能影响前体mRNA剪接；实际转录本后果、是否造成PTEN功能缺失及其肺癌临床意义 仍需RNA或其他直接证据。不得沿用结直肠癌表达缺失的预后结论，
+    也不得由该事件推导治疗、免疫、预后或遗传风险。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:5728
+    url: https://www.ncbi.nlm.nih.gov/gene/5728
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: colorectal_prognostic_and_splice_function_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_smad4_a464fs
+  gene: SMAD4
+  transcript: NM_005359.6
+  c_hgvs: c.1389_1396del
+  p_hgvs: p.A464Rfs*27
+  variant_kind: frameshift
+  intro: 'SMAD4编码Smad家族信号转导蛋白，可与其他活化Smad蛋白形成复合物并进入细胞核， 调控TGF-β相关靶基因转录。
+
+    '
+  mutation_analysis: '在转录本NM_005359.6上，c.1389_1396del对应p.A464Rfs*27， 按HGVS标注为自第464位起改变阅读框并在新的阅读框中提前终止的事件。 是否发生无义介导降解、是否形成稳定截短蛋白及其肺癌临床意义仍需直接证据；
+    不得沿用结直肠癌转移研究，也不得由本段推导治疗、预后或遗传风险。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:4089
+    url: https://www.ncbi.nlm.nih.gov/gene/4089
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: colorectal_metastasis_and_function_loss_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_tp53_h193l
+  gene: TP53
+  transcript: NM_000546.6
+  c_hgvs: c.578A>T
+  p_hgvs: p.H193L
+  variant_kind: missense
+  intro: 'TP53编码含转录激活、DNA结合和寡聚化区域的肿瘤抑制蛋白p53， 可响应多种细胞应激并调控细胞周期停滞、凋亡、衰老、DNA修复和代谢相关基因。
+
+    '
+  mutation_analysis: '在转录本NM_000546.6上，c.578A>T对应p.H193L，为第193位组氨酸替换为亮氨酸的错义事件。 当前官方基因功能来源不能证明该精确替换导致p53功能缺失； 不得把其他TP53位点或结直肠癌队列结果外推至本例肺癌，
+    也不得由本段形成治疗、预后或遗传性肿瘤风险结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:7157
+    url: https://www.ncbi.nlm.nih.gov/gene/7157
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: colorectal_cohort_and_function_loss_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_tp53_y236c
+  gene: TP53
+  transcript: NM_000546.6
+  c_hgvs: c.707A>G
+  p_hgvs: p.Y236C
+  variant_kind: missense
+  intro: 'TP53编码含转录激活、DNA结合和寡聚化区域的肿瘤抑制蛋白p53， 可响应多种细胞应激并调控细胞周期停滞、凋亡、衰老、DNA修复和代谢相关基因。
+
+    '
+  mutation_analysis: '在转录本NM_000546.6上，c.707A>G对应p.Y236C，为第236位酪氨酸替换为半胱氨酸的错义事件。 当前官方基因功能来源不能证明该精确替换导致p53功能缺失； 不得把其他TP53位点或结直肠癌队列结果外推至本例肺癌，
+    也不得由本段形成治疗、预后或遗传性肿瘤风险结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:7157
+    url: https://www.ncbi.nlm.nih.gov/gene/7157
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: colorectal_cohort_and_function_loss_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+- candidate_id: lung588_scope_narrative_tp53_g245d
+  gene: TP53
+  transcript: NM_000546.6
+  c_hgvs: c.734G>A
+  p_hgvs: p.G245D
+  variant_kind: missense
+  intro: 'TP53编码含转录激活、DNA结合和寡聚化区域的肿瘤抑制蛋白p53， 可响应多种细胞应激并调控细胞周期停滞、凋亡、衰老、DNA修复和代谢相关基因。
+
+    '
+  mutation_analysis: '在转录本NM_000546.6上，c.734G>A对应p.G245D，为第245位甘氨酸替换为天冬氨酸的错义事件。 当前官方基因功能来源不能证明该精确替换导致p53功能缺失； 不得把同一密码子的其他替换、其他TP53位点或结直肠癌队列结果外推至本例肺癌，
+    也不得由本段形成治疗、预后或遗传性肿瘤风险结论。
+
+    '
+  source_refs:
+  - type: ncbi_gene
+    authority: NCBI
+    id: GeneID:7157
+    url: https://www.ncbi.nlm.nih.gov/gene/7157
+    supports: gene_identity_and_function_only
+  evidence_boundaries:
+    direct_exact_event_functional_evidence: not_identified
+    direct_lung_clinical_evidence: not_identified
+    treatment_inference_allowed: false
+    immune_inference_allowed: false
+    prognostic_inference_allowed: false
+    hereditary_inference_allowed: false
+  superseded_risk: colorectal_cohort_and_other_tp53_event_extrapolation
+  review_status: needs_review
+  runtime_eligible: false
+  report_text_allowed: false
+  patient_visible: false
+  secondary_review_status: pending_report_group_review
+  panels:
+  - lung_588
+drug_sections: []
+panel_id: lung_588

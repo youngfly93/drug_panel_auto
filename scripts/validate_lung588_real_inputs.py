@@ -805,7 +805,7 @@ def _build_uat_readiness(
     aliases = [str(row.get("alias") or "").strip() for row in rows]
     ngs_structure_pass_count = sum(
         row["auto_detection"]["detected"]
-        and row["auto_detection"]["project_type"] == "lung_588_pdl1"
+        and row["auto_detection"]["project_type"] in {"lung_588", "lung_588_pdl1"}
         and row.get("targeted_drug_count", 0)
         == row.get("expected_targeted_drug_count", 0)
         and row.get("immune_positive_count", 0)
@@ -1116,7 +1116,7 @@ def validate_inputs(
     for row in rows:
         if (
             not row["auto_detection"]["detected"]
-            or row["auto_detection"]["project_type"] != "lung_588_pdl1"
+            or row["auto_detection"]["project_type"] not in {"lung_588", "lung_588_pdl1"}
         ):
             failures.append(
                 f"{row['alias']}: lung588 structural identity was not detected"

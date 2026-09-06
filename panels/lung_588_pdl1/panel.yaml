@@ -11,21 +11,22 @@ description: >
   table are visible with the governed report-group review boundary.
 
 aliases:
-  - "lung_588"
-  - "lung588"
   - "lung_588_pdl1"
 
 project_detector_rules:
+  identity_family:
+    id: "lung_588"
+    default_project_type: "lung_588"
+    pdl1: true
+  priority: 20
   keywords:
-    - "肺癌588"
     - "588基因+PD-L1"
-    - "肺癌588基因"
   keyword_groups:
-    - any:
-        - "肺癌588"
-        - "肺癌588基因"
-        - "588基因+PD-L1"
-        - "588基因+pd-l1"
+    - all:
+        - type: regex
+          pattern: '(?:肺癌\s*588|588\s*基因)'
+        - type: regex
+          pattern: 'PD[\s-]*L1'
       weight: 1
   structural_fingerprints:
     - id: "lung588_result_workbook_v1"

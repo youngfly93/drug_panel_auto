@@ -1,0 +1,267 @@
+schema_version: '1.0'
+panel_id: lung_62_pdl1
+rule_id: panel
+version: 0.1.0
+updated: '2026-07-23'
+status: draft
+description: Lung588 variant membership and display contract.
+variant_filter:
+  columns:
+  - ExistIn552
+  allowed_values:
+  - Ⅰ类
+  - Ⅱ类
+  - Ⅲ类
+class_i_genes: []
+class_ii_genes: []
+important_genes:
+- AKT1
+- ALK
+- APC
+- AR
+- ARID1A
+- ATM
+- BRAF
+- BRCA1
+- BRCA2
+- CCND1
+- CD274
+- CDK4
+- CDK6
+- CDKN2A
+- CTNNB1
+- DDR2
+- EGFR
+- ERBB2
+- ESR1
+- FANCA
+- FBXW7
+- FGF3
+- FGFR1
+- FGFR2
+- FGFR3
+- FLT3
+- HRAS
+- IDH1
+- IDH2
+- JAK1
+- JAK2
+- KIT
+- KRAS
+- MAP2K1
+- MAP2K2
+- MET
+- MLH1
+- MSH2
+- MSH6
+- MTOR
+- NOTCH1
+- NRAS
+- NTRK1
+- NTRK2
+- NTRK3
+- PDGFRA
+- PIK3CA
+- PMS2
+- POLD1
+- POLE
+- PTCH1
+- PTEN
+- RAF1
+- RB1
+- RET
+- ROS1
+- SMARCA4
+- STK11
+- TP53
+- TSC1
+- TSC2
+- VHL
+panel_display_genes:
+- name: AKT1
+  transcript: ''
+  chromosome: ''
+- name: ALK
+  transcript: ''
+  chromosome: ''
+- name: APC
+  transcript: ''
+  chromosome: ''
+- name: AR
+  transcript: ''
+  chromosome: ''
+- name: ARID1A
+  transcript: ''
+  chromosome: ''
+- name: ATM
+  transcript: ''
+  chromosome: ''
+- name: BRAF
+  transcript: ''
+  chromosome: ''
+- name: BRCA1
+  transcript: ''
+  chromosome: ''
+- name: BRCA2
+  transcript: ''
+  chromosome: ''
+- name: CCND1
+  transcript: ''
+  chromosome: ''
+- name: CD274
+  transcript: ''
+  chromosome: ''
+- name: CDK4
+  transcript: ''
+  chromosome: ''
+- name: CDK6
+  transcript: ''
+  chromosome: ''
+- name: CDKN2A
+  transcript: ''
+  chromosome: ''
+- name: CTNNB1
+  transcript: ''
+  chromosome: ''
+- name: DDR2
+  transcript: ''
+  chromosome: ''
+- name: EGFR
+  transcript: ''
+  chromosome: ''
+- name: ERBB2
+  transcript: ''
+  chromosome: ''
+- name: ESR1
+  transcript: ''
+  chromosome: ''
+- name: FANCA
+  transcript: ''
+  chromosome: ''
+- name: FBXW7
+  transcript: ''
+  chromosome: ''
+- name: FGF3
+  transcript: ''
+  chromosome: ''
+- name: FGFR1
+  transcript: ''
+  chromosome: ''
+- name: FGFR2
+  transcript: ''
+  chromosome: ''
+- name: FGFR3
+  transcript: ''
+  chromosome: ''
+- name: FLT3
+  transcript: ''
+  chromosome: ''
+- name: HRAS
+  transcript: ''
+  chromosome: ''
+- name: IDH1
+  transcript: ''
+  chromosome: ''
+- name: IDH2
+  transcript: ''
+  chromosome: ''
+- name: JAK1
+  transcript: ''
+  chromosome: ''
+- name: JAK2
+  transcript: ''
+  chromosome: ''
+- name: KIT
+  transcript: ''
+  chromosome: ''
+- name: KRAS
+  transcript: ''
+  chromosome: ''
+- name: MAP2K1
+  transcript: ''
+  chromosome: ''
+- name: MAP2K2
+  transcript: ''
+  chromosome: ''
+- name: MET
+  transcript: ''
+  chromosome: ''
+- name: MLH1
+  transcript: ''
+  chromosome: ''
+- name: MSH2
+  transcript: ''
+  chromosome: ''
+- name: MSH6
+  transcript: ''
+  chromosome: ''
+- name: MTOR
+  transcript: ''
+  chromosome: ''
+- name: NOTCH1
+  transcript: ''
+  chromosome: ''
+- name: NRAS
+  transcript: ''
+  chromosome: ''
+- name: NTRK1
+  transcript: ''
+  chromosome: ''
+- name: NTRK2
+  transcript: ''
+  chromosome: ''
+- name: NTRK3
+  transcript: ''
+  chromosome: ''
+- name: PDGFRA
+  transcript: ''
+  chromosome: ''
+- name: PIK3CA
+  transcript: ''
+  chromosome: ''
+- name: PMS2
+  transcript: ''
+  chromosome: ''
+- name: POLD1
+  transcript: ''
+  chromosome: ''
+- name: POLE
+  transcript: ''
+  chromosome: ''
+- name: PTCH1
+  transcript: ''
+  chromosome: ''
+- name: PTEN
+  transcript: ''
+  chromosome: ''
+- name: RAF1
+  transcript: ''
+  chromosome: ''
+- name: RB1
+  transcript: ''
+  chromosome: ''
+- name: RET
+  transcript: ''
+  chromosome: ''
+- name: ROS1
+  transcript: ''
+  chromosome: ''
+- name: SMARCA4
+  transcript: ''
+  chromosome: ''
+- name: STK11
+  transcript: ''
+  chromosome: ''
+- name: TP53
+  transcript: ''
+  chromosome: ''
+- name: TSC1
+  transcript: ''
+  chromosome: ''
+- name: TSC2
+  transcript: ''
+  chromosome: ''
+- name: VHL
+  transcript: ''
+  chromosome: ''
+reviewed_variant_overrides: []

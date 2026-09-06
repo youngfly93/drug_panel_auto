@@ -68,6 +68,7 @@ jobs:
         run: |
           npm ci --no-fund
           npm run lint
+          npm test
           npm audit --audit-level=moderate
           npm run build
 

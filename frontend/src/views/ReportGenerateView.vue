@@ -342,7 +342,7 @@
               clearable
             >
               <el-option
-                v-for="option in generationProjectOptions"
+                v-for="option in singleGenerationProjectOptions"
                 :key="option.value"
                 :label="option.label"
                 :value="option.value"
@@ -371,6 +371,14 @@
         :errors="form.errors.value"
         :loading="form.loading.value"
         @update-field="form.setValue"
+      />
+      <el-alert
+        v-if="(excelStore.upload?.family_choices?.length || 0) > 1"
+        title="Excel 只识别 NGS 家族，不代表已做 PD-L1。请按订单选择项目类型；填写 PD-L1 结果或来源后会选择同族含 PD-L1 产品。"
+        type="info"
+        show-icon
+        :closable="false"
+        style="margin-top: 12px"
       />
       <el-alert
         v-if="enrichmentMessage"
@@ -530,6 +538,7 @@ import { ElMessage } from 'element-plus'
 import { useExcelStore } from '@/stores/excel'
 import { useAuthStore } from '@/stores/auth'
 import { projectDisplayName, useDynamicForm } from '@/composables/useDynamicForm'
+import { pdl1VariantForForm } from '@/utils/projectIdentity'
 import {
   reportApi,
   type BatchResultItem,
@@ -574,7 +583,7 @@ const canUseGoldenMode = computed(
   () => authStore.user?.role === 'admin' || authStore.user?.role === 'reviewer',
 )
 const isControlledLungProject = computed(() =>
-  ['lung_329_pdl1', 'lung_588_pdl1'].includes(projectType.value || ''),
+  ['lung_329_pdl1', 'lung_588_pdl1', 'lung_588', 'lung_13', 'lung_62', 'lung_62_pdl1'].includes(projectType.value || ''),
 )
 const disabledProjectTypes = new Set(
   String(import.meta.env.VITE_DISABLED_PROJECT_TYPES || '')
@@ -587,10 +596,20 @@ const generationProjectOptions = [
   { label: '结直肠癌358基因+MSI', value: 'crc_358_msi' },
   { label: '肺癌329基因+PD-L1（报告组评审）', value: 'lung_329_pdl1' },
   { label: '肺癌588基因+PD-L1（报告组评审）', value: 'lung_588_pdl1' },
+  { label: '肺癌588基因（draft，无 PD-L1）', value: 'lung_588' },
+  { label: '肺癌13基因（draft）', value: 'lung_13' },
+  { label: '肺癌62基因（draft，无 PD-L1）', value: 'lung_62' },
+  { label: '肺癌62基因+PD-L1（draft）', value: 'lung_62_pdl1' },
   { label: 'MLF基因检测', value: 'mlf_result' },
   { label: '肺癌甲基化', value: 'lung_methylation' },
 ].filter((option) => !disabledProjectTypes.has(option.value))
 const batchGenerationProjectOptions = generationProjectOptions
+const singleGenerationProjectOptions = computed(() => {
+  const choices = excelStore.upload?.family_choices || []
+  if (!choices.length) return generationProjectOptions
+  const ids = new Set(choices.map((item) => item.id))
+  return generationProjectOptions.filter((option) => ids.has(option.value))
+})
 let batchPollTimer: number | null = null
 let singlePollTimer: number | null = null
 
@@ -1081,6 +1100,16 @@ watch(
 
 // Dynamic form driven by project type
 const form = useDynamicForm(projectType)
+watch(
+  () => [projectType.value, ...Object.entries(form.formData).filter(([key]) => key.startsWith('pdl1_')).flat()],
+  () => {
+    const variant = pdl1VariantForForm(projectType.value, form.formData)
+    if (variant && !disabledProjectTypes.has(variant)) {
+      projectType.value = variant
+      ElMessage.info('已填写病例 PD-L1 字段，项目已切换为同基因数的 +PD-L1 评审稿。')
+    }
+  },
+)
 const canGenerate = computed(
   () => Boolean(
     excelStore.upload

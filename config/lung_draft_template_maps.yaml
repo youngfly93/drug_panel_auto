@@ -1,0 +1,36 @@
+schema_version: '1.0'
+description: '2026-09-06 产品负责人确认的派生输入 draft；来源只登记 SHA。'
+panels:
+  lung_13:
+    source_sha256: 56330fa8d883136297048ac58b2475da1bf6639fbbe9eedf90c61a5f4030305c
+    family: A
+    gene_count: 13
+    membership_column: ExistInsmall13
+    genes: [EGFR, AKT1, ALK, BRAF, ERBB2, KRAS, MAP2K1, MET, NRAS, PIK3CA, RET, ROS1, TP53]
+    tables: {basic: 0, variants: 1, other_drugs: 2, introductions: 3, guideline: 4, genes: 5, qc: 6}
+    rich_start: '第二部分：检测结果解析'
+    rich_end: '第三部分：附录'
+    excluded_gene_level_drug_tips: [TP53]
+  lung_62:
+    source_sha256: a90010acad8e33c0d963b89c055f534b8162c90b5bcff0aa990eef57edf55b3c
+    family: A
+    gene_count: 62
+    membership_column: &lung62_membership_column ExistInsmall62
+    tables: {basic: 1, variants: 5, guideline: 6, other_drugs: 7, introductions: 8, genes: 9, qc: 10}
+    rich_start: '第二部分：检测结果解析'
+    rich_end: '第三部分：附录'
+  lung_62_pdl1:
+    source_sha256: 25bccdf88cd8694e4c1c1ecd0a3a1428eed40a945f2f3b08466567a821f975d3
+    family: C
+    gene_count: 62
+    membership_column: *lung62_membership_column
+    tables: {basic: 0, guideline: 1, pdl1: 2, immune_drugs: 3, variants: 4, obsolete_guideline: 5, other_drugs: 6, introductions: 7, genes: 8, qc: 9}
+    rich_start: '靶向用药提示解析'
+    rich_end: '5. 附录'
+  lung_588:
+    source_sha256: 4f4314259d898dcbc95b5ccf64af6e05ad084ea7219970f4acf2f6cebc55d14d
+    family: B
+    gene_count: 588
+    tables: {basic: 0, targeted: 1, guideline: 2, biomarkers: 3, chemo_summary: 4, variants: 5, introductions: 6, obsolete_guideline: 7, genes: 54, qc: 55}
+    rich_start: '第三部分：基因变异及相应靶向/免疫药物解析'
+    rich_end: '3. 阅读说明'

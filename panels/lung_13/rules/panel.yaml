@@ -1,0 +1,71 @@
+schema_version: '1.0'
+panel_id: lung_13
+rule_id: panel
+version: 0.1.0
+updated: '2026-07-23'
+status: draft
+description: Lung588 variant membership and display contract.
+variant_filter:
+  columns:
+  - ExistIn552
+  allowed_values:
+  - Ⅰ类
+  - Ⅱ类
+  - Ⅲ类
+class_i_genes: []
+class_ii_genes: []
+important_genes:
+- EGFR
+- AKT1
+- ALK
+- BRAF
+- ERBB2
+- KRAS
+- MAP2K1
+- MET
+- NRAS
+- PIK3CA
+- RET
+- ROS1
+- TP53
+panel_display_genes:
+- name: EGFR
+  transcript: ''
+  chromosome: ''
+- name: AKT1
+  transcript: ''
+  chromosome: ''
+- name: ALK
+  transcript: ''
+  chromosome: ''
+- name: BRAF
+  transcript: ''
+  chromosome: ''
+- name: ERBB2
+  transcript: ''
+  chromosome: ''
+- name: KRAS
+  transcript: ''
+  chromosome: ''
+- name: MAP2K1
+  transcript: ''
+  chromosome: ''
+- name: MET
+  transcript: ''
+  chromosome: ''
+- name: NRAS
+  transcript: ''
+  chromosome: ''
+- name: PIK3CA
+  transcript: ''
+  chromosome: ''
+- name: RET
+  transcript: ''
+  chromosome: ''
+- name: ROS1
+  transcript: ''
+  chromosome: ''
+- name: TP53
+  transcript: ''
+  chromosome: ''
+reviewed_variant_overrides: []

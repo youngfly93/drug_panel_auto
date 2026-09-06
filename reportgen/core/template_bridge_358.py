@@ -3974,6 +3974,9 @@ def enhance_report_data(
     Returns:
         Enhanced ReportData
     """
+    from reportgen.panels.input_scope import scope_panel_excel
+
+    excel_data = scope_panel_excel(excel_data, panel_package)
     # Load panel config (instance-based, no global mutation)
     pc = load_panel_config(
         base_path=base_path,

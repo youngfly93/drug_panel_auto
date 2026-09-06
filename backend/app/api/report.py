@@ -514,7 +514,9 @@ REVIEW_STATUSES = {
     "delivered": "已交付",
     "rejected": "退回修改",
 }
-CONTROLLED_PILOT_PROJECT_TYPES = {"lung_329_pdl1", "lung_588_pdl1"}
+CONTROLLED_PILOT_PROJECT_TYPES = {
+    "lung_329_pdl1", "lung_588_pdl1", "lung_588", "lung_13", "lung_62", "lung_62_pdl1",
+}
 
 
 def _require_override_permission(override_gate: bool, user: User) -> None:

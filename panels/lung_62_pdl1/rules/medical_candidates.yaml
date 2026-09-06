@@ -1,0 +1,340 @@
+schema_version: '1.0'
+panel_id: lung_62_pdl1
+rule_id: medical_candidates
+version: 0.2.1
+updated: '2026-08-10'
+status: controlled_pilot_partial_promotion
+description: 'Evidence-bounded, exact-event lung588 treatment catalog. Three treatment candidates across two exact
+  events are mirrored into rules/drugs.yaml for the controlled pilot under exact selector and clinical-context checks;
+  all other candidates and historical claims remain non-runtime.
+
+  '
+governance:
+  policy_id: lung588_exact_event_candidate_review_v1
+  purpose: 'Preserve a traceable disposition of the historical display contract while preventing cross-cancer, gene-only,
+    or unreviewed claims from entering a patient report.
+
+    '
+  evidence_as_of: '2026-08-09'
+  runtime_policy:
+    enabled: true
+    runtime_rule_source: false
+    promoted_rules_mirrored_to: rules/drugs.yaml
+    report_text_allowed: only_for_promoted_exact_rules_after_context_match
+    promotion_requires:
+    - report_group_event_level_secondary_review
+    - exact_selector_and_cancer_scope_review
+    - current_label_or_guideline_version_check
+    - positive_and_negative_rule_tests
+    - case_level_uat
+  promotion_context_contract:
+    status: implemented_required_for_controlled_pilot
+    contract_rule: clinical_context
+    runtime_enforcement: implemented_fail_closed
+    promotion_blocked: false
+    missing_or_uncertain_policy: keep_candidate_hidden
+    activation_requirement: 'Every promoted rule requires all event-specific clinical context fields with label-compatible,
+      non-uncertain values; download still requires a case-level report-group review record.
+
+      '
+  historical_inventory:
+    source: two de-identified repaired historical lung588 final reports
+    exact_targeted_event_count: 15
+    targeted_drug_claim_count: 169
+    historical_level_counts:
+      A: 9
+      B: 0
+      C: 146
+      D: 14
+    selected_candidate_claim_count: 4
+    promoted_candidate_claim_count: 3
+    not_migrated_claim_count: 165
+    disposition: 'Historical report text is evidence of an old display contract, not current medical truth. Only
+      the four exact-event candidates below were retained for review. Three evidence-bounded candidates are available
+      in the controlled pilot; the fourth and all other claims remain outside runtime.
+
+      '
+  default_review:
+    review_status: needs_review
+    runtime_eligible: false
+    secondary_review_status: case_level_report_group_review_required
+    reviewer: codex
+    reviewer_type: ai_assisted_evidence_triage
+    risk_level: high
+candidate_rules:
+- candidate_id: lung588_braf_v600e_dabrafenib_trametinib
+  gene: BRAF
+  selector:
+    event_type: snv
+    transcript: NM_004333.6
+    c_hgvs: c.1799T>A
+    p_hgvs: p.V600E
+  direction: benefit
+  therapy:
+    generic_name_zh: 达拉非尼+曲美替尼
+    generic_name_en: dabrafenib + trametinib
+    regimen_type: combination
+  clinical_scope:
+    cancer_type: non-small_cell_lung_cancer
+    stage: metastatic
+    biomarker: BRAF_V600E
+    assay_requirement: approved_or_clinically_validated_test
+  required_context_fields:
+  - lung_histology
+  - disease_extent
+  - companion_diagnostic_status
+  context_requirements:
+    lung_histology:
+    - 非小细胞肺癌
+    disease_extent:
+    - 转移性
+    companion_diagnostic_status:
+    - 已确认符合
+  evidence_class: regulatory_label_exact_variant_and_lung_cancer
+  evidence_summary: 'FDA labeling and a lung-cancer phase II study support the combination in metastatic NSCLC with
+    BRAF V600E. This candidate does not cover another BRAF variant, another cancer type, or either component as
+    monotherapy.
+
+    '
+  review_status: provisional_runtime
+  runtime_eligible: true
+  secondary_review_status: case_level_report_group_review_required
+  report_text_allowed: true
+  source_refs:
+  - type: regulatory_label
+    authority: FDA
+    id: Tafinlar-Mekinist-label-2024
+    url: https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/202806s031%2C217514s004lbl.pdf
+  - type: pubmed
+    id: PMID:28919011
+    url: https://pubmed.ncbi.nlm.nih.gov/28919011/
+- candidate_id: lung588_braf_v600e_encorafenib_binimetinib
+  gene: BRAF
+  selector:
+    event_type: snv
+    transcript: NM_004333.6
+    c_hgvs: c.1799T>A
+    p_hgvs: p.V600E
+  direction: benefit
+  therapy:
+    generic_name_zh: 康奈非尼+贝美替尼
+    generic_name_en: encorafenib + binimetinib
+    regimen_type: combination
+  clinical_scope:
+    cancer_type: metastatic_non-small_cell_lung_cancer
+    stage: metastatic
+    biomarker: BRAF_V600E
+    assay_requirement: FDA_approved_test
+  required_context_fields:
+  - lung_histology
+  - disease_extent
+  - companion_diagnostic_status
+  context_requirements:
+    lung_histology:
+    - 非小细胞肺癌
+    disease_extent:
+    - 转移性
+    companion_diagnostic_status:
+    - 已确认符合
+  evidence_class: regulatory_approval_exact_variant_and_lung_cancer
+  evidence_summary: 'FDA approval is restricted to metastatic NSCLC with BRAF V600E detected by an FDA-approved
+    test. It does not establish activity for BRAF D594G or other non-V600 events.
+
+    '
+  review_status: provisional_runtime
+  runtime_eligible: true
+  secondary_review_status: case_level_report_group_review_required
+  report_text_allowed: true
+  source_refs:
+  - type: regulatory_approval
+    authority: FDA
+    id: FDA-2023-encorafenib-binimetinib-NSCLC
+    url: https://www.fda.gov/drugs/resources-information-approved-drugs/fda-approves-encorafenib-binimetinib-metastatic-non-small-cell-lung-cancer-braf-v600e-mutation
+  - type: companion_diagnostic_registry
+    authority: FDA
+    id: FDA-companion-diagnostic-list
+    url: https://www.fda.gov/medical-devices/in-vitro-diagnostics/list-cleared-or-approved-companion-diagnostic-devices-in-vitro-and-imaging-tools
+- candidate_id: lung588_erbb2_g660d_trastuzumab_deruxtecan
+  gene: ERBB2
+  selector:
+    event_type: snv
+    transcript: NM_004448.4
+    c_hgvs: c.1979G>A
+    p_hgvs: p.G660D
+    protein_domain: transmembrane_domain
+  direction: benefit
+  therapy:
+    generic_name_zh: 德曲妥珠单抗
+    generic_name_en: trastuzumab deruxtecan
+    regimen_type: monotherapy
+  clinical_scope:
+    cancer_type: non-small_cell_lung_cancer
+    stage: unresectable_or_metastatic
+    prior_therapy: prior_systemic_therapy_required
+    biomarker: activating_HER2_ERBB2_mutation
+    assay_requirement: 'exact G660D activation and label-compatible test eligibility must be confirmed during secondary
+      review
+
+      '
+  required_context_fields:
+  - lung_histology
+  - disease_extent
+  - prior_systemic_therapy
+  - companion_diagnostic_status
+  context_requirements:
+    lung_histology:
+    - 非小细胞肺癌
+    disease_extent:
+    - 不可切除局部晚期
+    - 转移性
+    prior_systemic_therapy:
+    - 已接受
+    companion_diagnostic_status:
+    - 已确认符合
+  evidence_class: functional_activation_plus_regulatory_biomarker_label
+  evidence_summary: 'G660D has published functional evidence as an activating HER2 transmembrane-domain mutation.
+    The current regulatory indication is conditional on unresectable/metastatic NSCLC, prior systemic therapy, and
+    an activating HER2 mutation; exact assay/label eligibility remains a required review item and is not inferred
+    automatically.
+
+    '
+  review_status: provisional_runtime
+  runtime_eligible: true
+  secondary_review_status: case_level_report_group_review_required
+  report_text_allowed: true
+  source_refs:
+  - type: pubmed
+    id: PMID:30449325
+    url: https://pubmed.ncbi.nlm.nih.gov/30449325/
+  - type: regulatory_label
+    authority: FDA
+    id: Enhertu-label-2026
+    url: https://www.accessdata.fda.gov/drugsatfda_docs/label/2026/761139s041s043lbl.pdf
+  - type: companion_diagnostic
+    authority: FDA
+    id: P200010S008
+    url: https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfpma/pma.cfm?id=P200010S008
+- candidate_id: lung588_erbb2_g660d_trastuzumab_rezetecan
+  gene: ERBB2
+  selector:
+    event_type: snv
+    transcript: NM_004448.4
+    c_hgvs: c.1979G>A
+    p_hgvs: p.G660D
+    protein_domain: transmembrane_domain
+  direction: benefit
+  therapy:
+    generic_name_zh: 瑞康曲妥珠单抗
+    generic_name_en: trastuzumab rezetecan
+    regimen_type: monotherapy
+  clinical_scope:
+    cancer_type: non-small_cell_lung_cancer
+    stage: unresectable_locally_advanced_or_metastatic
+    prior_therapy: prior_systemic_therapy_required
+    biomarker: activating_HER2_ERBB2_mutation
+    assay_requirement: 'exact G660D eligibility under the current China label must be confirmed during secondary
+      review
+
+      '
+  required_context_fields:
+  - lung_histology
+  - disease_extent
+  - prior_systemic_therapy
+  - companion_diagnostic_status
+  context_requirements:
+    lung_histology:
+    - 非小细胞肺癌
+    disease_extent:
+    - 不可切除局部晚期
+    - 转移性
+    prior_systemic_therapy:
+    - 已接受
+    companion_diagnostic_status:
+    - 已确认符合
+  evidence_class: functional_activation_plus_china_regulatory_approval
+  evidence_summary: 'G660D has functional activation evidence. China regulatory reporting and the HORIZON-Lung study
+    support a HER2-activating-mutation NSCLC indication, but exact event eligibility and current label wording must
+    be confirmed before promotion.
+
+    '
+  review_status: needs_review
+  runtime_eligible: false
+  secondary_review_status: pending_report_group_review
+  report_text_allowed: false
+  source_refs:
+  - type: pubmed
+    id: PMID:30449325
+    url: https://pubmed.ncbi.nlm.nih.gov/30449325/
+  - type: government_regulatory_news
+    authority: NMPA-data-service
+    id: trastuzumab-rezetecan-approval-2025
+    url: https://pharm.ncmi.cn/xwzx/202506/t20250604_427984.html
+  - type: pubmed
+    id: PMID:40020696
+    url: https://pubmed.ncbi.nlm.nih.gov/40020696/
+explicit_non_promotions:
+- selector:
+    gene: BRAF
+    transcript: NM_004333.6
+    c_hgvs: c.1781A>G
+    p_hgvs: p.D594G
+  disposition: not_migrated
+  reason: 'Non-V600/class-3 BRAF biology is not covered by the V600E regulatory contracts; no drug candidate may
+    inherit from the gene alone.
+
+    '
+  source_refs:
+  - type: pubmed
+    id: PMID:26498038
+    url: https://pubmed.ncbi.nlm.nih.gov/26498038/
+  - type: pubmed
+    id: PMID:31929109
+    url: https://pubmed.ncbi.nlm.nih.gov/31929109/
+- selector:
+    gene: ERBB2
+    transcript: NM_004448.4
+    c_hgvs: c.1979G>A
+    p_hgvs: p.G660D
+  excluded_therapies:
+  - 宗艾替尼
+  - 恩美曲妥珠单抗
+  - 吡咯替尼
+  disposition: not_migrated
+  reason: 'The historical report does not establish a current exact-event patient-level contract for these therapies.
+    Zongertinib evidence is domain-sensitive (TKD), while G660D is a transmembrane-domain event.
+
+    '
+  source_refs:
+  - type: regulatory_review
+    authority: FDA
+    id: zongertinib-219042-review
+    url: https://www.accessdata.fda.gov/drugsatfda_docs/nda/2025/219042Orig1s000AdminCorres.pdf
+  - type: clinical_trial
+    id: NCT06151574
+    url: https://clinicaltrials.gov/study/NCT06151574
+- selector_scope: all_other_historical_A_C_D_claims
+  disposition: not_migrated
+  reason: 'Cross-cancer, basket-trial, preclinical, gene-only, and event-block citations are not converted into
+    lung-cancer patient rules without an independent drug-level evidence review.
+
+    '
+non_target_domains:
+  immune_gene_associations:
+    enabled: true
+    disposition: exact_historical_event_display_only
+    review_status: provisional_runtime
+    runtime_eligible: true
+    reason: 'Only transcript- and HGVS-exact rows registered in biomarkers.yaml are displayed. Broad gene-level
+      inheritance remains prohibited and every formal external delivery still requires case-level report-group review;
+      the clearly marked Word draft may be downloaded first for that review.
+
+      '
+  chemotherapy_pharmacogenomics:
+    enabled: false
+    disposition: historical_observations_only
+    review_status: needs_review
+    runtime_eligible: false
+    reason: 'Historical CtDrug/Ct1000/Ct15 association rows do not constitute a validated somatic or germline PGx
+      prescribing contract.
+
+      '

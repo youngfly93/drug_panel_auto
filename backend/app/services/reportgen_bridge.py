@@ -398,6 +398,9 @@ class ReportGenBridge:
                     "confidence": result.get("confidence"),
                     "detected": result.get("detected", False),
                     "identity_conflicts": list(result.get("identity_conflicts") or []),
+                    "identity_family": result.get("identity_family"),
+                    "family_choices": list(result.get("family_choices") or []),
+                    "identity_source": result.get("identity_source"),
                 }
                 if detected["detected"]:
                     return detected
@@ -419,6 +422,9 @@ class ReportGenBridge:
                 "confidence": None,
                 "detected": False,
             }
+
+    def project_identity_family(self, project_type: str) -> str:
+        return self.detector.identity_family_id(project_type)
 
     def infer_project_type_from_text(self, text: Optional[str]) -> dict[str, Any]:
         """Infer a panel type from trusted project text such as form project_name."""

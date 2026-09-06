@@ -82,7 +82,7 @@ def build_default_docx_processors() -> list[FunctionProcessor]:
             enabled_predicate=lambda c: str(
                 c.template_context.get("project_type") or ""
             ).strip().lower()
-            in {"lung_329_pdl1", "lung_588_pdl1"},
+            in {"lung_329_pdl1", "lung_588_pdl1", "lung_62_pdl1"},
         ),
         FunctionProcessor(
             "targeted_drug_brand_summary",

@@ -55,6 +55,40 @@
       "description": "Heuristics for auto-detecting this panel from Excel filename / sheet content.",
       "additionalProperties": false,
       "properties": {
+        "priority": { "type": "number" },
+        "identity_family": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "default_project_type", "pdl1"],
+          "properties": {
+            "id": { "type": "string" },
+            "default_project_type": { "type": "string" },
+            "pdl1": { "type": "boolean" }
+          }
+        },
+        "structural_fingerprints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "required_tables"],
+            "properties": {
+              "id": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "required_tables": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "required": ["required_columns"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "required_columns": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        },
         "keywords": {
           "type": "array",
           "items": { "type": "string" }
@@ -95,8 +129,10 @@
         "enabled": { "type": "boolean" },
         "clinical_info_mode": {
           "type": "string",
-          "enum": ["shared", "per_case_required"]
+          "enum": ["shared", "per_case_required", "case_isolated_optional"]
         },
+        "missing_display_defaults": { "type": "object", "additionalProperties": { "type": "string" } },
+        "shared_field_exclusions": { "type": "array", "items": { "type": "string" } },
         "reason": { "type": "string" }
       }
     },
@@ -107,8 +143,52 @@
       "required": ["enabled"],
       "properties": {
         "enabled": { "type": "boolean" },
+        "release_mode": { "type": "string" },
+        "cross_cancer_residual_scan": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "severity": { "type": "string", "enum": ["warn", "fail"] },
+            "scan_scope": { "type": "string" },
+            "runtime_action": { "type": "string" },
+            "suppressed_text": { "type": "string" },
+            "terms": { "type": "array", "items": { "type": "string" } },
+            "notice": { "type": "string" }
+          }
+        },
         "reason": { "type": "string" },
         "disabled_notice": { "type": "string", "minLength": 1 }
+      }
+    },
+    "derived_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["membership_column", "genes", "provenance"],
+      "properties": {
+        "membership_column": { "type": "string", "pattern": "^ExistInsmall[0-9]+$" },
+        "genes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "provenance": { "type": "string" }
+      }
+    },
+    "golden_template_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "family", "builder"],
+      "properties": {
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "family": { "type": "string" },
+        "builder": { "type": "string" }
+      }
+    },
+    "reviewed_part3_overlay_additions": { "type": "array", "items": { "type": "string" } },
+    "review_candidate_contract": { "type": "string" },
+    "release_governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "uat_policy": { "type": "string" },
+        "report_group_uat_decisions": { "type": "string" }
       }
     },
     "enhancer": {
@@ -133,7 +213,7 @@
             "type": "string",
             "description": "Path relative to the panel directory, typically templates/<id>.docx"
           },
-          "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+          "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9.-]+)?$" },
           "status": {
             "type": "string",
             "enum": ["draft", "pilot", "active", "deprecated"]

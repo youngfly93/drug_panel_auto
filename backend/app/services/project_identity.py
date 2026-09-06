@@ -117,7 +117,9 @@ def resolve_project_identity(
         ("临床表单项目名称", clinical_name_type),
     ]
     distinct_types = {value for _source, value in candidates if value}
-    if len(distinct_types) > 1:
+    family_resolver = getattr(bridge, "project_identity_family", lambda value: value)
+    distinct_families = {family_resolver(value) for value in distinct_types}
+    if len(distinct_families) > 1:
         details = "、".join(f"{source}={value}" for source, value in candidates if value)
         raise ProjectIdentityConflictError(
             "项目身份冲突："
@@ -125,7 +127,9 @@ def resolve_project_identity(
             "请重新上传并确认项目类型。"
         )
 
-    effective_type = requested_type or detected_type or request_name_type or clinical_name_type
+    # An explicit order/form choice disambiguates variants of the same NGS
+    # family. It never overrides a different cancer or gene-count fingerprint.
+    effective_type = requested_type or request_name_type or clinical_name_type or detected_type
     detected_name = (
         str(detection.get("project_name") or "").strip() if detected_type == effective_type else ""
     )

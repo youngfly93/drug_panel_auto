@@ -1,0 +1,559 @@
+schema_version: '1.0'
+panel_id: lung_62
+rule_id: guideline_tables
+version: 1.2.1
+updated: '2026-09-06'
+status: pilot
+description: '肺癌329/588历史终版共享的固定指南展示与CtDrug化疗结构。固定药物及说明 转录自受控同案历史终版；病例检测结果只由本次Excel推导。 UGT1A1与长春类映射暂保留历史展示合同；#14/#15的医学争议见
+  docs/analysis-decisions/lung-chemotherapy-pending-review.md，不代表新增医学批准。
+
+  '
+guideline_tables:
+  nccn_results:
+    output_table: nccn_results
+    output_field_prefix: nccn_
+    required_columns:
+    - 检测基因
+    - 检测内容
+    - 检测结果
+    rows: []
+  lung_guideline_drug_results:
+    output_table: lung_guideline_drug_results
+    required_columns:
+    - 检测基因
+    - 本癌种相关治疗药物
+    - 临床提示
+    - 检测结果
+    rows:
+    - key: EGFR
+      genes:
+      - EGFR
+      display: EGFR
+      result_mode: any_variant
+      match: 突变
+      undetected_result: 未见变异
+      drugs: '阿法替尼
+
+        厄洛替尼
+
+        达可替尼
+
+        吉非替尼
+
+        盐酸埃克替尼
+
+        奥希替尼
+
+        甲磺酸阿美替尼
+
+        甲磺酸伏美替尼
+
+        甲磺酸贝福替尼
+
+        甲磺酸瑞齐替尼
+
+        甲磺酸瑞厄替尼
+
+        利厄替尼
+
+        埃万妥单抗
+
+        埃万妥单抗+兰泽替尼
+
+        舒沃替尼
+
+        盐酸佐利替尼
+
+        厄洛替尼+雷莫西尤单抗
+
+        厄洛替尼+贝伐珠单抗（非鳞癌）
+
+        [指南推荐方案]
+
+        芦康沙妥珠单抗
+
+        德达博妥单抗
+
+        马来酸美凡厄替尼'
+      clinical_note: '非小细胞肺癌NCCN及CSCO指南推荐对EGFR基因进行检测。EGFR基因突变阳性（19号外显子缺失、21号外显子L858R）推荐奥希替尼、厄洛替尼、吉非替尼、盐酸埃克替尼、阿法替尼、达可替尼、甲磺酸阿美替尼、甲磺酸伏美替尼、厄洛替尼+雷莫西尤单抗、厄洛替尼+贝伐珠单抗（非鳞状非小细胞患者）为一线治疗方案，其中奥希替尼为EGFR突变患者首选方案，且为EGFR突变ⅠB-ⅢA非小细胞肺癌患者推荐术后辅助治疗方案；NMPA推荐盐酸佐利替尼用于治疗EGFR基因突变阳性（19号外显子缺失、21号外显子L858R）的非小细胞肺癌患者；NMPA推荐马来酸美凡厄替尼用于治疗EGFR基因21号外显子L858R的非小细胞肺癌患者；
+
+        EGFR基因突变阳性（如S768I、L861Q和/或G719X）的非小细胞肺癌患者一线治疗首选方案：阿法替尼、奥希替尼，其它推荐方案包括：厄洛替尼、达可替尼、吉非替尼；后续治疗推荐奥希替尼；
+
+        EGFR基因T790M突变的非小细胞肺癌患者推荐奥希替尼、甲磺酸阿美替尼、甲磺酸伏美替尼、甲磺酸贝福替尼，不推荐吉非替尼、厄洛替尼、阿法替尼、达可替尼；
+
+        EGFR基因20号外显子插入突变（p.A763_Y764insFQEA、p.A763_Y764insLQEA除外）的非小细胞肺癌患者可能对厄洛替尼、吉非替尼、阿法替尼、达可替尼等EGFR-TKIs不敏感，后续治疗推荐埃万妥单抗、舒沃替尼。'
+    - key: ALK
+      genes:
+      - ALK
+      display: ALK
+      result_mode: fusion
+      match: 融合
+      undetected_result: 未见变异
+      drugs: '阿来替尼
+
+        布格替尼
+
+        塞瑞替尼
+
+        恩沙替尼
+
+        克唑替尼
+
+        洛拉替尼
+
+        伊鲁阿克
+
+        依奉阿克
+
+        地罗阿克'
+      clinical_note: '非小细胞肺癌NCCN及CSCO指南推荐对患者进行ALK基因融合检测。ALK基因常见融合为ALK-EML4，ALK基因融合阳性非小细胞肺癌患者对ALK TKI敏感，推荐使用阿来替尼、布格替尼、洛拉替尼、塞瑞替尼、克唑替尼、恩沙替尼进行一线治疗，依据患者的不同进展情况，可考虑使用阿来替尼、布格替尼、塞瑞替尼、伊鲁阿克、洛拉替尼进行后续治疗。
+
+        ALK G1202R突变耐药患者，后续治疗推荐洛拉替尼。'
+    - key: ROS1
+      genes:
+      - ROS1
+      display: ROS1
+      result_mode: fusion
+      match: 融合
+      undetected_result: 未见融合变异
+      drugs: '克唑替尼
+
+        恩曲替尼
+
+        洛拉替尼
+
+        瑞普替尼
+
+        安奈克替尼
+
+        他雷替尼'
+      clinical_note: 非小细胞肺癌NCCN及CSCO指南推荐对患者进行ROS1基因融合检测。ROS1基因常见融合为ROS1-CD74、ROS1-SLC34A2、ROS1-CCDC6、ROS1-FIG，ROS1基因融合阳性非小细胞肺癌患者对ROS1
+        TKI敏感，推荐使用塞瑞替尼、克唑替尼、恩曲替尼、洛拉替尼进行一线治疗及后续治疗。
+    - key: BRAF
+      genes:
+      - BRAF
+      display: BRAF
+      result_mode: exact_pattern
+      variant_patterns:
+      - V600E
+      undetected_result: 未见V600E变异
+      drugs: '曲美替尼+达拉非尼
+
+        维莫非尼
+
+        达拉非尼
+
+        贝美替尼+康奈非尼'
+      clinical_note: 非小细胞肺癌NCCN及CSCO指南推荐对患者进行BRAF 基因V600E突变检测。针对BRAF V600E的非小细胞肺癌患者，推荐一线治疗首选方案达拉非尼+曲美替尼，某些情况下的适用方案：维莫非尼、达拉非尼及后续治疗推荐达拉非尼+曲美替尼。
+    - key: KRAS
+      genes:
+      - KRAS
+      display: KRAS
+      result_mode: any_variant
+      match: 突变
+      undetected_result: 未见变异
+      drugs: '索托拉西布
+
+        阿达格拉西布
+
+        氟泽雷塞
+
+        格索雷塞
+
+        戈来雷塞
+
+        阿法替尼
+
+        厄洛替尼
+
+        达可替尼
+
+        吉非替尼
+
+        奥希替尼'
+      clinical_note: 非小细胞肺癌NCCN及CSCO指南推荐对患者进行KRAS基因突变检测。KRAS基因突变常见于12号密码子，KRAS G12C突变阳性的非小细胞肺癌患者后续治疗推荐索托拉西布、阿达格拉西布。携带KRAS突变的患者相比于野生型患者预后较差，且对于EGFR
+        TKI（阿法替尼、厄洛替尼、达可替尼、吉非替尼、奥希替尼等）药物敏感性降低。
+    - key: NTRK123
+      genes:
+      - NTRK1
+      - NTRK2
+      - NTRK3
+      display: NTRK1/2/3
+      result_mode: fusion
+      match: 融合
+      undetected_result: 未见融合变异
+      drugs: '拉罗替尼
+
+        恩曲替尼
+
+        瑞普替尼'
+      clinical_note: 非小细胞肺癌NCCN及CSCO指南推荐，对NTRK基因融合进行检测。NTRK基因融合阳性的非小细胞肺癌患者推荐拉罗替尼、恩曲替尼。
+    - key: MET
+      genes:
+      - MET
+      display: MET
+      result_mode: met_ex14_or_amp
+      undetected_result: 未见14号外显子跳跃和扩增变异
+      drugs: '卡马替尼
+
+        克唑替尼
+
+        特泊替尼
+
+        赛沃替尼
+
+        谷美替尼
+
+        伯瑞替尼'
+      clinical_note: 非小细胞肺癌NCCN及CSCO指南推荐，对MET基因进行检测。针对MET基因14号外显子跳跃突变的非小细胞肺癌患者推荐卡马替尼、克唑替尼、特泊替尼、赛沃替尼、谷美替尼进行一线或后续治疗，针对MET基因高水平扩增的非小细胞肺癌患者推荐克唑替尼、卡马替尼、特泊替尼。
+    - key: RET
+      genes:
+      - RET
+      display: RET
+      result_mode: fusion
+      match: 融合
+      undetected_result: 未见融合变异
+      drugs: '塞普替尼
+
+        普拉替尼
+
+        卡博替尼'
+      clinical_note: 非小细胞肺癌NCCN及CSCO指南推荐对患者进行RET基因融合检测。针对RET基因融合的非小细胞肺癌患者推荐使用塞普替尼、普拉替尼、卡博替尼进行一线及后续治疗。
+    - key: ERBB2
+      genes:
+      - ERBB2
+      display: 'ERBB2
+
+        （HER2）'
+      result_mode: any_variant
+      match: 突变
+      undetected_result: 未见变异
+      drugs: '恩美曲妥珠单抗（T-DM1）
+
+        德曲妥珠单抗
+
+        吡咯替尼
+
+        瑞康曲妥珠单抗
+
+        宗艾替尼'
+      clinical_note: 非小细胞肺癌NCCN及CSCO指南推荐对患者进行ERBB2基因突变检测。针对ERBB2基因突变阳性的非小细胞肺癌患者推荐使用恩美曲妥珠单抗、德曲妥珠单抗、吡咯替尼进行治疗。
+    - key: MET_EGFR_JOINT
+      genes:
+      - MET
+      - EGFR
+      display: MET、EGFR
+      result_mode: joint_met_amp_egfr_variant
+      undetected_result: 未见联合变异
+      drugs: MET扩增+EGFR突变
+      clinical_note: NMPA批准赛沃替尼联合奥希替尼用于治疗伴有MET扩增的接受一线EGFR-TKI治疗后疾病进展的EGFR突变阳性局部晚期或转移性非小细胞肺瘤(NSCLC)患者。
+  chemotherapy:
+    enabled: true
+    output_table: chemotherapy
+    row_source: CtDrug
+    profile: lung_historical_ctdrug_v1
+    detail_allowed_levels:
+    - 1B
+    - 2A
+    - 2B
+    detail_drug_name_style: chinese_only
+    uncovered_display: 未覆盖
+    irinotecan_safety:
+      enabled: true
+      interpretation_policy: historical_display_pending_report_group_decision
+      drug_display: 伊立替康剂量安全性
+      selectors:
+        star28:
+          gene: UGT1A1
+          site: rs8175347
+        star6:
+          gene: UGT1A1
+          site: rs4148323
+      historical_rules:
+      - star28: 6TA/6TA
+        star6: GG
+        result: UGT1A1基因型为6TA/6TA
+        dose_evaluation: 正常剂量使用
+      - star28: 6TA/6TA
+        star6: AG
+        result: UGT1A1基因型为6TA/6TA
+        dose_evaluation: 正常剂量使用
+      - star28: 6TA/7TA
+        star6: GG
+        result: UGT1A1基因型为6TA/7TA
+        dose_evaluation: 减少剂量使用
+      - star28: 6TA/7TA
+        star6: AG
+        result: UGT1A1基因型为6TA/7TA
+        dose_evaluation: 减少剂量使用
+      unsupported_result: UGT1A1分型未形成历史剂量建议
+      unsupported_dose_evaluation: 未形成剂量建议
+    base_drugs:
+    - key: cisplatin
+      display: 顺铂
+      aliases:
+      - 顺铂
+      prediction_genes:
+      - XPC
+      - MTHFR
+      - GSTP1
+      - ERCC1
+      - XRCC1
+      - GSTM1
+    - key: carboplatin
+      display: 卡铂
+      aliases:
+      - 卡铂
+      prediction_genes:
+      - MTHFR
+      - ERCC1
+      - XRCC1
+    - key: vinorelbine
+      display: 长春瑞滨
+      aliases:
+      - 长春瑞滨
+      - 长春碱
+      - 长春新碱
+      prediction_genes:
+      - ABCB1
+      - CEP72
+    - key: etoposide
+      display: 依托泊苷
+      aliases:
+      - 依托泊苷
+      prediction_genes:
+      - SLCO1B1
+      - DYNC2H1
+    - key: gemcitabine
+      display: 吉西他滨
+      aliases:
+      - 吉西他滨
+      prediction_genes:
+      - CDA
+      - RRM1
+    - key: docetaxel
+      display: 多西他赛
+      aliases:
+      - 多西他赛
+      prediction_genes:
+      - ERCC1
+      - VEGFA
+    - key: pemetrexed
+      display: 培美曲塞
+      aliases:
+      - 培美曲塞
+      prediction_genes:
+      - SLC19A1
+      - GGH
+    - key: paclitaxel
+      display: 紫杉醇
+      aliases:
+      - 紫杉醇
+      - 紫杉烷类
+      prediction_genes:
+      - ERCC1
+      - ABCB1
+      - SOD2
+      - TP53
+    prediction_rows:
+    - display: 顺铂
+      components:
+      - cisplatin
+    - display: 长春瑞滨
+      components:
+      - vinorelbine
+    - display: 依托泊苷
+      components:
+      - etoposide
+    - display: 吉西他滨
+      components:
+      - gemcitabine
+    - display: 多西他赛
+      components:
+      - docetaxel
+    - display: 培美曲塞
+      components:
+      - pemetrexed
+    - display: 紫杉醇
+      components:
+      - paclitaxel
+    - display: 卡铂
+      components:
+      - carboplatin
+    - display: 依托泊苷+顺铂
+      components:
+      - etoposide
+      - cisplatin
+    - display: 吉西他滨+顺铂
+      components:
+      - gemcitabine
+      - cisplatin
+    - display: 多西他赛+顺铂
+      components:
+      - docetaxel
+      - cisplatin
+    - display: 长春瑞滨+顺铂
+      components:
+      - vinorelbine
+      - cisplatin
+    - display: 培美曲塞+顺铂(仅限于非鳞癌)
+      components:
+      - pemetrexed
+      - cisplatin
+    - display: 紫杉醇+顺铂
+      components:
+      - paclitaxel
+      - cisplatin
+    - display: 白蛋白结合型紫杉醇+卡铂
+      components:
+      - paclitaxel
+      - carboplatin
+    - display: 多西他赛+卡铂
+      components:
+      - docetaxel
+      - carboplatin
+    - display: 吉西他滨+卡铂
+      components:
+      - gemcitabine
+      - carboplatin
+    - display: 紫杉醇+卡铂
+      components:
+      - paclitaxel
+      - carboplatin
+    - display: 依托泊苷+卡铂
+      components:
+      - etoposide
+      - carboplatin
+    - display: 培美曲塞+卡铂(仅限于非鳞癌)
+      components:
+      - pemetrexed
+      - carboplatin
+    - display: 吉西他滨+多西他赛
+      components:
+      - gemcitabine
+      - docetaxel
+    - display: 吉西他滨+长春瑞滨
+      components:
+      - gemcitabine
+      - vinorelbine
+      summary_rank: 10
+    - display: 白蛋白结合型紫杉醇单药方案
+      components:
+      - paclitaxel
+      summary_rank: 30
+    - display: 多西他赛单药方案
+      components:
+      - docetaxel
+    - display: 吉西他滨单药方案
+      components:
+      - gemcitabine
+      summary_rank: 20
+    - display: 紫杉醇单药方案
+      components:
+      - paclitaxel
+      summary_rank: 40
+    - display: 培美曲塞单药方案(仅限于非鳞癌)
+      components:
+      - pemetrexed
+    regimen_rows:
+    - display: 吉西他滨
+      components:
+      - gemcitabine
+    - display: 顺铂
+      components:
+      - cisplatin
+    - display: 卡铂
+      components:
+      - carboplatin
+    - display: 多西他赛
+      components:
+      - docetaxel
+    - display: 长春瑞滨
+      components:
+      - vinorelbine
+    - display: 依托泊苷
+      components:
+      - etoposide
+    - display: 培美曲塞
+      components:
+      - pemetrexed
+    - display: 紫杉醇
+      components:
+      - paclitaxel
+    - display: GP（吉西他滨+顺铂）
+      components:
+      - gemcitabine
+      - cisplatin
+    - display: GC（吉西他滨+卡铂）
+      components:
+      - gemcitabine
+      - carboplatin
+    - display: DP（多西他赛+顺铂）
+      components:
+      - docetaxel
+      - cisplatin
+    - display: DC（多西他赛+卡铂）
+      components:
+      - docetaxel
+      - carboplatin
+    - display: NP（长春瑞滨+顺铂）
+      components:
+      - vinorelbine
+      - cisplatin
+    - display: NC（长春瑞滨+卡铂）
+      components:
+      - vinorelbine
+      - carboplatin
+    - display: EP（依托泊苷+顺铂）
+      components:
+      - etoposide
+      - cisplatin
+    - display: PP（培美曲塞+顺铂）*（仅限于非鳞癌）
+      components:
+      - pemetrexed
+      - cisplatin
+    - display: PC（培美曲塞+卡铂）*（仅限于非鳞癌）
+      components:
+      - pemetrexed
+      - carboplatin
+    - display: TP（紫杉醇+顺铂）
+      components:
+      - paclitaxel
+      - cisplatin
+    - display: TC（紫杉醇+卡铂）
+      components:
+      - paclitaxel
+      - carboplatin
+    - display: 多西他赛单药方案
+      components:
+      - docetaxel
+    - display: 培美曲塞单药方案(仅限于非鳞癌)
+      components:
+      - pemetrexed
+    - display: 吉西他滨单药方案
+      components:
+      - gemcitabine
+    dosage_rows:
+    - regimen: GP（吉西他滨+顺铂）
+      dosage: 吉西他滨：1000-1250 mg/(m2.d) 静脉滴注 d1,8 每三~四周*4-6顺铂：75 mg/(m2.d) 静脉滴注 d1 每三~四周*4-6或根据患者耐受状况，总剂量分3-5日输注。
+    - regimen: GC（吉西他滨+卡铂）
+      dosage: 吉西他滨：1000-1250 mg/(m2.d) 静脉滴注 d1,8 每三~四周*4-6卡铂：AUC 4.5-6 静脉滴注 d1 每三~四周*4-6或根据患者耐受状况，总剂量分2-3日输注。
+    - regimen: DP（多西他赛+顺铂）
+      dosage: 多西他赛：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2 日输注。顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分
+        3-5 日输注。
+    - regimen: DC（多西他赛+卡铂）
+      dosage: 多西他赛：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2 日输注。卡铂：AUC 4.5-6 静脉滴注 d1 每三~四周*4-6或根据患者耐受状况，总剂量分2-3日输注。
+    - regimen: NP（长春瑞滨+顺铂）
+      dosage: 长春瑞滨：25 mg/(m2.d) 静脉推注 d1,8 每三～四周*4-6顺铂：75-80 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 3-5 日输注。
+    - regimen: NC（长春瑞滨+卡铂）
+      dosage: 长春瑞滨：25 mg/(m2.d) 静脉推注 d1,8 每三～四周*4-6卡铂：AUC 4.5-6 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2-3 日输注。
+    - regimen: EP（依托泊苷+顺铂）
+      dosage: 依托泊苷：100 mg/(m2.d) 静脉滴注 d1-5 每三～四周*4-6顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 3-5 日输注。
+    - regimen: PP（培美曲塞+顺铂）*（仅限于非鳞癌）
+      dosage: 培美曲塞：500 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 3-5 日输注。
+    - regimen: PC（培美曲塞+卡铂）*（仅限于非鳞癌）
+      dosage: 培美曲塞：500 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6卡铂：AUC 4.5-6 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2-3 日输注。
+    - regimen: TP（紫杉醇+顺铂）
+      dosage: 紫杉醇：135-175 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6顺铂：75 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 3-5 日输注。
+    - regimen: TC（紫杉醇+卡铂）
+      dosage: 紫杉醇：135-175 mg/(m2.d) 静脉滴注 d1 每三～四周*4-6卡铂：AUC 4.5-6 静脉滴注 d1 每三～四周*4-6 或根据患者耐受状况，总剂量分 2-3 日输注。

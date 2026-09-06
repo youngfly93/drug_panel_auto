@@ -40,7 +40,7 @@ def test_iyun129_wrapper_pins_production_coordinates() -> None:
     wrapper = _read("scripts/iyun129_deploy_clean.sh")
     limited_release_panels = (
         "crc_301_msi,lung_methylation,"
-        "lung_13,lung_62,lung_62_pdl1"
+        "lung_13,lung_62,lung_62_pdl1,lung_588"
     )
 
     assert "SSH_HOST:-iyun129" in wrapper
@@ -111,22 +111,22 @@ def test_lung_methylation_remains_draft_and_formally_blocked() -> None:
     )
 
 
-def test_lung13_intake_is_reserved_but_not_misrepresented_as_built() -> None:
+def test_lung13_draft_is_built_but_not_clinically_promoted() -> None:
     readiness = yaml.safe_load(
         _read("config/panel_product_readiness/lung_13.yaml")
     )
 
     assert readiness["panel_id"] == "lung_13"
-    assert readiness["release_status"] == "NOT_BUILT"
+    assert readiness["release_status"] == "DRAFT_BUILT_PENDING_ENGINEERING_QA"
     assert readiness["production_eligible"] is False
     assert readiness["draft_build_allowed"] is True
     assert readiness["aggregate_inventory"]["historical_final_docx_count"] == 246
     assert readiness["aggregate_inventory"]["supplied_matching_lung_13_excel_count"] == 0
     assert readiness["aggregate_inventory"]["contains_patient_data"] is False
-    assert not (ROOT / "panels/lung_13/panel.yaml").exists()
+    assert (ROOT / "panels/lung_13/panel.yaml").exists()
 
 
-def test_lung62_series_is_reserved_as_two_distinct_unbuilt_products() -> None:
+def test_lung62_series_has_distinct_drafts_with_shared_ngs_identity() -> None:
     lung62 = yaml.safe_load(
         _read("config/panel_product_readiness/lung_62.yaml")
     )
@@ -149,10 +149,10 @@ def test_lung62_series_is_reserved_as_two_distinct_unbuilt_products() -> None:
     )
     assert (
         lung62_pdl1["promotion_evidence"]["pdl1_case_source_contract"]["clone_required"]
-        is True
+        is False
     )
-    assert not (ROOT / "panels/lung_62/panel.yaml").exists()
-    assert not (ROOT / "panels/lung_62_pdl1/panel.yaml").exists()
+    assert (ROOT / "panels/lung_62/panel.yaml").exists()
+    assert (ROOT / "panels/lung_62_pdl1/panel.yaml").exists()
 
 
 def test_production_scope_gate_rejects_methylation_override(tmp_path: Path) -> None:
@@ -164,13 +164,13 @@ def test_production_scope_gate_rejects_methylation_override(tmp_path: Path) -> N
         "--target",
         "iyun129",
         "--web-disabled",
-        "crc_301_msi,lung_13,lung_62,lung_62_pdl1",
+        "crc_301_msi,lung_13,lung_62,lung_62_pdl1,lung_588",
         "--core-disabled",
         "crc_301_msi,lung_methylation,"
-        "lung_13,lung_62,lung_62_pdl1",
+        "lung_13,lung_62,lung_62_pdl1,lung_588",
         "--frontend-disabled",
         "crc_301_msi,lung_methylation,"
-        "lung_13,lung_62,lung_62_pdl1",
+        "lung_13,lung_62,lung_62_pdl1,lung_588",
         "--output-json",
         str(tmp_path / "blocked.json"),
     ]
@@ -180,10 +180,10 @@ def test_production_scope_gate_rejects_methylation_override(tmp_path: Path) -> N
     assert payload["status"] == "FAIL"
     assert any("missing from web disabled scope" in row for row in payload["issues"])
 
-    web_scope = "crc_301_msi,lung_13,lung_62,lung_62_pdl1"
+    web_scope = "crc_301_msi,lung_13,lung_62,lung_62_pdl1,lung_588"
     command[command.index(web_scope)] = (
         "crc_301_msi,lung_methylation,"
-        "lung_13,lung_62,lung_62_pdl1"
+        "lung_13,lung_62,lung_62_pdl1,lung_588"
     )
     command[-1] = str(tmp_path / "closed.json")
     closed = subprocess.run(command, capture_output=True, text=True)
@@ -196,7 +196,7 @@ def test_iyun129_switch_enables_only_promoted_or_controlled_pilot_panels() -> No
     release = _read("scripts/iyun129_release.sh")
     limited_release_panels = (
         "crc_301_msi,lung_methylation,"
-        "lung_13,lung_62,lung_62_pdl1"
+        "lung_13,lung_62,lung_62_pdl1,lung_588"
     )
 
     assert f"RG_WEB_DISABLED_PROJECT_TYPES:-{limited_release_panels}" in release
@@ -220,15 +220,15 @@ def test_iyun129_switch_rejects_blocked_panel_scope_before_ssh() -> None:
         env={
             **os.environ,
             "RG_WEB_DISABLED_PROJECT_TYPES": (
-                "crc_301_msi,lung_13,lung_62,lung_62_pdl1"
+                "crc_301_msi,lung_13,lung_62,lung_62_pdl1,lung_588"
             ),
             "REPORTGEN_DISABLED_PROJECT_TYPES": (
                 "crc_301_msi,lung_methylation,"
-                "lung_13,lung_62,lung_62_pdl1"
+                "lung_13,lung_62,lung_62_pdl1,lung_588"
             ),
             "VITE_DISABLED_PROJECT_TYPES": (
                 "crc_301_msi,lung_methylation,"
-                "lung_13,lung_62,lung_62_pdl1"
+                "lung_13,lung_62,lung_62_pdl1,lung_588"
             ),
         },
         capture_output=True,
