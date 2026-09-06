@@ -1132,9 +1132,11 @@ def test_lung588_generation_surfaces_pending_pdl1_profile_in_draft(tmp_path):
     residual_check = qa["checks"]["part3_cross_cancer_residuals"]
     assert residual_check["status"] == "WARN"
     assert residual_check["matched_terms"]
-    suppression_check = qa["checks"]["part3_cross_cancer_suppression"]
-    assert suppression_check["status"] == "PASS"
-    assert suppression_check["suppressed_field_count"] == 0
+    assert "part3_cross_cancer_suppression" not in qa["checks"]
+    assert not any(
+        issue["code"] == "PART3_CROSS_CANCER_SUPPRESSION"
+        for issue in qa["issues"]
+    )
     assert any(
         issue["code"] == "PART3_CROSS_CANCER_RESIDUALS"
         for issue in qa["issues"]
