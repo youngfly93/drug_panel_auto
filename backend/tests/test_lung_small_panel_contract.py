@@ -320,4 +320,8 @@ def test_each_draft_has_a_product_specific_synthetic_golden_runner(tmp_path, pan
     second = mapped.get_table("drug_kabo")
     assert len(second) == 1 and second[0]["Gene"] == "ERCC2"
     assert second[0]["Result"] == "SYNTHETIC-PGX-SECOND-OBSERVATION"
+    # Maintained 588 PGx mapping also admits both observations in the platinum
+    # class table. Molecule count is not the number of nonempty detail tables.
+    platinum = mapped.get_table("drug_boleihuahewu")
+    assert {row["Gene"] for row in platinum} == {"ERCC1", "ERCC2"}
     assert spec["expectations"]["separate_lung_draft_tables"] is True

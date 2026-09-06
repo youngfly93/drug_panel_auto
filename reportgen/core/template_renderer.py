@@ -5074,6 +5074,15 @@ class TemplateRenderer:
             # it after Part 3 is disabled leaks the seed case's evidence trail
             # into unrelated patients.  Preserve the reviewed section layout,
             # but replace the stale list with one explicit review notice.
+            if not existing and ref_end_idx < len(paragraphs):
+                # A semantic module boundary may follow the reference heading
+                # immediately. Do not consume that heading as a reusable old
+                # citation, or leave an empty references section in the report.
+                from docx.oxml import OxmlElement
+
+                node = OxmlElement("w:p")
+                paragraphs[ref_idx]._p.addnext(node)
+                existing = [Paragraph(node, paragraphs[ref_idx]._parent)]
             if existing:
                 set_para_text(
                     existing[0],

@@ -867,8 +867,8 @@ def inspect_lung_draft_table_boundaries(document):
     return {
         "passed": (
             len(guides) == 1 and guides[0][1] == 0
-            and len(pgx) == 2 and all(index == 0 for _, index in pgx)
-            and len({table for table, _ in pgx}) == 2
+            and len(pgx) >= 2 and all(index == 0 for _, index in pgx)
+            and len({table for table, _ in pgx}) == len(pgx)
         ),
         "guideline_headers": guides,
         "pgx_headers": pgx,
@@ -973,7 +973,7 @@ def assert_golden_case_output(
         )
         check(
             "separate_lung_draft_tables", boundaries["passed"],
-            "guideline and two synthetic PGx tables retain separate native boundaries",
+            "guideline and nonempty multi-drug PGx tables retain separate native boundaries",
             details=boundaries,
         )
 

@@ -100,7 +100,10 @@ def test_empty_or_malformed_section_alias_cannot_match_every_document(values):
 
 @pytest.mark.parametrize(
     "boundary",
-    ["第三部分：附录", "5. 附录", "补充检测结果：TMB、MSI 与化疗药物基因组学"],
+    [
+        "第三部分：附录", "5. 附录", "补充检测结果：TMB、MSI 与化疗药物基因组学",
+        "肺癌相关重要基因变异及药物提示",
+    ],
 )
 def test_reference_cleanup_never_deletes_following_lung_modules(tmp_path, boundary):
     document = Document()
@@ -123,6 +126,26 @@ def test_reference_cleanup_never_deletes_following_lung_modules(tmp_path, bounda
     assert boundary in text and "CNV待复核：合成来源待审" in text and "固定附录保留" in text
     assert "合成旧文献" not in text
     assert actual.tables[0].cell(0, 0).text == "合成 PGx 行"
+
+
+def test_empty_reference_list_does_not_consume_following_guideline_caption(tmp_path):
+    document = Document()
+    document.add_paragraph("参考文献")
+    document.add_paragraph("肺癌相关重要基因变异及药物提示")
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "来源指南行"
+    path = tmp_path / "reference-immediate-guideline.docx"
+    document.save(path)
+    renderer = TemplateRenderer(log_level="ERROR")
+    renderer._rebuild_reference_section(str(path), {})
+    actual = Document(path)
+    assert [p.text for p in actual.paragraphs] == [
+        "参考文献",
+        "本报告未生成患者级动态参考文献；历史病例固定参考文献已移除，待报告组根据最终启用的解释内容复核。",
+        "肺癌相关重要基因变异及药物提示",
+    ]
+    assert actual.tables[0].cell(0, 0).text == "来源指南行"
+    renderer._rebuild_reference_section(str(path), {})
+    assert [p.text for p in Document(path).paragraphs] == [p.text for p in actual.paragraphs]
 
 
 def test_flat_historical_toc_becomes_refreshable_without_old_page_numbers(tmp_path):
@@ -430,7 +453,8 @@ def test_missing_configured_part3_heading_keeps_full_document_fallback():
 
 
 @pytest.mark.parametrize(
-    "tamper", [None, "gene", "guideline", "pgx", "merged_guideline", "merged_pgx", "spanned"]
+    "tamper",
+    [None, "gene", "guideline", "pgx", "merged_guideline", "merged_pgx", "spanned", "extra_pgx"],
 )
 def test_final_word_scope_detects_missing_genes_guidelines_and_changed_pgx(tamper):
     package = load_panel_package("lung_13")
@@ -481,6 +505,9 @@ def test_final_word_scope_detects_missing_genes_guidelines_and_changed_pgx(tampe
     second = copy.deepcopy(pgx._tbl)
     pgx._tbl.addnext(second)
     context["drug_kabo"] = copy.deepcopy(context["drug_shunbo"])
+    if tamper == "extra_pgx":
+        second.addnext(copy.deepcopy(pgx._tbl))
+        context["drug_boleihuahewu"] = copy.deepcopy(context["drug_shunbo"])
     if tamper in {"spanned", "merged_pgx"}:
         # Simulate LO's 16-column grid with only six logical cells per row.
         for table in (pgx._tbl, second):
@@ -505,7 +532,7 @@ def test_final_word_scope_detects_missing_genes_guidelines_and_changed_pgx(tampe
             pgx._tbl.append(row)
         second.getparent().remove(second)
     result = inspect_word_scope(document, context, package)
-    assert bool(result["failures"]) is (tamper not in {None, "spanned"})
+    assert bool(result["failures"]) is (tamper not in {None, "spanned", "extra_pgx"})
     boundaries = inspect_lung_draft_table_boundaries(document)
     assert boundaries["passed"] is (tamper not in {"merged_guideline", "merged_pgx"})
     if tamper in {"merged_guideline", "merged_pgx", "spanned"}:
