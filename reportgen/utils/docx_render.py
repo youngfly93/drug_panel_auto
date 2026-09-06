@@ -281,9 +281,12 @@ def _docx_to_pdf(
     workdir: Path,
     profile_dir: Path,
     timeout_seconds: int,
+    include_automatic_blank_pages: bool = False,
 ) -> Path:
     """Convert the staged DOCX to PDF with an explicit renderer profile."""
     if _libreoffice_profile_mode() == "system":
+        if include_automatic_blank_pages:
+            raise RuntimeError("Automatic-blank-page QA requires an isolated LibreOffice profile")
         _run_checked(
             _system_profile_convert_cmd(
                 soffice=soffice,
@@ -305,10 +308,14 @@ def _docx_to_pdf(
         tmp_docx,
         listener_pdf,
         timeout_seconds=timeout_seconds,
+        **({"include_automatic_blank_pages": True} if include_automatic_blank_pages else {}),
     ):
         return _find_pdf_output(workdir)
 
-    initialize_libreoffice_profile(profile_dir, require_available=True)
+    initialize_libreoffice_profile(
+        profile_dir, require_available=True,
+        **({"include_automatic_blank_pages": True} if include_automatic_blank_pages else {}),
+    )
     convert_cmd = _isolated_profile_convert_cmd(
         soffice=soffice,
         tmp_docx=tmp_docx,
@@ -334,6 +341,7 @@ def render_docx_to_pngs(
     last_page: Optional[int] = None,
     timeout_seconds: int = 120,
     tmp_dir: Optional[Path] = None,
+    include_automatic_blank_pages: bool = False,
 ) -> List[Path]:
     """Render a .docx file to page PNGs via LibreOffice + Poppler."""
     docx_path = docx_path.resolve()
@@ -385,6 +393,7 @@ def render_docx_to_pngs(
             workdir=workdir,
             profile_dir=profile_dir,
             timeout_seconds=timeout_seconds,
+            include_automatic_blank_pages=include_automatic_blank_pages,
         )
 
         # PDF -> PNGs. Rasterization is CPU-bound and page-independent, and

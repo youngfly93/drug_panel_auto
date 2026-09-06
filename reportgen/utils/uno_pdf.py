@@ -46,6 +46,7 @@ _UNO_EXPORT_SCRIPT = textwrap.dedent(
         return item
 
     input_path, output_path, port = sys.argv[1], sys.argv[2], sys.argv[3]
+    include_automatic_blank_pages = len(sys.argv) > 4 and sys.argv[4] == "1"
     local_ctx = uno.getComponentContext()
     resolver = local_ctx.ServiceManager.createInstanceWithContext(
         "com.sun.star.bridge.UnoUrlResolver",
@@ -85,9 +86,14 @@ _UNO_EXPORT_SCRIPT = textwrap.dedent(
         load_props,
     )
     try:
+        export_props = [prop("FilterName", "writer_pdf_Export")]
+        if include_automatic_blank_pages:
+            export_props.append(prop("FilterData", uno.Any(
+                "[]com.sun.star.beans.PropertyValue", (prop("IsSkipEmptyPages", False),)
+            )))
         doc.storeToURL(
             uno.systemPathToFileUrl(output_path),
-            (prop("FilterName", "writer_pdf_Export"),),
+            tuple(export_props),
         )
     finally:
         doc.close(False)
@@ -125,6 +131,7 @@ def convert_docx_to_pdf_via_listener(
     output_pdf: Path | str,
     *,
     timeout_seconds: int = 180,
+    include_automatic_blank_pages: bool = False,
 ) -> bool:
     """Export ``input_docx`` to ``output_pdf`` through the persistent listener.
 
@@ -165,6 +172,7 @@ def convert_docx_to_pdf_via_listener(
                     str(input_path),
                     str(output_path),
                     str(port),
+                    "1" if include_automatic_blank_pages else "0",
                 ],
                 check=True,
                 stdout=subprocess.PIPE,

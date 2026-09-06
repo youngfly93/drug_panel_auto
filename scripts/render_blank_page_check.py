@@ -82,6 +82,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fail (instead of SKIP) when LibreOffice is unavailable.",
     )
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--include-automatic-blank-pages", action="store_true",
+        help="Include LibreOffice's automatically inserted section-parity blank pages.",
+    )
     return parser
 
 
@@ -101,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
             dpi=args.dpi,
             keep_pdf=True,
             timeout_seconds=180,
+            include_automatic_blank_pages=args.include_automatic_blank_pages,
         )
     except DocxRenderError as exc:
         msg = f"LibreOffice render unavailable: {exc}"

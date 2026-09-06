@@ -244,7 +244,9 @@ def font_substitution_fingerprint(
     }
 
 
-def _registry_xml(substitutions: Mapping[str, str]) -> str:
+def _registry_xml(
+    substitutions: Mapping[str, str], *, include_automatic_blank_pages: bool = False
+) -> str:
     nodes: list[str] = []
     for index, (source, target) in enumerate(sorted(substitutions.items())):
         nodes.append(
@@ -277,6 +279,12 @@ def _registry_xml(substitutions: Mapping[str, str]) -> str:
                 '<item oor:path="/org.openoffice.Office.Common/Misc">',
                 '<prop oor:name="FirstRun" oor:op="fuse"><value>false</value></prop>',
                 "</item>",
+                (
+                    '<item oor:path="/org.openoffice.Office.Common/Filter/PDF/Export">'
+                    '<prop oor:name="IsSkipEmptyPages" oor:op="fuse">'
+                    '<value>false</value></prop></item>'
+                    if include_automatic_blank_pages else ""
+                ),
                 "</oor:items>",
             ]
         )
@@ -289,6 +297,7 @@ def initialize_libreoffice_profile(
     *,
     system_name: str | None = None,
     require_available: bool = True,
+    include_automatic_blank_pages: bool = False,
 ) -> dict[str, object]:
     """Create the pinned font table before LibreOffice opens the profile."""
     profile_dir = Path(profile_dir)
@@ -301,7 +310,10 @@ def initialize_libreoffice_profile(
     target = user_dir / "registrymodifications.xcu"
     temporary = user_dir / "registrymodifications.xcu.next"
     temporary.write_text(
-        _registry_xml(fingerprint["font_substitutions"]),
+        _registry_xml(
+            fingerprint["font_substitutions"],
+            include_automatic_blank_pages=include_automatic_blank_pages,
+        ),
         encoding="utf-8",
     )
     os.replace(temporary, target)

@@ -742,6 +742,14 @@ def normalize_fixed_reference_flow(doc, appendix):
             grid.set(qn("w:val"), "false")
 
 
+def normalize_continuous_page_numbering(doc):
+    """Keep section geometry but remove restarts that create implicit blank pages."""
+    for section in list(doc.sections)[1:]:
+        numbering = section._sectPr.find(qn("w:pgNumType"))
+        if numbering is not None:
+            numbering.attrib.pop(qn("w:start"), None)
+
+
 def normalize_footer_page_totals(doc):
     """Replace historical literal totals with native NUMPAGES fields in place."""
     for part in _story_parts(doc):
@@ -1037,6 +1045,7 @@ def build_template(panel, spec, source, work, output):
     if panel == "lung_588":
         normalize_b_family_faq_flow(doc)
     normalize_fixed_reference_flow(doc, appendix._p)
+    normalize_continuous_page_numbering(doc)
     normalize_footer_page_totals(doc)
     fixed = {}
     # Only the fixed appendix may contain a historical literature example.
@@ -1313,6 +1322,12 @@ def build_package(panel, spec, private_dir, work, packages_dir):
             )
         elif source.name == "style.yaml":
             rule["style"].setdefault("toc", {})["mode"] = "native"
+            if panel == "lung_62_pdl1":
+                # The historical cross-cancer table is now a short pointer.
+                # Its old hard break must not strand the evidence legend.
+                rule["style"].setdefault("front_matter", {}).setdefault(
+                    "remove_page_break_after_text_prefixes", []
+                ).append("随临床证据更新药物推荐结果及分级可能产生变化。")
         elif source.name == "knowledge_coverage.yaml":
             rule["reportable_genes"] = genes
             rule["contract"]["ordered_gene_list_sha256"] = hashlib.sha256(

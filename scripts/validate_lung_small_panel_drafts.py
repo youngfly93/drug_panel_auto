@@ -368,6 +368,7 @@ def run_case(args, panel, case):
                 str(report_file),
                 "--require-render",
                 "--strict-trailing",
+                "--include-automatic-blank-pages",
                 "--dpi",
                 str(args.dpi),
                 "--output-dir",

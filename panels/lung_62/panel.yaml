@@ -115,8 +115,6 @@ rules:
   filtering: config/filtering.yaml
   drug_brands: config/drug_brands.yaml
 input_contract:
-  missing_source_defaults:
-    sample_type: 未提供
   required_tables:
   - Variations
   - TMB
@@ -184,6 +182,8 @@ input_contract:
     - 测序质控结论
     qc_analysis_status:
     - 分析质控结论
+  missing_source_defaults:
+    sample_type: 未提供
 template_contract:
   required_variables:
   - patient_name

@@ -38,6 +38,7 @@ from scripts.build_lung_draft_packages import (
     install_refreshable_toc,
     install_shared_modules,
     normalize_b_family_faq_flow,
+    normalize_continuous_page_numbering,
     normalize_draft_case_fields,
     normalize_draft_variant_flow,
     normalize_fixed_reference_flow,
@@ -124,6 +125,81 @@ def test_optional_drug_empty_state_is_explicit_without_removing_real_rows(tmp_pa
         ]
     else:
         assert not actual.tables
+
+
+def test_pdl1_short_guideline_pointer_does_not_force_a_legend_only_page(tmp_path):
+    package = load_panel_package("lung_62_pdl1")
+    path = tmp_path / "synthetic-guideline-pointer.docx"
+    document = Document()
+    document.add_paragraph("随临床证据更新药物推荐结果及分级可能产生变化。")
+    document.add_page_break()
+    document.add_paragraph("1.2 NCCN 推荐临床常规靶向药物相关基因检测结果（不限于本癌种）")
+    document.add_paragraph("本癌种指南相关检测结果见第一部分；不展示本产品范围外的未检出结论。")
+    document.add_page_break()
+    document.add_paragraph("合成独立章节")
+    document.save(path)
+    import yaml
+
+    config = yaml.safe_load((package.root_dir / "rules/style.yaml").read_text())
+    prefixes = config["style"]["front_matter"]["remove_page_break_after_text_prefixes"]
+    TemplateRenderer(log_level="ERROR")._remove_page_breaks_after_text_prefixes(
+        str(path), tuple(prefixes)
+    )
+    actual = Document(path)
+    breaks = actual.element.body.findall(".//" + qn("w:br"))
+    assert len(breaks) == 1  # Keep the unrelated independent section boundary.
+    assert actual.paragraphs[-1].text == "合成独立章节"
+
+
+def test_continuous_page_numbers_keep_section_format_and_first_page_start():
+    from docx.enum.section import WD_SECTION_START
+    from docx.oxml import OxmlElement
+
+    document = Document()
+    document.add_section(WD_SECTION_START.NEW_PAGE)
+    document.add_section(WD_SECTION_START.NEW_PAGE)
+    for section in document.sections:
+        numbering = OxmlElement("w:pgNumType")
+        numbering.set(qn("w:fmt"), "decimal")
+        numbering.set(qn("w:start"), "1")
+        section._sectPr.append(numbering)
+    geometry = [s._sectPr.pgSz.xml + s._sectPr.pgMar.xml for s in document.sections]
+    normalize_continuous_page_numbering(document)
+    numbers = [s._sectPr.find(qn("w:pgNumType")) for s in document.sections]
+    assert [n.get(qn("w:start")) for n in numbers] == ["1", None, None]
+    assert all(n.get(qn("w:fmt")) == "decimal" for n in numbers)
+    assert geometry == [s._sectPr.pgSz.xml + s._sectPr.pgMar.xml for s in document.sections]
+    before = document.element.xml
+    normalize_continuous_page_numbering(document)
+    assert before == document.element.xml
+
+
+@pytest.mark.parametrize("native", [True, False])
+def test_native_draft_qa_does_not_hide_automatic_blank_pages(tmp_path, monkeypatch, native):
+    from PIL import Image
+    from reportgen.core.qa_report import build_docx_qa_report
+
+    path = tmp_path / "synthetic-implicit-blank.docx"
+    Document().save(path)
+    calls = []
+
+    def fake_render(_source, *, output_dir, **kwargs):
+        calls.append(kwargs)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        page = output_dir / "page-1.png"
+        Image.new("RGB", (200, 300), "white").save(page)
+        return [page]
+
+    monkeypatch.setattr("reportgen.core.qa_report.render_docx_to_pngs", fake_render)
+    report = ReportData()
+    report.context["panel_style"] = {"toc": {"mode": "native" if native else "legacy"}}
+    result = build_docx_qa_report(
+        output_file=str(path), report_data=report,
+        visual_render="all", visual_render_required=True,
+    )
+    assert calls[0].get("include_automatic_blank_pages", False) is native
+    assert result["checks"]["visual_render"]["include_automatic_blank_pages"] is native
+    assert result["checks"]["blank_page_detection"]["status"] == "FAIL"
 
 
 def test_variant_flow_preserves_cells_widths_and_runs_while_overriding_indent():

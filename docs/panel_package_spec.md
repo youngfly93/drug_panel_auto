@@ -64,6 +64,13 @@ The four historical lung draft packages use a `评审草稿.docx` suffix, so the
 default filenames do not imply clinical final approval. Packages without this
 field retain the existing global naming behavior.
 
+Historical lung drafts use continuous book page numbering: section formatting,
+headers and fonts stay intact, but section-level page-number restarts are removed
+to avoid LibreOffice's implicit parity blank pages. Native-TOC visual QA includes
+automatically inserted blank pages; other templates retain their existing render
+defaults. The standalone blank-page gate exposes the same behavior through
+`--include-automatic-blank-pages`.
+
 Optional `gene_symbol_aliases` is a panel-scoped `historical_alias -> current_symbol`
 mapping for assays whose historical input keys differ from the current official
 gene symbol:

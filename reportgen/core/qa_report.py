@@ -263,6 +263,7 @@ def build_docx_qa_report(
         output_dir=visual_render_output_dir,
         tmp_dir=visual_render_tmp_dir,
         expected_sparse_pages=_visual_expected_sparse_page_specs(context),
+        include_automatic_blank_pages=toc_style.get("mode") == "native",
     )
     for visual_issue in _visual_render_issues(checks["visual_render"]):
         issue(**visual_issue)
@@ -571,6 +572,7 @@ def _build_visual_render_check(
     output_dir: Optional[str],
     tmp_dir: Optional[str],
     expected_sparse_pages: Optional[Iterable[Mapping[str, Any]]] = None,
+    include_automatic_blank_pages: bool = False,
 ) -> Dict[str, Any]:
     normalized_mode = str(mode or "none").strip().lower()
     result: Dict[str, Any] = {
@@ -581,6 +583,7 @@ def _build_visual_render_check(
         "rendered_pages": [],
         "output_dir": None,
         "error": None,
+        "include_automatic_blank_pages": include_automatic_blank_pages,
     }
     if normalized_mode == "none":
         return result
@@ -618,6 +621,7 @@ def _build_visual_render_check(
             keep_pdf=bool(expected_sparse_specs),
             timeout_seconds=int(timeout_seconds),
             tmp_dir=Path(tmp_dir) if tmp_dir else None,
+            **({"include_automatic_blank_pages": True} if include_automatic_blank_pages else {}),
         )
     except Exception as exc:
         result.update(

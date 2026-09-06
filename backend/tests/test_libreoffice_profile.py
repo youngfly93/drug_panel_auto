@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
 from docx import Document
 from docx.oxml.ns import qn
 from lxml import etree
@@ -59,6 +60,55 @@ def test_font_profile_hash_changes_when_mapping_changes(monkeypatch) -> None:
     second = font_substitution_fingerprint(system_name="Linux", require_available=False)
 
     assert first["font_substitution_profile_sha256"] != second["font_substitution_profile_sha256"]
+
+
+def test_isolated_profile_can_include_implicit_blank_pages_without_changing_default(tmp_path):
+    for include in (False, True):
+        profile = tmp_path / str(include)
+        initialize_libreoffice_profile(
+            profile, require_available=False, include_automatic_blank_pages=include,
+        )
+        content = (profile / "user/registrymodifications.xcu").read_text()
+        assert ("IsSkipEmptyPages" in content) is include
+        if include:
+            assert '<value>false</value></prop></item>' in content
+
+
+@pytest.mark.parametrize("listener_available", [True, False])
+def test_strict_pdf_option_reaches_listener_and_isolated_fallback(
+    tmp_path, monkeypatch, listener_available,
+):
+    from reportgen.utils import docx_render, uno_pdf
+
+    calls = []
+    source = tmp_path / "source.docx"
+    Document().save(source)
+    monkeypatch.setattr(docx_render, "_libreoffice_profile_mode", lambda: "isolated")
+
+    def listener(_source, output, **kwargs):
+        calls.append(("listener", kwargs))
+        if listener_available:
+            output.write_bytes(b"%PDF-synthetic")
+        return listener_available
+
+    def profile(_directory, **kwargs):
+        calls.append(("profile", kwargs))
+
+    def convert(_command, **_kwargs):
+        (tmp_path / "input.pdf").write_bytes(b"%PDF-synthetic")
+
+    monkeypatch.setattr(uno_pdf, "convert_docx_to_pdf_via_listener", listener)
+    monkeypatch.setattr(docx_render, "initialize_libreoffice_profile", profile)
+    monkeypatch.setattr(docx_render, "_run_checked", convert)
+    result = docx_render._docx_to_pdf(
+        soffice="synthetic-soffice", tmp_docx=source, workdir=tmp_path,
+        profile_dir=tmp_path / "profile", timeout_seconds=10,
+        include_automatic_blank_pages=True,
+    )
+    assert result == tmp_path / "input.pdf"
+    assert all(kwargs["include_automatic_blank_pages"] is True for _, kwargs in calls)
+    expected_calls = ["listener"] if listener_available else ["listener", "profile"]
+    assert [name for name, _ in calls] == expected_calls
 
 
 def test_disposable_docx_render_copy_pins_explicit_and_theme_fonts(
