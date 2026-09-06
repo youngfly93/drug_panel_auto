@@ -47,6 +47,11 @@
 - 服务器 SSH 传输反复中断，压缩、限速及 IPQoS=none 尝试未完成归档上传；公网
   health 仍为 200。只读探测确认服务器可访问 GitHub codeload（HTTP 200），可在冻结
   并推送草稿分支后由服务器下载已提交源码；真实输入仍必须走私有传输/校验，禁止入 Git。
+- 后续已通过 Git HTTPS 在隔离目录 `frozen_c608430` 取得干净源码；从本项目既有
+  私有 QA 目录恢复 A/B/C 到 `verified_inputs`，三个完整 SHA 均与本地匹配。
+  首例 A13 未进入渲染：范围校验错误要求所有行含旗标键，但 ExcelReader 会省略空
+  单元格。已修为按表头验列、空值仍作非成员，稀疏/全空旗标回归共 18 passed。
+  原 FAIL 位于 `frozen_c608430/.work/validation_A13_initial`，不能改写为通过。
 - `scripts/validate_lung_small_panel_drafts.py` 提供逐例 Word/上下文/源表/588 TMB-MSI-PGx
   对照与完整渲染入口。新四产品 `draft_generation_eligible=false`，部署三处禁用范围
   均保留；只有真实工程门禁回执及源码/模板 SHA 匹配才可开放报告组草稿。

@@ -25,7 +25,16 @@ def scope_panel_excel(excel_data: Any, panel_package: Any) -> Any:
     counts = {}
     for table in ("Variations", "Hereditary_tumor"):
         rows = excel_data.get_table_data(table) or []
-        if rows and not all(column in row for row in rows):
+        # ExcelReader omits blank cells from individual row dictionaries. A
+        # blank membership cell is an ordinary non-member, not a missing
+        # worksheet column; the recorded header also covers all-blank flags.
+        declared_columns = (excel_data.metadata.get("table_columns") or {}).get(table)
+        columns = (
+            set(declared_columns)
+            if declared_columns is not None
+            else {key for row in rows for key in row}
+        )
+        if (rows or declared_columns is not None) and column not in columns:
             raise ValueError(
                 f"{table}: required product membership column is missing: {column}"
             )

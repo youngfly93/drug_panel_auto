@@ -183,6 +183,36 @@ def test_missing_flag_fails_closed_and_flag_name_is_configuration_driven(tmp_pat
     assert len(scope_panel_excel(excel, custom).get_table_data("Variations")) == 4
 
 
+@pytest.mark.parametrize("record_header", [False, True])
+def test_blank_membership_cells_are_nonmembers_not_missing_columns(tmp_path, record_header):
+    excel = source(tmp_path, 13)
+    excel.table_data["Variations"][4].pop("ExistInsmall13")
+    if record_header:
+        excel.metadata["table_columns"] = {
+            "Variations": list(excel.table_data["Variations"][0])
+        }
+    before = copy.deepcopy(excel.to_dict())
+    view = scope_panel_excel(excel, package("lung_13"))
+    assert len(view.get_table_data("Variations")) == 4
+    assert excel.to_dict() == before
+
+
+@pytest.mark.parametrize("empty_rows", [False, True])
+def test_recorded_header_allows_an_all_blank_membership_column(tmp_path, empty_rows):
+    excel = source(tmp_path, 13)
+    excel.metadata["table_columns"] = {
+        "Variations": list(excel.table_data["Variations"][0])
+    }
+    for row in excel.table_data["Variations"]:
+        row.pop("ExistInsmall13")
+    if empty_rows:
+        excel.table_data["Variations"] = []
+    assert scope_panel_excel(excel, package("lung_13")).get_table_data("Variations") == []
+    excel.metadata["table_columns"]["Variations"].remove("ExistInsmall13")
+    with pytest.raises(ValueError, match="membership column"):
+        scope_panel_excel(excel, package("lung_13"))
+
+
 def test_thirteen_gene_context_keeps_four_variants_and_three_targeted_rows(tmp_path):
     pkg = package("lung_13")
     excel = source(tmp_path, 13)

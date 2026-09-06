@@ -316,9 +316,7 @@ def run_case(args, panel, case):
         "generation_success": result.get("success"),
         "qa_status": qa.get("status"),
         "qa_issues": qa.get("issues"),
-        "page_count": ((qa.get("checks") or {}).get("visual_render") or {}).get(
-            "page_count"
-        ),
+        "page_count": (qa.get("metrics") or {}).get("visual_render_page_count"),
         "expected_variants": expected,
         "word_variant_genes": word_variant_genes,
         "word_targeted_genes": word_targeted_genes,
