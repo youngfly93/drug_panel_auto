@@ -1,12 +1,12 @@
 {
-  "aggregate_sha256": "a59cac0cd18ea9afffe4b6d0253cdf93286739c5905e73dbfcb68fd7d89d4708",
+  "aggregate_sha256": "220164234ad0426ffc80f73c9946451979efd14059b75dc15170dc6483161555",
   "metrics": {
     "drawing_count": 50,
     "inline_shape_count": 5,
-    "jinja_control_count": 146,
+    "jinja_control_count": 149,
     "jinja_variable_count": 260,
     "media_part_count": 14,
-    "paragraph_count": 343,
+    "paragraph_count": 344,
     "section_count": 4,
     "table_count": 46
   },
@@ -18,7 +18,7 @@
     "word/_rels/header5.xml.rels": "df8668324d201580ca4598085e14b49faaec50d3add53eb6552bbf655fcb5dd1",
     "word/_rels/header7.xml.rels": "a134ffb58bad658becad1362f28a7fcb92904a928e5a686fbae9bed93092e9d8",
     "word/_rels/header8.xml.rels": "a134ffb58bad658becad1362f28a7fcb92904a928e5a686fbae9bed93092e9d8",
-    "word/document.xml": "135effeac2d351e7140455f3a5c7cce8a4bf44692dc2c74c3759145a8eaafe4b",
+    "word/document.xml": "15c190564172e3f20576247896afd68e9ce203d39a5ad2e6f700db1053676970",
     "word/fontTable.xml": "d4a4f5b545bd5654450855915bc6716e931bd27927025a798c8d966c040cdfce",
     "word/footer1.xml": "cd07d444d541bbd3982528a2e4d5cab93c323f6143f257de43f91e68d231402c",
     "word/footer2.xml": "adb8b2205f601bfbdf0ce5251d372003522520e4bbb00e331431c0a254075d06",
@@ -53,7 +53,7 @@
     "word/theme/theme1.xml": "f615a0c233cf1911d85786fc8e496d4c1d57475c2130cf1324c7b8c9806207a9"
   },
   "paragraph_styles": {
-    "1": 322,
+    "1": 323,
     "12": 4,
     "26": 1,
     "27": 13,

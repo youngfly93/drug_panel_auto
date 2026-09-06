@@ -19,6 +19,7 @@ from reportgen.core.qa_gate import (
 )
 from reportgen.core.qa_report import (
     _build_business_checks,
+    _build_style_checks,
     _inspect_toc,
     _is_empty_numbered_paragraph,
     _read_part3_text,
@@ -28,15 +29,109 @@ from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.docx_sections import find_reference_section_bounds
 from reportgen.panels.loader import load_panel_package
 from scripts.build_lung_draft_packages import (
+    EMPTY_APPROVED_DRUG_NOTICE,
     ensure_table_separator,
     install_refreshable_toc,
     install_shared_modules,
     normalize_b_family_faq_flow,
     normalize_draft_case_fields,
+    normalize_draft_variant_flow,
+    normalize_optional_drug_block,
 )
 from scripts.validate_lung_small_panel_drafts import canonical_parity_value, inspect_word_scope
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+def synthetic_variant_table(document):
+    table = document.add_table(rows=3, cols=9)
+    table.cell(0, 0).text = "基因突变信息"
+    table.cell(1, 1).text = "转录本号"
+    for cell in table.rows[2].cells:
+        cell.text = "合成字段"
+    return table
+
+
+def test_small_draft_qa_rejects_empty_drug_header_and_unprotected_variant_rows():
+    document = Document()
+    synthetic_variant_table(document)
+    empty = document.add_table(rows=1, cols=2)
+    empty.cell(0, 0).text = "药物名称"
+    empty.cell(0, 1).text = "相关基因"
+    check = _build_style_checks(document, "lung_13", {})["docx_style_rules"]
+    assert check["status"] == "FAIL"
+    codes = {item["code"] for item in check["failures"]}
+    assert {
+        "HEADER_ONLY_DRUG_TABLE", "VARIANT_ROW_CAN_SPLIT", "VARIANT_HEADER_NOT_REPEATED",
+    } <= codes
+
+
+@pytest.mark.parametrize("panel", ["lung_13", "lung_62", "lung_62_pdl1", "lung_588"])
+def test_installed_draft_variants_have_explicit_zero_indent_and_pagination_guards(panel):
+    package = load_panel_package(panel)
+    document = Document(package.resolve_template_file())
+    result = _build_style_checks(document, panel, {})["docx_style_rules"]
+    assert result["status"] == "PASS", result
+
+
+@pytest.mark.parametrize("has_drug", [False, True])
+def test_optional_drug_empty_state_is_explicit_without_removing_real_rows(tmp_path, has_drug):
+    document = Document()
+    document.add_paragraph("前述结果")
+    document.add_page_break()
+    title = document.add_paragraph("3.2 其它潜在获益上市药物提示*")
+    title.paragraph_format.page_break_before = True
+    document.add_paragraph("历史固定栏目说明")
+    table = document.add_table(rows=4, cols=2)
+    table.cell(0, 0).text = "药物名称"
+    table.cell(0, 1).text = "相关基因"
+    table.cell(1, 0).text = "{%tr for row in chemotherapy %}"
+    table.cell(2, 0).text = "{{ row.drug }}"
+    table.cell(2, 1).text = "{{ row.gene }}"
+    table.cell(3, 0).text = "{%tr endfor %}"
+    document.add_page_break()
+    next_title = document.add_paragraph("4. 检测结果说明")
+    next_title.paragraph_format.page_break_before = True
+    document.add_paragraph("固定说明完整保留")
+    normalize_optional_drug_block(document, table)
+    path = tmp_path / "optional-drugs.docx"
+    document.save(path)
+    template = DocxTemplate(path)
+    rows = [{"drug": "合成药物", "gene": "合成基因"}] if has_drug else []
+    template.render({"chemotherapy": rows})
+    template.save(path)
+    actual = Document(path)
+    visible = "".join(p.text for p in actual.paragraphs)
+    assert (EMPTY_APPROVED_DRUG_NOTICE in visible) is (not has_drug)
+    assert "固定说明完整保留" in visible and "历史固定栏目说明" in visible
+    assert not actual.element.body.findall(".//" + qn("w:br"))
+    assert all(not p.paragraph_format.page_break_before for p in actual.paragraphs)
+    if has_drug:
+        assert [[c.text for c in row.cells] for row in actual.tables[0].rows] == [
+            ["药物名称", "相关基因"], ["合成药物", "合成基因"],
+        ]
+    else:
+        assert not actual.tables
+
+
+def test_variant_flow_preserves_cells_widths_and_runs_while_overriding_indent():
+    document = Document()
+    table = synthetic_variant_table(document)
+    before = [[cell.text for cell in row.cells] for row in table.rows]
+    widths = [cell.width for cell in table.rows[2].cells]
+    normalize_draft_variant_flow(table)
+    assert before == [[cell.text for cell in row.cells] for row in table.rows]
+    assert widths == [cell.width for cell in table.rows[2].cells]
+    assert _build_style_checks(document, "lung_13", {})["docx_style_rules"]["status"] == "PASS"
+    assert _build_style_checks(document, "lung_588_pdl1", {}) == {}
+    table.rows[2]._tr.trPr.find(qn("w:cantSplit")).set(qn("w:val"), "false")
+    check = _build_style_checks(document, "lung_13", {})["docx_style_rules"]
+    assert check["status"] == "FAIL"
+    assert any(item["code"] == "VARIANT_ROW_CAN_SPLIT" for item in check["failures"])
+    normalize_draft_variant_flow(table)
+    table.cell(2, 1).paragraphs[0]._p.pPr.ind.set(qn("w:firstLine"), "420")
+    check = _build_style_checks(document, "lung_13", {})["docx_style_rules"]
+    assert "VARIANT_CELL_INHERITED_INDENT" in check["failure_codes"]
 
 
 @pytest.mark.parametrize("panel", ["lung_13", "lung_62", "lung_62_pdl1", "lung_588"])

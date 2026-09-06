@@ -66,6 +66,10 @@ CHEMO_NOTICE = (
     "本节按现有肺癌588历史展示合同映射 CtDrug；UGT1A1 与长春类解释列入"
     "报告组待决清单，不构成自动用药或剂量建议。"
 )
+EMPTY_APPROVED_DRUG_NOTICE = (
+    "本栏目暂无可列示的结构化药物条目，待报告组复核；"
+    "不代表无可用治疗方案。"
+)
 LABEL_FIELDS = {
     "姓名": "patient_name",
     "性别": "gender",
@@ -604,6 +608,73 @@ def normalize_draft_case_fields(doc, basic_table):
             cursor = previous
 
 
+def normalize_draft_variant_flow(table):
+    """Keep one event per row and cancel inherited body-text indentation."""
+    for index, row in enumerate(table.rows):
+        props = row._tr.get_or_add_trPr()
+        for tag in ("w:cantSplit", "w:tblHeader") if index < 2 else ("w:cantSplit",):
+            flag = props.find(qn(tag))
+            if flag is None:
+                flag = OxmlElement(tag)
+                props.append(flag)
+            flag.set(qn("w:val"), "true")
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                paragraph.paragraph_format.first_line_indent = Pt(0)
+                indent = paragraph._p.get_or_add_pPr().get_or_add_ind()
+                indent.set(qn("w:firstLineChars"), "0")
+                indent.attrib.pop(qn("w:hangingChars"), None)
+                paragraph.paragraph_format.keep_together = True
+                paragraph.paragraph_format.keep_with_next = index < 2
+
+
+def normalize_optional_drug_block(doc, table):
+    """Preserve the source caption, expose empty results, and remove spacers."""
+    cursor = table._tbl.getprevious()
+    block = []
+    while cursor is not None and cursor.tag == qn("w:p"):
+        block.append(cursor)
+        if "潜在获益上市药物提示" in text(cursor):
+            break
+        cursor = cursor.getprevious()
+    else:
+        raise ValueError("Optional drug table has no source section heading")
+    title = block[-1]
+    for node in block:
+        paragraph = Paragraph(node, None)
+        paragraph.paragraph_format.page_break_before = False
+        paragraph.paragraph_format.keep_with_next = True
+    cursor = title.getprevious()
+    while cursor is not None and cursor.tag == qn("w:p") and not text(cursor).strip():
+        if any(list(cursor.iter(qn(tag))) for tag in ("w:sectPr", "w:drawing", "w:pict")):
+            break
+        previous = cursor.getprevious()
+        cursor.getparent().remove(cursor)
+        cursor = previous
+    paragraph_after(table._tbl.getprevious(), "{%p if chemotherapy %}")
+    anchor = paragraph_after(table._tbl, "{%p else %}")
+    anchor = paragraph_after(anchor, EMPTY_APPROVED_DRUG_NOTICE)
+    anchor = paragraph_after(anchor, "{%p endif %}")
+    cursor = anchor.getnext()
+    while cursor is not None:
+        following = cursor.getnext()
+        if cursor.tag in {qn("w:bookmarkStart"), qn("w:bookmarkEnd")}:
+            cursor = following
+            continue
+        if cursor.tag != qn("w:p") or any(
+            list(cursor.iter(qn(tag))) for tag in ("w:sectPr", "w:drawing", "w:pict")
+        ):
+            break
+        if text(cursor).strip():
+            # A short result-explanation block can share the same page. Keep
+            # the source page boundary before a new major report part.
+            if re.fullmatch(r"\d+[.．、]?检测结果说明", compact(text(cursor))):
+                Paragraph(cursor, None).paragraph_format.page_break_before = False
+            break
+        cursor.getparent().remove(cursor)
+        cursor = following
+
+
 def normalize_b_family_faq_flow(doc):
     """Keep bounded question/answer blocks together and let the appendix flow."""
     for table in doc.tables:
@@ -881,6 +952,9 @@ def build_template(panel, spec, source, work, output):
     paragraph_after(front._p, NOTICE)
     sanitize_final(doc, replacements, panel)
     normalize_draft_case_fields(doc, tables["basic"])
+    normalize_draft_variant_flow(tables["variants"])
+    if "other_drugs" in tables:
+        normalize_optional_drug_block(doc, tables["other_drugs"])
     if panel == "lung_588":
         normalize_b_family_faq_flow(doc)
     fixed = {}

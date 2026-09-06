@@ -20,6 +20,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 from zipfile import ZipFile
 
 from docx import Document
+from docx.oxml.ns import qn
 
 from reportgen.core.pipeline.summary import summarize_stage_results
 from reportgen.core.processors import critical_docx_processor_names
@@ -1461,6 +1462,8 @@ def _build_style_checks(
     project_type: Optional[str],
     context: Mapping[str, Any],
 ) -> Dict[str, Any]:
+    if project_type in {"lung_13", "lung_62", "lung_62_pdl1", "lung_588"}:
+        return _build_lung_draft_style_checks(doc)
     if not _is_crc(project_type):
         return {}
 
@@ -1555,6 +1558,68 @@ def _build_style_checks(
             "table_counts": table_counts,
             "failures": failures[:30],
             "failure_count": len(failures),
+        }
+    }
+
+
+def _build_lung_draft_style_checks(doc: Any) -> Dict[str, Any]:
+    """Detect sparse-table and inherited-indent defects in new draft families."""
+    failures: List[Dict[str, Any]] = []
+    checked = 0
+    for table_index, table in enumerate(doc.tables):
+        if not table.rows:
+            continue
+        header = [_compact(cell.text) for cell in table.rows[0].cells]
+        if header == ["药物名称", "相关基因"] and len(table.rows) == 1:
+            failures.append({"code": "HEADER_ONLY_DRUG_TABLE", "table": table_index})
+        if len(table.rows) < 2 or "基因突变信息" not in "".join(header):
+            continue
+        if "转录本" not in "".join(cell.text for cell in table.rows[1].cells):
+            continue
+        checked += 1
+        for row_index, row in enumerate(table.rows):
+            def enabled(tag: str) -> bool:
+                node = row._tr.find("./" + qn("w:trPr") + "/" + qn(tag))
+                return node is not None and node.get(qn("w:val"), "true") not in {
+                    "0", "false", "off",
+                }
+
+            if row_index < 2 and not enabled("w:tblHeader"):
+                failures.append({
+                    "code": "VARIANT_HEADER_NOT_REPEATED",
+                    "table": table_index, "row": row_index,
+                })
+            if not enabled("w:cantSplit"):
+                failures.append({
+                    "code": "VARIANT_ROW_CAN_SPLIT", "table": table_index, "row": row_index,
+                })
+            if row_index < 2:
+                continue
+            for column_index, cell in enumerate(row.cells):
+                for paragraph in cell.paragraphs:
+                    indent = paragraph._p.find("./" + qn("w:pPr") + "/" + qn("w:ind"))
+                    if (
+                        indent is None or indent.get(qn("w:firstLine")) != "0"
+                        or indent.get(qn("w:firstLineChars"), "0") != "0"
+                    ):
+                        failures.append({
+                            "code": "VARIANT_CELL_INHERITED_INDENT", "table": table_index,
+                            "row": row_index, "column": column_index,
+                        })
+                        break
+    if not checked:
+        failures.append({"code": "MISSING_LUNG_DRAFT_VARIANT_TABLE"})
+    return {
+        "docx_style_rules": {
+            "status": "FAIL" if failures else "PASS",
+            "message": (
+                "Lung draft table pagination/empty-state rules failed."
+                if failures else "Lung draft table flow rules passed."
+            ),
+            "checked_table_count": checked,
+            "failure_count": len(failures),
+            "failure_codes": sorted({item["code"] for item in failures}),
+            "failures": failures[:30],
         }
     }
 
