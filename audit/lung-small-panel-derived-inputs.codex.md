@@ -2,7 +2,7 @@
 module: lung-small-panel-derived-inputs
 agent: codex
 identity_kind: git_commit
-identity_value: fa17b1ab2413cb1c65a5c5268176f49961051163
+identity_value: fb72cc33490d21b4f0ef3a0ba8184534f9bb4580
 audit_date: 2026-09-06
 ---
 
@@ -20,7 +20,7 @@ C13 的旧候选实稿已独立核对四条变异、三条靶向；完整排版�
 
 - 需求权威：用户 2026-09-06 本轮规格；沿用模板族总规格，增加“真实肺癌超集派生
   输入可用于 draft 工程验证”的明确授权，不把派生输入登记为历史同案真实小 Panel 输入。
-- 本轮修复源码冻结：`fa17b1ab2413cb1c65a5c5268176f49961051163`，分支为
+- 本轮修复源码冻结：`fb72cc33490d21b4f0ef3a0ba8184534f9bb4580`，分支为
   `codex/lung-small-panel-derived-drafts-20260906`。正文分别标注开发测试和冻结后验证，
   不将开发回执误报为已完成的冻结全量回放；
   用户原有 13 份未跟踪审计及专用 stash 保留，不属于本次源码 subject。
@@ -54,10 +54,10 @@ C13 的旧候选实稿已独立核对四条变异、三条靶向；完整排版�
 
 | draft 模板 | SHA256 |
 |---|---|
-| lung_13_historical_draft_v1 | `774a81c1d3221e5f4116389dbf703ec1919004d38705c2828fa4453e534b90d4` |
-| lung_62_historical_draft_v1 | `891146fb0799d138c054518ac16c7c90f2e077c71e2849d54875467b9c6adffd` |
-| lung_62_pdl1_historical_draft_v1 | `a05b1ae51db36b33ccda853a4703fcc1610acb40f8e6f6400d11582f21ed2907` |
-| lung_588_historical_draft_v1 | `add46f103919b3a83d31b60eecf9f282bc60d55efb4be81821ebf979213a4c55` |
+| lung_13_historical_draft_v1 | `e7035ae50c37f61c0e4cf68e98e982fbf90e7f88b9768ae7027d24ee66dd8c66` |
+| lung_62_historical_draft_v1 | `5d3b155fec08701f101669d578955a95954a16a8b01dd7b1ff34cce46cc6dbee` |
+| lung_62_pdl1_historical_draft_v1 | `475fcf9697d2bcdad66239b1a0e7553c4feb5b965d6144dd9717306090778b9e` |
+| lung_588_historical_draft_v1 | `fb58d475339cbb108fd86daffba854a10e850d947963c7ef706feab0641b99a2` |
 
 ## 3. 派生规则与源表复算
 
@@ -109,6 +109,9 @@ python scripts/derive_panel_input.py INPUT.xlsx --panel lung_13 \
 |---|---|---|---|---|
 | lung-small-panel-derived-inputs-01 | P1 | 原“三行”验收漏计产品内 PIK3CA；用户已修正为四行，业务未删该行 | 原始 Variations 第 39 行；`backend/tests/test_lung_small_panel_contract.py:test_thirteen_gene_context_keeps_four_variants_and_three_targeted_rows` | CONFIRMED |
 | lung-small-panel-derived-inputs-02 | P1 | NGS 共同旗标不能确定 IHC 订单；用户已授权同族下拉/订单消歧 | `reportgen/core/project_detector.py:_resolve_structural_family`；`frontend/tests/projectIdentity.test.mjs` | CONFIRMED |
+| lung-small-panel-derived-inputs-03 | P1 | 8c8aeb5 的 62+PD-L1 合成稿遗留母版“2 个变异/0 个靶向”段落，与实际 1/1 矛盾 | CI 34015224627 原 Word/第 6 页；5.4 动态统计及重复统计校验修复 | CONFIRMED |
+| lung-small-panel-derived-inputs-04 | P1 | 同版 62+PD-L1/588 空目录未正确刷新，旧正文数字误参与目录检查 | 同 CI 第 5/7 页与 QA；5.4 原生终态刷新/必需域检查修复 | CONFIRMED |
+| lung-small-panel-derived-inputs-05 | P2 | 原生排版后基本信息字段继承表头白字，浅底不可读 | 13/62+PD-L1 第 6 页、模板与输出颜色节点比对；5.4 显式黑字 | CONFIRMED |
 
 C 输入的有效分级事件位于第 2、15、32、39 行，分别为 BRAF V600E、ERBB2 G660D、
 TP53 G245D、PIK3CA A1066V。其余成员旗标行包括未分级或知识注释行，因此“旗标
@@ -239,6 +242,38 @@ c608430 全量 CI 实际为 **2 failed / 943 passed / 2 skipped**（1189.71 秒�
 部分传输件在完整 SHA 匹配前不导入。B/C IHC 记录及图片传输结束，但服务器端
 图片 SHA 尚未重新核验，不能据此宣称 PD-L1 端到端完成。未改服务器网络/生产服务。
 
+### 5.4 数字摘要与真实版式的第二轮反馈（8c8aeb5 → fb72cc3）
+
+Actions 34015224627 的 13/62 合成 Word 原始 QA 均 PASS、整本 31/28 页，重复
+生成比对 PASS；外层 current-output gate 失败是配置转换遗漏 `section_aliases`。
+保留原 Word 重新读取，补传配置后两份 current-output 检查均 PASS；原 CI 的 FAIL
+不改写。62+PD-L1 为 29 页、588 为 49 页，原始 QA 均 FAIL。
+
+- 人工查看 62+PD-L1 第 4–8 页确认：第 5 页只有目录标题、第 7 页只有水印；
+  第 6 页还残留历史“2/0”病例统计。旧目录检查把正文编号误算为目录页码，
+  因而不能仅凭其 PASS 宣称目录正确。13 第 2/6/7/28 页也作了抽样查看，不等于
+  真实病例整本人工审核；基本信息白字问题在 Word XML 中复现。
+- 本轮将四族目录明确配置为 native，62+PD-L1/588 改用与可工作的 A 族一致的
+  普通复杂 TOC 域表示（非数字“待刷新”缓存）；最终版式结束后再用原生引擎刷新。
+  不再套用 CRC 四章节重建；缺失可刷新字段直接 FAIL，正文数字不能补足目录。
+  该互操作修复仍须下一次 Linux 全页结果确认，不能凭源 XML 单测宣称完成。
+- 所有病例摘要改为 total_variants_count / drug_related_count 动态字段，移除旧
+  “未筛选到药物”病例结论。新增最终 Word 每一处数字摘要一致性检查，即使文档中
+  已存在一处正确数字，也不能掩盖另一处旧数字。指南标题前冗余分页已定点清理；
+  基本信息变量明确黑字，不改变检出/药物结果，也不修改 #14/#15 医学待决口径。
+- 开发回归 **191 passed / 18.34 秒**；现有 CRC/目录/QA 保护 **33 passed / 7.57 秒**。
+  前一次将 pytest 临时根放在 `.work/` 内，导致“拒绝非私有路径”的测试前提不成立
+  （190 passed / 1 failed）；未改测试或放宽路径校验，换回无 `.work` 名称的任务
+  临时根后全量通过。初始失败回执保留。
+- 最新四源模板硬标识/跨母版 token 扫描全过，字面病例数字摘要零残留；样式基线
+  仅更新上述四份有意变更。真实输入及派生 SHA 不改。
+- 较早 bdd7eaa 全量 CI 34014128765 已 PASS；4387fe8 的默认 qa-gate 也 PASS，
+  但其四个新包 gate FAIL。两者都不能作为 fb72cc3 的完整通过凭据。
+
+14:00 前后的 SSH 短连接也超时，分片传输在建远端目录前终止，未组装/导入新源码。
+公网 health 返回 `status=ok` 只证明现网存活，不证明版本一致。真实九例、Web UAT、
+双病例泄漏与生产部署继续未完成；仍未收到医学 WARN 验收定义的答复，未放行。
+
 ## 6. 私有回执入口
 
 目录：`.work/lung-small-panel-derived-inputs/`。
@@ -258,12 +293,16 @@ c608430 全量 CI 实际为 **2 failed / 943 passed / 2 skipped**（1189.71 秒�
   CNV 提示及短附录分页。旧 `build_pgx_complete` 是中间候选，不作最终通过凭据。
 - `layout_contract_units.xml`、`layout_word_scope_units.xml`：113 / 31 项开发验证回执。
 - `build_reference_boundaries/lung_62_pdl1/build_receipt.json` 与
-  `build_reference_boundaries_b_final/lung_588/build_receipt.json`：当前两个原生目录模板；
+  `build_reference_boundaries_b_final/lung_588/build_receipt.json`：fa17b1a 两个目录候选模板；
   中间建包失败回执不覆盖、不算通过。
 - `reference_toc_full_lightweight.xml`、`reference_toc_pgx_units.xml`、
   `reference_legacy_guard.xml`：176 / 51 / 5 项回归；`cross_scan_reference_toc.json`
   仅记录 token 数、模板 SHA 与命中数，不记录病例身份。
 - `ci_4387fe8/`：四包失败的公开合成 Word、PNG 与 QA，不能替代真实 A/B/C 门禁。
+- `ci_8c8aeb5/`、`profile_alias_recheck/`：第二轮公开合成 Word/QA 及原 Word 重检查。
+- `build_native_flat_case_fields/<panel>/build_receipt.json`：上表当前模板；
+  `native_flat_full_lightweight_retest.xml`、`native_flat_crc_toc_guard.xml`、
+  `cross_scan_native_flat.json` 为 191 / 33 项测试和最新模板扫描。
 - `development_units_final.xml`、`release_scope_units.xml`：本次开发回归，不替代冻结服务器门禁。
 - 服务器隔离目录为本轮 `reportgen-lung-small-drafts-20260906.HySk3P`，不是生产目录。
   `frozen_c608430` 为干净 Git 工作树；`verified_inputs` 内 A/B/C 三份完整 SHA 已匹配。
