@@ -1,5 +1,6 @@
 """Real-XLSX regressions for CNV parsing and molecule/genotype fidelity."""
 
+import copy
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,22 @@ def _xlsx(tmp_path, *, cnv=None, ctdrug=None, ct1000=None):
 def lung_config(request):
     package = load_panel_package(request.param, project_root=ROOT)
     return load_panel_config(base_path=str(ROOT), panel_package=package)
+
+
+@pytest.fixture
+def strict_candidate_config(lung_config):
+    """Unpromoted #14/#15 candidate strategy; not the default report contract."""
+    candidate = copy.deepcopy(lung_config)
+    safety = candidate.chemotherapy_rule["irinotecan_safety"]
+    safety["interpretation_policy"] = "genotype_only_pending_review"
+    safety["review_dose_evaluation"] = "待医学复核；不自动给出正常或减量用药建议"
+    for item in candidate.chemotherapy_rule["base_drugs"]:
+        if item["key"] == "vinorelbine":
+            item.update(
+                aliases=["长春瑞滨", "vinorelbine"], source_match="exact_molecule",
+                require_explicit_summary=True, missing_evidence_display="未提供同药物证据",
+            )
+    return candidate
 
 
 @pytest.mark.parametrize("prefix_rows", [0, 2, 5])
@@ -134,8 +151,9 @@ def test_summary_only_numeric_cnvkit_is_not_an_amplification_call(tmp_path, lung
 @pytest.mark.parametrize("star28", ["6TA/6TA", "6TA/7TA", "7TA/7TA"])
 @pytest.mark.parametrize("star6", ["GG", "AG", "AA"])
 def test_ugt1a1_both_loci_are_displayed_without_automatic_dose(
-    tmp_path, lung_config, star28, star6
+    tmp_path, strict_candidate_config, star28, star6
 ):
+    lung_config = strict_candidate_config
     source = _xlsx(
         tmp_path,
         ctdrug=[
@@ -158,8 +176,9 @@ def test_ugt1a1_both_loci_are_displayed_without_automatic_dose(
     "calls, expected", [([], "未提供"), (["GG", "AA"], "冲突"), (["Uncovered"], "未覆盖")]
 )
 def test_ugt1a1_missing_conflicting_and_uncovered_calls_are_not_conflated(
-    tmp_path, lung_config, calls, expected
+    tmp_path, strict_candidate_config, calls, expected
 ):
+    lung_config = strict_candidate_config
     source = _xlsx(
         tmp_path,
         ctdrug=[
@@ -179,8 +198,9 @@ def test_ugt1a1_missing_conflicting_and_uncovered_calls_are_not_conflated(
     "molecule", ["长春新碱（vincristine）", "长春碱（vinblastine）", "长春瑞滨+顺铂"]
 )
 def test_wrong_or_combined_molecule_cannot_supply_vinorelbine_prediction(
-    tmp_path, lung_config, molecule
+    tmp_path, strict_candidate_config, molecule
 ):
+    lung_config = strict_candidate_config
     source = _xlsx(
         tmp_path,
         ct1000=[
@@ -208,7 +228,8 @@ def test_wrong_or_combined_molecule_cannot_supply_vinorelbine_prediction(
 @pytest.mark.parametrize(
     "molecule", ["长春瑞滨（vinorelbine）", "vinorelbine", "VINORELBINE（长春瑞滨）"]
 )
-def test_exact_vinorelbine_summary_is_accepted(tmp_path, lung_config, molecule):
+def test_exact_vinorelbine_summary_is_accepted(tmp_path, strict_candidate_config, molecule):
+    lung_config = strict_candidate_config
     source = _xlsx(
         tmp_path,
         ct1000=[
@@ -226,7 +247,10 @@ def test_exact_vinorelbine_summary_is_accepted(tmp_path, lung_config, molecule):
     assert row["genes"] == "SYNTHETIC_GENE"
 
 
-def test_mixed_molecules_in_one_ct1000_block_are_not_a_vinorelbine_source(tmp_path, lung_config):
+def test_mixed_molecules_in_one_ct1000_block_are_not_a_vinorelbine_source(
+    tmp_path, strict_candidate_config
+):
+    lung_config = strict_candidate_config
     source = _xlsx(
         tmp_path,
         ct1000=[
@@ -244,7 +268,10 @@ def test_mixed_molecules_in_one_ct1000_block_are_not_a_vinorelbine_source(tmp_pa
     assert row["efficacy"] == "未提供同药物证据"
 
 
-def test_conflicting_exact_drug_summaries_are_not_resolved_by_row_order(tmp_path, lung_config):
+def test_conflicting_exact_drug_summaries_are_not_resolved_by_row_order(
+    tmp_path, strict_candidate_config
+):
+    lung_config = strict_candidate_config
     source = _xlsx(
         tmp_path,
         ct1000=[

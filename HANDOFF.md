@@ -1,7 +1,7 @@
 # HANDOFF —— 基因组 Panel 自动化报告系统（Web 平台）
 
 > 当前状态快照。更新就改这个文件，别新建 `_v2`。
-> 最近更新：**2026-09-06**（用户已授权提交和部署，冻结发布验证中）。
+> 最近更新：**2026-09-06**（小 Panel 派生输入已验证；两项产品/验收口径待确认，发布已暂停）。
 
 ---
 
@@ -13,7 +13,35 @@
 `current_release`、`REVISION`、进程 cwd 和健康检查四项实时证据为准，不能由本文档
 静态推断。
 
-## 0.10 2026-09-06 提交与部署授权（最新继续点）
+## 0.11 2026-09-06 小 Panel 派生输入（最新继续点）
+
+- 用户新规格：先保留 #13 CNV 修复；#14/#15 不再改动历史展示，交报告组待决。
+  PR #50 已将包含三项变更的 `295ebd26ad03d1f213c0fbfc7e6b1b982cb2ae50`
+  合入 main；收到新规格后，精确终止本任务部署进程，未执行服务切换。生产最后核验
+  仍为 `da8e62de672ecaa5416d3c2b29e3e9294531f519`，内网 health HTTP 200。
+- 工作分支 `codex/lung-small-panel-derived-drafts-20260906` 已前向恢复 #14/#15
+  历史默认规则；严格候选策略只在显式测试配置启用。待决清单：
+  `docs/analysis-decisions/lung-chemotherapy-pending-review.md`。CNV 修复和原断言保留。
+- `scripts/derive_panel_input.py` 只修改 Variations / Hereditary_tumor 的产品旗标；
+  输出强制 `.work/` 且拒绝覆盖，其他 ZIP 成员逐字节保留。6 份真实派生输入
+  （A/B/C × 13/62）已独立逐单元格验证，其余 10 张表不变；108 项专项回归通过。
+- **停止点一**：C 输入 SHA `7b39431044c4a9298f7663c97a47c4df83b5b1e0875d88a64b3e24c05bfa498a`
+  的 Variations 第 39 行为 PIK3CA c.3197C>T / p.A1066V，ExistIn552=Ⅱ类。
+  按指定 13 基因集合，纯成员旗标在 Variations 命中 40 行；与有效 HGVS/分级相交后
+  为 BRAF、ERBB2、TP53、PIK3CA 四个事件，不满足用户指定的三行。已询问是否另有
+  正式产品排除规则或不同版本 C 输入；不得做病例专属过滤。
+- **停止点二**：62 与 62+PD-L1 若同用 ExistInsmall62 且基因集相同，就没有不同的
+  结构指纹。已询问是否用可配置 ExistInsmall62pdl1 标识派生 PD-L1 产品。未收到答复
+  前不改自动识别、不手动 project_type 替代验收、不推断任何 PD-L1 结果。
+- 三份台账母版 SHA 与同一 62 基因清单已冻结，但**三个 draft 包尚未变量化或接入**。
+  Word / 硬编码 / 双病例泄漏 / 整本渲染 / Web 批量门禁均 NOT_RUN，不得写成 PASS。
+  工程稿不得使用 CRC 输入；同案逐字历史对照按用户授权延期；生产禁用名单不变。
+- 新证据目录 `.work/lung-small-panel-derived-inputs/`，审计真源
+  `audit/lung-small-panel-derived-inputs.codex.md`。旧发布三次尝试、完整 295ebd2 CI、
+  Linux QA 和历史门禁回执保留在 `.work/lung-report-accuracy-release/`，不可当作新候选
+  通过证据。旧部署仅留下备份和未激活的 partial upload，不恢复该部署进程。
+
+## 0.10 2026-09-06 提交与部署授权（旧候选，已被 0.11 暂停）
 
 - 用户明确授权“提交、部署吧”，替代下文 R10–R12 的待提交授权状态。
 - 提交范围仅限本轮 18 个业务/测试/文档文件；其他未跟踪审计原稿和用户专用 stash

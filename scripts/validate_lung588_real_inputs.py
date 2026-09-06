@@ -75,29 +75,13 @@ HISTORICAL_IRINOTECAN_SAFETY = {
         "dose_evaluation": "减少剂量使用",
     },
 }
-# 2026-09-05 source-fidelity corrections supersede these specific historical
-# outputs, not the historical source itself (retained above for comparison).
-# The source Ct1000 block is vincristine, not vinorelbine. UGT1A1 dose wording
-# is not a validated genotype-only rule; both source loci must remain visible.
-CURRENT_CHEMOTHERAPY_GENES = {**HISTORICAL_CHEMOTHERAPY_GENES, "长春瑞滨": "/"}
-CURRENT_CHEMOTHERAPY_RATINGS = {
-    alias: {**ratings, "长春瑞滨": ("未提供同药物证据", "未提供同药物证据")}
-    for alias, ratings in HISTORICAL_CHEMOTHERAPY_RATINGS.items()
-}
-CURRENT_CHEMOTHERAPY_SUMMARIES = {
-    **HISTORICAL_CHEMOTHERAPY_SUMMARIES,
-    "CASE-LUNG-C": (
-        "经分析，可考虑优先选择的化疗方案有吉西他滨单药方案、"
-        "白蛋白结合型紫杉醇单药方案、紫杉醇单药方案。"
-    ),
-}
-CURRENT_IRINOTECAN_SAFETY = {
-    alias: {
-        "result": f"UGT1A1 *28（rs8175347）：{star28}\nUGT1A1 *6（rs4148323）：GG",
-        "dose_evaluation": "待医学复核；不自动给出正常或减量用药建议",
-    }
-    for alias, star28 in (("CASE-LUNG-B", "6TA/6TA"), ("CASE-LUNG-C", "6TA/7TA"))
-}
+# 2026-09-06 explicit user decision: #14/#15 retain the historical display
+# until the report group resolves the medical questions. This verifies display
+# compatibility, not clinical validity; previous 2026-09-05 receipts remain intact.
+CURRENT_CHEMOTHERAPY_GENES = copy.deepcopy(HISTORICAL_CHEMOTHERAPY_GENES)
+CURRENT_CHEMOTHERAPY_RATINGS = copy.deepcopy(HISTORICAL_CHEMOTHERAPY_RATINGS)
+CURRENT_CHEMOTHERAPY_SUMMARIES = copy.deepcopy(HISTORICAL_CHEMOTHERAPY_SUMMARIES)
+CURRENT_IRINOTECAN_SAFETY = copy.deepcopy(HISTORICAL_IRINOTECAN_SAFETY)
 KNOWN_INPUTS = {
     "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646": {
         "alias": "CASE-LUNG-A",

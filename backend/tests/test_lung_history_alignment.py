@@ -469,13 +469,11 @@ def test_ct1000_explicit_summary_is_preferred_and_reproduces_history(tmp_path):
 @pytest.mark.parametrize(
     ("star28", "expected_result", "expected_dose"),
     [
-        ("6TA/6TA", "UGT1A1 *28（rs8175347）：6TA/6TA\nUGT1A1 *6（rs4148323）：GG",
-         "待医学复核；不自动给出正常或减量用药建议"),
-        ("6TA/7TA", "UGT1A1 *28（rs8175347）：6TA/7TA\nUGT1A1 *6（rs4148323）：GG",
-         "待医学复核；不自动给出正常或减量用药建议"),
+        ("6TA/6TA", "UGT1A1基因型为6TA/6TA", "正常剂量使用"),
+        ("6TA/7TA", "UGT1A1基因型为6TA/7TA", "减少剂量使用"),
     ],
 )
-def test_irinotecan_safety_preserves_exact_loci_without_historical_dose_claim(
+def test_irinotecan_safety_preserves_historical_display_pending_report_group_decision(
     tmp_path,
     star28,
     expected_result,
