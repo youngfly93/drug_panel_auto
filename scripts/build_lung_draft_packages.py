@@ -127,6 +127,20 @@ def paragraph_after(anchor, value, *, title=False):
     return node
 
 
+def ensure_table_separator(table, caption):
+    """Protect a logical table boundary from native adjacent-table merging."""
+    previous = table._tbl.getprevious()
+    cursor = previous
+    while cursor is not None and cursor.tag == qn("w:p"):
+        value = text(cursor).strip()
+        if value and not value.startswith("{%"):
+            return  # A surviving caption/paragraph already separates tables.
+        cursor = cursor.getprevious()
+    if previous is None:
+        raise ValueError("A named table boundary requires a preceding body node")
+    paragraph_after(previous, caption, title=True)
+
+
 def replace_between(doc, start, end, values=(), keep_tables=()):
     begin, finish = heading(doc, start)._p, heading(doc, end)._p
     nodes = list(doc.element.body)
@@ -352,6 +366,10 @@ def install_shared_modules(doc, spec, tables):
         # Preserve the reviewed 588 table geometry and source-derived rows.
         # Empty drug lists must not create a run of header-only tables.
         anchor = paragraph_after(anchor, "{%p if " + collection + " %}")
+        drug_label = modules[collection].cell(0, 0).text.strip()
+        if not drug_label or "{" in drug_label:
+            raise ValueError("PGx caption must come from the maintained source table header")
+        anchor = paragraph_after(anchor, drug_label + "药物基因组学明细", title=True)
         node = copy.deepcopy(modules[collection]._tbl)
         anchor.addnext(node)
         anchor = paragraph_after(node, "{%p endif %}")
@@ -833,6 +851,7 @@ def build_template(panel, spec, source, work, output):
                         else "{{ tmb_summary }}；{{ msi_summary }}",
                     )
     install_shared_modules(doc, spec, tables)
+    ensure_table_separator(tables["guideline"], "肺癌相关重要基因变异及药物提示")
     if not any("total_variants_count" in text(p._p) for p in doc.paragraphs):
         paragraph_after(
             tables["variants"]._tbl.getprevious(),

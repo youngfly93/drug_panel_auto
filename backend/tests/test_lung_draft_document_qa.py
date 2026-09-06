@@ -1,9 +1,13 @@
 """Native TOC and historical appendix boundaries; synthetic documents only."""
 
+import copy
+
 import pytest
 from docx import Document
 from docx.oxml import parse_xml
 from docx.oxml.ns import qn
+from docxtpl import DocxTemplate
+from reportgen.core.golden_case import inspect_lung_draft_table_boundaries
 from reportgen.core.legacy_reference import (
     _extract_features,
     _section_presence,
@@ -24,11 +28,13 @@ from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.docx_sections import find_reference_section_bounds
 from reportgen.panels.loader import load_panel_package
 from scripts.build_lung_draft_packages import (
+    ensure_table_separator,
     install_refreshable_toc,
+    install_shared_modules,
     normalize_b_family_faq_flow,
     normalize_draft_case_fields,
 )
-from scripts.validate_lung_small_panel_drafts import inspect_word_scope
+from scripts.validate_lung_small_panel_drafts import canonical_parity_value, inspect_word_scope
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -423,7 +429,9 @@ def test_missing_configured_part3_heading_keeps_full_document_fallback():
     assert _read_part3_text(document, {"start_heading": "不存在的标题"}) is None
 
 
-@pytest.mark.parametrize("tamper", [None, "gene", "guideline", "pgx"])
+@pytest.mark.parametrize(
+    "tamper", [None, "gene", "guideline", "pgx", "merged_guideline", "merged_pgx", "spanned"]
+)
 def test_final_word_scope_detects_missing_genes_guidelines_and_changed_pgx(tamper):
     package = load_panel_package("lung_13")
     config = load_panel_config(panel_package=package)
@@ -470,11 +478,94 @@ def test_final_word_scope_detects_missing_genes_guidelines_and_changed_pgx(tampe
         pgx.add_row().cells, ["DrugDisplay", "Gene", "Locus", "Level", "Genotype", "Result"]
     ):
         cell.text = context["drug_shunbo"][0][key]
+    second = copy.deepcopy(pgx._tbl)
+    pgx._tbl.addnext(second)
+    context["drug_kabo"] = copy.deepcopy(context["drug_shunbo"])
+    if tamper in {"spanned", "merged_pgx"}:
+        # Simulate LO's 16-column grid with only six logical cells per row.
+        for table in (pgx._tbl, second):
+            for _ in range(10):
+                table.tblGrid.append(copy.deepcopy(table.tblGrid[0]))
+            for row in table.tr_lst:
+                for cell, span in zip(row.tc_lst, [1, 3, 3, 2, 3, 4]):
+                    cell.get_or_add_tcPr().get_or_add_gridSpan().val = span
     if tamper == "gene":
         genes.cell(1, 0).text = "UNASSAYED"
     elif tamper == "guideline":
         guide._tbl.remove(guide.rows[-1]._tr)
     elif tamper == "pgx":
         pgx.cell(1, 5).text = "与来源不符"
+    elif tamper == "merged_guideline":
+        prefix = copy.deepcopy(guide.rows[0]._tr)
+        for node in prefix.iter(qn("w:t")):
+            node.text = "上一个表的内容"
+        guide.rows[0]._tr.addprevious(prefix)
+    elif tamper == "merged_pgx":
+        for row in list(second.tr_lst):
+            pgx._tbl.append(row)
+        second.getparent().remove(second)
     result = inspect_word_scope(document, context, package)
-    assert bool(result["failures"]) is (tamper is not None)
+    assert bool(result["failures"]) is (tamper not in {None, "spanned"})
+    boundaries = inspect_lung_draft_table_boundaries(document)
+    assert boundaries["passed"] is (tamper not in {"merged_guideline", "merged_pgx"})
+    if tamper in {"merged_guideline", "merged_pgx", "spanned"}:
+        assert result["pgx_detail_row_count"] == result["expected_pgx_detail_row_count"] == 2
+        assert result["guideline_row_count"] == len(context["lung_guideline_drug_results"])
+        assert "word_guideline_rows_mismatch" not in result["failures"]
+        assert "word_pgx_detail_rows_mismatch" not in result["failures"]
+    if tamper == "merged_guideline":
+        assert "word_guideline_table_merged" in result["failures"]
+    if tamper == "merged_pgx":
+        assert "word_pgx_tables_merged" in result["failures"]
+
+
+def test_parity_normalizes_empty_cells_without_masking_clinical_evidence():
+    source = {"drug": [{"Reference": None, "\r": None, "Result": "来源结论", "Level": "1B"}]}
+    rendered = {"drug": [{"Reference": "", "\r": "", "Result": "来源结论", "Level": "1B"}]}
+    assert canonical_parity_value(source) == canonical_parity_value(rendered)
+    for key in ("Result", "Level"):
+        changed = copy.deepcopy(rendered)
+        changed["drug"][0][key] = "篡改"
+        assert canonical_parity_value(source) != canonical_parity_value(changed)
+    assert canonical_parity_value(source) != canonical_parity_value({"drug": []})
+    assert canonical_parity_value([0, None, "a"]) != canonical_parity_value(["", 0, "a"])
+
+
+@pytest.mark.parametrize("existing_caption", [False, True])
+def test_guide_boundary_uses_a_surviving_caption(existing_caption):
+    document = Document()
+    document.add_table(rows=1, cols=3)
+    if existing_caption:
+        document.add_paragraph("已有指南标题")
+    document.add_paragraph("{%p endif %}")
+    guide = document.add_table(rows=1, cols=4)
+    ensure_table_separator(guide, "新增指南标题")
+    assert [p.text for p in document.paragraphs].count("新增指南标题") == (not existing_caption)
+
+
+def test_pgx_captions_survive_render_only_for_nonempty_drug_groups(tmp_path):
+    document = Document()
+    variants = document.add_table(rows=1, cols=1)
+    document.add_paragraph("合成附录边界")
+    install_shared_modules(document, {"rich_end": "合成附录边界"}, {"variants": variants})
+    source = tmp_path / "synthetic-modules.docx"
+    output = tmp_path / "synthetic-modules-rendered.docx"
+    document.save(source)
+    template = DocxTemplate(source)
+    template.render({
+        "drug_shunbo": [{"Result": "来源甲"}],
+        "drug_kabo": [{"Result": "来源乙"}],
+    })
+    template.save(output)
+    actual = Document(output)
+    pgx = [
+        table for table in actual.tables
+        if len(table.rows[0].cells) == 6 and table.rows[0].cells[1].text.strip() == "基因"
+    ]
+    assert len(pgx) == 2
+    for table in pgx:
+        previous = table._tbl.getprevious()
+        assert previous.tag == qn("w:p")
+        caption = "".join(node.text or "" for node in previous.iter(qn("w:t")))
+        assert caption == table.cell(0, 0).text.strip() + "药物基因组学明细"
+    assert len([p for p in actual.paragraphs if p.text.endswith("药物基因组学明细")]) == 2

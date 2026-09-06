@@ -142,6 +142,17 @@ def baseline_context(bridge, raw_path, clinical):
     return report.get_template_context()
 
 
+def canonical_parity_value(value):
+    """Rendering converts source None to empty text, without changing evidence."""
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        return {key: canonical_parity_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [canonical_parity_value(item) for item in value]
+    return value
+
+
 def inspect_word_scope(document, context, package):
     """Compare final Word guideline, assayed genes and every maintained PGx row."""
     def compact(value):
@@ -149,19 +160,36 @@ def inspect_word_scope(document, context, package):
     config = load_panel_config(panel_package=package)
     genes, guidelines, pgx = [], [], []
     guide_table_count = gene_table_count = 0
+    merged_guideline = merged_pgx = False
     for table in document.tables:
-        headers = [compact(cell.text) for cell in table.rows[0].cells]
-        if headers and re.fullmatch(r"肺癌\d+基因检测列表", headers[0]):
-            gene_table_count += 1
-            genes.extend(
-                compact(cell.text) for row in table.rows[1:] for cell in row.cells
-                if compact(cell.text)
-            )
-        if headers and headers[0] == "检测基因" and "本癌种相关治疗药物" in "".join(headers):
-            guide_table_count += 1
-            guidelines.extend(tuple(compact(c.text) for c in r.cells) for r in table.rows[1:])
-        if len(headers) == 6 and headers[1:4] == ["基因", "检测位点", "等级"]:
-            pgx.extend(tuple(compact(c.text) for c in r.cells) for r in table.rows[1:])
+        kind = None
+        pgx_headers = 0
+        for index, row in enumerate(table.rows):
+            # row.cells repeats the same XML cell for every gridSpan column.
+            # Native merging can yield 16 physical grid columns but six fields.
+            cells, seen = [], set()
+            for cell in row.cells:
+                if cell._tc not in seen:
+                    cells.append(compact(cell.text))
+                    seen.add(cell._tc)
+            if cells and re.fullmatch(r"肺癌\d+基因检测列表", cells[0]):
+                gene_table_count += 1
+                kind = "genes"
+            elif cells and cells[0] == "检测基因" and "本癌种相关治疗药物" in "".join(cells):
+                guide_table_count += 1
+                merged_guideline |= index != 0
+                kind = "guideline"
+            elif len(cells) == 6 and cells[1:4] == ["基因", "检测位点", "等级"]:
+                pgx_headers += 1
+                kind = "pgx"
+            elif any(cells):
+                if kind == "genes":
+                    genes.extend(cell for cell in cells if cell)
+                elif kind == "guideline":
+                    guidelines.append(tuple(cells))
+                elif kind == "pgx":
+                    pgx.append(tuple(cells))
+        merged_pgx |= pgx_headers > 1
     guide_rows = context.get("lung_guideline_drug_results") or []
     columns = len(guidelines[0]) if guidelines else 0
     expected_guidelines = [
@@ -177,6 +205,10 @@ def inspect_word_scope(document, context, package):
         for _, collection in DRUG_DETAIL_BINDINGS for row in context.get(collection) or []
     ]
     failures = []
+    if merged_guideline:
+        failures.append("word_guideline_table_merged")
+    if merged_pgx:
+        failures.append("word_pgx_tables_merged")
     if gene_table_count != 1 or Counter(genes) != Counter(config.crc_important_genes):
         failures.append("word_assayed_gene_list_mismatch")
     configured_guide_genes = [
@@ -312,7 +344,10 @@ def run_case(args, panel, case):
         "chemotherapy_summary_text",
         "irinotecan_safety_rows",
     ) + tuple(collection for _, collection in DRUG_DETAIL_BINDINGS)
-    differences = [key for key in parity_keys if context.get(key) != base.get(key)]
+    differences = [
+        key for key in parity_keys
+        if canonical_parity_value(context.get(key)) != canonical_parity_value(base.get(key))
+    ]
     if differences:
         failures.append("588_biomarker_pgx_parity_mismatch")
     write_json(

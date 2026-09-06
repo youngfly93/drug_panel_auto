@@ -317,3 +317,7 @@ def test_each_draft_has_a_product_specific_synthetic_golden_runner(tmp_path, pan
     # PGx is an independent assay source, not cropped by the NGS gene panel.
     assert len(pgx) == 1 and pgx[0]["Gene"] == "ERCC1"
     assert pgx[0]["Result"] == "SYNTHETIC-PGX-OBSERVATION"
+    second = mapped.get_table("drug_kabo")
+    assert len(second) == 1 and second[0]["Gene"] == "ERCC2"
+    assert second[0]["Result"] == "SYNTHETIC-PGX-SECOND-OBSERVATION"
+    assert spec["expectations"]["separate_lung_draft_tables"] is True

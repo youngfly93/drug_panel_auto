@@ -417,8 +417,10 @@ def _golden_case_spec(panel: str) -> Dict[str, Any]:
                     "报告组评审草稿（非临床交付）",
                     "ERBB2", "c.1979G>A", "p.G660D",
                     "SYNTHETIC-PGX-OBSERVATION",
+                    "SYNTHETIC-PGX-SECOND-OBSERVATION",
                     *(["TPS 50%，CPS 52", "阳性（高表达）"] if pdl1 else []),
                 ],
+                "separate_lung_draft_tables": True,
             },
             "builder": partial(
                 _build_lung_pdl1_golden_input,
@@ -737,6 +739,9 @@ def _build_lung_pdl1_golden_input(
     synthetic_pgx = [{
         "药物": "顺铂（cisplatin）", "Gene": "ERCC1", "Locus": "rsTEST",
         "Genotype": "AA", "Level": "1B", "Result": "SYNTHETIC-PGX-OBSERVATION",
+    }, {
+        "药物": "卡铂（carboplatin）", "Gene": "ERCC2", "Locus": "rsSECOND",
+        "Genotype": "GG", "Level": "2B", "Result": "SYNTHETIC-PGX-SECOND-OBSERVATION",
     }]
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
         meta.to_excel(writer, sheet_name="Meta", index=False)
@@ -845,6 +850,31 @@ def _write_synthetic_pdl1_image(path: Path) -> None:
     image.save(path, format="PNG", optimize=True)
 
 
+def inspect_lung_draft_table_boundaries(document):
+    """The multi-drug synthetic fixture must survive native table round trips."""
+    guides, pgx = [], []
+    for table_index, table in enumerate(document.tables):
+        for row_index, row in enumerate(table.rows):
+            cells, seen = [], set()
+            for cell in row.cells:
+                if cell._tc not in seen:
+                    cells.append(_compact(cell.text))
+                    seen.add(cell._tc)
+            if cells and cells[0] == "检测基因" and "本癌种相关治疗药物" in "".join(cells):
+                guides.append((table_index, row_index))
+            if len(cells) == 6 and cells[1:4] == ["基因", "检测位点", "等级"]:
+                pgx.append((table_index, row_index))
+    return {
+        "passed": (
+            len(guides) == 1 and guides[0][1] == 0
+            and len(pgx) == 2 and all(index == 0 for _, index in pgx)
+            and len({table for table, _ in pgx}) == 2
+        ),
+        "guideline_headers": guides,
+        "pgx_headers": pgx,
+    }
+
+
 def assert_golden_case_output(
     generation: Mapping[str, Any],
     *,
@@ -934,6 +964,17 @@ def assert_golden_case_output(
             _compact(required) in compact_text,
             "required golden text appears in rendered DOCX",
             required=required,
+        )
+
+    if expected.get("separate_lung_draft_tables"):
+        boundaries = (
+            inspect_lung_draft_table_boundaries(Document(output_path))
+            if output_path and output_path.exists() else {"passed": False}
+        )
+        check(
+            "separate_lung_draft_tables", boundaries["passed"],
+            "guideline and two synthetic PGx tables retain separate native boundaries",
+            details=boundaries,
         )
 
     return {"ok": all(row["passed"] for row in checks), "checks": checks}
