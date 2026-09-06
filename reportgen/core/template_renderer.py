@@ -4397,20 +4397,22 @@ class TemplateRenderer:
         )
 
         # === 基因变异解读 ===
+        heading_style = self._panel_style_config(context, "part3_variant_heading")
         for section in sections:
             header = section.get("header", "")
             has_drug = section.get("has_drug", False)
             header_color = "FF0000" if has_drug else "0000FF"
 
-            # 变异标题：bold, 12pt, red/blue, 前缀圆点 "● "
+            # New draft families use a Unicode marker. Keep the reviewed legacy
+            # font-encoded marker unless a panel explicitly opts in.
             current = add_para_after(
                 current,
                 header,
                 bold=True,
                 size=12,
                 color=header_color,
-                prefix="u ",
-                prefix_font_name="Wingdings",
+                prefix=str(heading_style.get("prefix", "u ")),
+                prefix_font_name=str(heading_style.get("prefix_font_name", "Wingdings")),
                 underline=True,
                 justify=True,
                 spacing_before=200,

@@ -59,6 +59,60 @@ def synthetic_variant_table(document):
     return table
 
 
+def test_draft_variant_table_is_inline_and_caption_tracks_first_row():
+    from docx.oxml import OxmlElement
+
+    document = Document()
+    caption = document.add_paragraph("合成变异统计说明")
+    caption.paragraph_format.keep_with_next = False
+    table = synthetic_variant_table(document)
+    floating = OxmlElement("w:tblpPr")
+    floating.set(qn("w:tblpX"), "1280")
+    table._tbl.tblPr.append(floating)
+    table._tbl.tblPr.append(OxmlElement("w:tblOverlap"))
+    assert "FLOATING_VARIANT_TABLE" in _build_style_checks(
+        document, "lung_62", {}
+    )["docx_style_rules"]["failure_codes"]
+    before = [[cell.text for cell in row.cells] for row in table.rows]
+    grid = table._tbl.tblGrid.xml
+    normalize_draft_variant_flow(table)
+    assert table._tbl.tblPr.find(qn("w:tblpPr")) is None
+    assert table._tbl.tblPr.find(qn("w:tblOverlap")) is None
+    assert caption.paragraph_format.keep_with_next is True
+    assert before == [[cell.text for cell in row.cells] for row in table.rows]
+    assert table._tbl.tblGrid.xml == grid
+    assert _build_style_checks(document, "lung_62", {})["docx_style_rules"]["status"] == "PASS"
+    saved = document.element.xml
+    normalize_draft_variant_flow(table)
+    assert document.element.xml == saved
+
+
+@pytest.mark.parametrize("unicode_marker", [False, True])
+@pytest.mark.parametrize("has_drug", [False, True])
+def test_variant_heading_marker_is_panel_owned_and_legacy_default_is_unchanged(
+    tmp_path, unicode_marker, has_drug,
+):
+    path = tmp_path / "synthetic-marker.docx"
+    document = Document()
+    document.add_paragraph("__PART3_MARKER__")
+    document.save(path)
+    marker_style = {"prefix": "❖ ", "prefix_font_name": "DejaVu Sans"}
+    context = {
+        "gene_knowledge_sections": [{"header": "SYNTHETIC: c.10A>G", "has_drug": has_drug}],
+        "panel_style": {"part3_variant_heading": marker_style} if unicode_marker else {},
+    }
+    TemplateRenderer(log_level="ERROR")._render_part3_formatted(str(path), context)
+    actual = Document(path)
+    heading = next(p for p in actual.paragraphs if "SYNTHETIC:" in p.text)
+    assert heading.text == ("❖ " if unicode_marker else "u ") + "SYNTHETIC: c.10A>G"
+    first = heading.runs[0]
+    assert first.font.name == ("DejaVu Sans" if unicode_marker else "Wingdings")
+    assert str(heading.runs[-1].font.color.rgb) == ("FF0000" if has_drug else "0000FF")
+    failures = _build_style_checks(actual, "lung_13", {})["docx_style_rules"]["failure_codes"]
+    assert ("LEGACY_SYMBOL_FONT_VARIANT_MARKER" in failures) is (not unicode_marker)
+    assert _build_style_checks(actual, "lung_588_pdl1", {}) == {}
+
+
 def test_small_draft_qa_rejects_empty_drug_header_and_unprotected_variant_rows():
     document = Document()
     synthetic_variant_table(document)

@@ -61,3 +61,6 @@ style:
     remove_page_break_after_text_prefixes:
     - 备注：正体为国内大型三甲医院在临床中用到的化疗方案
     - 随临床证据更新药物推荐结果及分级可能产生变化。
+  part3_variant_heading:
+    prefix: '❖ '
+    prefix_font_name: DejaVu Sans

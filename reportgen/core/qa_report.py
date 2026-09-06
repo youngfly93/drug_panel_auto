@@ -1598,6 +1598,12 @@ def _paragraph_has_zero_first_line_indent(paragraph: Any, doc: Any) -> bool:
 def _build_lung_draft_style_checks(doc: Any) -> Dict[str, Any]:
     """Detect sparse-table and inherited-indent defects in new draft families."""
     failures: List[Dict[str, Any]] = []
+    for paragraph_index, paragraph in enumerate(doc.paragraphs):
+        first = next((run for run in paragraph.runs if run.text.strip()), None)
+        if first is not None and first.text.strip() == "u" and first.font.name == "Wingdings":
+            failures.append({
+                "code": "LEGACY_SYMBOL_FONT_VARIANT_MARKER", "paragraph": paragraph_index,
+            })
     for part in doc.part.package.parts:
         if not str(part.partname).startswith("/word/footer"):
             continue
@@ -1624,6 +1630,8 @@ def _build_lung_draft_style_checks(doc: Any) -> Dict[str, Any]:
         if "转录本" not in "".join(cell.text for cell in table.rows[1].cells):
             continue
         checked += 1
+        if table._tbl.tblPr.find(qn("w:tblpPr")) is not None:
+            failures.append({"code": "FLOATING_VARIANT_TABLE", "table": table_index})
         for row_index, row in enumerate(table.rows):
             def enabled(tag: str) -> bool:
                 node = row._tr.find("./" + qn("w:trPr") + "/" + qn(tag))

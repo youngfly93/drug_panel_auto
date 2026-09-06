@@ -609,7 +609,16 @@ def normalize_draft_case_fields(doc, basic_table):
 
 
 def normalize_draft_variant_flow(table):
-    """Keep one event per row and cancel inherited body-text indentation."""
+    """Keep inline event rows; floating tables can strand their introduction."""
+    # Historical fixed-case anchors move a growing result table as one floating
+    # object. Inline flow permits normal page splits without changing its grid,
+    # column widths, borders, text, or the one-event-per-row contract.
+    for tag in ("w:tblpPr", "w:tblOverlap"):
+        for node in list(table._tbl.tblPr.findall(qn(tag))):
+            table._tbl.tblPr.remove(node)
+    previous = table._tbl.getprevious()
+    if previous is not None and previous.tag == qn("w:p") and text(previous).strip():
+        Paragraph(previous, None).paragraph_format.keep_with_next = True
     for index, row in enumerate(table.rows):
         props = row._tr.get_or_add_trPr()
         for tag in ("w:cantSplit", "w:tblHeader") if index < 2 else ("w:cantSplit",):
@@ -1322,6 +1331,9 @@ def build_package(panel, spec, private_dir, work, packages_dir):
             )
         elif source.name == "style.yaml":
             rule["style"].setdefault("toc", {})["mode"] = "native"
+            rule["style"]["part3_variant_heading"] = {
+                "prefix": "❖ ", "prefix_font_name": "DejaVu Sans",
+            }
             if panel == "lung_62_pdl1":
                 # The historical cross-cancer table is now a short pointer.
                 # Its old hard break must not strand the evidence legend.
