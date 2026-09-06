@@ -42,6 +42,7 @@ htmlcov/
 # Generated
 backend/static/
 tmp/
+.work/
 /bin/
 /logs/
 /run/
