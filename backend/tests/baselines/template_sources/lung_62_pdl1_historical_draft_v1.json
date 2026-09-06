@@ -1,5 +1,5 @@
 {
-  "aggregate_sha256": "220164234ad0426ffc80f73c9946451979efd14059b75dc15170dc6483161555",
+  "aggregate_sha256": "4832a4fb699d4c91247ccc046aba1accd2c60ffac96c791d62d714f8e87513f2",
   "metrics": {
     "drawing_count": 50,
     "inline_shape_count": 5,
@@ -18,7 +18,7 @@
     "word/_rels/header5.xml.rels": "df8668324d201580ca4598085e14b49faaec50d3add53eb6552bbf655fcb5dd1",
     "word/_rels/header7.xml.rels": "a134ffb58bad658becad1362f28a7fcb92904a928e5a686fbae9bed93092e9d8",
     "word/_rels/header8.xml.rels": "a134ffb58bad658becad1362f28a7fcb92904a928e5a686fbae9bed93092e9d8",
-    "word/document.xml": "15c190564172e3f20576247896afd68e9ce203d39a5ad2e6f700db1053676970",
+    "word/document.xml": "17bc28a9d29e967c8a5d570b6900448878382484cbe9a23ff5fccc17d584c481",
     "word/fontTable.xml": "d4a4f5b545bd5654450855915bc6716e931bd27927025a798c8d966c040cdfce",
     "word/footer1.xml": "cd07d444d541bbd3982528a2e4d5cab93c323f6143f257de43f91e68d231402c",
     "word/footer2.xml": "adb8b2205f601bfbdf0ce5251d372003522520e4bbb00e331431c0a254075d06",

@@ -40,6 +40,8 @@ from scripts.build_lung_draft_packages import (
     normalize_b_family_faq_flow,
     normalize_draft_case_fields,
     normalize_draft_variant_flow,
+    normalize_fixed_reference_flow,
+    normalize_footer_page_totals,
     normalize_optional_drug_block,
 )
 from scripts.validate_lung_small_panel_drafts import canonical_parity_value, inspect_word_scope
@@ -75,7 +77,13 @@ def test_installed_draft_variants_have_explicit_zero_indent_and_pagination_guard
     package = load_panel_package(panel)
     document = Document(package.resolve_template_file())
     result = _build_style_checks(document, panel, {})["docx_style_rules"]
-    assert result["status"] == "PASS", result
+    # Source templates deliberately carry a zero NUMPAGES cache. Only native
+    # output may pass that gate; this unit checks the unrendered table geometry.
+    assert set(result["failure_codes"]) <= {"UNREFRESHED_FOOTER_PAGE_TOTAL"}, result
+    if panel == "lung_62":
+        assert result["failure_codes"] == ["UNREFRESHED_FOOTER_PAGE_TOTAL"]
+    else:
+        assert result["status"] == "PASS", result
 
 
 @pytest.mark.parametrize("has_drug", [False, True])
@@ -162,6 +170,58 @@ def test_indent_checker_resolves_style_defaults_and_direct_zero_override():
     assert _paragraph_has_zero_first_line_indent(paragraph, document)
     direct.set(qn("w:hanging"), "invalid")
     assert not _paragraph_has_zero_first_line_indent(paragraph, document)
+
+
+def test_fixed_short_references_keep_their_figure_without_rewriting_source():
+    document = Document()
+    dynamic = document.add_paragraph("参考文献：")
+    document.add_paragraph("Synthetic dynamic citation 2001.")
+    appendix = document.add_paragraph("固定附录")
+    figure = document.add_paragraph()
+    figure._p.append(parse_xml(
+        f'<w:r xmlns:w="{W}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
+        '<w:drawing><wp:inline><wp:extent cx="1800000" cy="1800000"/></wp:inline></w:drawing></w:r>'
+    ))
+    caption = document.add_paragraph("Synthetic Pathway")
+    heading = document.add_paragraph("参考文献：")
+    citations = [document.add_paragraph(f"Synthetic journal. 200{i};1:2-3.") for i in range(3)]
+    following = document.add_paragraph("基因检测列表")
+    before = [p.text for p in document.paragraphs]
+    normalize_fixed_reference_flow(document, appendix._p)
+    assert before == [p.text for p in document.paragraphs]
+    for paragraph in (figure, caption, heading, *citations[:-1]):
+        assert paragraph.paragraph_format.keep_with_next
+    assert citations[-1].paragraph_format.keep_with_next is False
+    assert dynamic.paragraph_format.keep_with_next is None
+    assert following.paragraph_format.keep_with_next is None
+    assert all(p.paragraph_format.keep_together for p in citations)
+    assert all(p._p.pPr.find(qn("w:snapToGrid")).get(qn("w:val")) == "false" for p in citations)
+
+
+def test_footer_total_is_native_dynamic_and_idempotent():
+    document = Document()
+    paragraph = document.sections[0].footer.paragraphs[0]
+    for value in ("第 ", "2", " 页 共 ", "31", " 页"):
+        paragraph.add_run(value)
+    assert "HARDCODED_FOOTER_PAGE_TOTAL" in _build_style_checks(
+        document, "lung_62", {},
+    )["docx_style_rules"]["failure_codes"]
+    normalize_footer_page_totals(document)
+    xml = paragraph._p.xml
+    assert " NUMPAGES " in xml
+    assert "31" not in paragraph.text
+    assert "第 2 页 共 0 页" == paragraph.text
+    normalize_footer_page_totals(document)
+    assert paragraph._p.xml == xml
+    assert "UNREFRESHED_FOOTER_PAGE_TOTAL" in _build_style_checks(
+        document, "lung_62", {},
+    )["docx_style_rules"]["failure_codes"]
+    for item in paragraph._p.iter(qn("w:t")):
+        if item.text == "0":
+            item.text = "37"  # Simulate a native refreshed cache, not a clinical source.
+    codes = _build_style_checks(document, "lung_62", {})["docx_style_rules"]["failure_codes"]
+    assert "HARDCODED_FOOTER_PAGE_TOTAL" not in codes
+    assert "UNREFRESHED_FOOTER_PAGE_TOTAL" not in codes
 
 
 @pytest.mark.parametrize("panel", ["lung_13", "lung_62", "lung_62_pdl1", "lung_588", "crc_358_msi"])

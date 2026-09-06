@@ -703,6 +703,85 @@ def normalize_b_family_faq_flow(doc):
             paragraph.paragraph_format.keep_with_next = True
 
 
+def normalize_fixed_reference_flow(doc, appendix):
+    """Keep bounded fixed figure/reference blocks together without rewriting text."""
+    nodes = list(doc.element.body)
+    for index in range(nodes.index(appendix) + 1, len(nodes)):
+        node = nodes[index]
+        if node.tag != qn("w:p") or compact(text(node)) != "参考文献":
+            continue
+        references = []
+        for following in nodes[index + 1:]:
+            value = text(following).strip()
+            if following.tag != qn("w:p") or not re.search(r"\b(?:19|20)\d{2}\b", value):
+                break
+            references.append(following)
+        if not references or len(references) > 8 or sum(len(text(p)) for p in references) > 1200:
+            continue
+        block = [node, *references]
+        caption = nodes[index - 1]
+        figure = nodes[index - 2] if index > 1 else None
+        if (
+            caption.tag == qn("w:p") and 0 < len(text(caption).strip()) <= 120
+            and figure is not None and figure.tag == qn("w:p")
+            and list(figure.iter(qn("w:drawing")))
+        ):
+            heights = [int(n.get("cy", "0")) for n in figure.iter(qn("wp:extent"))]
+            if heights and 0 < max(heights) <= 5 * 914400:
+                block = [figure, caption, *block]
+        for position, item in enumerate(block):
+            paragraph = Paragraph(item, None)
+            paragraph.paragraph_format.keep_together = True
+            paragraph.paragraph_format.keep_with_next = position < len(block) - 1
+        for item in references:
+            props = item.get_or_add_pPr()
+            grid = props.find(qn("w:snapToGrid"))
+            if grid is None:
+                grid = OxmlElement("w:snapToGrid")
+                props.append(grid)
+            grid.set(qn("w:val"), "false")
+
+
+def normalize_footer_page_totals(doc):
+    """Replace historical literal totals with native NUMPAGES fields in place."""
+    for part in _story_parts(doc):
+        if "/footer" not in str(part.partname):
+            continue
+        for paragraph in part.element.iter(qn("w:p")):
+            texts = paragraph.xpath("./w:r/w:t")
+            if any("NUMPAGES" in (item.text or "") for item in paragraph.iter(qn("w:instrText"))):
+                continue
+            for index, item in enumerate(texts):
+                if not (
+                    (item.text or "").strip().isdigit() and index > 0 and index + 1 < len(texts)
+                    and compact(texts[index - 1].text).endswith("共")
+                    and compact(texts[index + 1].text).startswith("页")
+                ):
+                    continue
+                run = item.getparent()
+                if len([child for child in run if child.tag != qn("w:rPr")]) != 1:
+                    raise ValueError("Unsupported mixed-content footer total run")
+                for kind in ("begin", "instruction", "separate", "cache", "end"):
+                    new = OxmlElement("w:r")
+                    if run.rPr is not None:
+                        new.append(copy.deepcopy(run.rPr))
+                    if kind == "instruction":
+                        element = OxmlElement("w:instrText")
+                        element.set(qn("xml:space"), "preserve")
+                        element.text = " NUMPAGES "
+                    elif kind == "cache":
+                        element = OxmlElement("w:t")
+                        element.text = "0"  # Native refresh is required before output QA.
+                    else:
+                        element = OxmlElement("w:fldChar")
+                        element.set(qn("w:fldCharType"), kind)
+                        if kind == "begin":
+                            element.set(qn("w:dirty"), "true")
+                    new.append(element)
+                    run.addprevious(new)
+                run.getparent().remove(run)
+
+
 def sanitize_final(doc, replacements, panel):
     for table in doc.tables:
         joined = compact(text(table._tbl))
@@ -957,6 +1036,8 @@ def build_template(panel, spec, source, work, output):
         normalize_optional_drug_block(doc, tables["other_drugs"])
     if panel == "lung_588":
         normalize_b_family_faq_flow(doc)
+    normalize_fixed_reference_flow(doc, appendix._p)
+    normalize_footer_page_totals(doc)
     fixed = {}
     # Only the fixed appendix may contain a historical literature example.
     after_appendix = False

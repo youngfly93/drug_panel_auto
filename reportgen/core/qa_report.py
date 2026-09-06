@@ -1594,6 +1594,20 @@ def _paragraph_has_zero_first_line_indent(paragraph: Any, doc: Any) -> bool:
 def _build_lung_draft_style_checks(doc: Any) -> Dict[str, Any]:
     """Detect sparse-table and inherited-indent defects in new draft families."""
     failures: List[Dict[str, Any]] = []
+    for part in doc.part.package.parts:
+        if not str(part.partname).startswith("/word/footer"):
+            continue
+        for paragraph in part.element.iter(qn("w:p")):
+            value = "".join(node.text or "" for node in paragraph.iter(qn("w:t")))
+            total = re.search(r"共\s*(\d+)\s*页", value)
+            if not total:
+                continue
+            instructions = [node.text or "" for node in paragraph.iter(qn("w:instrText"))]
+            instructions += [node.get(qn("w:instr"), "") for node in paragraph.iter(qn("w:fldSimple"))]
+            if not any(re.search(r"\bNUMPAGES\b", code) for code in instructions):
+                failures.append({"code": "HARDCODED_FOOTER_PAGE_TOTAL", "part": str(part.partname)})
+            elif int(total.group(1)) <= 0:
+                failures.append({"code": "UNREFRESHED_FOOTER_PAGE_TOTAL", "part": str(part.partname)})
     checked = 0
     for table_index, table in enumerate(doc.tables):
         if not table.rows:
