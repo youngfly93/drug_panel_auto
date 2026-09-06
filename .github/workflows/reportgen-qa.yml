@@ -86,3 +86,52 @@ jobs:
           name: reportgen-qa-gate
           path: tmp/ci_qa_gate
           if-no-files-found: ignore
+
+  lung-draft-golden:
+    name: Lung draft golden (${{ matrix.panel }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        panel: [lung_13, lung_62, lung_62_pdl1, lung_588]
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install report and QA dependencies
+        run: |
+          python -m pip install -r requirements.txt -r requirements-qa.txt pytest lxml
+          python -m pip install -e "./backend[dev]"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libreoffice-writer fonts-noto-cjk poppler-utils python3-uno
+          /usr/bin/python3 -c 'import uno'
+      - name: Full synthetic draft gate
+        env:
+          RG_WEB_UPSTREAM_ROOT: ${{ github.workspace }}
+        # The qa-gate job runs the full backend suite. This independent job
+        # covers each new draft's actual Word, repeated render, diff and QA
+        # profile. Real Excel/IHC and historical paired reports stay private;
+        # this cannot stand in for the required iyun129 A/B/C + Web UAT.
+        run: >-
+          nice -n 10 python -m reportgen.cli qa gate
+          --panel ${{ matrix.panel }}
+          --output-root tmp/ci_lung_draft/${{ matrix.panel }}
+          --skip-pytest
+          --skip-legacy-reference
+          --render all
+          --render-required
+      - name: Upload synthetic draft gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lung-draft-golden-${{ matrix.panel }}
+          path: tmp/ci_lung_draft/${{ matrix.panel }}
+          if-no-files-found: ignore
+          retention-days: 7
