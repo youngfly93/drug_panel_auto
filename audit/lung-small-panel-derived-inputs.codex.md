@@ -2,7 +2,7 @@
 module: lung-small-panel-derived-inputs
 agent: codex
 identity_kind: git_commit
-identity_value: 411faf12cd5f81ed327e8117e02a27836b5aa800
+identity_value: fa17b1ab2413cb1c65a5c5268176f49961051163
 audit_date: 2026-09-06
 ---
 
@@ -20,7 +20,7 @@ C13 的旧候选实稿已独立核对四条变异、三条靶向；完整排版�
 
 - 需求权威：用户 2026-09-06 本轮规格；沿用模板族总规格，增加“真实肺癌超集派生
   输入可用于 draft 工程验证”的明确授权，不把派生输入登记为历史同案真实小 Panel 输入。
-- 本轮修复源码冻结：`411faf12cd5f81ed327e8117e02a27836b5aa800`，分支为
+- 本轮修复源码冻结：`fa17b1ab2413cb1c65a5c5268176f49961051163`，分支为
   `codex/lung-small-panel-derived-drafts-20260906`。正文分别标注开发测试和冻结后验证，
   不将开发回执误报为已完成的冻结全量回放；
   用户原有 13 份未跟踪审计及专用 stash 保留，不属于本次源码 subject。
@@ -56,8 +56,8 @@ C13 的旧候选实稿已独立核对四条变异、三条靶向；完整排版�
 |---|---|
 | lung_13_historical_draft_v1 | `774a81c1d3221e5f4116389dbf703ec1919004d38705c2828fa4453e534b90d4` |
 | lung_62_historical_draft_v1 | `891146fb0799d138c054518ac16c7c90f2e077c71e2849d54875467b9c6adffd` |
-| lung_62_pdl1_historical_draft_v1 | `9ba1c600d15d25a0d51dd263bb94b2257773d677511bef30318d13c07f126015` |
-| lung_588_historical_draft_v1 | `51e865c793de64d0a293b91b7f2a7ca7e8a34cb8efc5579c3cbbbc2500e050d2` |
+| lung_62_pdl1_historical_draft_v1 | `a05b1ae51db36b33ccda853a4703fcc1610acb40f8e6f6400d11582f21ed2907` |
+| lung_588_historical_draft_v1 | `add46f103919b3a83d31b60eecf9f282bc60d55efb4be81821ebf979213a4c55` |
 
 ## 3. 派生规则与源表复算
 
@@ -142,9 +142,9 @@ TP53 G245D、PIK3CA A1066V。其余成员旗标行包括未分级或知识注释
 | render_blank_page_check / 全页无孤行 | 6749292 整本 QA FAIL；修复待回放 | C13 30 页，26/27 页空白或低内容；A62 27 页；未声称历史页数量级已达成 |
 | 新产品 QA gate / 网页批量 3×3 | 未通过 / 待运行 | 新合成 golden runner 已接入，不能以默认 CRC gate 替代新四包门禁 |
 | 前端 / 发布范围保护 | 开发 PASS | lint、类型检查、build、3 个前端测试；发布范围 48 passed / 2 skipped；跳过项为既有可选环境测试 |
-| 冻结完整 CI | FAIL，待新提交复测 | GitHub Actions 34012314013，源码 c608430；2 项清单断言失败，见 5.1 |
+| 冻结完整 CI | 6749292 全量 PASS；最新修复待复测 | Actions 34013341880/job 101432818311；4387fe8 四包合成 gate FAIL，见 5.3 |
 | 历史同案逐字对照 | AUTHORIZED_DEFERRED | 用户明确留待真配对输入，不伪称派生稿为同案验收 |
-| 新版本部署后三源一致 | NOT_RUN | 分支已推送 c608430；main=295ebd2，生产最后核验=da8e62d，不能报同步完成 |
+| 新版本部署后三源一致 | NOT_RUN | 本任务仍在工作分支；main=295ebd2，生产最后核验=da8e62d，不能报同步完成 |
 
 旧失败证据保留：首轮派生脚本的 ZIP 元信息复用缺陷导致 5 failed / 103 passed；
 修复后各轮独立回执记录通过，不把旧 FAIL 改成 PASS。后续格式检查与 `git diff --check`
@@ -208,6 +208,37 @@ c608430 全量 CI 实际为 **2 failed / 943 passed / 2 skipped**（1189.71 秒�
 
 本节修复已形成新源码身份；6749292 的旧 FAIL 不被回溯改为通过。
 
+### 5.3 合成全页反馈与章节保留修复（4387fe8 → fa17b1a）
+
+4387fe8 新增四包独立 Linux golden CI（Actions 34014423779，最多并行两包）；
+四包均生成 Word/PNG，但四个 QA gate 均 FAIL。下载的是公开合成 fixture 产物，
+不上传真实 Excel、母版或 IHC。13/62/62+PD-L1 实稿缺少 CNV 提示；588 提示已在，
+但原始 QA WARN。62+PD-L1 保留历史固定目录页码，588 只有空目录标题。
+
+- 实际内容丢失原因：参考文献清理边界只认旧 CRC 的第四部分附录，没有认出
+  小包的第三部分/编号附录和新增补充检测章节，误将其正文作为旧参考文献删除。
+  修复终止边界；三个独立合成 DOCX 回归确认后续 CNV 文案、固定附录和 PGx 表
+  不被删，旧参考文献仍按规则清理。不是把必需提示检查改成可选。
+- 62+PD-L1 静态 TOC 和 588 空目录改为原生可刷新目录，按存活正文标题建立级别，
+  保留前置分节；页码由真实 LibreOffice 更新，不伪造缓存。13/62 已有原生目录不改。
+- 当前输出检查允许包内显式声明真实章节标题别名；无别名的 CRC 保持原默认，
+  空/畸形别名不能绕过检查。统计文字同时识别“本次检出”和“本次共检出”。
+- 四个新合成 fixture 增加标记明确的完整中性 Cnv 观测及一条合成 PGx 明细，
+  检查明细结果真正进入 Word；已有 CRC/329/588+PD-L1 fixture 默认不变。
+  该正向合成样本不能证明真实 CNV 阴性；真实输入、#13 缺失/不确定性单测和
+  原始 QA 严格要求均未更改，绝不向真实派生 Excel 填入这些合成值。
+- 新四包 CI 显式开启生成器整本视觉 QA，而不仅是另行生成 PNG 文件；保持空白/
+  低内容失败门槛。没有将医学 WARN 清零，也没有提升 draft 开放状态。
+- fa17b1a 提交前轻量回归 **176 passed / 17.36 秒**，源模板两项有意目录基线
+  更新；新 PGx/目录/清理子集 51 passed，既有参考文献保护 5 passed。
+  六个私有源身份 token × 四包交叉扫描：硬命中 0、ZIP 身份命中 0。
+  bdd7eaa 冻结轻量回归另为 134 passed；两组回执不得混称同一源码验证。
+
+服务器最后已验证的源码仍为 frozen_6749292；GitHub HTTPS 拉取超时，Tailscale
+中继在线但 SSH 大文件传输多次超时。已准备可校验 Git bundle 作为私有链路备选；
+部分传输件在完整 SHA 匹配前不导入。B/C IHC 记录及图片传输结束，但服务器端
+图片 SHA 尚未重新核验，不能据此宣称 PD-L1 端到端完成。未改服务器网络/生产服务。
+
 ## 6. 私有回执入口
 
 目录：`.work/lung-small-panel-derived-inputs/`。
@@ -223,9 +254,16 @@ c608430 全量 CI 实际为 **2 failed / 943 passed / 2 skipped**（1189.71 秒�
   留在该目录，不能入库。
 - `build_optional_fields/<panel>/build_receipt.json`：补可选字段和总数位置后的开发模板；
   初始冻结模板 SHA 仍在旧 build 回执中。
-- `build_layout_complete/<panel>/build_receipt.json`：上表当前四模板 SHA；补全 PGx、
+- `build_layout_complete/<panel>/build_receipt.json`：411faf1 四模板 SHA；补全 PGx、
   CNV 提示及短附录分页。旧 `build_pgx_complete` 是中间候选，不作最终通过凭据。
 - `layout_contract_units.xml`、`layout_word_scope_units.xml`：113 / 31 项开发验证回执。
+- `build_reference_boundaries/lung_62_pdl1/build_receipt.json` 与
+  `build_reference_boundaries_b_final/lung_588/build_receipt.json`：当前两个原生目录模板；
+  中间建包失败回执不覆盖、不算通过。
+- `reference_toc_full_lightweight.xml`、`reference_toc_pgx_units.xml`、
+  `reference_legacy_guard.xml`：176 / 51 / 5 项回归；`cross_scan_reference_toc.json`
+  仅记录 token 数、模板 SHA 与命中数，不记录病例身份。
+- `ci_4387fe8/`：四包失败的公开合成 Word、PNG 与 QA，不能替代真实 A/B/C 门禁。
 - `development_units_final.xml`、`release_scope_units.xml`：本次开发回归，不替代冻结服务器门禁。
 - 服务器隔离目录为本轮 `reportgen-lung-small-drafts-20260906.HySk3P`，不是生产目录。
   `frozen_c608430` 为干净 Git 工作树；`verified_inputs` 内 A/B/C 三份完整 SHA 已匹配。
