@@ -2,7 +2,7 @@
 module: lung-small-panel-derived-inputs
 agent: codex
 identity_kind: git_commit
-identity_value: fb72cc33490d21b4f0ef3a0ba8184534f9bb4580
+identity_value: 94b478e4cd8efa9571a30fdc352efdd034886089
 audit_date: 2026-09-06
 ---
 
@@ -20,7 +20,7 @@ C13 的旧候选实稿已独立核对四条变异、三条靶向；完整排版�
 
 - 需求权威：用户 2026-09-06 本轮规格；沿用模板族总规格，增加“真实肺癌超集派生
   输入可用于 draft 工程验证”的明确授权，不把派生输入登记为历史同案真实小 Panel 输入。
-- 本轮修复源码冻结：`fb72cc33490d21b4f0ef3a0ba8184534f9bb4580`，分支为
+- 本轮修复源码冻结：`94b478e4cd8efa9571a30fdc352efdd034886089`，分支为
   `codex/lung-small-panel-derived-drafts-20260906`。正文分别标注开发测试和冻结后验证，
   不将开发回执误报为已完成的冻结全量回放；
   用户原有 13 份未跟踪审计及专用 stash 保留，不属于本次源码 subject。
@@ -57,7 +57,7 @@ C13 的旧候选实稿已独立核对四条变异、三条靶向；完整排版�
 | lung_13_historical_draft_v1 | `e7035ae50c37f61c0e4cf68e98e982fbf90e7f88b9768ae7027d24ee66dd8c66` |
 | lung_62_historical_draft_v1 | `5d3b155fec08701f101669d578955a95954a16a8b01dd7b1ff34cce46cc6dbee` |
 | lung_62_pdl1_historical_draft_v1 | `475fcf9697d2bcdad66239b1a0e7553c4feb5b965d6144dd9717306090778b9e` |
-| lung_588_historical_draft_v1 | `fb58d475339cbb108fd86daffba854a10e850d947963c7ef706feab0641b99a2` |
+| lung_588_historical_draft_v1 | `0129713a216a22e431043e9071f3f65d98972bca8c1d2034c38e1916fc252947` |
 
 ## 3. 派生规则与源表复算
 
@@ -112,6 +112,8 @@ python scripts/derive_panel_input.py INPUT.xlsx --panel lung_13 \
 | lung-small-panel-derived-inputs-03 | P1 | 8c8aeb5 的 62+PD-L1 合成稿遗留母版“2 个变异/0 个靶向”段落，与实际 1/1 矛盾 | CI 34015224627 原 Word/第 6 页；5.4 动态统计及重复统计校验修复 | CONFIRMED |
 | lung-small-panel-derived-inputs-04 | P1 | 同版 62+PD-L1/588 空目录未正确刷新，旧正文数字误参与目录检查 | 同 CI 第 5/7 页与 QA；5.4 原生终态刷新/必需域检查修复 | CONFIRMED |
 | lung-small-panel-derived-inputs-05 | P2 | 原生排版后基本信息字段继承表头白字，浅底不可读 | 13/62+PD-L1 第 6 页、模板与输出颜色节点比对；5.4 显式黑字 | CONFIRMED |
+| lung-small-panel-derived-inputs-06 | P1 | 83b22b0 的 588 同时出现旧浮动目录和新目录；旧页码最高 74，新目录混入病例单元格及空条目 | CI 34015953334、588 原 Word SHA 与第 5/6/8 页；5.5 定位及修复 | CONFIRMED |
+| lung-small-panel-derived-inputs-07 | P2 | 同一 588 第 9 页仅余一句末行，第 27 页空白 | 同版本第 8/9/26/27/28 页人工检查与原始 QA LOW_CONTENT；5.5 清理标题前占位空段落 | CONFIRMED |
 
 C 输入的有效分级事件位于第 2、15、32、39 行，分别为 BRAF V600E、ERBB2 G660D、
 TP53 G245D、PIK3CA A1066V。其余成员旗标行包括未分级或知识注释行，因此“旗标
@@ -274,6 +276,49 @@ Actions 34015224627 的 13/62 合成 Word 原始 QA 均 PASS、整本 31/28 页�
 公网 health 返回 `status=ok` 只证明现网存活，不证明版本一致。真实九例、Web UAT、
 双病例泄漏与生产部署继续未完成；仍未收到医学 WARN 验收定义的答复，未放行。
 
+### 5.5 588 浮动目录与继承大纲修复（94b478e）
+
+CI **34015953334**（83b22b0，业务源码 fb72cc3）的四包结果已分开核对：
+
+| 包 | 完整合成 golden gate | 原始 QA | 页数 | 原生目录页码 |
+|---|---|---|---:|---|
+| lung_13 | PASS | PASS | 31 | 11/11 |
+| lung_62 | PASS | PASS | 27 | 10/10 |
+| lung_62_pdl1 | PASS | PASS | 29 | 38/38 |
+| lung_588 | FAIL | FAIL | 53 | 52/60，另有旧浮动目录 |
+
+这三项 PASS 包含最终 Word、重复生成差异和 Linux 整本视觉门禁，但均为公开合成
+输入，不替代 A/B/C 九例。该 run 默认 qa-gate 尚未完成时未登记为整条 CI PASS。
+原始 588 Word SHA：`cc22bfd7d33ffa754be8c87c2493d7304411e7d00d011f3f8ca319291e53377e`。
+逐页看图确认：第 5 页仍是带 74 等历史页码的浮动目录；第 6—8 页另起新目录并
+错误收录姓名、样本字段、空标题和图示文献；第 9 页末行孤页、第 27 页空白。
+旧 FAIL/PNG 均保留，不能由随后模板变化覆盖。
+
+94b478e 的有界修复：
+
+- 仅重建 588 源模板。识别并移除目录标题中的完整旧文本框目录及其 VML 回退，
+  保留无文本装饰；只把真实正文中的对应标题纳入大纲，病例表格、空段落、图示
+  文献不再误入目录；全局参考文献只用最后一处标题，不收录局部通路的文献小标题。
+- 原目录标题携带的分节边界移至原生目录字段之后，避免新目录和基本信息混页；
+  清理对应标题前连续无内容段落，把原显式换页语义留在标题上，标题与下文相连。
+  没有补文字、造页码或放宽空白/低内容阈值。其他三个模板 SHA 未变。
+- 原生目录 QA 新增浮动旧目录残留失败项；用原 83b22b0 四份 Word 只读重查，
+  前三份仍 PASS，588 明确检出两个 OOXML 文本框缓存（显示/兼容两份）。
+- 四个空单元格的 `numId=0` 实为取消编号，旧检查误认为可见空编号；按
+  [Microsoft 的 OOXML NumberingId 定义](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.numberingid?view=openxml-3.0.1)
+  修正判断，正整数编号和缺失编号 ID 的原阻断仍保留。未改生产排版清理器。
+- 开发验证：180 项专项 **PASS / 17.41 秒**，17 项全模板源基线 **PASS / 3.60 秒**；
+  33 项现有 CRC/目录/QA 保护 **PASS / 9.90 秒**。46/47 项中间专项回执保留；
+  最初文本框回归暴露冒号规范化匹配问题（1 failed），已修正后再跑全套。
+  四模板跨母版 6 个私有 token 扫描硬命中/ZIP 命中均 0。仅更新 588 有意变更基线。
+- 发布脚本声明的三层禁用范围校验 PASS（0 issues）。不传范围的诊断命令按设计
+  FAIL，回执另存；不能将默认空参数误报为实际生产配置变化。
+
+14:30 SSH 只读时间探针恢复；服务器 GitHub fetch 仍在 40 秒限制处超时。通过 SSH
+继续传输已提交 bundle，尚未核验完整远端 SHA 前不导入、不生成。新 94b478e 的
+Linux 整本渲染仍待执行，不能用前三包旧 PASS 推断 588 已修好。医学 WARN 定义
+仍待答复，四 draft 继续禁用，未部署。
+
 ## 6. 私有回执入口
 
 目录：`.work/lung-small-panel-derived-inputs/`。
@@ -300,9 +345,14 @@ Actions 34015224627 的 13/62 合成 Word 原始 QA 均 PASS、整本 31/28 页�
   仅记录 token 数、模板 SHA 与命中数，不记录病例身份。
 - `ci_4387fe8/`：四包失败的公开合成 Word、PNG 与 QA，不能替代真实 A/B/C 门禁。
 - `ci_8c8aeb5/`、`profile_alias_recheck/`：第二轮公开合成 Word/QA 及原 Word 重检查。
-- `build_native_flat_case_fields/<panel>/build_receipt.json`：上表当前模板；
+- `build_native_flat_case_fields/<panel>/build_receipt.json`：fb72cc3 四模板（前三仍为当前）；
   `native_flat_full_lightweight_retest.xml`、`native_flat_crc_toc_guard.xml`、
   `cross_scan_native_flat.json` 为 191 / 33 项测试和最新模板扫描。
+- `ci_83b22b0/`：前三包合成完整 gate PASS、588 FAIL 的不可覆盖原始产物。
+- `build_b_floating_toc_final/lung_588/build_receipt.json`：当前 588 模板 SHA；
+  `b_toc_lightweight_full.xml`、`b_toc_template_matrix.xml`、`b_toc_crc_qa_guard.xml`
+  和 `cross_scan_b_floating_toc.json` 是本次 180/17/33 项及四模板扫描回执。
+  `build_b_floating_toc/` 为中间模板，不作终态渲染凭据。
 - `development_units_final.xml`、`release_scope_units.xml`：本次开发回归，不替代冻结服务器门禁。
 - 服务器隔离目录为本轮 `reportgen-lung-small-drafts-20260906.HySk3P`，不是生产目录。
   `frozen_c608430` 为干净 Git 工作树；`verified_inputs` 内 A/B/C 三份完整 SHA 已匹配。
