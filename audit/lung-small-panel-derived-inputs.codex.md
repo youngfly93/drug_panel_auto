@@ -2,7 +2,7 @@
 module: lung-small-panel-derived-inputs
 agent: codex
 identity_kind: git_commit
-identity_value: c608430ef6f291eac3857e41907f1767be210858
+identity_value: 411faf12cd5f81ed327e8117e02a27836b5aa800
 audit_date: 2026-09-06
 ---
 
@@ -13,13 +13,14 @@ audit_date: 2026-09-06
 原两项规格冲突已经用户明确裁决：C 例为四条变异/三条靶向提示；62 和 588 都按
 NGS 家族识别、默认无 PD-L1，再由订单/网页同族选择消歧。不存在排除 PIK3CA 或
 新增实验室不会输出的 PD-L1 旗标。新增无 PD-L1 的 588 draft 是本轮追加范围。
-下述机器测试不等于真实 Word 表格、完整排版或报告组医学复核已通过。
+C13 的旧候选实稿已独立核对四条变异、三条靶向；完整排版仍未通过，详见 5.2。
+下述机器测试不等于完整排版或报告组医学复核已通过。
 
 ## 1. 需求与冻结身份
 
 - 需求权威：用户 2026-09-06 本轮规格；沿用模板族总规格，增加“真实肺癌超集派生
   输入可用于 draft 工程验证”的明确授权，不把派生输入登记为历史同案真实小 Panel 输入。
-- 源码冻结：`c608430ef6f291eac3857e41907f1767be210858`，已推送分支
+- 本轮修复源码冻结：`411faf12cd5f81ed327e8117e02a27836b5aa800`，分支为
   `codex/lung-small-panel-derived-drafts-20260906`。正文分别标注开发测试和冻结后验证，
   不将开发回执误报为已完成的冻结全量回放；
   用户原有 13 份未跟踪审计及专用 stash 保留，不属于本次源码 subject。
@@ -53,10 +54,10 @@ NGS 家族识别、默认无 PD-L1，再由订单/网页同族选择消歧。不
 
 | draft 模板 | SHA256 |
 |---|---|
-| lung_13_historical_draft_v1 | `2c1efb1735c5b1c2f383e5b63121af2a97917eb5aa8ea6747dfd22646f06e441` |
-| lung_62_historical_draft_v1 | `53a4be310869ad24a58eeb520aa421b002bb57aab763a99f2d8d996d08edf65a` |
-| lung_62_pdl1_historical_draft_v1 | `5c4fc8c8d1ced8d11d52fb364136a8e1628237a16f7f02ba1f105e3fa61998ed` |
-| lung_588_historical_draft_v1 | `02d151dbba0410e564beb1be22d2c76be86b28bd29c110f7715dd5b667ae9c3c` |
+| lung_13_historical_draft_v1 | `774a81c1d3221e5f4116389dbf703ec1919004d38705c2828fa4453e534b90d4` |
+| lung_62_historical_draft_v1 | `891146fb0799d138c054518ac16c7c90f2e077c71e2849d54875467b9c6adffd` |
+| lung_62_pdl1_historical_draft_v1 | `9ba1c600d15d25a0d51dd263bb94b2257773d677511bef30318d13c07f126015` |
+| lung_588_historical_draft_v1 | `51e865c793de64d0a293b91b7f2a7ca7e8a34cb8efc5579c3cbbbc2500e050d2` |
 
 ## 3. 派生规则与源表复算
 
@@ -133,13 +134,13 @@ TP53 G245D、PIK3CA A1066V。其余成员旗标行包括未分级或知识注释
 | #13 保留、#14/#15 转待决 | 已实现于工作分支 | 默认历史回归 + 显式严格候选策略；不新增医学批准 |
 | 派生脚本与保护性单测 | 开发 PASS | 旧 fdf3c10 冻结 108 passed；本次提交前 122 passed / 11.33 秒，见 development_units_final.xml |
 | A/B/C × 13/62 派生保真 | PASS，6/6 | 独立原始→派生单元格比较 + 冻结提交完整 SHA 重放 |
-| C 例四行/三靶向修正规格 | 源表及合成上下文 PASS，真实 Word 待验 | 不排除 PIK3CA；尚未以内部数据代替 Word 表格验收 |
+| C 例四行/三靶向修正规格 | 6749292 真实 Word 表格 PASS；当前版待回放 | 独立 python-docx 读取实稿四变异/三靶向，不以内部上下文替代表格 |
 | 62 / 588 同族身份 | 开发 PASS | 同族默认/可信订单/跨族阻断；前端 3 项测试包含 0 值 |
 | seed → variableize → 三小包及 588 无 PD-L1 | BUILT | 四包均 draft，可加载，源模板样式基线四项通过 |
 | scan_hardcoded_literals | PASS，4/4 模板 | 合并四母版 6 个私有身份 token 交叉扫描零命中；硬性文字零命中；不等于病例泄漏/视觉门禁已过 |
-| two_case_leak_test | NOT_RUN | 无新产品 Word，不用已有 588 或 CRC 稿替代 |
-| render_blank_page_check / 全页无孤行 | NOT_RUN | 无新产品 Word；未声称 42/44/56 页目标达成 |
-| 新产品 QA gate / 网页批量 3×3 | 待运行 | SSH 大文件传输中断；未用旧 588/CRC 或静态表格代替网页验收 |
+| two_case_leak_test | NOT_RUN | 已有两份失败候选实稿；尚未完成各包 A/B/C 跨病例门禁 |
+| render_blank_page_check / 全页无孤行 | 6749292 整本 QA FAIL；修复待回放 | C13 30 页，26/27 页空白或低内容；A62 27 页；未声称历史页数量级已达成 |
+| 新产品 QA gate / 网页批量 3×3 | 未通过 / 待运行 | 新合成 golden runner 已接入，不能以默认 CRC gate 替代新四包门禁 |
 | 前端 / 发布范围保护 | 开发 PASS | lint、类型检查、build、3 个前端测试；发布范围 48 passed / 2 skipped；跳过项为既有可选环境测试 |
 | 冻结完整 CI | FAIL，待新提交复测 | GitHub Actions 34012314013，源码 c608430；2 项清单断言失败，见 5.1 |
 | 历史同案逐字对照 | AUTHORIZED_DEFERRED | 用户明确留待真配对输入，不伪称派生稿为同案验收 |
@@ -180,6 +181,33 @@ c608430 全量 CI 实际为 **2 failed / 943 passed / 2 skipped**（1189.71 秒�
 失败均为产品清单断言尚未列入新增四 draft，不是通过。后续补齐显式清单并断言新包
 仍为 draft/NOT_PRODUCTION_ACTIVE；必须由新提交全量 CI 重新证明通过。
 
+### 5.2 首轮实稿及后续版式修复（6749292 → 411faf1）
+
+6749292 的 C13、A62 均在 iyun129 完成 Word 和全页渲染。C13 最终变异表四行、
+靶向表三行；A62 五条主表事件包含 ESR1/FLT3 两条Ⅲ类，不删行。两例 TMB/MSI/
+化疗汇总/方案/剂量上下文与同例 588 比较无差异，但**原始 QA 均 FAIL**。
+
+- C13 Word SHA：`de60bded05e19ef916e7e37b152dbc92382b5ab814f56889107a3e072693d9d5`。
+  30 页；第 26 页正文空白，第 27 页仅短基因表，已查看真实 PNG。简易空白检测的
+  PASS 不能覆盖更强全页 QA 的 LOW_CONTENT 错误。源基因列表/QC 周边的重复分页
+  已定点清理，未放宽低内容阈值，也未以填充文字凑历史页数。
+- A62 Word SHA：`2c4a3ca778762099216bf24fe564c42587e1bad01d7d461ae6cb3b38d51356bd`。
+  27 页；新模板漏展示 CNV 待复核提示，现已补条件显示，保持 #13 医学边界。
+- C13 原生 TOC 位于 SDT 内容控件，实际已有缓存页码，旧 QA 漏读。新增 XML 检查
+  要求每条目录均有独立页码且目标书签闭合；数字标题、单条缺页码、坏书签均不能 PASS。
+- 四包曾只接化疗汇总，现补入 588 维护的 30 组逐药来源表和剂量表，空药物集合
+  不生成标题空表。新增最终 Word 指南逐行、完整检测基因集合和每条 PGx 六字段校验；
+  588 对照也扩大到全部逐药集合。变异/靶向四行三行仍不变。
+- 跨癌种扫描按各历史族的真实动态章节边界读取，不再误扫描固定附录；动态章节内
+  命中仍报警，起始标题缺失仍回退全文检查。医学待审 WARN 没有被改成 PASS，已向
+  用户澄清工程 PASS 与原始 QA 全零警示的验收区别，未获得答复前保持严格判定。
+- 开发验证：原生目录/章节测试 13 passed；小包/输入保真/章节合计 113 passed；
+  最终 Word 范围断言及完整源样式矩阵 31 passed。四包源基线仅更新有意模板改动，
+  其余基线保持；六个私有源身份 token 对四包交叉扫描均零硬命中。新增四产品合成
+  golden runner 可执行，但尚未跑完服务器全页 gate；合成 fixture 不算真实临床记录。
+
+本节修复已形成新源码身份；6749292 的旧 FAIL 不被回溯改为通过。
+
 ## 6. 私有回执入口
 
 目录：`.work/lung-small-panel-derived-inputs/`。
@@ -194,12 +222,15 @@ c608430 全量 CI 实际为 **2 failed / 943 passed / 2 skipped**（1189.71 秒�
 - `build/<panel>/build_receipt.json`：四母版、模板和来源规则 SHA；私有 token/中间种子也
   留在该目录，不能入库。
 - `build_optional_fields/<panel>/build_receipt.json`：补可选字段和总数位置后的开发模板；
-  上表当前模板 SHA 对应该回执，初始冻结模板 SHA 仍在旧 build 回执中。
+  初始冻结模板 SHA 仍在旧 build 回执中。
+- `build_layout_complete/<panel>/build_receipt.json`：上表当前四模板 SHA；补全 PGx、
+  CNV 提示及短附录分页。旧 `build_pgx_complete` 是中间候选，不作最终通过凭据。
+- `layout_contract_units.xml`、`layout_word_scope_units.xml`：113 / 31 项开发验证回执。
 - `development_units_final.xml`、`release_scope_units.xml`：本次开发回归，不替代冻结服务器门禁。
 - 服务器隔离目录为本轮 `reportgen-lung-small-drafts-20260906.HySk3P`，不是生产目录。
   `frozen_c608430` 为干净 Git 工作树；`verified_inputs` 内 A/B/C 三份完整 SHA 已匹配。
   `frozen_c608430/.work/validation_A13_initial` 保留首例失败；损坏传输文件不得使用。
 
-下一步：由服务器拉取修复后的已提交源码并核 SHA，先完成 C13 的真实 Word
-四行/三行快速反馈，再运行 A/B/C 全矩阵、三件套和网页批量。所有工程门禁通过后
+下一步：由服务器拉取修复后的已提交源码并核 SHA，重跑 C13/A62 整本 QA，
+再运行 A/B/C 全矩阵、三件套和网页批量。所有工程门禁通过后
 才写入草稿开放回执、完成主线/历史发布门禁和精确部署；医学晋级仍为 false。
