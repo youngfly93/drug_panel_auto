@@ -6,6 +6,41 @@ from collections.abc import Mapping
 from typing import Any
 
 
+def map_optional_panel_fields(report_data: Any, excel_data: Any, panel_package: Any) -> None:
+    """Map explicitly declared optional scalars, never infer a clinical value.
+
+    The neutral missing marker belongs only to these declared display fields;
+    a misspelled template variable still fails the strict template contract.
+    """
+    contract = getattr(panel_package, "input_contract", None) or {}
+    fields = contract.get("optional_source_fields") or {}
+    if not isinstance(fields, Mapping):
+        raise ValueError("optional_source_fields must map field names to source keys")
+    provenance = {}
+    for field, synonyms in fields.items():
+        if report_data.get_field(field) not in (None, ""):
+            continue
+        source_key = next(
+            (
+                key
+                for key in [field, *_string_list(synonyms)]
+                if excel_data.single_values.get(key) not in (None, "")
+            ),
+            None,
+        )
+        value = excel_data.single_values[source_key] if source_key else "未提供"
+        report_data.set_field(field, value)
+        override = (excel_data.metadata.get("field_source_overrides") or {}).get(field) or {}
+        provenance[field] = {
+            "source": (override.get("source") or "excel") if source_key else "default",
+            "source_key": source_key,
+            "provided": source_key is not None,
+            "inferred": False,
+        }
+    if provenance:
+        report_data.metadata["optional_source_fields"] = provenance
+
+
 def _value(source: Any, name: str, default: Any) -> Any:
     if isinstance(source, Mapping):
         return source.get(name, default)

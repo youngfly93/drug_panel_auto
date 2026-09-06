@@ -267,6 +267,14 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "optional_source_fields": {
+          "type": "object",
+          "description": "Optional display scalars mapped only from explicit source keys; absent values display 未提供, never an inferred clinical or QC result.",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
         "required_columns": {
           "type": "object",
           "description": "Per-table required columns. Keys are sheet names, values are arrays of column names.",

@@ -113,6 +113,11 @@ def build_field_provenance_report(
         },
         "source_precedence": SOURCE_PRECEDENCE,
         "fields": provenance,
+        **(
+            {"optional_source_fields": report_data.metadata["optional_source_fields"]}
+            if report_data.metadata.get("optional_source_fields")
+            else {}
+        ),
     }
 
 

@@ -84,7 +84,7 @@ LABEL_FIELDS = {
     "家族史": "family_history",
     "样本条形码": "sample_id",
     "采样部位": "sample_site",
-    "样本采集日期": "sampling_date",
+    "样本采集日期": "collection_date",
     "样本接收日期": "receive_date",
 }
 
@@ -529,7 +529,7 @@ def build_template(panel, spec, source, work, output):
         replace_cell_text(tables["basic"].rows[2].cells[1], field("clinical_diagnosis"))
     if panel == "lung_62":
         for col, name in enumerate(
-            ("sample_id", "sample_type", "sample_site", "sampling_date", "receive_date")
+            ("sample_id", "sample_type", "sample_site", "collection_date", "receive_date")
         ):
             replace_cell_text(doc.tables[2].rows[1].cells[col], field(name))
     if "pdl1" in tables:
@@ -562,6 +562,12 @@ def build_template(panel, spec, source, work, output):
                         else "{{ tmb_summary }}；{{ msi_summary }}",
                     )
     install_shared_modules(doc, spec, tables)
+    if not any("total_variants_count" in text(p._p) for p in doc.paragraphs):
+        paragraph_after(
+            tables["variants"]._tbl.getprevious(),
+            "本次检出体细胞变异：{{ total_variants_count }} 个（含Ⅰ/Ⅱ/Ⅲ类）；"
+            "靶向药物相关变异：{{ drug_related_count }} 个。",
+        )
     # A fixed, explicit gene list is not patient data. No unassayed gene is
     # represented as a negative result in the dynamic undetected set.
     replace_cell_text(
@@ -685,6 +691,16 @@ def build_package(panel, spec, private_dir, work, packages_dir):
         }
     ]
     raw["processors"] = processors
+    raw["input_contract"]["optional_source_fields"] = {
+        "phone": ["联系方式", "联系电话"],
+        "family_history": ["家族史"],
+        "treatment_history": ["既往用药史", "治疗史"],
+        "signer": ["签发者", "签发人"],
+        "qc_extraction_status": ["核酸提取质控结论"],
+        "qc_library_status": ["文库构建质控结论"],
+        "qc_sequencing_status": ["测序质控结论"],
+        "qc_analysis_status": ["分析质控结论"],
+    }
     raw["golden_cases"] = [
         {
             "id": panel + "_derived_draft_contract",

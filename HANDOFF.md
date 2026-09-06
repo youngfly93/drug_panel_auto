@@ -52,6 +52,15 @@
   首例 A13 未进入渲染：范围校验错误要求所有行含旗标键，但 ExcelReader 会省略空
   单元格。已修为按表头验列、空值仍作非成员，稀疏/全空旗标回归共 18 passed。
   原 FAIL 位于 `frozen_c608430/.work/validation_A13_initial`，不能改写为通过。
+- `frozen_3961ce0` 的 C13/A62 已通过范围映射，C13 实际上下文四变异/三靶向，
+  两例 TMB/MSI/PGx 对照无差异；但新模板可选字段缺映射/总数变量未引用导致严格
+  契约 FAIL，尚未渲染。后续开发已补包级 optional_source_fields（缺失=未提供，
+  有值保留来源，不从 Q30/深度推断合格）、总数位置和采集日期 canonical 名。
+  96 项轻量专项通过；三小模板已按新构建回执更新，母版不变。
+- c608430 全量 CI=2 failed / 943 passed / 2 skipped；两个失败是新增四包产品清单
+  断言未更新，已补显式清单和 draft 状态断言，等待新提交完整回归。
+  服务器已在本轮隔离 `.work/toolchain` 安装并校验官方 Node 22.16.0；未装到系统/
+  生产目录，用于后续临时网页验收。生产服务和生产 DB 尚未改变。
 - `scripts/validate_lung_small_panel_drafts.py` 提供逐例 Word/上下文/源表/588 TMB-MSI-PGx
   对照与完整渲染入口。新四产品 `draft_generation_eligible=false`，部署三处禁用范围
   均保留；只有真实工程门禁回执及源码/模板 SHA 匹配才可开放报告组草稿。

@@ -178,6 +178,9 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
 
         # 映射单值字段
         self._map_single_values(excel_data, report_data)
+        from reportgen.panels.input_contract import map_optional_panel_fields
+
+        map_optional_panel_fields(report_data, excel_data, panel_package)
         self._apply_identifier_defaults(report_data)
 
         # Resolve targeted-drug rules once per request. The context is passed

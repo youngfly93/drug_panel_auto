@@ -53,9 +53,9 @@ NGS 家族识别、默认无 PD-L1，再由订单/网页同族选择消歧。不
 
 | draft 模板 | SHA256 |
 |---|---|
-| lung_13_historical_draft_v1 | `e066eb88e549aace6babdc1f19df206c059ae847336f6b6ba857e8ae85143a09` |
-| lung_62_historical_draft_v1 | `e8cbb7ed1c768f2b99c1166befa0323bee3c05a387bb9b95a56d3b098e623d77` |
-| lung_62_pdl1_historical_draft_v1 | `ce352a8cf7d444f7efbe57861a027b5b6f6ebbc0557b0714125e40ca672c5e2f` |
+| lung_13_historical_draft_v1 | `2c1efb1735c5b1c2f383e5b63121af2a97917eb5aa8ea6747dfd22646f06e441` |
+| lung_62_historical_draft_v1 | `53a4be310869ad24a58eeb520aa421b002bb57aab763a99f2d8d996d08edf65a` |
+| lung_62_pdl1_historical_draft_v1 | `5c4fc8c8d1ced8d11d52fb364136a8e1628237a16f7f02ba1f105e3fa61998ed` |
 | lung_588_historical_draft_v1 | `02d151dbba0410e564beb1be22d2c76be86b28bd29c110f7715dd5b667ae9c3c` |
 
 ## 3. 派生规则与源表复算
@@ -112,7 +112,9 @@ python scripts/derive_panel_input.py INPUT.xlsx --panel lung_13 \
 C 输入的有效分级事件位于第 2、15、32、39 行，分别为 BRAF V600E、ERBB2 G660D、
 TP53 G245D、PIK3CA A1066V。其余成员旗标行包括未分级或知识注释行，因此“旗标
 恰好四行”亦不等同于“最终变异表四行”。成员资格、有效 HGVS 和显式分级必须分别核对。
-主变异表沿用肺癌Ⅰ/Ⅱ类口径，Ⅲ类保留于完整事件/解释上下文；没有把数字旗标 1 当Ⅰ类。
+主变异表沿用肺癌Ⅰ/Ⅱ/Ⅲ类口径，Ⅲ类不展示药物提示；没有把数字旗标 1 当Ⅰ类。
+早期验收脚本将主表误限于Ⅰ/Ⅱ类，已依据现有 mapper 和 A62 实际五条上下文行纠正；
+未通过删除 ESR1/FLT3 Ⅲ类变异迎合错误验收预期。
 
 此前提出额外 PD-L1 旗标的方案已撤回。62 族共用 `ExistInsmall62`，588 族共用
 `ExistInsmall588`；文件名不作为 IHC 证据。填写 PD-L1 结果或来源可自动切换同族
@@ -139,7 +141,7 @@ TP53 G245D、PIK3CA A1066V。其余成员旗标行包括未分级或知识注释
 | render_blank_page_check / 全页无孤行 | NOT_RUN | 无新产品 Word；未声称 42/44/56 页目标达成 |
 | 新产品 QA gate / 网页批量 3×3 | 待运行 | SSH 大文件传输中断；未用旧 588/CRC 或静态表格代替网页验收 |
 | 前端 / 发布范围保护 | 开发 PASS | lint、类型检查、build、3 个前端测试；发布范围 48 passed / 2 skipped；跳过项为既有可选环境测试 |
-| 冻结完整 CI | RUNNING | GitHub Actions 34012314013，源码 c608430；不提前写 PASS |
+| 冻结完整 CI | FAIL，待新提交复测 | GitHub Actions 34012314013，源码 c608430；2 项清单断言失败，见 5.1 |
 | 历史同案逐字对照 | AUTHORIZED_DEFERRED | 用户明确留待真配对输入，不伪称派生稿为同案验收 |
 | 新版本部署后三源一致 | NOT_RUN | 分支已推送 c608430；main=295ebd2，生产最后核验=da8e62d，不能报同步完成 |
 
@@ -167,6 +169,17 @@ TP53 G245D、PIK3CA A1066V。其余成员旗标行包括未分级或知识注释
 （3.42 秒，`sparse_flag_units.xml`）。验收脚本页数取值同时对齐 QA 的真实 metrics 字段。
 上述是开发修复，须以新提交重跑服务器实稿，不能追溯改变 c608430 的失败结论。
 
+3961ce0 的 C13/A62 进入严格模板契约后再次失败，尚未渲染：可选质控签核/病史等
+字段未接入，且模板未引用声明要求的 total_variants_count。C13 的实际上下文已为
+四变异/三靶向；A62 为五变异（含两条Ⅲ类）。TMB/MSI/PGx 对照均无差异。
+后续开发增加包内可选源字段映射：有值按来源展示、缺失明确“未提供”，不得由 Q30/
+深度推断质控合格；新增总数位置、修正 collection_date 字段名，模板契约仍为 fail。
+该轮轻量专项 96 passed（10.88 秒），包括缺失/有来源质控与Ⅲ类回归。
+
+c608430 全量 CI 实际为 **2 failed / 943 passed / 2 skipped**（1189.71 秒）；两项
+失败均为产品清单断言尚未列入新增四 draft，不是通过。后续补齐显式清单并断言新包
+仍为 draft/NOT_PRODUCTION_ACTIVE；必须由新提交全量 CI 重新证明通过。
+
 ## 6. 私有回执入口
 
 目录：`.work/lung-small-panel-derived-inputs/`。
@@ -180,6 +193,8 @@ TP53 G245D、PIK3CA A1066V。其余成员旗标行包括未分级或知识注释
 - `initial_unit_failure.json`：首轮真实失败，不覆盖。
 - `build/<panel>/build_receipt.json`：四母版、模板和来源规则 SHA；私有 token/中间种子也
   留在该目录，不能入库。
+- `build_optional_fields/<panel>/build_receipt.json`：补可选字段和总数位置后的开发模板；
+  上表当前模板 SHA 对应该回执，初始冻结模板 SHA 仍在旧 build 回执中。
 - `development_units_final.xml`、`release_scope_units.xml`：本次开发回归，不替代冻结服务器门禁。
 - 服务器隔离目录为本轮 `reportgen-lung-small-drafts-20260906.HySk3P`，不是生产目录。
   `frozen_c608430` 为干净 Git 工作树；`verified_inputs` 内 A/B/C 三份完整 SHA 已匹配。

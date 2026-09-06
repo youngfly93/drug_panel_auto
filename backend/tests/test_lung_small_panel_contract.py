@@ -15,6 +15,7 @@ for directory in (ROOT, ROOT / "backend"):
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.template_bridge_358 import build_undetected_genes, load_panel_config
+from reportgen.core.template_contract import extract_template_contract, validate_declared_contract
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.panels.input_scope import scope_panel_excel
 from reportgen.panels.loader import load_panel_package
@@ -97,6 +98,12 @@ def test_draft_packages_are_valid_and_literal_free(panel, count):
     assert pkg.raw["status"] == pkg.default_template.status == "draft"
     assert validate_panel_package(panel, project_root=ROOT).ok
     assert not scan_docx(pkg.resolve_template_file(), tokens=[]).hard
+    declared = validate_declared_contract(
+        str(pkg.resolve_template_file()),
+        extract_template_contract(str(pkg.resolve_template_file())),
+        pkg.template_contract,
+    )
+    assert declared.ok, declared
     config = load_panel_config(panel_package=pkg)
     assert len(config.crc_important_genes) == count
     assert len(build_undetected_genes(set(), panel_config=config)) == count
@@ -229,3 +236,46 @@ def test_thirteen_gene_context_keeps_four_variants_and_three_targeted_rows(tmp_p
     policy = load_targeted_drug_rule_context(pkg)
     assert "TP53" not in policy["gene_level_review_pending"]["allowed_genes"]
     assert "PIK3CA" in policy["gene_level_review_pending"]["allowed_genes"]
+
+
+def test_optional_fields_never_infer_qc_from_read_metrics(tmp_path):
+    excel = source(tmp_path, 13)
+    excel.single_values.update({"Q30": 98.5, "平均深度": 1500})
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    report = mapper.map(excel, panel_package=package("lung_13"))
+    for field in (
+        "qc_extraction_status", "qc_library_status", "qc_sequencing_status", "qc_analysis_status"
+    ):
+        assert report.get_field(field) == "未提供"
+        assert report.metadata["optional_source_fields"][field] == {
+            "source": "default", "source_key": None, "provided": False, "inferred": False,
+        }
+    assert "unregistered_typo" not in report.context
+
+
+def test_optional_fields_preserve_explicit_source_and_remain_panel_scoped(tmp_path):
+    excel = source(tmp_path, 13)
+    excel.single_values["测序质控结论"] = "人工复核未通过"
+    excel.single_values["family_history"] = "合成测试病史"
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    report = mapper.map(excel, panel_package=package("lung_13"))
+    assert report.get_field("qc_sequencing_status") == "人工复核未通过"
+    assert report.get_field("family_history") == "合成测试病史"
+    provenance = report.metadata["optional_source_fields"]["qc_sequencing_status"]
+    assert provenance["source_key"] == "测序质控结论"
+    legacy = mapper.map(excel, panel_package=package("lung_588_pdl1"))
+    assert "qc_sequencing_status" not in legacy.context
+
+
+def test_class_three_variants_keep_primary_rows_but_no_drug_tips(tmp_path):
+    excel = source(tmp_path, 62)
+    excel.table_data["Variations"] = [{
+        "Gene_Symbol": "ESR1", "cHGVS": "c.1242G>T", "pHGVS_S": "p.Q414H",
+        "ExistIn552": "Ⅲ类", "ExistInsmall62": 1,
+    }]
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    report = mapper.map(excel, panel_package=package("lung_62"))
+    rows = report.get_table("variants_2_1")
+    assert len(rows) == 1 and rows[0]["gene"] == "ESR1"
+    assert rows[0]["benefit_drugs"] == "--"
+    assert report.get_table("targeted_drug_tips") == []

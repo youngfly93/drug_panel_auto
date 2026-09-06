@@ -49,10 +49,10 @@ def write_json(path, value):
 
 
 def expected_variants(excel_path, package):
-    """Primary table oracle: member, coding event and explicit class I/II.
+    """Primary table oracle: member, coding event and explicit class I/II/III.
 
-    Class III remains in the all-variants/knowledge context. Annotation/CNV
-    notes without c.HGVS are not SNVs, following the existing lung contract.
+    Class III is displayed without drug tips, as in the existing 588 primary
+    table. Annotation/CNV notes without c.HGVS are not SNVs.
     """
     contract = package.raw.get("derived_input") or {}
     flag = contract.get("membership_column") or "ExistInsmall588"
@@ -65,7 +65,7 @@ def expected_variants(excel_path, package):
         for cells in rows:
             row = dict(zip(header, cells))
             category = str(row.get("ExistIn552") or "").strip()
-            explicit_class = bool(re.fullmatch(r"(?:Ⅰ|Ⅱ|I|II|1|2)类", category))
+            explicit_class = bool(re.fullmatch(r"(?:Ⅰ|Ⅱ|Ⅲ|I|II|III|1|2|3)类", category))
             gene = str(row.get("Gene_Symbol") or "").strip()
             if (
                 row.get(flag) in (1, "1")

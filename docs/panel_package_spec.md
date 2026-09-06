@@ -94,6 +94,12 @@ Here the `Variations` sheet and every `required_columns` header are mandatory,
 while either protein-HGVS header is sufficient. Structural validation reports
 only configured sheet/column names and never includes patient values.
 
+`input_contract.optional_source_fields` maps optional display variables to
+explicit source-key aliases. It is opt-in per package; missing values become
+`未提供`, never a clinical finding or a QC approval. Existing mapped values are
+preserved, and the report metadata records source/default provenance. Fields
+not declared here remain subject to the strict template-variable gate.
+
 ## `qa.yaml` Minimum Fields
 
 Every panel package must include a QA profile:

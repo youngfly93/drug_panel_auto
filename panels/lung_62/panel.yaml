@@ -160,6 +160,26 @@ input_contract:
       - MSI-H
       source_priority:
       - excel
+  optional_source_fields:
+    phone:
+    - 联系方式
+    - 联系电话
+    family_history:
+    - 家族史
+    treatment_history:
+    - 既往用药史
+    - 治疗史
+    signer:
+    - 签发者
+    - 签发人
+    qc_extraction_status:
+    - 核酸提取质控结论
+    qc_library_status:
+    - 文库构建质控结论
+    qc_sequencing_status:
+    - 测序质控结论
+    qc_analysis_status:
+    - 分析质控结论
 template_contract:
   required_variables:
   - patient_name
