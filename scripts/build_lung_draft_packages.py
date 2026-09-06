@@ -25,7 +25,7 @@ import yaml
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Pt
+from docx.shared import Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -434,18 +434,11 @@ def install_refreshable_toc(doc):
         matched += 1
     if matched < 3:
         raise ValueError("Historical TOC cannot be matched to surviving body headings")
-    block = OxmlElement("w:sdt")
-    properties = OxmlElement("w:sdtPr")
-    obj = OxmlElement("w:docPartObj")
-    gallery = OxmlElement("w:docPartGallery")
-    gallery.set(qn("w:val"), "Table of Contents")
-    obj.append(gallery)
-    properties.append(obj)
-    block.append(properties)
-    content = OxmlElement("w:sdtContent")
-    block.append(content)
-    paragraph = OxmlElement("w:p")
-    content.append(paragraph)
+    # Match the working A-family complex-field representation. The empty
+    # hand-built content control did not survive the first Linux round-trip.
+    # This non-numeric cache is explicitly pending, never a made-up page.
+    block = OxmlElement("w:p")
+    paragraph = block
     for field_kind in ("begin", "instruction", "separate", "end"):
         run = OxmlElement("w:r")
         paragraph.append(run)
@@ -455,7 +448,15 @@ def install_refreshable_toc(doc):
             node.set(qn("xml:space"), "preserve")
         else:
             node.set(qn("w:fldCharType"), field_kind)
+            if field_kind == "begin":
+                node.set(qn("w:dirty"), "true")
         run.append(node)
+        if field_kind == "separate":
+            cache_run = OxmlElement("w:r")
+            cache = OxmlElement("w:t")
+            cache.text = "目录待排版引擎刷新"
+            cache_run.append(cache)
+            paragraph.append(cache_run)
     if entries:
         entries[0]._p.addprevious(block)
     else:
@@ -475,6 +476,35 @@ def install_refreshable_toc(doc):
         update = OxmlElement("w:updateFields")
         doc.settings.element.append(update)
     update.set(qn("w:val"), "true")
+
+
+def normalize_draft_case_fields(doc, basic_table):
+    """Remove stale case summaries and light-background/white-value inheritance."""
+    for row in basic_table.rows:
+        for cell in row.cells:
+            if "{{" not in cell.text:
+                continue
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+    for p in doc.paragraphs:
+        value = compact(p.text)
+        if "检出体细胞变异" in value:
+            replace_paragraph_text(
+                p,
+                "本次检出体细胞变异：{{ total_variants_count }}个；"
+                "与靶向药物用药相关的变异有：{{ drug_related_count }}个。详见本例结果表。",
+            )
+        if value != "肺癌相关重要基因变异及药物提示":
+            continue
+        p.paragraph_format.keep_with_next = True
+        cursor = p._p.getprevious()
+        while cursor is not None and cursor.tag == qn("w:p") and not text(cursor).strip():
+            if any(list(cursor.iter(qn(tag))) for tag in ("w:sectPr", "w:drawing", "w:pict")):
+                break
+            previous = cursor.getprevious()
+            cursor.getparent().remove(cursor)
+            cursor = previous
 
 
 def sanitize_final(doc, replacements, panel):
@@ -724,6 +754,7 @@ def build_template(panel, spec, source, work, output):
     front = next(p for p in doc.paragraphs if p.text.strip() and "\t" not in p.text)
     paragraph_after(front._p, NOTICE)
     sanitize_final(doc, replacements, panel)
+    normalize_draft_case_fields(doc, tables["basic"])
     fixed = {}
     # Only the fixed appendix may contain a historical literature example.
     after_appendix = False
@@ -993,6 +1024,8 @@ def build_package(panel, spec, private_dir, work, packages_dir):
             rule["texts"]["patient_letter_project_label"]["text"] = (
                 raw["display_name"] + "检测项目"
             )
+        elif source.name == "style.yaml":
+            rule["style"].setdefault("toc", {})["mode"] = "native"
         elif source.name == "knowledge_coverage.yaml":
             rule["reportable_genes"] = genes
             rule["contract"]["ordered_gene_list_sha256"] = hashlib.sha256(

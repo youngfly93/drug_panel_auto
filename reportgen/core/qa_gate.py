@@ -661,6 +661,7 @@ def _current_output_profile_from_package(package: PanelPackage) -> dict[str, Any
         "source": str(raw.get("source") or "golden_reference"),
         "required_features": _severity_map(raw.get("required_features") or {}),
         "required_sections": _severity_map(raw.get("required_sections") or {}),
+        "section_aliases": raw.get("section_aliases") or {},
         "require_table_shapes": _severity(
             raw.get("require_table_shapes"), default="warn"
         ),

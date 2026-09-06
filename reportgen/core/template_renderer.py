@@ -6565,6 +6565,16 @@ class TemplateRenderer:
         import os
         import shutil
 
+        if self._panel_style_config(context, "toc").get("mode") == "native":
+            # Historical A/B/C families have their own real headings. Keep
+            # their native index and refresh only after the final layout pass;
+            # the CRC-specific four-part PAGEREF rewrite does not apply.
+            if not self._document_contains_toc(file_path):
+                raise RuntimeError("Native TOC field was lost before final pagination")
+            self._refresh_fields_with_native_engine(file_path)
+            self._set_update_fields(file_path)
+            return
+
         require_deterministic_layout = bool(
             (context or {}).get("_require_deterministic_layout")
         )

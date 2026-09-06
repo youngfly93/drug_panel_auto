@@ -8,15 +8,46 @@ from reportgen.core.legacy_reference import (
     _section_presence,
     snapshot_docx_report,
 )
+from reportgen.core.qa_gate import (
+    _current_output_profile_from_package,
+    _run_single_current_output_contract,
+)
 from reportgen.core.qa_report import _build_business_checks, _inspect_toc, _read_part3_text
 from reportgen.core.template_bridge_358 import load_panel_config
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.docx_sections import find_reference_section_bounds
 from reportgen.panels.loader import load_panel_package
-from scripts.build_lung_draft_packages import install_refreshable_toc
+from scripts.build_lung_draft_packages import install_refreshable_toc, normalize_draft_case_fields
 from scripts.validate_lung_small_panel_drafts import inspect_word_scope
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+@pytest.mark.parametrize("panel", ["lung_13", "lung_62", "lung_62_pdl1", "lung_588"])
+@pytest.mark.parametrize("omit_biomarker_heading", [False, True])
+def test_current_output_gate_retains_package_declared_section_aliases(
+    tmp_path, panel, omit_biomarker_heading
+):
+    document = Document()
+    for value in (
+        "本次检出体细胞变异：1个",
+        "" if omit_biomarker_heading else "补充检测结果：TMB、MSI 与化疗药物基因组学",
+        "肿瘤突变负荷为10.0 mutations/Mb，TMB-H；MSS",
+        "本次 PD-L1 免疫组化检测结果：TPS 50%，CPS 52，阳性（高表达）。",
+        "基因检测列表",
+    ):
+        document.add_paragraph(value)
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "基因突变信息"
+    path = tmp_path / "synthetic-current-output.docx"
+    document.save(path)
+    profile = _current_output_profile_from_package(load_panel_package(panel))
+    result = _run_single_current_output_contract(
+        panel, output_file=path, output_root=tmp_path / "snapshot",
+        profile=profile, source_step="synthetic-test", fail_on_warn=True,
+    )
+    assert result["status"] == ("FAIL" if omit_biomarker_heading else "PASS"), result
+    if omit_biomarker_heading:
+        assert any(row["code"] == "LEGACY_SECTION_MISSING" for row in result["issues"])
 
 
 @pytest.mark.parametrize("phrase", ["本次共检出体细胞变异：4个", "本次检出体细胞变异：4 个"])
@@ -93,7 +124,8 @@ def test_flat_historical_toc_becomes_refreshable_without_old_page_numbers(tmp_pa
     path = tmp_path / "converted-toc.docx"
     document.save(path)
     # Empty cache must still fail the page-number check until real LO refresh.
-    assert _inspect_toc([], output_path=path)["status"] == "WARN"
+    result = _inspect_toc(document.paragraphs, output_path=path, require_fields=True)
+    assert result["status"] == "FAIL"
 
 
 def test_empty_b_family_toc_uses_actual_major_headings():
@@ -104,7 +136,67 @@ def test_empty_b_family_toc_uses_actual_major_headings():
         document.add_paragraph(label)
     install_refreshable_toc(document)
     assert " TOC " in document.element.xml
-    assert [p.text for p in document.paragraphs[1:]] == labels
+    assert [p.text for p in document.paragraphs if p.text in labels] == labels
+    assert "目录待排版引擎刷新" in [p.text for p in document.paragraphs]
+
+
+@pytest.mark.parametrize("old_count", [2, 9, 123])
+def test_case_summary_and_basic_values_never_inherit_historical_case_data(old_count):
+    document = Document()
+    basic = document.add_table(rows=1, cols=2)
+    basic.cell(0, 0).text = "姓名"
+    basic.cell(0, 1).text = "{{ patient_name }}"
+    document.add_paragraph(f"在本次检测范围内，检出体细胞变异：{old_count}个，其中与靶向药物相关的变异：0个。暂未筛选到合适的靶向药物。")
+    document.add_page_break()
+    title = document.add_paragraph("肺癌相关重要基因变异及药物提示")
+    normalize_draft_case_fields(document, basic)
+    paragraphs = [p.text for p in document.paragraphs]
+    assert "暂未筛选" not in "".join(paragraphs)
+    assert f"变异：{old_count}个" not in "".join(paragraphs)
+    assert "{{ total_variants_count }}" in "".join(paragraphs)
+    assert "{{ drug_related_count }}" in "".join(paragraphs)
+    assert str(basic.cell(0, 1).paragraphs[0].runs[0].font.color.rgb) == "000000"
+    assert title.paragraph_format.keep_with_next
+    assert 'w:type="page"' not in document.element.xml
+
+
+def test_required_native_toc_cannot_pass_from_numbered_body_prose(tmp_path):
+    document = Document()
+    document.add_paragraph("目录")
+    document.add_paragraph("2.1 检测结果")
+    document.add_paragraph("3.1 合成正文数值 52")
+    path = tmp_path / "missing-native.docx"
+    document.save(path)
+    result = _inspect_toc(document.paragraphs, output_path=path, require_fields=True)
+    assert result["status"] == "FAIL"
+
+
+@pytest.mark.parametrize("stale", [False, True])
+def test_every_case_summary_count_must_agree_even_when_one_correct_summary_exists(stale):
+    text = "本次检出体细胞变异：1个；与靶向药物用药相关的变异有：1个。"
+    if stale:
+        text += "检出体细胞变异：2个，其中与靶向药物相关的变异：0个。"
+    result = _build_business_checks(
+        text, {"total_variants_count": 1, "drug_related_count": 1}, "lung_62_pdl1"
+    )
+    for name in ("case_total_count_consistency", "case_drug_count_consistency"):
+        assert result[name]["status"] == ("FAIL" if stale else "PASS")
+
+
+def test_native_pagination_never_invokes_crc_toc_rewrite(monkeypatch):
+    renderer = TemplateRenderer(log_level="ERROR")
+    events = []
+    monkeypatch.setattr(renderer, "_document_contains_toc", lambda _path: True)
+    monkeypatch.setattr(
+        renderer, "_refresh_fields_with_native_engine", lambda _path: events.append("refresh")
+    )
+    monkeypatch.setattr(renderer, "_set_update_fields", lambda _path: events.append("fields"))
+    context = {"panel_style": {"toc": {"mode": "native"}}}
+    renderer._populate_static_toc_page_numbers("synthetic.docx", context)
+    assert events == ["refresh", "fields"]
+    monkeypatch.setattr(renderer, "_document_contains_toc", lambda _path: False)
+    with pytest.raises(RuntimeError, match="Native TOC field was lost"):
+        renderer._populate_static_toc_page_numbers("synthetic.docx", context)
 
 
 def native_toc(tmp_path, pages=(1, 2), target="section", closed=True):

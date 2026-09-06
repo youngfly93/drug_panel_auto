@@ -54,6 +54,7 @@ style:
     item_font_size: 11
     item_bold: false
     content_top_padding_pt: 57
+    mode: native
   front_matter:
     guide_spacer_count: 30
     insert_page_break: false

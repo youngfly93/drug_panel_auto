@@ -242,7 +242,11 @@ def build_docx_qa_report(
             "Rendered DOCX contains visible empty bullet/numbered paragraphs.",
         )
 
-    toc = _inspect_toc(paragraphs, output_path=output_path)
+    toc_style = _style_config(context.get("panel_style") or {}, "toc")
+    toc = _inspect_toc(
+        paragraphs, output_path=output_path,
+        require_fields=toc_style.get("mode") == "native",
+    )
     checks["toc_page_numbers"] = toc
     if toc["status"] == "FAIL":
         issue("error", "TOC_FIELD_INVALID", toc["message"])
@@ -1206,7 +1210,7 @@ def _inspect_reportgen_toc_fields(output_path: Path) -> Optional[Dict[str, Any]]
 
 
 def _inspect_toc(
-    paragraphs: List[Any], *, output_path: Optional[Path] = None
+    paragraphs: List[Any], *, output_path: Optional[Path] = None, require_fields: bool = False
 ) -> Dict[str, Any]:
     if output_path is not None:
         field_check = _inspect_reportgen_toc_fields(Path(output_path))
@@ -1215,6 +1219,8 @@ def _inspect_toc(
         native_check = _inspect_native_toc(Path(output_path))
         if native_check is not None:
             return native_check
+    if require_fields:
+        return {"status": "FAIL", "message": "Required refreshable TOC fields are missing."}
 
     texts = [(p.text or "").strip() for p in paragraphs]
     start_idx = None
@@ -1937,6 +1943,19 @@ def _build_business_checks(
     part3_compact_text: Optional[str] = None,
 ) -> Dict[str, Any]:
     checks: Dict[str, Any] = {}
+    for name, pattern, expected in (
+        ("case_total_count_consistency", r"检出体细胞变异[：:](\d+)个", _as_int(context.get("total_variants_count"))),
+        ("case_drug_count_consistency", r"与靶向药物(?:用药)?相关的变异(?:有)?[：:](\d+)个", _as_int(context.get("drug_related_count"))),
+    ):
+        observed = [int(value) for value in re.findall(pattern, compact_text)]
+        if expected is not None and observed:
+            # Every occurrence must agree, not just one correct summary next
+            # to an unchanged historical-case paragraph elsewhere in the Word.
+            checks[name] = {
+                "status": "PASS" if all(value == expected for value in observed) else "FAIL",
+                "expected": expected,
+                "observed": observed,
+            }
     if context.get("cnv_review_required"):
         visible = "CNV待复核" in compact_text
         checks["cnv_source_review"] = {
@@ -2111,6 +2130,8 @@ def _build_business_checks(
 
 def _business_issues(checks: Mapping[str, Any]) -> Iterable[Dict[str, str]]:
     messages = {
+        "case_total_count_consistency": "A rendered case-summary variant count contradicts the source-derived context.",
+        "case_drug_count_consistency": "A rendered case-summary drug-related count contradicts the source-derived context.",
         "total_variant_count_text": "Total variant count text does not match report context.",
         "drug_related_count_text": "Drug-related variant count text does not match report context.",
         "targeted_or_immune_related_count_text": (

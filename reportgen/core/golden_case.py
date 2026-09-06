@@ -409,7 +409,10 @@ def _golden_case_spec(panel: str) -> Dict[str, Any]:
                     **LUNG_588_PDL1_EXPECTATIONS["expected_context"],
                     "project_name": name,
                 },
-                "required_qa_checks": list(_LUNG_PDL1_REQUIRED_QA_CHECKS),
+                "required_qa_checks": [
+                    *_LUNG_PDL1_REQUIRED_QA_CHECKS,
+                    "case_total_count_consistency", "case_drug_count_consistency",
+                ],
                 "required_text": [
                     "报告组评审草稿（非临床交付）",
                     "ERBB2", "c.1979G>A", "p.G660D",
