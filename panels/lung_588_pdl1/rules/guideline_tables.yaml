@@ -1,12 +1,13 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "guideline_tables"
-version: "1.1.0"
-updated: "2026-09-02"
+version: "1.2.0"
+updated: "2026-09-05"
 status: "pilot"
 description: >
   肺癌329/588历史终版共享的固定指南展示与CtDrug化疗结构。固定药物及说明
   转录自受控同案历史终版；病例检测结果只由本次Excel推导。
+  UGT1A1仅展示原始分型待医学复核；长春瑞滨不借用其它长春类药物证据。
 
 guideline_tables:
   nccn_results:
@@ -184,33 +185,21 @@ guideline_tables:
     uncovered_display: "未覆盖"
     irinotecan_safety:
       enabled: true
+      interpretation_policy: "genotype_only_pending_review"
       drug_display: "伊立替康剂量安全性"
       selectors:
         star28: {gene: "UGT1A1", site: "rs8175347"}
         star6: {gene: "UGT1A1", site: "rs4148323"}
-      historical_rules:
-        - star28: "6TA/6TA"
-          star6: "GG"
-          result: "UGT1A1基因型为6TA/6TA"
-          dose_evaluation: "正常剂量使用"
-        - star28: "6TA/6TA"
-          star6: "AG"
-          result: "UGT1A1基因型为6TA/6TA"
-          dose_evaluation: "正常剂量使用"
-        - star28: "6TA/7TA"
-          star6: "GG"
-          result: "UGT1A1基因型为6TA/7TA"
-          dose_evaluation: "减少剂量使用"
-        - star28: "6TA/7TA"
-          star6: "AG"
-          result: "UGT1A1基因型为6TA/7TA"
-          dose_evaluation: "减少剂量使用"
-      unsupported_result: "UGT1A1分型未形成历史剂量建议"
-      unsupported_dose_evaluation: "未形成剂量建议"
+      review_dose_evaluation: "待医学复核；不自动给出正常或减量用药建议"
     base_drugs:
       - {key: "cisplatin", display: "顺铂", aliases: ["顺铂"], prediction_genes: [XPC, MTHFR, GSTP1, ERCC1, XRCC1, GSTM1]}
       - {key: "carboplatin", display: "卡铂", aliases: ["卡铂"], prediction_genes: [MTHFR, ERCC1, XRCC1]}
-      - {key: "vinorelbine", display: "长春瑞滨", aliases: ["长春瑞滨", "长春碱", "长春新碱"], prediction_genes: [ABCB1, CEP72]}
+      - key: "vinorelbine"
+        display: "长春瑞滨"
+        aliases: ["长春瑞滨", "vinorelbine"]
+        source_match: "exact_molecule"
+        require_explicit_summary: true
+        missing_evidence_display: "未提供同药物证据"
       - {key: "etoposide", display: "依托泊苷", aliases: ["依托泊苷"], prediction_genes: [SLCO1B1, DYNC2H1]}
       - {key: "gemcitabine", display: "吉西他滨", aliases: ["吉西他滨"], prediction_genes: [CDA, RRM1]}
       - {key: "docetaxel", display: "多西他赛", aliases: ["多西他赛"], prediction_genes: [ERCC1, VEGFA]}

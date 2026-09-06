@@ -75,6 +75,29 @@ HISTORICAL_IRINOTECAN_SAFETY = {
         "dose_evaluation": "减少剂量使用",
     },
 }
+# 2026-09-05 source-fidelity corrections supersede these specific historical
+# outputs, not the historical source itself (retained above for comparison).
+# The source Ct1000 block is vincristine, not vinorelbine. UGT1A1 dose wording
+# is not a validated genotype-only rule; both source loci must remain visible.
+CURRENT_CHEMOTHERAPY_GENES = {**HISTORICAL_CHEMOTHERAPY_GENES, "长春瑞滨": "/"}
+CURRENT_CHEMOTHERAPY_RATINGS = {
+    alias: {**ratings, "长春瑞滨": ("未提供同药物证据", "未提供同药物证据")}
+    for alias, ratings in HISTORICAL_CHEMOTHERAPY_RATINGS.items()
+}
+CURRENT_CHEMOTHERAPY_SUMMARIES = {
+    **HISTORICAL_CHEMOTHERAPY_SUMMARIES,
+    "CASE-LUNG-C": (
+        "经分析，可考虑优先选择的化疗方案有吉西他滨单药方案、"
+        "白蛋白结合型紫杉醇单药方案、紫杉醇单药方案。"
+    ),
+}
+CURRENT_IRINOTECAN_SAFETY = {
+    alias: {
+        "result": f"UGT1A1 *28（rs8175347）：{star28}\nUGT1A1 *6（rs4148323）：GG",
+        "dose_evaluation": "待医学复核；不自动给出正常或减量用药建议",
+    }
+    for alias, star28 in (("CASE-LUNG-B", "6TA/6TA"), ("CASE-LUNG-C", "6TA/7TA"))
+}
 KNOWN_INPUTS = {
     "267a8cbab4d112ea38660dcb1734bb4fb3a7269f50abed6d83a9bf1262ee5646": {
         "alias": "CASE-LUNG-A",
@@ -1164,12 +1187,12 @@ def validate_inputs(
             "dosage": 11,
         }:
             failures.append(f"{row['alias']}: chemotherapy table rows differ")
-        expected_ratings = HISTORICAL_CHEMOTHERAPY_RATINGS.get(row["alias"])
+        expected_ratings = CURRENT_CHEMOTHERAPY_RATINGS.get(row["alias"])
         if expected_ratings is not None:
             expected_base_rows = [
                 {
                     "drug": drug,
-                    "genes": HISTORICAL_CHEMOTHERAPY_GENES[drug],
+                    "genes": CURRENT_CHEMOTHERAPY_GENES[drug],
                     "efficacy": ratings[0],
                     "toxicity": ratings[1],
                 }
@@ -1177,18 +1200,18 @@ def validate_inputs(
             ]
             if row["chemotherapy_base_rows"] != expected_base_rows:
                 failures.append(
-                    f"{row['alias']}: chemotherapy base rows differ from historical final"
+                    f"{row['alias']}: chemotherapy base rows violate corrected source-fidelity contract"
                 )
             if row["chemotherapy_summary_text"] != (
-                HISTORICAL_CHEMOTHERAPY_SUMMARIES[row["alias"]]
+                CURRENT_CHEMOTHERAPY_SUMMARIES[row["alias"]]
             ):
                 failures.append(
-                    f"{row['alias']}: chemotherapy summary differs from historical final"
+                    f"{row['alias']}: chemotherapy summary violates corrected source-fidelity contract"
                 )
-            expected_irinotecan = HISTORICAL_IRINOTECAN_SAFETY[row["alias"]]
+            expected_irinotecan = CURRENT_IRINOTECAN_SAFETY[row["alias"]]
             if row["irinotecan_safety_rows"] != [expected_irinotecan]:
                 failures.append(
-                    f"{row['alias']}: irinotecan safety differs from historical final"
+                    f"{row['alias']}: irinotecan safety violates genotype-only review contract"
                 )
         if any(row["chemotherapy_detail_quality"].values()):
             failures.append(

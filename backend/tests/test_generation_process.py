@@ -1,3 +1,5 @@
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -43,6 +45,31 @@ class DirectBridge:
     def generate_report(self, **kwargs):
         self.called = True
         return {"success": True, "kwargs": kwargs}
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["app.services.generation_process", "app.services.clinical_info_service"],
+)
+def test_short_lived_worker_import_does_not_load_the_report_engine(module_name):
+    command = (
+        "import importlib, sys; "
+        f"importlib.import_module({module_name!r}); "
+        "heavy = {'reportgen.core.report_generator', "
+        "'reportgen.core.template_renderer', 'app.services.reportgen_bridge'}; "
+        "assert not heavy.intersection(sys.modules), heavy.intersection(sys.modules)"
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT), str(BACKEND), env.get("PYTHONPATH", "")])
+    result = subprocess.run(
+        [sys.executable, "-c", command],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_run_callable_with_timeout_returns_child_payload():

@@ -469,11 +469,13 @@ def test_ct1000_explicit_summary_is_preferred_and_reproduces_history(tmp_path):
 @pytest.mark.parametrize(
     ("star28", "expected_result", "expected_dose"),
     [
-        ("6TA/6TA", "UGT1A1基因型为6TA/6TA", "正常剂量使用"),
-        ("6TA/7TA", "UGT1A1基因型为6TA/7TA", "减少剂量使用"),
+        ("6TA/6TA", "UGT1A1 *28（rs8175347）：6TA/6TA\nUGT1A1 *6（rs4148323）：GG",
+         "待医学复核；不自动给出正常或减量用药建议"),
+        ("6TA/7TA", "UGT1A1 *28（rs8175347）：6TA/7TA\nUGT1A1 *6（rs4148323）：GG",
+         "待医学复核；不自动给出正常或减量用药建议"),
     ],
 )
-def test_irinotecan_safety_uses_exact_ugt1a1_star28_star6_history(
+def test_irinotecan_safety_preserves_exact_loci_without_historical_dose_claim(
     tmp_path,
     star28,
     expected_result,
@@ -581,6 +583,7 @@ def test_ct1000_parser_keeps_source_gene_order_and_explicit_ratings():
     assert rows == [
         {
             "source_drug": "顺铂（cisplatin）",
+            "source_drugs": ["顺铂（cisplatin）"],
             "drug": "顺铂",
             "genes": ["XPC", "ERCC1"],
             "gene_display": "XPC、ERCC1",
@@ -591,6 +594,7 @@ def test_ct1000_parser_keeps_source_gene_order_and_explicit_ratings():
         },
         {
             "source_drug": "三胺硫磷（thiotepa）",
+            "source_drugs": ["三胺硫磷（thiotepa）"],
             "drug": "三胺硫磷",
             "genes": ["ALDH1A1"],
             "gene_display": "ALDH1A1",

@@ -1026,7 +1026,7 @@ table_data:
     required: false
     empty_behavior: "hide_section"
     table_format: "simple"
-    skip_rows: 2  # 跳过前2行（第1行旧表头+第2行空行），从第3行读取（真实表头在第3行）
+    # ExcelReader uses semantic CNV headers; summary and segment blocks may move.
     columns:
       Gene:
         synonyms: ['Gene', 'gene', '基因']

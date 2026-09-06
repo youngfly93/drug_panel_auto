@@ -151,7 +151,7 @@ def build_tmb_fields(
     tmb_status = "H" if tmb >= threshold else "L"
     tmb_level_cn = "高" if tmb_status == "H" else "低"
     level = "TMB-H" if tmb_status == "H" else "TMB-L"
-    direction = "高于" if tmb_status == "H" else "低于"
+    direction = "等于" if tmb == threshold else ("高于" if tmb_status == "H" else "低于")
     unit = "mutations/Mb"
     detail_sentence = (
         f"在本次检测范围内，该样本肿瘤突变负荷为{tmb:.1f} {unit}，"

@@ -1,7 +1,7 @@
 # HANDOFF —— 基因组 Panel 自动化报告系统（Web 平台）
 
 > 当前状态快照。更新就改这个文件，别新建 `_v2`。
-> 最近更新：**2026-09-02**（肺癌 329/588 历史终版内容对齐候选）。
+> 最近更新：**2026-09-06**（用户已授权提交和部署，冻结发布验证中）。
 
 ---
 
@@ -12,6 +12,103 @@
 批量生成。该口径不等于正式临床放行或医学签署。任何生产状态仍必须以
 `current_release`、`REVISION`、进程 cwd 和健康检查四项实时证据为准，不能由本文档
 静态推断。
+
+## 0.10 2026-09-06 提交与部署授权（最新继续点）
+
+- 用户明确授权“提交、部署吧”，替代下文 R10–R12 的待提交授权状态。
+- 提交范围仅限本轮 18 个业务/测试/文档文件；其他未跟踪审计原稿和用户专用 stash
+  原样保留。冻结前 405 个受测文件与 R12 开发快照逐一相等，origin/main 仍为 da8e62d。
+- 先推送 PR 并等待必需 `Reportgen QA Gate / qa-gate`，合入后按精确 SHA 在真实 Git
+  工作树生成 Linux 全页历史金标候选并由既有脚本签注。不得复用旧 SHA 的签注。
+- 仅在完整门禁通过后，使用 `scripts/iyun129_deploy_clean.sh` 完成备份、不可变发布
+  切换及身份/内外健康检查；回滚基线为 da8e62d。未就绪产品保持禁用，肺癌保持 pilot。
+- 本轮运行回执统一留在 ignored `.work/lung-report-accuracy-release/`；此提交时点尚未
+  部署，不得把部署计划当完成证据。最终状态以该目录回执和生产实时身份为准。
+
+## 0.9 2026-09-05 输入保真修复候选（R10；后续结果见 0.9.2/0.10）
+
+- 工作分支：`codex/lung-report-accuracy-fixes-20260905`。本地主干已同步到
+  `da8e62de672ecaa5416d3c2b29e3e9294531f519`；本轮最后确认的 origin/main 与
+  iyun129 实际 release/REVISION/进程 cwd 均为此版本。业务修复尚未提交、合并或部署。
+- Cnv 改按语义表头解析多块工作表，保留汇总/区段和原始行号；不能把数字标记或
+  `gain` 当作已确认扩增，也不能把解析失败输出为阴性。肺癌源 CNV 不确定项明确
+  显示待复核，QA 检查提示是否进入最终 Word。
+- *28/*6 均完整展示原始基因型，撤下未经充分验证的自动正常/减量文案；长春新碱
+  不再作为长春瑞滨别名，无同分子直接证据时明确缺失且不进入优先组合。
+  本条取代 0.8/0.6 中这两项历史输出对齐要求；历史文档不作为跨药物证据来源。
+- 短药物解析连排仅作用于肺癌；共用 TMB 函数纠正等阈值时“高于”的表述。未改
+  阈值、CRC 二进制模板、CRC YAML 医学规则或批准差异指纹；共用 CNV 解析/状态
+  判别有变动，仍须通过 CRC 外部历史金标门禁，不能只凭合成用例宣称全部行为不变。
+- 已验：72 项新增输入/边界回归；CRC358/301、肺癌329/588 包校验全部 0 issue；
+  真实 588 A/B/C 的 24 个变异及 TMB/MSI 共 30 项独立源表核对全通过，Word 为
+  61/71/75 页，整本视觉及空白页检查 PASS。整体 QA 均为 WARN，仍需医学复核。
+- 服务器开发快照与正本 405 个源码/规则/模板/测试文件逐一匹配。快照 SHA256
+  `8f6f52c70f868b63233b41730c3c1e6c1dd9998be4410357f8b98b0abf3a1811` 只标识
+  未提交开发快照，不是发布 commit。凭据在 `.work/lung-report-accuracy-fix/`，
+  原 Word/QA 在 iyun129 隔离目录 `reportgen-lung-fix-20260905.9x4Hk4`。
+- 继续点：检查 `backend_retest_receipt.json`、`retest_329_generation.json`，补记结果；
+  冻结后再跑 GitHub 必需检查和同 SHA 的 CRC 历史金标发布门禁，然后备份、部署、
+  核验四项运行身份并完成登录后的 Web 异步链路。不能复用旧 SHA 的历史发布凭据。
+- 用户已授权改代码、同步和部署，但尚未明确授权 Git 提交；不要绕过该确认或部署的
+  clean-tree / origin-main / historical-golden 门禁。ego-browser 空间 72 已交给用户登录，
+  未收到登录完成确认，不得把后台生成测试写成网页 E2E PASS。
+- 用户原有 HANDOFF 改动在专用 stash `6af2a8c8ee77a6b35f0d25e9af65f6bf6c184c32`
+  中完整保留；未直接覆盖较新的主干 HANDOFF，旧 stash 与其他审计文件未删除。
+
+### 0.9.1 CopyNumber 格式兼容补充（后于上述 R10）
+
+- CRC 开发门禁检出空 CNV 表仅有 CopyNumber 的既有格式被拒绝；已补回表头支持，
+  数字值继续明确待复核，不作为已确认扩增。新增 3 个最小复现先失败再通过，专项
+  回归现为 75 项通过。详见 `fix_log.md` R11；未通过改金标输入或放宽 QA 来规避。
+- 当前受测快照改为 `source_final/`，405/405 文件匹配，内容 SHA256 为
+  `7ebceb8ac0f6c0eb2e62cf618548e27818f723c76ba0e00a0bea6225e2d9b83f`。
+  旧 `source_retest/` 及其 Word/QA 不变。不要用新 hash 重新标注旧生成时间或源码身份。
+- 329 有效 XLSX 已完成：51 页，QA WARN，视觉/空白页 PASS；TMB 等于阈值文案及
+  缺失 CNV/PD-L1/UGT1A1 均通过。仍为合成生物数据。
+- 当前继续点：`crc_gate_copy_number_receipt.json`、`backend_retest_receipt.json`
+  和新旧 parser/CNV 摘要比较。后端整库作业仍绑定 R10，不能写成 R11 冻结整库通过。
+  四份开发 Word 已复制到本地 ignored `.work/lung-report-accuracy-fix/reports/`，哈希一致。
+- R11 Linux 定向回归 `102 passed`；`parser_equivalence.json` 已证明四份既有肺癌输入
+  的完整解析对象与 CNV 函数结果和 R10 相同，可复用旧 Word，但不更改旧生成身份。
+- 全库的两项治理测试已在 R11 独立定位：归档无 `.git`，其 `git rev-parse HEAD`
+  退出 128，尚未运行至业务断言。保留 `governance_probe.log/xml`，冻结后在真实 Git
+  工作树补验，不通过改脚本或伪造版本把失败变成 PASS。
+- CRC358/301 开发 gate 已 PASS：4 份 reference/candidate 分别 68/68/75/75 页，
+  双次生成、整本渲染、repeat diff、current-output、知识门禁和 Ruff 均通过。
+  gate 内 pytest 因独立整库作业而显式 SKIPPED，外部 historical reference 未配置
+  亦 SKIPPED；这不是冻结 SHA 的历史发布门禁。另在重放原整库中对应的 4 个 CRC
+  失败用例，回执为 `crc_failure_replay_receipt.json`。
+- R10 整库现已结束：`895 passed, 2 skipped, 9 failed`，34 分 50 秒。失败拆分为
+  6 项旧 CopyNumber 解析影响的 CRC 生成/样式、2 项无 Git 元数据、1 项患者信息子进程
+  超出 3 秒。原报告保留，不改写为新快照 PASS。
+- R11 `crc_failure_replay` 已 `4 passed`；`remaining_replay` 为 `2 passed, 1 failed`：
+  两项原 CRC 样式断言通过，原 3 秒时限仍超时。未更新样式基线或放宽时限，
+  `remaining_replay_receipt.json`、`remaining_replay.log/xml` 保留，后者进入 R12。
+
+### 0.9.2 R12 短时限进程启动（最新继续点）
+
+- 已定位并修复：患者查询子进程模块级导入签名库/ReportGenBridge，提前加载完整
+  报告引擎；仅改为按需导入。相同环境单次导入由约 6.345 秒降为 0.592 秒，不改
+  3 秒硬时限、spawn、终止/回收、签名选项或报告字段逻辑。
+- `test_generation_process.py`、整个 `test_stateless_report_endpoints.py` 及签名表单
+  合同共 `66 passed`（50.82 秒）；原 3 秒断言、4 MB 队列交接、超时无泄漏和两个
+  新的轻量导入断言均通过。证据在 `bootstrap_replay.log/xml` 与其 receipt。
+- 当前受测开发快照为 `source_r12/`，SHA256
+  `5d91ca05d445fa39ce6e6cfa45a6dfe97c55c43249bbffb3f893c5d4eb988e89`，405/405
+  文件与正本匹配。相对 R11 只有两个服务文件和一个测试文件有变化；
+  `bootstrap_scope.json` 证明报告引擎/规则/模板不变，R10 Word、R11 CRC 凭据
+  可作为原身份的观察证据复用，不将其改标为 R12 生成或冻结发布 PASS。
+- R10 整库的 9 个失败中，7 个已按原断言定向重放通过，2 个无 Git 元数据的治理
+  检查仍待冻结 Git 工作树。不得把原 `895 passed, 2 skipped, 9 failed` 改成整库通过。
+- 当前没有必需的后台作业。先取得用户明确 Git 提交授权；仅提交 R10–R12 文件清单，
+  保留用户 stash 和其他 agent 审计文件，再完成真实冻结工作树/CI、同 SHA 外部 CRC
+  历史门禁、独立审计、备份与 immutable release 切换。禁止拿开发 snapshot hash 当 Git SHA。
+- 后续仍须登录后 Web 异步生成、真实 329 病例及 Word/WPS 人审；三份真实 588 报告
+  整体 QA 为 WARN、医学复核未签发。不能将本轮工程通过称为完整临床放行。
+- 06:42 只读收尾：origin/main、生产 release/REVISION/进程 cwd 均为 da8e62d，
+  387/387 运行源码/模板/知识文件匹配，PID 2596421 未重启，内外 health 均 200。
+  证据 `.work/lung-report-accuracy-review/runtime_identity_r12_readonly.json`；
+  开发代码已同步隔离测试目录，但生产部署未执行。
 
 ## 0.8 2026-09-02 肺癌历史终版 P2/P3 对齐候选
 

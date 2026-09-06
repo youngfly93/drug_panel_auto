@@ -13,7 +13,6 @@ from queue import Empty
 from typing import Any, Callable
 
 from app.config import settings
-from app.services.reportgen_bridge import ReportGenBridge
 
 
 class GenerationTimeoutError(TimeoutError):
@@ -181,15 +180,18 @@ def _generate_report_in_child(
     template_dir: str,
     generate_kwargs: dict[str, Any],
 ) -> dict[str, Any]:
+    from app.services.reportgen_bridge import ReportGenBridge
+
     bridge = ReportGenBridge(config_dir=config_dir, template_dir=template_dir)
     return bridge.generate_report(**generate_kwargs)
 
 
 def should_isolate_bridge(bridge: Any) -> bool:
-    return bool(
-        settings.generation_process_isolation
-        and isinstance(bridge, ReportGenBridge)
-    )
+    if not settings.generation_process_isolation:
+        return False
+    from app.services.reportgen_bridge import ReportGenBridge
+
+    return isinstance(bridge, ReportGenBridge)
 
 
 def run_generate_report_with_timeout(

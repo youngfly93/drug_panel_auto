@@ -1,8 +1,8 @@
 schema_version: "1.0"
 panel_id: "lung_588_pdl1"
 rule_id: "biomarkers"
-version: "1.0.1"
-updated: "2026-09-02"
+version: "1.1.0"
+updated: "2026-09-05"
 status: "pilot"
 description: >
   Lung comprehensive-panel biomarker display contract transcribed from the
@@ -10,6 +10,7 @@ description: >
   only the current-case result column is derived from source data. Historical
   B/C event associations remain transcript- and HGVS-exact; fixed rows do not
   broaden those reviewed event rules to arbitrary variants in the same gene.
+  CNV source observations remain explicit review items, not confirmed immune claims.
 
 biomarkers:
   tmb:
@@ -71,11 +72,11 @@ biomarkers:
     hyperprogression:
       genes: [MDM2, MDM4, DNMT3A, EGFR, CCND1, FGF3, FGF4, FGF19]
       rows:
-        - {key: MDM2, genes: [MDM2], mode: direct, display: "MDM2", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
-        - {key: MDM4, genes: [MDM4], mode: direct, display: "MDM4", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
+        - {key: MDM2, genes: [MDM2], mode: direct, cnv_review: true, display: "MDM2", interpretation: "检出有害变异时可能与超进展相关。CNV源表记录须另行复核。", runtime_eligible: true}
+        - {key: MDM4, genes: [MDM4], mode: direct, cnv_review: true, display: "MDM4", interpretation: "检出有害变异时可能与超进展相关。CNV源表记录须另行复核。", runtime_eligible: true}
         - {key: DNMT3A, genes: [DNMT3A], mode: direct, display: "DNMT3A", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
-        - {key: EGFR_AMP, genes: [EGFR], mode: cnv_amp, match: "扩增", display: "EGFR（扩增）", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
-        - {key: CCND1, genes: [CCND1], mode: direct, display: "CCND1", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
-        - {key: FGF3, genes: [FGF3], mode: direct, display: "FGF3", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
-        - {key: FGF4, genes: [FGF4], mode: direct, display: "FGF4", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
-        - {key: FGF19, genes: [FGF19], mode: direct, display: "FGF19", interpretation: "检出有害变异时可能与超进展相关。", runtime_eligible: true}
+        - {key: EGFR_AMP, genes: [EGFR], mode: cnv_amp, cnv_review: true, match: "扩增", display: "EGFR（扩增）", interpretation: "检出有害变异时可能与超进展相关。CNV源表记录须另行复核。", runtime_eligible: true}
+        - {key: CCND1, genes: [CCND1], mode: direct, cnv_review: true, display: "CCND1", interpretation: "检出有害变异时可能与超进展相关。CNV源表记录须另行复核。", runtime_eligible: true}
+        - {key: FGF3, genes: [FGF3], mode: direct, cnv_review: true, display: "FGF3", interpretation: "检出有害变异时可能与超进展相关。CNV源表记录须另行复核。", runtime_eligible: true}
+        - {key: FGF4, genes: [FGF4], mode: direct, cnv_review: true, display: "FGF4", interpretation: "检出有害变异时可能与超进展相关。CNV源表记录须另行复核。", runtime_eligible: true}
+        - {key: FGF19, genes: [FGF19], mode: direct, cnv_review: true, display: "FGF19", interpretation: "检出有害变异时可能与超进展相关。CNV源表记录须另行复核。", runtime_eligible: true}

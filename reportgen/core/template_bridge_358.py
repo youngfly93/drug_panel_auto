@@ -28,6 +28,7 @@ from reportgen.knowledge import GeneKnowledgeProvider
 from reportgen.core.validation import build_msi_fields, build_tmb_fields
 from reportgen.models.excel_data import ExcelDataSource
 from reportgen.models.report_data import ReportData
+from reportgen.rules.cnv import cnv_kind, cnv_review_text, source_status
 from reportgen.rules.approved_drugs import (
     EXCLUDE_IF_LISTED_IN_PART2,
     normalize_display_mode,
@@ -707,6 +708,8 @@ def _normalize_immune_rows(tables: Dict[str, Any], category: str) -> List[Dict[s
             if row.get(selector_key) is not None:
                 item[selector_key] = row.get(selector_key)
         item["runtime_eligible"] = row.get("runtime_eligible", True)
+        if "cnv_review" in row:
+            item["cnv_review"] = row["cnv_review"] is True
         patterns = row.get("patterns")
         if isinstance(patterns, str):
             patterns = [patterns]
@@ -2152,26 +2155,19 @@ def build_immune_variants(
         for row in rows:
             if str(row.get("mode") or "direct").strip() != "cnv_amp":
                 continue
+            if row.get("cnv_review"):
+                # Lung pilot CNVs remain source observations until reviewed;
+                # their presence is surfaced separately, not as an immune call.
+                continue
             genes = _row_genes(row)
-            match = str(row.get("match") or "扩增").strip()
             if not genes:
                 continue
             for raw in cnv_data:
                 gene = _norm_text(raw.get("Gene") or raw.get("gene")).upper()
                 if gene not in genes:
                     continue
-                status = _norm_text(
-                    raw.get("Cnvkit") or raw.get("Status") or raw.get("status")
-                )
-                if not status:
-                    continue
-                status_upper = status.upper()
-                is_amp = (
-                    (match and match in status)
-                    or "扩增" in status
-                    or "AMP" in status_upper
-                )
-                if not is_amp:
+                status = source_status(raw)
+                if cnv_kind(raw) != "amp":
                     continue
                 _append_unique(
                     group,
@@ -2564,11 +2560,11 @@ def _build_nccn_and_immune_fields(
         g = _norm_text(r.get("Gene") or r.get("gene"))
         if not g:
             continue
-        status = _norm_text(r.get("Cnvkit") or r.get("Status") or r.get("status"))
+        status = source_status(r)
         if status:
             gene_variants.setdefault(g.upper(), []).append({
                 "gene": g, "cHGVS": f"CNV:{status}", "pHGVS": "",
-                "exon": "", "cnv_type": status,
+                "exon": "", "cnv_type": status, "cnv_kind": cnv_kind(r),
             })
 
     # 合并 Fusion 数据（NCCN 表需要检测 ALK/RET/NTRK/ROS1 融合等）
@@ -2585,6 +2581,10 @@ def _build_nccn_and_immune_fields(
 
     def _format_result(gene_key: str, exon_filter: str = "") -> str:
         """格式化检测结果：检出时返回 cHGVS，pHGVS；未检出时返回标准文本。"""
+        if pc.lung_guideline_drug_rows and ("扩增" in exon_filter or "amp" in exon_filter.lower()):
+            review = cnv_review_text(excel_data, gene_key)
+            if review:
+                return review
         variants = gene_variants.get(gene_key.upper(), [])
         if not variants:
             return "未检出"
@@ -2616,7 +2616,7 @@ def _build_nccn_and_immune_fields(
                         filtered.append(v)
                 elif "扩增" in ef or "amp" in ef:
                     # 只匹配 CNV 扩增类型的条目
-                    if is_cnv:
+                    if is_cnv and v.get("cnv_kind") == "amp":
                         filtered.append(v)
                 elif "突变" in ef or "mut" in ef:
                     # "突变"行只展示 SNV/indel 等序列变异，避免混入同基因 CNV/Fusion。
@@ -2742,6 +2742,15 @@ def _build_nccn_and_immune_fields(
         mode = str(row.get("mode") or "direct").strip() or "direct"
         if not genes:
             return "未检出有害变异"
+        if row.get("cnv_review"):
+            observations = [cnv_review_text(excel_data, gene) for gene in genes]
+            observations = [value for value in observations if value]
+            if observations:
+                sequence_result = _format_gene_prefixed_variants(_immune_variants_for_genes(genes))
+                return "\n".join(
+                    ([] if sequence_result == "未检出有害变异" else [sequence_result])
+                    + observations
+                )
 
         # These rows require evidence that is not established by an ordinary
         # sequence-variant row.  Keep them visible in the reviewed table, but
@@ -2904,6 +2913,9 @@ def _build_nccn_and_immune_fields(
         missing = str(row.get("undetected_result") or "未见变异").strip()
 
         if mode == "joint_met_amp_egfr_variant":
+            met_review = cnv_review_text(excel_data, "MET")
+            if met_review:
+                return f"MET：{met_review}；无法确认联合变异"
             met = _matching_variant_text("MET", "扩增")
             egfr = _matching_variant_text("EGFR", "突变")
             if met and egfr:
@@ -3009,6 +3021,22 @@ def _build_nccn_and_immune_fields(
             )
         )
     report_data.set_table("immune_hyperprogression_results", immune_hyper_table_rows)
+    if pc.lung_guideline_drug_rows:
+        review_genes = list(dict.fromkeys(
+            gene for row in imm_hyper_rows if row.get("cnv_review")
+            for gene in _genes_from_row(row) if cnv_review_text(excel_data, gene)
+        ))
+        report_data.set_field("cnv_review_required", bool(review_genes))
+        report_data.set_field("cnv_review_genes", review_genes)
+        if review_genes:
+            previous = str(report_data.get_field("immuno_hyperprogression_genes") or "")
+            observation = (
+                "CNV待复核：" + "、".join(review_genes)
+                + "；源表记录不等同于已确认扩增或超进展相关结论。"
+            )
+            text = "\n".join([previous, observation]) if previous and previous != "未检出" else observation
+            report_data.set_field("immuno_hyperprogression_genes", text)
+            report_data.set_field("immune_hyperprogression_result", text)
 
 
 def _resolve_panel_filter_column(
@@ -3574,23 +3602,29 @@ def _build_lung_chemotherapy_tables(
             for alias in item.get("aliases") or []
             if str(alias).strip()
         ]
-        source_summary = next(
-            (
-                row
-                for row in ct1000_summaries
-                if any(
-                    alias
-                    in " ".join(
-                        (
-                            str(row.get("source_drug") or ""),
-                            str(row.get("drug") or ""),
-                        )
-                    )
-                    for alias in aliases
-                )
-            ),
-            None,
-        )
+        def matches_drug(name: str) -> bool:
+            if item.get("source_match") != "exact_molecule":
+                return any(alias in name for alias in aliases)
+            # Both sides of a bilingual name must identify the same molecule.
+            # A combination or a mismatched translation is not a single drug.
+            names = [part.strip().casefold() for part in re.split(r"[（()）]", name) if part.strip()]
+            allowed = {alias.casefold() for alias in aliases}
+            return bool(names) and all(part in allowed for part in names)
+
+        matching_summaries = [
+            row for row in ct1000_summaries
+            if matches_drug(str(row.get("source_drug") or row.get("drug") or ""))
+            and (
+                not item.get("require_explicit_summary")
+                or all(matches_drug(str(name)) for name in row.get("source_drugs") or [])
+            )
+        ]
+        source_summary = matching_summaries[0] if matching_summaries else None
+        if item.get("require_explicit_summary") and len({
+            (str(row.get("efficacy") or "/"), str(row.get("toxicity") or "/"))
+            for row in matching_summaries
+        }) > 1:
+            source_summary = None
         if source_summary is not None:
             source_genes = source_summary.get("genes") or []
             if isinstance(source_genes, str):
@@ -3610,6 +3644,11 @@ def _build_lung_chemotherapy_tables(
             }
             continue
 
+        if item.get("require_explicit_summary"):
+            missing = str(item.get("missing_evidence_display") or "未提供同药物证据")
+            base_summaries[key] = {"genes": "/", "efficacy": missing, "toxicity": missing}
+            continue
+
         prediction_genes = {
             str(gene).strip().upper()
             for gene in item.get("prediction_genes") or []
@@ -3618,7 +3657,7 @@ def _build_lung_chemotherapy_tables(
         matched: List[Dict[str, Any]] = []
         for row in ctdrug_rows:
             drug_name = _ctdrug_value(row, ("药物", "Drug", "药物名称"))
-            if any(alias in drug_name for alias in aliases):
+            if matches_drug(drug_name):
                 gene = _ctdrug_value(row, ("检测基因", "Gene", "基因"))
                 if prediction_genes and gene.upper() not in prediction_genes:
                     continue
@@ -3661,6 +3700,8 @@ def _build_lung_chemotherapy_tables(
 
         def combine(field: str) -> str:
             values = [str(component.get(field) or "/") for component in component_rows]
+            if "未提供同药物证据" in values:
+                return "未提供同药物证据"
             # A multi-drug conclusion requires a source conclusion for every
             # component; otherwise displaying the known component alone would
             # silently overstate the evidence for the whole regimen.
@@ -3757,6 +3798,7 @@ def _build_lung_chemotherapy_tables(
     irinotecan_rule = rule.get("irinotecan_safety") or {}
     if isinstance(irinotecan_rule, dict) and irinotecan_rule.get("enabled"):
         selectors = irinotecan_rule.get("selectors") or {}
+        genotype_only = irinotecan_rule.get("interpretation_policy") == "genotype_only_pending_review"
 
         def genotype_for(selector_name: str) -> str:
             selector = selectors.get(selector_name) or {}
@@ -3779,6 +3821,12 @@ def _build_lung_chemotherapy_tables(
                     values.append(genotype)
             # Duplicate CtDrug rows are common. Conflicting calls must not be
             # collapsed into a patient-level dose statement.
+            if genotype_only:
+                if len(values) > 1:
+                    return "冲突（" + "、".join(sorted(values)) + "）"
+                if not values or values[0] in {"-", "--", "/", "未提供"}:
+                    return "未提供"
+                return _normalize_ctdrug_text(values[0], uncovered) if values else "未提供"
             return values[0] if len(values) == 1 else ""
 
         star28 = genotype_for("star28")
@@ -3803,6 +3851,13 @@ def _build_lung_chemotherapy_tables(
             or irinotecan_rule.get("unsupported_dose_evaluation")
             or "未形成剂量建议"
         )
+        if genotype_only:
+            result = (
+                f"UGT1A1 *28（{selectors['star28']['site']}）：{star28}\n"
+                f"UGT1A1 *6（{selectors['star6']['site']}）：{star6}"
+            )
+            dose_evaluation = str(irinotecan_rule.get("review_dose_evaluation")
+                                  or "待医学复核；不自动给出剂量建议")
         drug_display = str(
             irinotecan_rule.get("drug_display") or "伊立替康剂量安全性"
         )

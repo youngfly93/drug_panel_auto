@@ -1871,6 +1871,17 @@ def _build_business_checks(
     part3_compact_text: Optional[str] = None,
 ) -> Dict[str, Any]:
     checks: Dict[str, Any] = {}
+    if context.get("cnv_review_required"):
+        visible = "CNV待复核" in compact_text
+        checks["cnv_source_review"] = {
+            "status": "WARN" if visible else "FAIL",
+            "genes": list(context.get("cnv_review_genes") or []),
+            "message": (
+                "CNV source records require review; gain/numeric caller flags are not "
+                "confirmed amplification or immune-response conclusions."
+                if visible else "Required CNV source-review notice is missing from the report."
+            ),
+        }
     residual_scan = context.get("part3_cross_cancer_residual_scan")
     if isinstance(residual_scan, Mapping) and residual_scan.get("enabled"):
         configured_terms = [

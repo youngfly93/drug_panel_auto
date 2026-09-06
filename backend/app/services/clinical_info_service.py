@@ -20,7 +20,6 @@ from urllib import parse, request
 
 import yaml
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from reportgen.core.signature_library import signature_options
 
 from app.config import settings
 from app.schemas.clinical_info import (
@@ -34,6 +33,14 @@ from app.schemas.clinical_info import (
     ProjectInfo,
 )
 from app.services.file_manager import resolve_pdl1_image_metadata
+
+
+def signature_options(config_dir: Any, role: str) -> list[str]:
+    """Load report dependencies only when the form needs signature choices."""
+    from reportgen.core.signature_library import signature_options as resolve_options
+
+    return resolve_options(config_dir, role)
+
 
 # File lock for concurrent YAML writes
 _yaml_lock = threading.Lock()

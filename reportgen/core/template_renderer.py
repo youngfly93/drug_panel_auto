@@ -1326,6 +1326,36 @@ class TemplateRenderer:
             style_runs(paragraph, bold=False, underline=False, size=10.5)
             changed = True
 
+        if str(context.get("project_type") or "") in {"lung_329_pdl1", "lung_588_pdl1"}:
+            # A short drug interpretation must not leave its final review
+            # notice alone on a near-empty page. Bind bounded semantic blocks,
+            # never page numbers or case-specific drug names. Long blocks keep
+            # normal flow; labels still stay with the following paragraph.
+            drug_start = None
+            for idx in range(start + 1, end + 1):
+                text = paragraphs[idx].text.strip() if idx < end else ""
+                is_drug = bool(text and text in context_drug_names)
+                boundary = idx == end or is_drug or drug_variant_re.match(text) or text in sub_headings
+                if boundary and drug_start is not None:
+                    block = paragraphs[drug_start:idx]
+                    nonempty = [p for p in block if p.text.strip()]
+                    if (
+                        len(nonempty) <= 8
+                        and sum(len(p.text) for p in nonempty) <= 700
+                        and any(p.text.strip() == "药物疗效临床解析：" for p in nonempty)
+                    ):
+                        for item in block[:-1]:
+                            item.paragraph_format.keep_with_next = True
+                        if block:
+                            block[-1].paragraph_format.keep_with_next = False
+                        changed = True
+                    drug_start = None
+                if is_drug:
+                    drug_start = idx
+                if text in drug_analysis_labels:
+                    paragraphs[idx].paragraph_format.keep_with_next = True
+                    changed = True
+
         if changed:
             doc.save(file_path)
 

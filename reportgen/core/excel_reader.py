@@ -426,6 +426,7 @@ class ExcelReader:
                     summaries.append(
                         {
                             "source_drug": source_drug,
+                            "source_drugs": drugs,
                             "drug": display_drug(source_drug),
                             "genes": genes,
                             "gene_display": "、".join(genes) if genes else "/",
@@ -471,6 +472,68 @@ class ExcelReader:
             self.logger.warning("加载skip_rows配置失败", error=str(e))
 
         return skip_rows_map
+
+    def _extract_cnv_data(
+        self, df: pd.DataFrame, data_source: ExcelDataSource
+    ) -> None:
+        """Read named CNV blocks; never interpret a numeric caller flag as a call.
+
+        Exports may contain a gene summary followed by exon/segment calls at
+        an arbitrary row. Keep those separate: their AvgCP values can have
+        different scales. Source coordinates refer to the original workbook.
+        """
+        aliases = {
+            "gene": "Gene", "基因": "Gene", "genesymbol": "Gene",
+            "status": "Status", "状态": "Status", "cnvkit": "Cnvkit",
+            "copynumber": "CopyNumber",
+        }
+        headers: list[str] = []
+        header_row = 0
+        block_kind = ""
+        calls: List[Dict[str, Any]] = []
+        summaries: List[Dict[str, Any]] = []
+        blocks: List[Dict[str, Any]] = []
+        for row_number, values in enumerate(df.itertuples(index=False, name=None), 1):
+            values = [self._convert_to_python_type(value) for value in values]
+            if not any(value is not None and str(value).strip() for value in values):
+                continue
+            labels = [str(value).strip() if value is not None else "" for value in values]
+            canonical = [aliases.get(self._normalized_header(label), label) for label in labels]
+            if "Gene" in canonical and any(
+                key in canonical for key in ("Status", "Cnvkit", "CopyNumber")
+            ):
+                nonempty = [label for label in canonical if label]
+                if len(nonempty) != len(set(nonempty)):
+                    raise ValueError(f"Cnv 第 {row_number} 行存在重复表头，无法安全读取 CNV")
+                headers = canonical
+                header_row = row_number
+                block_kind = "calls" if "Status" in canonical else "summary"
+                blocks.append({"kind": block_kind, "header_row": header_row, "columns": nonempty})
+                continue
+            if not headers:
+                continue  # Export titles may precede the first semantic header.
+            row = {key: value for key, value in zip(headers, values) if key and value is not None}
+            if not str(row.get("Gene") or "").strip():
+                raise ValueError(f"Cnv 第 {row_number} 行缺少 Gene，无法安全读取 CNV")
+            row.update({"_source_row": row_number, "_source_header_row": header_row,
+                        "_source_block": block_kind})
+            (calls if block_kind == "calls" else summaries).append(row)
+
+        if not blocks and not df.empty:
+            raise ValueError("Cnv 缺少可识别的 Gene + Status/Cnvkit/CopyNumber 表头，不能按 CNV 阴性处理")
+        call_genes = {str(row["Gene"]).strip().upper() for row in calls}
+        # An unmatched summary is still source evidence, not an empty call set.
+        data_source.table_data["Cnv"] = calls + [
+            row for row in summaries if str(row["Gene"]).strip().upper() not in call_genes
+        ]
+        data_source.table_data["Cnv_summary"] = summaries
+        data_source.metadata["cnv_parse"] = {
+            "status": "parsed" if blocks else "unavailable",
+            "blocks": blocks, "call_rows": len(calls), "summary_rows": len(summaries),
+        }
+        data_source.metadata.setdefault("table_columns", {})["Cnv"] = list(dict.fromkeys(
+            key for block in blocks for key in block["columns"]
+        ))
 
     def read(self, file_path: str, include_tables: bool = True) -> ExcelDataSource:
         """
@@ -665,6 +728,12 @@ class ExcelReader:
                 ]
 
             for sheet_name in sheets_to_read:
+                if sheet_name == "Cnv":
+                    self._extract_cnv_data(
+                        self._parse_sheet(excel_file, sheet_name, sheet_cache, header=None),
+                        data_source,
+                    )
+                    continue
                 # 特殊处理HLA sheet（使用专用解析器）
                 if sheet_name == "HLA":
                     df_raw = self._parse_sheet(
