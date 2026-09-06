@@ -2,7 +2,7 @@
 module: lung-small-panel-derived-inputs
 agent: codex
 identity_kind: git_commit
-identity_value: 94b478e4cd8efa9571a30fdc352efdd034886089
+identity_value: e7d343a8d38e6d3babcb8c96d5eb096b2d5aa257
 audit_date: 2026-09-06
 ---
 
@@ -20,7 +20,7 @@ C13 的旧候选实稿已独立核对四条变异、三条靶向；完整排版�
 
 - 需求权威：用户 2026-09-06 本轮规格；沿用模板族总规格，增加“真实肺癌超集派生
   输入可用于 draft 工程验证”的明确授权，不把派生输入登记为历史同案真实小 Panel 输入。
-- 本轮修复源码冻结：`94b478e4cd8efa9571a30fdc352efdd034886089`，分支为
+- 本轮修复源码冻结：`e7d343a8d38e6d3babcb8c96d5eb096b2d5aa257`，分支为
   `codex/lung-small-panel-derived-drafts-20260906`。正文分别标注开发测试和冻结后验证，
   不将开发回执误报为已完成的冻结全量回放；
   用户原有 13 份未跟踪审计及专用 stash 保留，不属于本次源码 subject。
@@ -56,7 +56,7 @@ C13 的旧候选实稿已独立核对四条变异、三条靶向；完整排版�
 |---|---|
 | lung_13_historical_draft_v1 | `e7035ae50c37f61c0e4cf68e98e982fbf90e7f88b9768ae7027d24ee66dd8c66` |
 | lung_62_historical_draft_v1 | `5d3b155fec08701f101669d578955a95954a16a8b01dd7b1ff34cce46cc6dbee` |
-| lung_62_pdl1_historical_draft_v1 | `475fcf9697d2bcdad66239b1a0e7553c4feb5b965d6144dd9717306090778b9e` |
+| lung_62_pdl1_historical_draft_v1 | `1bb04e736fab3869d1b0ea870bea7c0881b0119c71ded4864353e0262c933de6` |
 | lung_588_historical_draft_v1 | `0129713a216a22e431043e9071f3f65d98972bca8c1d2034c38e1916fc252947` |
 
 ## 3. 派生规则与源表复算
@@ -114,6 +114,7 @@ python scripts/derive_panel_input.py INPUT.xlsx --panel lung_13 \
 | lung-small-panel-derived-inputs-05 | P2 | 原生排版后基本信息字段继承表头白字，浅底不可读 | 13/62+PD-L1 第 6 页、模板与输出颜色节点比对；5.4 显式黑字 | CONFIRMED |
 | lung-small-panel-derived-inputs-06 | P1 | 83b22b0 的 588 同时出现旧浮动目录和新目录；旧页码最高 74，新目录混入病例单元格及空条目 | CI 34015953334、588 原 Word SHA 与第 5/6/8 页；5.5 定位及修复 | CONFIRMED |
 | lung-small-panel-derived-inputs-07 | P2 | 同一 588 第 9 页仅余一句末行，第 27 页空白 | 同版本第 8/9/26/27/28 页人工检查与原始 QA LOW_CONTENT；5.5 清理标题前占位空段落 | CONFIRMED |
+| lung-small-panel-derived-inputs-08 | P2 | 62+PD-L1 目录收录整段文献及局部文献小标题，页码门禁虽 PASS 仍不专业 | 83b22b0 原 Word SHA `5d3179a38e0fe0247f35de8ed7fc066197e1c447230b181587c26d8e6469bdaa` 第 5/6 页；5.6 修复及补门禁 | CONFIRMED |
 
 C 输入的有效分级事件位于第 2、15、32、39 行，分别为 BRAF V600E、ERBB2 G660D、
 TP53 G245D、PIK3CA A1066V。其余成员旗标行包括未分级或知识注释行，因此“旗标
@@ -319,6 +320,33 @@ CI **34015953334**（83b22b0，业务源码 fb72cc3）的四包结果已分开�
 Linux 整本渲染仍待执行，不能用前三包旧 PASS 推断 588 已修好。医学 WARN 定义
 仍待答复，四 draft 继续禁用，未部署。
 
+### 5.6 C 族目录专业性修复与服务器传输恢复（e7d343a）
+
+随后 CI **34016832113**（fb1e725，业务源码 94b478e）四个新包完整合成 golden
+gate 全 PASS；默认全量 qa-gate 尚在进行。该成功只证明机器检查范围，不代表
+真实病例验收或所有页面的专业性已人工确认。继续查看 83b22b0 的 C 族原稿
+第 5/6 页，发现目录纳入长篇参考文献及多个局部参考文献标题；这是此前有效页码
+检查没有覆盖的版式缺陷。旧测量保留，不能改称旧稿已通过人工验收。
+
+e7d343a 将重建目录的大纲归一化同时应用于 C 族，只保留原平面目录与正文能够
+对应的标题；文献正文保留，只取消其误继承的目录级别，局部“参考文献：”不再
+冒充全局章节。原生目录 QA 增加文献条目/裸 URL 混入检查，即使页码全部有效也
+FAIL。只重建 62+PD-L1 模板；13、62、588 模板 SHA 不变。
+开发 **200 passed / 19.40 秒**，CRC/目录/QA 保护 **33 passed / 7.35 秒**；
+50 项细分目录测试、四模板 6 私有 token 交叉扫描全部通过，整本渲染仍待重放。
+
+SSH 有间歇性长连接掉线，已断点续传并独立核验完整远端文件：
+
+- bdd7eaa-from-6749292.bundle：`b6d1bc28030bd65e5cc0e8a362b58850433778e714286b2f4661561b9da1f264`，已导入 Git 对象；
+- fb1e725-from-bdd7eaa.bundle：`7d07712b6aa5ce55177c49f465986111af32b629d7f47fd0816b5ed199e6380a`；
+- B/C IHC 图片 SHA 为 `aaec9fc11533160600149067cc045a713d66bf3eeddb4a1e0ff8520d13e06a3c`、
+  `9d0846dc0d5022eedf8003efde26d9625ecc10edf456e2b44d8673b9095912d4`；
+  YAML 完整 SHA 也与本地一致（`3e21b9af…148c04a2`、`ec1f7310…e499297`）。
+
+传输验证不等于运行/部署成功。A 没有可用 PD-L1 原始来源，继续保留缺失，绝不
+使用旧 contract 中不可溯源的 TPS/CPS。准备最新提交的隔离实稿与网页回放；
+未启动服务切换，医学 WARN 口径仍待用户确认。
+
 ## 6. 私有回执入口
 
 目录：`.work/lung-small-panel-derived-inputs/`。
@@ -353,6 +381,9 @@ Linux 整本渲染仍待执行，不能用前三包旧 PASS 推断 588 已修好
   `b_toc_lightweight_full.xml`、`b_toc_template_matrix.xml`、`b_toc_crc_qa_guard.xml`
   和 `cross_scan_b_floating_toc.json` 是本次 180/17/33 项及四模板扫描回执。
   `build_b_floating_toc/` 为中间模板，不作终态渲染凭据。
+- `build_c_toc_heading_scope/lung_62_pdl1/build_receipt.json`：当前 C 族模板 SHA；
+  `bc_toc_full.xml`、`bc_toc_crc_qa_guard.xml`、`bc_toc_qa_full.xml` 与
+  `cross_scan_bc_toc.json` 为 200/33/50 项及四模板扫描回执。
 - `development_units_final.xml`、`release_scope_units.xml`：本次开发回归，不替代冻结服务器门禁。
 - 服务器隔离目录为本轮 `reportgen-lung-small-drafts-20260906.HySk3P`，不是生产目录。
   `frozen_c608430` 为干净 Git 工作树；`verified_inputs` 内 A/B/C 三份完整 SHA 已匹配。
