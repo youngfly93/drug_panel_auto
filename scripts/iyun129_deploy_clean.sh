@@ -26,9 +26,10 @@ export RG_WEB_DOCS_ENABLED="${RG_WEB_DOCS_ENABLED:-0}"
 export RG_WEB_CORS_ORIGINS="${RG_WEB_CORS_ORIGINS:-https://panel.mailuo-report.com.cn}"
 # Lung329 and lung588 expose single-case and case-isolated batch pilot drafts;
 # batch PD-L1 fields remain blank/not-provided and formal clinical promotion is
-# separate. CRC301, methylation and unbuilt small panels remain outside this
-# release. The same scope is enforced in the Web API, reportgen core, and UI.
-export RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1,lung_588}"
+# separate. Lung13/62/62+PD-L1 and non-IHC 588 are report-group-only drafts,
+# not clinical promotions. CRC301 and methylation remain outside this release.
+# The same scope is enforced in the Web API, reportgen core, and UI.
+export RG_WEB_DISABLED_PROJECT_TYPES="${RG_WEB_DISABLED_PROJECT_TYPES:-crc_301_msi,lung_methylation}"
 export REPORTGEN_DISABLED_PROJECT_TYPES="${REPORTGEN_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 export VITE_DISABLED_PROJECT_TYPES="${VITE_DISABLED_PROJECT_TYPES:-$RG_WEB_DISABLED_PROJECT_TYPES}"
 export ORIGIN_REMOTE="${ORIGIN_REMOTE:-origin}"

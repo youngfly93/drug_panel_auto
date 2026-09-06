@@ -1,19 +1,56 @@
 schema_version: "1.0"
 panel_id: "lung_62_pdl1"
 product_name: "肺癌62基因+PD-L1"
-release_status: "DRAFT_BUILT_PENDING_ENGINEERING_QA"
+release_status: "DRAFT_REVIEW_ONLY"
 production_eligible: false
-draft_generation_eligible: false
+draft_generation_eligible: true
 enforced_targets:
   - "iyun129"
-blocker_code: "draft_build_allowed_production_evidence_pending"
+blocker_code: "clinical_promotion_evidence_pending"
 draft_build_allowed: true
 decision: >-
-  The C-family draft is built and shares the NGS fingerprint with lung_62.
-  PD-L1 order/form selection chooses this sibling; no additional Excel flag is
-  invented. Only case-specific legacy transcription is allowed, with missing
-  source fields visibly absent. Deployment awaits engineering gates; clinical
-  promotion requires separate report-group approval and true paired inputs.
+  User-authorized report-group draft access is supported by pinned A/B/C
+  engineering receipts. The C-family draft shares the lung_62 NGS fingerprint;
+  PD-L1 order/form selection chooses this sibling, without an invented flag.
+  Missing case-specific IHC remains visibly absent, not a draft-access blocker.
+  Original narratives and WARN remain; clinical promotion requires separate
+  report-group approval and true paired inputs.
+
+draft_generation_evidence:
+  scope: report_group_review_only
+  user_authorized: true
+  authorization_date: "2026-09-06"
+  business_source_commit: 1fbb2948410c75321530f93d6936498e07c9f3fd
+  producer_sha256: 4723a131e2d8b9495ed360592167acafca07c56fe0bbad98d23d2a643e096f05
+  template_sha256: 94f3983af19e6afe6c9561f8eab8892334e0ef518e9d5be23ee7dc303b49cee8
+  case_aliases: [A, B, C]
+  raw_qa_statuses: [WARN, WARN, WARN]
+  raw_strict_pass_preserved: false
+  receipt: .work/lung-small-panel-derived-inputs/draft_acceptance_warn_only/lung_62_pdl1.json
+  synthetic_ci_run: https://github.com/youngfly93/drug_panel_auto/actions/runs/34034116775
+  qa_gate_scope: synthetic_panel_goldens_with_separate_backend_and_historical_checks
+  gates:
+    scan_hardcoded_literals:
+      status: PASS
+      receipt_sha256: a5408d09501e34e6ecd5cfc8a5330c691d861117302e0c19d9590202b7df7556
+    two_case_leak_test:
+      status: PASS
+      receipt_sha256: ff66f0e4ca50f7a948f85616fc21f1c835c50729c37d173f5937ec063ba8bef0
+    render_blank_page_check:
+      status: PASS
+      receipt_sha256: ff66f0e4ca50f7a948f85616fc21f1c835c50729c37d173f5937ec063ba8bef0
+    linux_visual_qa:
+      status: PASS
+      receipt_sha256: ff66f0e4ca50f7a948f85616fc21f1c835c50729c37d173f5937ec063ba8bef0
+    derived_input_matrix:
+      status: PASS
+      receipt_sha256: ff66f0e4ca50f7a948f85616fc21f1c835c50729c37d173f5937ec063ba8bef0
+    web_batch_uat:
+      status: PASS
+      receipt_sha256: ff66f0e4ca50f7a948f85616fc21f1c835c50729c37d173f5937ec063ba8bef0
+    qa_gate:
+      status: PASS
+      receipt_sha256: c8c1fb42be1d29b31d1187cd2d0887eb35b88b1cb7dfbf2f86095dd8dafea05f
 
 aggregate_inventory:
   historical_final_docx_count: 55

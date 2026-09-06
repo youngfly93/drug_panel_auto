@@ -1,17 +1,54 @@
 schema_version: "1.0"
 panel_id: "lung_588"
 product_name: "肺癌588基因"
-release_status: "DRAFT_BUILT_PENDING_ENGINEERING_QA"
+release_status: "DRAFT_REVIEW_ONLY"
 production_eligible: false
-draft_generation_eligible: false
+draft_generation_eligible: true
 draft_build_allowed: true
 enforced_targets: [iyun129]
-blocker_code: "draft_engineering_gates_pending"
+blocker_code: "clinical_promotion_evidence_pending"
 decision: >-
-  Build the non-PD-L1 sibling from a traceable non-IHC historical final.
+  User-authorized report-group draft access is supported by pinned raw A/B/C
+  engineering receipts and the traceable non-IHC historical layout.
   NGS Excel shares ExistIn552 + ExistInsmall588 with lung_588_pdl1 and defaults
-  to this product. Draft deployment awaits engineering gates; this record
+  to this product. Original narratives and WARN remain visible; this record
   grants no clinical production promotion.
+draft_generation_evidence:
+  scope: report_group_review_only
+  user_authorized: true
+  authorization_date: "2026-09-06"
+  business_source_commit: 1fbb2948410c75321530f93d6936498e07c9f3fd
+  producer_sha256: 251e61a10d9840252c4b2bf43ae0c6a52aba03384ee5631531827aed6f9e15a3
+  template_sha256: 9a1485b677b10522e51fe32543141d69d0a39de90ec68d8264f43128ada8ef85
+  case_aliases: [A, B, C]
+  raw_qa_statuses: [WARN, WARN, WARN]
+  raw_strict_pass_preserved: false
+  receipt: .work/lung-small-panel-derived-inputs/draft_acceptance_warn_only/lung_588.json
+  synthetic_ci_run: https://github.com/youngfly93/drug_panel_auto/actions/runs/34034116775
+  qa_gate_scope: synthetic_panel_goldens_with_separate_backend_and_historical_checks
+  gates:
+    scan_hardcoded_literals:
+      status: PASS
+      receipt_sha256: a5408d09501e34e6ecd5cfc8a5330c691d861117302e0c19d9590202b7df7556
+    two_case_leak_test:
+      status: PASS
+      receipt_sha256: 5d0a4553b603371ef097c53765e04e0cb4e204c850dffc09b81e1abd6b33374a
+    render_blank_page_check:
+      status: PASS
+      receipt_sha256: 5d0a4553b603371ef097c53765e04e0cb4e204c850dffc09b81e1abd6b33374a
+    linux_visual_qa:
+      status: PASS
+      receipt_sha256: 5d0a4553b603371ef097c53765e04e0cb4e204c850dffc09b81e1abd6b33374a
+    derived_input_matrix:
+      status: PASS
+      receipt_sha256: 5d0a4553b603371ef097c53765e04e0cb4e204c850dffc09b81e1abd6b33374a
+    web_batch_uat:
+      status: PASS
+      receipt_sha256: 5d0a4553b603371ef097c53765e04e0cb4e204c850dffc09b81e1abd6b33374a
+    qa_gate:
+      status: PASS
+      receipt_sha256: 6ab2538330a1ca4a5241e397437204b7c9e4132ae961977f28dd36e59b6d71d8
+
 historical_layout_source:
   family: B
   sha256: 4f4314259d898dcbc95b5ccf64af6e05ad084ea7219970f4acf2f6cebc55d14d

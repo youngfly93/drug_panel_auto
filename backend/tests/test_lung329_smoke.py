@@ -279,8 +279,27 @@ def test_lung329_generation_without_pdl1_or_image_creates_review_draft(tmp_path)
     assert "TP53基因" in visible
     qa = json.loads(Path(result["qa_report_file"]).read_text(encoding="utf-8"))
     residual_check = qa["checks"]["part3_cross_cancer_residuals"]
-    assert residual_check["status"] == "PASS"
-    assert residual_check["matched_terms"] == []
+    assert residual_check["status"] == "WARN"
+    assert residual_check["matched_terms"]
+    compact_visible = re.sub(r"\s+", "", visible)
+    assert all(
+        re.sub(r"\s+", "", term) in compact_visible
+        for term in residual_check["matched_terms"]
+    )
+    assert "part3_cross_cancer_suppression" not in qa["checks"]
+    assert not any(
+        issue["code"] == "PART3_CROSS_CANCER_SUPPRESSION"
+        for issue in qa["issues"]
+    )
+    assert any(
+        issue["code"] == "PART3_CROSS_CANCER_RESIDUALS"
+        for issue in qa["issues"]
+    )
+    assert not any(
+        issue["code"] == "PART3_CROSS_CANCER_FIELDS_SUPPRESSED"
+        for stage in result["stage_results"]
+        for issue in stage.get("issues") or []
+    )
 
 
 def test_lung329_batch_is_enabled_and_strips_shared_pdl1():

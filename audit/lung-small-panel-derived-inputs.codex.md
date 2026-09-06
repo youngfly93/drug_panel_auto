@@ -2,13 +2,15 @@
 module: lung-small-panel-derived-inputs
 agent: codex
 identity_kind: git_commit
-identity_value: 6462cd5bfc34beafb7d6ec7cd1dffc61451c02c6
+identity_value: 1fbb2948410c75321530f93d6936498e07c9f3fd
 audit_date: 2026-09-06
 ---
 
 # 肺癌小 Panel 派生输入与 draft 建包记录
 
-结论：**四个 draft 包已构建并提交；九例机器工程核验与完整 CI 通过，严格放行未通过，未正式部署。**
+当前结论：用户已授权仅部署报告组 draft；六肺包已恢复原文 + WARN，临床资格不变。
+本节之后的旧停止结论保留为历史记录，不再把医学 WARN、缺失 IHC 或 P2 排版待办
+当作 draft 开放前置条件。新版冻结回放与发布进度见 5.15；尚未声称生产已切换。
 
 原两项规格冲突已经用户明确裁决：C 例为四条变异/三条靶向提示；62 和 588 都按
 NGS 家族识别、默认无 PD-L1，再由订单/网页同族选择消歧。不存在排除 PIK3CA 或
@@ -36,9 +38,9 @@ C13 的 f7aabde 实稿已独立核对四条变异、三条靶向，以及 13 基
 - 旧 PR #50 已合并 #13，也包含 #14/#15 修改；依新要求在服务切换前停止旧发布。
   本分支前向恢复 #14/#15 历史默认展示，候选严格策略仍有显式单测。
   [报告组待决清单](../docs/analysis-decisions/lung-chemotherapy-pending-review.md) 不代表医学批准。
-- 新四产品维持 `draft_generation_eligible=false`、`production_eligible=false`，三端禁用
-  范围也包含新增 `lung_588`。后续仅凭真实工程门禁、源码/模板 SHA 与明确用户授权
-  可开放报告组草稿，不能凭此提升 `active` 或医学批准。不放宽历史差异指纹。
+- 初始建包阶段四产品均未开放；当前 draft 资格以 5.15 及已提交的 readiness 清单为准。
+  用户已授权按真实工程回执、源码/模板 SHA 开放报告组草稿；`production_eligible`
+  始终为 false，不能凭此提升 `active` 或医学批准。不放宽历史差异指纹。
 
 ## 2. 母版来源（只记 SHA，不提交病例 Word 或文件名）
 
@@ -662,6 +664,81 @@ Claude 同版审核；其余历史模块的既有身份差异也未擅自修写�
 `eab60fcf177e42f29886a840130ec9f74ab1f16309eb3e07aa0a0755ed136e12`。
 本轮主线程自检不冒充独立双 agent 同版联合批准。
 
+### 5.15 用户授权的 warn-only draft 发布
+
+2026-09-06 用户复核明确要求：六个肺癌包默认 `runtime_action: warn_only`，
+保留扫描/WARN 和历史原文；压制仅保留为可选项。允许仅部署 draft，不开放临床交付。
+这替代了 5.14 及旧结尾中“待用户裁决医学 WARN”的停止点，未改写旧 strict=false 回执。
+
+业务源码 `1fbb2948410c75321530f93d6936498e07c9f3fd` 已提交并推送。六包配置、
+建包默认、无配置时的默认均为 warn-only。新增六产品原文保留 + 扫描 WARN 单测和
+缺省值单测，原有 opt-in 压制单测仍保留。`7922072` 仅修正旧生成单测对 suppression
+检查项的预期，不改业务。66 + 211 项轻量测试通过；四个模板与六个私有标识交叉扫描
+hard=0、ZIP 命中=0，模板 SHA 与第 2 节相同。
+
+| 产品 | 新实际网页任务 | A/B/C 页数（含封面/封底） | 原始 QA |
+|---|---|---|---|
+| lung_13 | `0f2b051c-8ab4-4d30-af94-96d6f6eece3a` | 33/36/44 | WARN/WARN/WARN |
+| lung_62 | `58972edf-8ca7-45a3-b051-9a233722201a` | 36/49/53 | WARN/WARN/WARN |
+| lung_62_pdl1 | `e06109e5-7387-445c-b31c-dfd3b6fc441e` | 36/49/55 | WARN/WARN/WARN |
+| lung_588 | `3fc131f2-f396-40c3-8883-51522516cdc7` | 60/73/82 | WARN/WARN/WARN |
+
+原始 WARN 仅保留跨癌种扫描/PIPELINE，A 另有 CNV_SOURCE_REVIEW；suppression
+检查项不再出现。早期只读 C13 矩阵确认：BRAF/ERBB2/TP53/PIK3CA 四变异、
+BRAF/ERBB2/PIK3CA 三靶向；13 检测基因、9 指南行、73 PGx；38 项 588 parity
+无差异，C↔A、C↔B 四向限定 token 检查通过。C13 Word SHA256：
+`dc4d8a2c21cdeeac0480e89c9d95eb1ec76d8d9da518ebb795cdb75617ca22f9`；QA SHA256：
+`ee8ae983b233fdc7c3c8fd0362fbf5a2ffe8249a549bb2d0522d8983484b4cbb`。
+原文恢复使 C13 从压制版 39 页增加到 44 页；没有删行压页。
+
+B/C588 使用同一原始 Excel/同一表单，对比旧生产 da8e62d 与候选的渲染前上下文：
+241 个旧键中只有 `immune_hyperprogression_results` 改变，新加 `cnv_review_genes` /
+`cnv_review_required`，与 #13 修复边界一致；gene/drug 历史解析表完全相同。
+这是渲染前数据对照，不冒充 B/C588 最终 Word 的全页对照或医学二审。
+
+十二份已完成原生空白检查（require-render、strict-trailing、含自动空白页、120 dpi），
+均 PASS；每包 C↔A / C↔B 四向泄漏共 16 项全部退出 0。小包九份源表成员/HGVS、
+检测基因、指南、逐药六字段、样本类型、draft 标记、页脚和 38 项 588 parity 零差异。
+小包原矩阵 SHA：`ce6d5babff0efdec4f05965cfb89f603f5c6f53f699bcf8e6ea5bab41e546daa`。
+
+588 原矩阵 SHA：`73c9f1d0983c29339502e0bb68fecd5c32b61d0a903418d236fba637f73351ab`，
+保留其三种检查器适配误报及 strict=false。新独立回执
+`588_legacy_adapter_1fbb294.json`（SHA
+`e87486952879054fe27a01f25f952684c3eee14f2f23ad8cc1d3d9e424c65b01`）逐份绑定相同
+Word/Excel/QA 哈希后复核：完整 588 基因逐项匹配母版，规则仅 `C8orf34/C8ORF34`
+大小写有别；A 的 TP53 small588 单元格是注释，而旧/新 588 均按 `ExistIn552` 的明确
+I/II/III 类纳入；“样本类型：”的冒号不影响实际“未提供”值。A/B/C 变异为 7/8/9，
+所有事件 HGVS 均匹配源表，并有删事件/换基因负对照。未改业务、Word 或旧回执。
+
+CI 34034116775 的四个合成 draft gate 均 PASS（各 8 PASS、0 WARN、0 FAIL；
+pytest/历史真配对是独立步骤）；完整后端为 1087 passed、2 skipped、1 failed：
+329 旧断言仍要求残留扫描 PASS。该测试前向改为原文可见 + WARN + 无 suppression，
+不得据此将整条旧 CI 改判 SUCCESS。最终提交必须重新通过必需 CI 后才能合并部署。
+报告组待决清单同时记录 #14/#15、跨癌种原文、页尾表头/断词及派生标识导致的姓名
+缺失；原始 QA WARN 不改写为临床 PASS。真实文件均留在本地 .work/ 与 iyun129 私有目录。
+
+全书 606 页的 35 张总览全部下载、逐一核验服务器 SHA 并查看；C13 第 6/7 页另看原尺寸。
+视觉回执 `visual_review_warn_only.json` SHA 为
+`4d60bb5f80d9a2ff07b6e1e8fb47fc77cfa0bdf6675a68f50dc4eef4982a9710`。没有整张中段
+空白页；588 的稀疏 PGx 续页及既有页尾表头/断词仍记为 P2 排版待办，不宣称终版精修。
+该检查不等于逐字医学审核或真实同案比较。
+
+新 draft 验收回执引用旧矩阵的不可变 Word/QA/输入哈希、588 适配复核、全书视觉、
+模板扫描和合成 gate；明确原始 strict=false、raw QA=WARN、clinical_approval=false：
+
+| 产品 | `.work/lung-small-panel-derived-inputs/draft_acceptance_warn_only/` 回执 SHA256 |
+|---|---|
+| lung_13 | `45e82c374e795676c2831b1ccb99a0aae1700203e522ac42996f2e0ced829624` |
+| lung_62 | `3380387cb28a97142ec9c23416fef36c418812a732ee48006e202adc3bdb017f` |
+| lung_62_pdl1 | `ff66f0e4ca50f7a948f85616fc21f1c835c50729c37d173f5937ec063ba8bef0` |
+| lung_588 | `5d0a4553b603371ef097c53765e04e0cb4e204c850dffc09b81e1abd6b33374a` |
+
+四份 readiness 因而设为 `DRAFT_REVIEW_ONLY` / draft=true / production=false；三端仅
+禁用 CRC301 和甲基化。48 项发布/范围测试通过，2 项按平台条件跳过，三端 scope gate
+PASS。再次执行共享审计核对器仍退出 1（既有 identity 短/长 SHA 差异及单边覆盖）；
+未编辑对方审计，未冒充同版双 agent 审批。当前仍需新提交必需 CI、主线合并、精确
+历史候选/备份/官方部署及在线验证；此处记录 draft 资格，不声称生产已更新。
+
 ## 6. 私有回执入口
 
 目录：`.work/lung-small-panel-derived-inputs/`。
@@ -737,7 +814,6 @@ Claude 同版审核；其余历史模块的既有身份差异也未擅自修写�
   `visual_review_6462cd5.json`：九份评审 Word/原始 QA、全部 22 张总览及哈希/人工检查记录。
   真实来源及产物留在本地 `.work/` 与 iyun129 私有目录，不进入公共仓库。
 
-下一步：用户/报告组裁决医学 WARN、A 的 IHC 来源和 P2 排版待办。未经明确接受这些
-评审限制，不更改 draft 开放资格、不把严格验收写成 PASS、不合并并部署到正式服务。
-若获准仅开放评审候选，再按精确主线 CI、历史发布合同/清单、备份和发布 wrapper
-执行同步及部署；医学晋级仍为 false，不能把隔离验证实例当作正式服务已更新。
+当前下一步：按 5.15 已获准的 draft 边界，完成新版受影响工程门禁及精确主线 CI、
+历史发布合同/清单、备份和发布 wrapper，再验证三源身份与公网入口。医学晋级仍为
+false，原始 WARN 不改写，不能把隔离验证实例当作正式服务已更新。

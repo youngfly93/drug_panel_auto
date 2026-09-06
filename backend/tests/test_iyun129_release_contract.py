@@ -38,10 +38,7 @@ def test_release_checklist_uses_real_iyun129_topology() -> None:
 
 def test_iyun129_wrapper_pins_production_coordinates() -> None:
     wrapper = _read("scripts/iyun129_deploy_clean.sh")
-    limited_release_panels = (
-        "crc_301_msi,lung_methylation,"
-        "lung_13,lung_62,lung_62_pdl1,lung_588"
-    )
+    limited_release_panels = "crc_301_msi,lung_methylation"
 
     assert "SSH_HOST:-iyun129" in wrapper
     assert "/media/desk16/iy12922/apps" in wrapper
@@ -117,7 +114,8 @@ def test_lung13_draft_is_built_but_not_clinically_promoted() -> None:
     )
 
     assert readiness["panel_id"] == "lung_13"
-    assert readiness["release_status"] == "DRAFT_BUILT_PENDING_ENGINEERING_QA"
+    assert readiness["release_status"] == "DRAFT_REVIEW_ONLY"
+    assert readiness["draft_generation_eligible"] is True
     assert readiness["production_eligible"] is False
     assert readiness["draft_build_allowed"] is True
     assert readiness["aggregate_inventory"]["historical_final_docx_count"] == 246
@@ -194,10 +192,7 @@ def test_production_scope_gate_rejects_methylation_override(tmp_path: Path) -> N
 
 def test_iyun129_switch_enables_only_promoted_or_controlled_pilot_panels() -> None:
     release = _read("scripts/iyun129_release.sh")
-    limited_release_panels = (
-        "crc_301_msi,lung_methylation,"
-        "lung_13,lung_62,lung_62_pdl1,lung_588"
-    )
+    limited_release_panels = "crc_301_msi,lung_methylation"
 
     assert f"RG_WEB_DISABLED_PROJECT_TYPES:-{limited_release_panels}" in release
     assert "VITE_DISABLED_PROJECT_TYPES" in release

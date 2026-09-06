@@ -1,18 +1,54 @@
 schema_version: "1.0"
 panel_id: "lung_13"
 product_name: "肺癌13基因"
-release_status: "DRAFT_BUILT_PENDING_ENGINEERING_QA"
+release_status: "DRAFT_REVIEW_ONLY"
 production_eligible: false
-draft_generation_eligible: false
+draft_generation_eligible: true
 enforced_targets:
   - "iyun129"
-blocker_code: "draft_build_allowed_production_evidence_pending"
+blocker_code: "clinical_promotion_evidence_pending"
 draft_build_allowed: true
 decision: >-
-  The historical-family draft is built. Derived superset inputs are authorized
-  for engineering review, not as historical same-case clinical evidence.
-  Keep deployment disabled until draft engineering gates pass; clinical
-  promotion additionally requires true paired inputs and report-group approval.
+  User-authorized report-group draft access is supported by the pinned A/B/C
+  engineering receipts. Historical narratives remain visible with WARN.
+  Derived superset inputs are not historical same-case clinical evidence;
+  clinical promotion still requires true paired inputs and report-group approval.
+
+draft_generation_evidence:
+  scope: report_group_review_only
+  user_authorized: true
+  authorization_date: "2026-09-06"
+  business_source_commit: 1fbb2948410c75321530f93d6936498e07c9f3fd
+  producer_sha256: 3a72deb2fcb08a0720346687f730c5029ce506b28d018e5873d3db30b5177413
+  template_sha256: 31a3f5a87744ed3902251b196cdf40960c4eb76cf3712ccd87d7bcd4b87afe1a
+  case_aliases: [A, B, C]
+  raw_qa_statuses: [WARN, WARN, WARN]
+  raw_strict_pass_preserved: false
+  receipt: .work/lung-small-panel-derived-inputs/draft_acceptance_warn_only/lung_13.json
+  synthetic_ci_run: https://github.com/youngfly93/drug_panel_auto/actions/runs/34034116775
+  qa_gate_scope: synthetic_panel_goldens_with_separate_backend_and_historical_checks
+  gates:
+    scan_hardcoded_literals:
+      status: PASS
+      receipt_sha256: a5408d09501e34e6ecd5cfc8a5330c691d861117302e0c19d9590202b7df7556
+    two_case_leak_test:
+      status: PASS
+      receipt_sha256: 45e82c374e795676c2831b1ccb99a0aae1700203e522ac42996f2e0ced829624
+    render_blank_page_check:
+      status: PASS
+      receipt_sha256: 45e82c374e795676c2831b1ccb99a0aae1700203e522ac42996f2e0ced829624
+    linux_visual_qa:
+      status: PASS
+      receipt_sha256: 45e82c374e795676c2831b1ccb99a0aae1700203e522ac42996f2e0ced829624
+    derived_input_matrix:
+      status: PASS
+      receipt_sha256: 45e82c374e795676c2831b1ccb99a0aae1700203e522ac42996f2e0ced829624
+    web_batch_uat:
+      status: PASS
+      receipt_sha256: 45e82c374e795676c2831b1ccb99a0aae1700203e522ac42996f2e0ced829624
+    qa_gate:
+      status: PASS
+      receipt_sha256: 53463b5607cb8d81630e21f19d9d8725ec6026b1baa19ce28303728fed6d08e5
 
 aggregate_inventory:
   historical_final_docx_count: 246

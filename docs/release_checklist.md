@@ -154,7 +154,7 @@ cached PAGEREF directory construction and can produce an empty TOC even when
 HTTP health is green. The runtime start script checks them before stopping the
 known-good process and refuses the switch when any is truthy.
 
-### CRC358 + lung329/lung588 controlled-pilot release
+### CRC358 + lung controlled-pilot / review-only draft release
 
 The lung329 and lung588 products are exposed for single-case and case-isolated
 batch pilot generation. A report-review draft may be generated and downloaded
@@ -165,21 +165,28 @@ Panel's registered exact-event rules with visible review/context notices;
 invalid or explicitly out-of-scope values remain blocked. Part 3 is pilot-visible
 and its final rendered text receives a non-blocking cross-cancer residual WARN.
 Review state governs formal clinical release, not access to the pilot Word file.
-CRC301, lung methylation and the unbuilt small panels remain disabled in all
-three scope guards:
+Lung13, lung62, lung62+PD-L1 and non-IHC lung588 are user-authorized report-group
+drafts (`draft_generation_eligible: true`, `production_eligible: false`). Their
+visible draft notice and original QA WARN are retained. All six lung packages
+default to `cross_cancer_residual_scan.runtime_action: warn_only`: the report
+group must see the original historical narratives to review them. Suppression
+remains opt-in, never the shipping default. Draft generation does not require
+clinical sign-off, matched historical small-panel inputs or a complete IHC form.
+Missing fields remain visibly not provided; no values are fabricated.
+CRC301 and lung methylation remain disabled in all three scope guards:
 
 ```text
-REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1
-RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1
-VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation,lung_13,lung_62,lung_62_pdl1
+REPORTGEN_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation
+RG_WEB_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation
+VITE_DISABLED_PROJECT_TYPES=crc_301_msi,lung_methylation
 ```
 
 The first guard blocks direct/core generation, the second blocks Web API entry
 points, and the third removes unpromoted products from the production
 generation selector. Batch case isolation remains independently enforced by
-each lung pilot's committed Panel contract. The list also reserves `lung_13`,
-`lung_62`, and `lung_62_pdl1`, which have product-intake records but no Panel
-package or matching source Excel.
+each lung pilot/draft's committed Panel contract. The 62 siblings share the
+same NGS fingerprint, as do the 588 siblings; default to non-IHC and disambiguate
+by order/project selection or case-specific PD-L1 form values.
 The iyun129 deployment wrapper supplies these values by default. The backend
 guards are authoritative: a hidden or absent frontend option alone is not a
 release boundary.
@@ -189,8 +196,9 @@ record for the methylation draft. Its synthetic golden proves only that the
 engineering pipeline can render a document; it is not production evidence.
 Before any backup or server mutation,
 `scripts/check_production_panel_scope.py` requires every panel whose readiness
-record is `production_eligible: false` to remain present in the Web, core, and
-frontend disabled scopes. Promotion additionally requires a SHA-pinned,
+record is not eligible for either production or explicitly authorized draft
+generation to remain present in the Web, core, and frontend disabled scopes.
+Draft engineering receipts do not satisfy clinical promotion. Promotion requires a SHA-pinned,
 same-case report-group final DOCX and source Excel, report-group secondary
 review, historical-golden PASS, and production-equivalent Linux visual QA.
 Pre-package products use the same schema under
