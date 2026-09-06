@@ -1562,6 +1562,35 @@ def _build_style_checks(
     }
 
 
+def _paragraph_has_zero_first_line_indent(paragraph: Any, doc: Any) -> bool:
+    """Accept equivalent zero OOXML forms, resolving inherited indentation."""
+    layers = [paragraph._p.pPr]
+    style = paragraph.style
+    seen = set()
+    while style is not None and style.style_id not in seen:
+        seen.add(style.style_id)
+        layers.append(style.element.find(qn("w:pPr")))
+        style = style.base_style
+    layers.append(doc.styles.element.find(
+        "./" + qn("w:docDefaults") + "/" + qn("w:pPrDefault") + "/" + qn("w:pPr")
+    ))
+    for props in layers:
+        indent = props.find(qn("w:ind")) if props is not None else None
+        if indent is None:
+            continue
+        values = [
+            indent.get(qn("w:" + name))
+            for name in ("firstLine", "firstLineChars", "hanging", "hangingChars")
+            if indent.get(qn("w:" + name)) is not None
+        ]
+        if values:
+            try:
+                return all(int(value) == 0 for value in values)
+            except (TypeError, ValueError):
+                return False
+    return True  # No direct/style/default indentation means an effective zero.
+
+
 def _build_lung_draft_style_checks(doc: Any) -> Dict[str, Any]:
     """Detect sparse-table and inherited-indent defects in new draft families."""
     failures: List[Dict[str, Any]] = []
@@ -1597,11 +1626,7 @@ def _build_lung_draft_style_checks(doc: Any) -> Dict[str, Any]:
                 continue
             for column_index, cell in enumerate(row.cells):
                 for paragraph in cell.paragraphs:
-                    indent = paragraph._p.find("./" + qn("w:pPr") + "/" + qn("w:ind"))
-                    if (
-                        indent is None or indent.get(qn("w:firstLine")) != "0"
-                        or indent.get(qn("w:firstLineChars"), "0") != "0"
-                    ):
+                    if not _paragraph_has_zero_first_line_indent(paragraph, doc):
                         failures.append({
                             "code": "VARIANT_CELL_INHERITED_INDENT", "table": table_index,
                             "row": row_index, "column": column_index,

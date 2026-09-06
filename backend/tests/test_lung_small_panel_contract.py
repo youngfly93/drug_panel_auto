@@ -7,11 +7,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from openpyxl import Workbook
 
 ROOT = Path(__file__).resolve().parents[2]
 for directory in (ROOT, ROOT / "backend"):
     sys.path.insert(0, str(directory))
 
+from reportgen.core.excel_reader import ExcelReader
 from reportgen.core.field_mapper import FieldMapper
 from reportgen.core.golden_case import _golden_case_spec, _normalize_panel
 from reportgen.core.project_detector import ProjectDetector
@@ -138,6 +140,33 @@ def test_shared_fingerprint_defaults_to_ngs_not_ihc_even_with_filename(tmp_path,
         f"lung_{count}",
         f"lung_{count}_pdl1",
     }
+
+
+@pytest.mark.parametrize("count", [13, 62, 588])
+@pytest.mark.parametrize("header_only", [False, True])
+def test_structural_identity_uses_headers_with_all_blank_membership(tmp_path, count, header_only):
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    flag = f"ExistInsmall{count}"
+    for name in ("Variations", "Hereditary_tumor"):
+        sheet = workbook.create_sheet(name)
+        sheet.append(["Gene_Symbol", "ExistIn552", "ExistIn178", flag])
+        if not header_only:
+            sheet.append(["OUTSIDE_PANEL", "Ⅱ类", 1, None])
+    path = tmp_path / "neutral.xlsx"
+    workbook.save(path)
+    bridge = ReportGenBridge(config_dir=str(ROOT / "config"), template_dir=str(ROOT / "templates"))
+    excel = ExcelReader(config_dir=str(ROOT / "config"), log_level="ERROR").read(str(path))
+    assert flag in excel.metadata["table_columns"]["Hereditary_tumor"]
+    assert all(flag not in row for row in excel.get_table_data("Hereditary_tumor"))
+    identity = resolve_project_identity(bridge, excel_path=path, excel_data=excel)
+    assert identity.project_type == f"lung_{count}"
+    assert identity.detection["confidence"] == 1.0
+
+    # An actually absent required header must not be inferred from membership values.
+    excel.metadata["table_columns"]["Hereditary_tumor"].remove(flag)
+    missing = resolve_project_identity(bridge, excel_path=path, excel_data=excel)
+    assert missing.project_type is None
 
 
 @pytest.mark.parametrize("count", [62, 588])

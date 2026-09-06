@@ -1249,9 +1249,12 @@ class ReportGenerator:
             raise RuntimeError("Report data is unavailable before output path setup.")
 
         if not state.output_filename:
+            naming = state.panel_package.raw.get("naming") if state.panel_package else None
+            pattern = naming.get("output_pattern") if isinstance(naming, dict) else None
             state.output_filename = self._generate_output_filename(
                 state.excel_data,
                 state.report_data,
+                **({"pattern_override": pattern} if pattern else {}),
             )
 
         max_len = self.config_loader.get_setting("naming.max_filename_length", 200)
@@ -2080,7 +2083,9 @@ class ReportGenerator:
         panel = project_type or ",".join(validation.get("panels_checked") or [])
         return f"Panel Package校验失败，已阻断生成：{panel}。{summary}"
 
-    def _generate_output_filename(self, excel_data, report_data: ReportData) -> str:
+    def _generate_output_filename(
+        self, excel_data, report_data: ReportData, *, pattern_override: Optional[str] = None,
+    ) -> str:
         """
         生成输出文件名
 
@@ -2091,7 +2096,7 @@ class ReportGenerator:
         Returns:
             输出文件名
         """
-        pattern = self.config_loader.get_setting("naming.output_pattern", None)
+        pattern = pattern_override or self.config_loader.get_setting("naming.output_pattern", None)
         timestamp_format = self.config_loader.get_setting(
             "naming.timestamp_format", "%Y%m%d_%H%M%S"
         )

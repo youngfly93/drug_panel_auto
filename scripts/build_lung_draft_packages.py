@@ -1034,6 +1034,9 @@ def build_package(panel, spec, private_dir, work, packages_dir):
         aliases=[panel],
         default_template=template_id,
     )
+    raw["naming"] = {
+        "output_pattern": "{patient_name}_{sample_id}_{project_name}_{report_date}_评审草稿.docx",
+    }
     if panel == "lung_588":
         raw["aliases"].append("lung588")
     processors = [

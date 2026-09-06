@@ -3,6 +3,8 @@ panel_id: lung_588
 display_name: 肺癌588基因
 version: 0.1.0
 status: draft
+naming:
+  output_pattern: '{patient_name}_{sample_id}_{project_name}_{report_date}_评审草稿.docx'
 description: 报告组评审草稿（非临床交付）：本稿仅用于产品工程验证；尚未完成真实同案历史对照及报告组医学复核。
 aliases:
 - lung_588

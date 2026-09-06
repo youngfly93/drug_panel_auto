@@ -1,6 +1,7 @@
 """Native TOC and historical appendix boundaries; synthetic documents only."""
 
 import copy
+from types import SimpleNamespace
 
 import pytest
 from docx import Document
@@ -22,11 +23,14 @@ from reportgen.core.qa_report import (
     _build_style_checks,
     _inspect_toc,
     _is_empty_numbered_paragraph,
+    _paragraph_has_zero_first_line_indent,
     _read_part3_text,
 )
+from reportgen.core.report_generator import ReportGenerator, _GenerationState
 from reportgen.core.template_bridge_358 import load_panel_config
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.docx_sections import find_reference_section_bounds
+from reportgen.models.report_data import ReportData
 from reportgen.panels.loader import load_panel_package
 from scripts.build_lung_draft_packages import (
     EMPTY_APPROVED_DRUG_NOTICE,
@@ -132,6 +136,60 @@ def test_variant_flow_preserves_cells_widths_and_runs_while_overriding_indent():
     table.cell(2, 1).paragraphs[0]._p.pPr.ind.set(qn("w:firstLine"), "420")
     check = _build_style_checks(document, "lung_13", {})["docx_style_rules"]
     assert "VARIANT_CELL_INHERITED_INDENT" in check["failure_codes"]
+
+
+@pytest.mark.parametrize("attribute", ["firstLine", "hanging", "firstLineChars", "hangingChars"])
+@pytest.mark.parametrize("value,expected", [("0", True), ("420", False), ("-20", False)])
+def test_native_zero_indent_forms_are_equivalent_but_nonzero_still_blocks(
+    attribute, value, expected,
+):
+    document = Document()
+    paragraph = document.add_paragraph("合成数字字段")
+    paragraph._p.get_or_add_pPr().get_or_add_ind().set(qn("w:" + attribute), value)
+    assert _paragraph_has_zero_first_line_indent(paragraph, document) is expected
+
+
+def test_indent_checker_resolves_style_defaults_and_direct_zero_override():
+    document = Document()
+    paragraph = document.add_paragraph("合成数字字段")
+    style_indent = paragraph.style.element.get_or_add_pPr().get_or_add_ind()
+    style_indent.set(qn("w:firstLine"), "420")
+    assert not _paragraph_has_zero_first_line_indent(paragraph, document)
+    direct = paragraph._p.get_or_add_pPr().get_or_add_ind()
+    direct.set(qn("w:start"), "0")  # Margin reset alone must not erase indentation.
+    assert not _paragraph_has_zero_first_line_indent(paragraph, document)
+    direct.set(qn("w:hanging"), "0")  # LibreOffice's exported equivalent of firstLine=0.
+    assert _paragraph_has_zero_first_line_indent(paragraph, document)
+    direct.set(qn("w:hanging"), "invalid")
+    assert not _paragraph_has_zero_first_line_indent(paragraph, document)
+
+
+@pytest.mark.parametrize("panel", ["lung_13", "lung_62", "lung_62_pdl1", "lung_588", "crc_358_msi"])
+@pytest.mark.parametrize("explicit", [False, True])
+def test_draft_web_default_filename_never_claims_final_and_crc_naming_is_unchanged(
+    tmp_path, panel, explicit,
+):
+    package = load_panel_package(panel)
+    generator = ReportGenerator(log_level="ERROR")
+    report = ReportData()
+    for key, value in {
+        "patient_name": "合成测试", "sample_id": "SYNTHETIC-ONLY",
+        "project_name": package.display_name, "report_date": "2000-01-01",
+    }.items():
+        report.set_field(key, value)
+    state = _GenerationState(
+        excel_file="synthetic.xlsx", template_file="unused.docx", output_dir=str(tmp_path),
+        excel_data=SimpleNamespace(file_path="synthetic.xlsx", metadata={}), report_data=report,
+        panel_package=package, output_filename="explicit-name.docx" if explicit else None,
+    )
+    generator._stage_output_path(SimpleNamespace(artifacts={}, metrics={}), state)
+    if explicit:
+        assert state.output_filename == "explicit-name.docx"
+    elif panel.startswith("lung_"):
+        assert state.output_filename.endswith("_评审草稿.docx")
+        assert "终版" not in state.output_filename
+    else:
+        assert state.output_filename.endswith("_终版.docx")
 
 
 @pytest.mark.parametrize("panel", ["lung_13", "lung_62", "lung_62_pdl1", "lung_588"])

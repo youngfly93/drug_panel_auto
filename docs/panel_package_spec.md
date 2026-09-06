@@ -58,6 +58,12 @@ Supported package and template statuses:
 Every active or pilot panel must declare at least one synthetic golden case.
 Production customer files must not be placed under `golden_cases/`.
 
+Optional `naming.output_pattern` overrides the global automatic output filename
+pattern for this package only. Explicit caller-provided filenames are preserved.
+The four historical lung draft packages use a `评审草稿.docx` suffix, so their
+default filenames do not imply clinical final approval. Packages without this
+field retain the existing global naming behavior.
+
 Optional `gene_symbol_aliases` is a panel-scoped `historical_alias -> current_symbol`
 mapping for assays whose historical input keys differ from the current official
 gene symbol:

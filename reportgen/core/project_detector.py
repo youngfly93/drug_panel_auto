@@ -390,6 +390,13 @@ class ProjectDetector:
             table_data = excel_data.get("table_data")
         if not isinstance(table_data, dict):
             return 0.0, []
+        metadata = (
+            excel_data.get("metadata", {})
+            if isinstance(excel_data, dict) else getattr(excel_data, "metadata", {})
+        )
+        table_headers = metadata.get("table_columns", {}) if isinstance(metadata, dict) else {}
+        if not isinstance(table_headers, dict):
+            table_headers = {}
 
         best_score = 0.0
         best_id = ""
@@ -404,6 +411,12 @@ class ProjectDetector:
             for table_name, table_contract in required_tables.items():
                 rows = table_data.get(str(table_name))
                 columns = self._table_columns(rows)
+                # A valid all-blank membership column (or header-only sheet)
+                # disappears from sparse row dictionaries. Identity is a schema
+                # fact, so include ExcelReader's preserved original headers.
+                headers = table_headers.get(str(table_name), [])
+                if isinstance(headers, (list, tuple, set)):
+                    columns.update(str(value).strip().lower() for value in headers if value)
                 if not columns:
                     matched = False
                     break
