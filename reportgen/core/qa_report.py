@@ -1117,7 +1117,12 @@ def _is_empty_numbered_paragraph(paragraph: Any) -> bool:
     if _paragraph_has_embedded_object(paragraph):
         return False
     ppr = paragraph._p.pPr
-    return bool(ppr is not None and ppr.numPr is not None)
+    if ppr is None or ppr.numPr is None:
+        return False
+    # OOXML numId=0 explicitly suppresses numbering inherited from a style;
+    # LibreOffice emits this in unnumbered cells. It is not a visible bullet.
+    number_id = ppr.numPr.numId
+    return number_id is None or number_id.val != 0
 
 
 def _paragraph_has_embedded_object(paragraph: Any) -> bool:
@@ -1281,6 +1286,16 @@ def _inspect_native_toc(output_path: Path) -> Optional[Dict[str, Any]]:
         instructions = [n.text or "" for n in block.findall(".//w:instrText", ns)]
         if not any(re.match(r"\s*TOC\s", value) for value in instructions):
             continue
+        # python-docx omits floating text boxes. A refreshed index must not
+        # hide a second historical directory with stale, hardcoded page text.
+        native_nodes = set(block.iter())
+        stale_caches = 0
+        for box in root.findall(".//w:txbxContent", ns):
+            if box in native_nodes:
+                continue
+            value = "".join(n.text or "" for n in box.findall(".//w:t", ns))
+            if len(set(re.findall(r"第[一二三四五六七八九十]+部分[：:]", value))) >= 3:
+                stale_caches += 1
         lines, numbered = [], []
         for paragraph in block.findall(".//w:p", ns):
             # A heading such as "检测项目 62" is not a cached page number.
@@ -1303,13 +1318,15 @@ def _inspect_native_toc(output_path: Path) -> Optional[Dict[str, Any]]:
         unclosed = sorted(t for t in targets & set(bookmarks) if bookmarks[t] not in closed_ids)
         complete = bool(lines) and len(numbered) == len(lines)
         return {
-            "status": "FAIL" if missing or unclosed else ("PASS" if complete else "WARN"),
+            "status": "FAIL" if missing or unclosed or stale_caches else ("PASS" if complete else "WARN"),
             "mode": "native_TOC",
             "line_count": len(lines),
             "page_numbered_line_count": len(numbered),
             "missing_bookmarks": missing,
             "unclosed_bookmarks": unclosed,
+            "stale_floating_cache_count": stale_caches,
             "message": (
+                "Native TOC coexists with a historical floating directory." if stale_caches else
                 "Native TOC has broken bookmark targets." if missing or unclosed else
                 "Native TOC contains cached page numbers for every entry." if complete else
                 "Native TOC has missing cached page numbers."

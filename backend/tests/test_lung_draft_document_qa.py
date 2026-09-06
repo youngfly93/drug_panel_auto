@@ -3,6 +3,7 @@
 import pytest
 from docx import Document
 from docx.oxml import parse_xml
+from docx.oxml.ns import qn
 from reportgen.core.legacy_reference import (
     _extract_features,
     _section_presence,
@@ -12,7 +13,12 @@ from reportgen.core.qa_gate import (
     _current_output_profile_from_package,
     _run_single_current_output_contract,
 )
-from reportgen.core.qa_report import _build_business_checks, _inspect_toc, _read_part3_text
+from reportgen.core.qa_report import (
+    _build_business_checks,
+    _inspect_toc,
+    _is_empty_numbered_paragraph,
+    _read_part3_text,
+)
 from reportgen.core.template_bridge_358 import load_panel_config
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.docx_sections import find_reference_section_bounds
@@ -140,6 +146,69 @@ def test_empty_b_family_toc_uses_actual_major_headings():
     assert "目录待排版引擎刷新" in [p.text for p in document.paragraphs]
 
 
+def test_b_family_floating_toc_is_replaced_and_section_boundary_follows_field():
+    document = Document()
+    title = document.add_paragraph("目录")
+    labels = [
+        "第一部分：基本信息", "第二部分：检测结果", "第三部分：附录", "肺癌诊疗知识", "参考文献",
+    ]
+    cache = "".join(
+        f"<w:p><w:r><w:tab/><w:t>{name}</w:t><w:tab/><w:t>99</w:t></w:r></w:p>"
+        for name in labels
+    )
+    title._p.append(parse_xml(
+        f'<w:r xmlns:w="{W}" xmlns:v="urn:schemas-microsoft-com:vml">'
+        f'<w:pict><v:shape><v:textbox><w:txbxContent>{cache}'
+        '</w:txbxContent></v:textbox></v:shape></w:pict></w:r>'
+    ))
+    decoration = parse_xml(f'<w:r xmlns:w="{W}"><w:pict/></w:r>')
+    title._p.append(decoration)
+    title._p.get_or_add_pPr().append(parse_xml(
+        f'<w:sectPr xmlns:w="{W}"><w:pgNumType w:start="1"/></w:sectPr>'
+    ))
+    document.add_paragraph(labels[0])
+    cell_p = document.add_table(rows=1, cols=1).cell(0, 0).paragraphs[0]
+    cell_p._p.get_or_add_pPr().append(parse_xml(f'<w:outlineLvl xmlns:w="{W}" w:val="1"/>'))
+    for name in labels[1:3]:
+        document.add_paragraph(name)
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "固定 FAQ 内容保留"
+    document.add_paragraph()
+    document.add_paragraph()
+    document.add_page_break()
+    appendix_heading = document.add_paragraph("2. 肺癌诊疗知识")
+    prose = document.add_paragraph("不进入目录的历史正文", style="Heading 2")
+    local_references = document.add_paragraph("参考文献：")
+    global_references = document.add_paragraph("5. 参考文献")
+    install_refreshable_toc(document)
+    assert "99" not in document.element.xml
+    assert not list(document.element.iter(qn("w:txbxContent")))
+    assert decoration.getparent() is title._p
+    assert title._p.find(".//" + qn("w:sectPr")) is None
+    field = title._p.getnext()
+    assert " TOC " in field.xml
+    assert field.getnext().find(".//" + qn("w:sectPr")) is not None
+    assert cell_p._p.pPr.find(qn("w:outlineLvl")).get(qn("w:val")) == "9"
+    assert prose._p.pPr.find(qn("w:outlineLvl")).get(qn("w:val")) == "9"
+    assert appendix_heading._p.pPr.find(qn("w:outlineLvl")).get(qn("w:val")) == "1"
+    assert appendix_heading._p.getprevious().tag == qn("w:tbl")
+    assert appendix_heading.paragraph_format.page_break_before
+    assert appendix_heading.paragraph_format.keep_with_next
+    assert document.tables[-1].cell(0, 0).text == "固定 FAQ 内容保留"
+    assert local_references._p.pPr.find(qn("w:outlineLvl")).get(qn("w:val")) == "9"
+    assert global_references._p.pPr.find(qn("w:outlineLvl")).get(qn("w:val")) == "1"
+
+
+@pytest.mark.parametrize("number_id, visible", [(0, False), (1, True), (9, True), (None, True)])
+def test_empty_numbering_distinguishes_explicit_suppression(number_id, visible):
+    document = Document()
+    paragraph = document.add_paragraph()
+    num = "" if number_id is None else f'<w:numId w:val="{number_id}"/>'
+    paragraph._p.get_or_add_pPr().append(parse_xml(
+        f'<w:numPr xmlns:w="{W}"><w:ilvl w:val="0"/>{num}</w:numPr>'
+    ))
+    assert _is_empty_numbered_paragraph(paragraph) is visible
+
+
 @pytest.mark.parametrize("old_count", [2, 9, 123])
 def test_case_summary_and_basic_values_never_inherit_historical_case_data(old_count):
     document = Document()
@@ -241,6 +310,23 @@ def test_native_toc_broken_or_unclosed_bookmarks_fail(tmp_path, target, closed):
     result = _inspect_toc([], output_path=native_toc(tmp_path, target=target, closed=closed))
     assert result["status"] == "FAIL"
     assert result["missing_bookmarks"] or result["unclosed_bookmarks"]
+
+
+def test_native_toc_cannot_hide_a_stale_floating_directory(tmp_path):
+    path = native_toc(tmp_path)
+    document = Document(path)
+    paragraph = document.add_paragraph()
+    value = "第一部分：基本信息 99 第二部分：检测结果 99 第三部分：附录 99"
+    paragraph._p.append(parse_xml(
+        f'<w:r xmlns:w="{W}" xmlns:v="urn:schemas-microsoft-com:vml">'
+        '<w:pict><v:shape><v:textbox><w:txbxContent>'
+        f'<w:p><w:r><w:t>{value}</w:t></w:r></w:p>'
+        '</w:txbxContent></v:textbox></v:shape></w:pict></w:r>'
+    ))
+    document.save(path)
+    result = _inspect_toc([], output_path=path)
+    assert result["status"] == "FAIL"
+    assert result["stale_floating_cache_count"] == 1
 
 
 @pytest.mark.parametrize("unsafe_inside", [False, True])

@@ -401,7 +401,7 @@ def install_refreshable_toc(doc):
     entries = [p for p in paragraphs if re.fullmatch(r"toc\s+[1-9]", p.style.name, re.I)]
 
     def label(value):
-        value = str(value).split("\t")[0].strip()
+        value = str(value).strip().split("\t")[0].strip()
         return compact(re.sub(r"^\d+(?:\.\d+)*[.．、]?\s*", "", value))
 
     if entries:
@@ -412,18 +412,54 @@ def install_refreshable_toc(doc):
         toc_heading = None
         last = paragraphs.index(entries[-1])
     else:
-        # Some B-family mothers contain only the empty TOC heading. Index the
-        # actual major section headings, never synthesize page numbers.
+        # B-family TOCs can be floating text boxes, not body paragraphs. Their
+        # historical page numbers must not remain beside the new native index.
         toc_heading = heading(doc, "目录")
         last = next(i for i, p in enumerate(paragraphs) if p._p is toc_heading._p)
+        cache_labels = set()
+        for media in list(toc_heading._p.iter(qn("w:drawing"))) + list(
+            toc_heading._p.iter(qn("w:pict"))
+        ):
+            labels = []
+            for node in media.iter(qn("w:p")):
+                value = "".join(
+                    "\t" if n.tag == qn("w:tab") else (n.text or "")
+                    for n in node.iter() if n.tag in {qn("w:t"), qn("w:tab")}
+                )
+                labels.append(label(value))
+            major = [value for value in labels if re.match(r"第[一二三四五六七八九十]+部分.+", value)]
+            if len(major) >= 3:
+                # Keep decorative shapes and unrelated media; replace only
+                # recognizable complete TOC caches (including VML fallbacks).
+                media.getparent().remove(media)
+                cache_labels.update(labels)
+        # The source list style also marks patient cells, figures and blank
+        # paragraphs as outline level 2. A new index must not inherit those.
+        for node in doc.element.body.iter(qn("w:p")):
+            properties = node.get_or_add_pPr()
+            outline = properties.find(qn("w:outlineLvl"))
+            if outline is None:
+                outline = OxmlElement("w:outlineLvl")
+                properties.append(outline)
+            outline.set(qn("w:val"), "9")
         levels = {
             label(p.text): 0 for p in paragraphs[last + 1:]
             if re.fullmatch(r"第[一二三四五六七八九十]+部分\s*[：:].+", p.text.strip())
         }
+        # Use surviving body headings from the historical directory, with no
+        # inferred labels or inherited case-cell/figure captions.
+        for value in cache_labels:
+            if value:
+                levels.setdefault(value, 1)
+    # Appendix pathway subsections also have local "参考文献：" captions.
+    # Only the final global bibliography belongs to the report directory.
+    reference_headings = [p for p in paragraphs[last + 1:] if label(p.text) == label("参考文献")]
     matched = 0
     for p in paragraphs[last + 1:]:
         key = label(p.text)
         if key not in levels:
+            continue
+        if not entries and key == label("参考文献") and p._p is not reference_headings[-1]._p:
             continue
         properties = p._p.get_or_add_pPr()
         node = properties.find(qn("w:outlineLvl"))
@@ -432,6 +468,22 @@ def install_refreshable_toc(doc):
             properties.append(node)
         node.set(qn("w:val"), str(levels[key]))
         matched += 1
+        if not entries:
+            p.paragraph_format.keep_with_next = True
+            p.paragraph_format.keep_together = True
+            cursor = p._p.getprevious()
+            page_break = False
+            while cursor is not None and cursor.tag == qn("w:p") and not text(cursor).strip():
+                if any(list(cursor.iter(qn(tag))) for tag in (
+                    "w:sectPr", "w:drawing", "w:pict", "w:fldChar", "w:instrText"
+                )):
+                    break
+                previous = cursor.getprevious()
+                page_break |= any(n.get(qn("w:type")) == "page" for n in cursor.iter(qn("w:br")))
+                cursor.getparent().remove(cursor)
+                cursor = previous
+            if page_break:
+                p.paragraph_format.page_break_before = True
     if matched < 3:
         raise ValueError("Historical TOC cannot be matched to surviving body headings")
     # Match the working A-family complex-field representation. The empty
@@ -461,6 +513,22 @@ def install_refreshable_toc(doc):
         entries[0]._p.addprevious(block)
     else:
         toc_heading._p.addnext(block)
+        # The source closes its front-matter section on the TOC title. Move
+        # that boundary after the refreshed entries, so the TOC stays with its
+        # title and cannot share a body page with patient information.
+        sect = toc_heading._p.find(".//" + qn("w:sectPr"))
+        if sect is not None:
+            boundary = OxmlElement("w:p")
+            props = OxmlElement("w:pPr")
+            sect.getparent().remove(sect)
+            props.append(sect)
+            boundary.append(props)
+            block.addnext(boundary)
+        else:
+            first_body_heading = next(
+                p for p in paragraphs[last + 1:] if label(p.text) in levels
+            )
+            first_body_heading.paragraph_format.page_break_before = True
     for p in entries:
         # An old TOC can carry the front-matter section boundary. Preserve it.
         sect = p._p.find(".//" + qn("w:sectPr"))
