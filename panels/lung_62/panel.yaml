@@ -115,6 +115,8 @@ rules:
   filtering: config/filtering.yaml
   drug_brands: config/drug_brands.yaml
 input_contract:
+  missing_source_defaults:
+    sample_type: 未提供
   required_tables:
   - Variations
   - TMB

@@ -424,6 +424,15 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
     """
     mapping = _load_mapping_yaml()
     single_values = mapping.get("single_values", {})
+    missing_defaults = {}
+    if project_type:
+        from reportgen.panels.loader import PanelPackageLoader
+
+        try:
+            package = PanelPackageLoader(project_root=settings.upstream_root).load(project_type)
+            missing_defaults = package.input_contract.get("missing_source_defaults") or {}
+        except (FileNotFoundError, ValueError):
+            pass
 
     # Build all field schemas
     all_fields: dict[str, FieldSchema] = {}
@@ -440,7 +449,7 @@ def get_clinical_form_schema(project_type: Optional[str] = None) -> ClinicalForm
             label=label,
             type=field_def.get("type", "string"),
             required=field_def.get("required", False),
-            default=field_def.get("default_value"),
+            default=None if key in missing_defaults else field_def.get("default_value"),
             description=field_def.get("description"),
             format=field_def.get("format_template"),
             synonyms=synonyms,

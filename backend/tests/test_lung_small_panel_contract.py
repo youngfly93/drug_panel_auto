@@ -26,6 +26,7 @@ from reportgen.panels.validation import validate_panel_package
 from reportgen.rules.targeted_drugs import load_targeted_drug_rule_context
 from scripts.scan_hardcoded_literals import scan_docx
 
+from app.services.clinical_info_service import get_clinical_form_schema
 from app.services.project_identity import ProjectIdentityConflictError, resolve_project_identity
 from app.services.reportgen_bridge import ReportGenBridge
 
@@ -167,6 +168,43 @@ def test_structural_identity_uses_headers_with_all_blank_membership(tmp_path, co
     excel.metadata["table_columns"]["Hereditary_tumor"].remove(flag)
     missing = resolve_project_identity(bridge, excel_path=path, excel_data=excel)
     assert missing.project_type is None
+
+
+@pytest.mark.parametrize(
+    "panel,count", [("lung_13", 13), ("lung_62", 62), ("lung_62_pdl1", 62), ("lung_588", 588)]
+)
+@pytest.mark.parametrize("provided", [None, "组织", "血液"])
+def test_draft_sample_type_needs_a_source_and_never_changes_crc_defaults(
+    tmp_path, panel, count, provided,
+):
+    excel = source(tmp_path, count)
+    if provided:
+        excel.single_values["样本类型"] = provided
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    report = mapper.map(excel, panel_package=package(panel))
+    assert report.get_field("sample_type") == (provided or "未提供")
+    bridge = ReportGenBridge(config_dir=str(ROOT / "config"), template_dir=str(ROOT / "templates"))
+    clinical = bridge.get_mapped_clinical_fields(excel)
+    if provided:
+        assert clinical["sample_type"] == provided
+        assert "sample_type" not in report.metadata.get("panel_missing_source_defaults", {})
+    else:
+        assert "sample_type" not in clinical
+        assert report.metadata["panel_missing_source_defaults"]["sample_type"]["provided"] is False
+    schema = get_clinical_form_schema(panel)
+    field = next(f for g in schema.groups for f in g.fields if f.key == "sample_type")
+    assert field.default is None
+    # The shared mapper must not mutate legacy/global mappings after a draft call.
+    legacy = mapper.map(source(tmp_path, 13), panel_package=package("crc_358_msi"))
+    assert legacy.get_field("sample_type") == "组织"
+
+
+def test_unregistered_legacy_preview_keeps_existing_mapping_behavior(tmp_path, monkeypatch):
+    bridge = ReportGenBridge(config_dir=str(ROOT / "config"), template_dir=str(ROOT / "templates"))
+    monkeypatch.setattr(bridge, "detect_project_type", lambda *args, **kwargs: {
+        "detected": True, "project_type": "unregistered_legacy",
+    })
+    assert bridge.get_mapped_clinical_fields(source(tmp_path))["sample_type"] == "组织"
 
 
 @pytest.mark.parametrize("count", [62, 588])

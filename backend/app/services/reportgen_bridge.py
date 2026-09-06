@@ -139,9 +139,24 @@ class ReportGenBridge:
         fields — not the raw QC/technical data from excel_data.single_values.
         """
         try:
-            report_data = self.field_mapper.map(excel_data)
+            detection = self.detect_project_type(excel_data.file_path, excel_data=excel_data)
+            panel_id = detection.get("project_type") if detection.get("detected") else None
+            registry = get_panel_registry() if panel_id else None
+            registration = (
+                registry.get(panel_id) if registry and registry.is_registered(panel_id) else None
+            )
+            package = registration.package if registration else None
+            missing_defaults = (getattr(package, "input_contract", None) or {}).get(
+                "missing_source_defaults"
+            ) or {}
+            report_data = self.field_mapper.map(
+                excel_data, **({"panel_package": package} if missing_defaults else {}),
+            )
+            absent_fields = report_data.metadata.get("panel_missing_source_defaults") or {}
             result = {}
             for k, v in report_data.context.items():
+                if k in absent_fields:
+                    continue  # A neutral display default is not an Excel/form source fact.
                 # Skip table data (lists/dicts), keep only scalar clinical fields
                 if isinstance(v, (list, dict)):
                     continue

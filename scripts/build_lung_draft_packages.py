@@ -1198,6 +1198,7 @@ def build_package(panel, spec, private_dir, work, packages_dir):
             if not k.startswith("pdl1_")
         }
     flag = spec.get("membership_column") or "ExistInsmall588"
+    raw["input_contract"]["missing_source_defaults"] = {"sample_type": "未提供"}
     if spec.get("membership_column"):
         raw["derived_input"] = {
             "membership_column": flag,

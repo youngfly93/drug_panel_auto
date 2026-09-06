@@ -106,6 +106,13 @@ explicit source-key aliases. It is opt-in per package; missing values become
 preserved, and the report metadata records source/default provenance. Fields
 not declared here remain subject to the strict template-variable gate.
 
+Optional `input_contract.missing_source_defaults` replaces a global mapping
+default only when no source or configured patient value exists. The four lung
+drafts declare `sample_type: 未提供`; the schema leaves that form control empty,
+and Excel preview/batch preparation must not promote this display default to a
+source-provided field. Explicit source values (including `组织`) are preserved.
+Packages without this declaration retain legacy mapping defaults.
+
 ## `qa.yaml` Minimum Fields
 
 Every panel package must include a QA profile:

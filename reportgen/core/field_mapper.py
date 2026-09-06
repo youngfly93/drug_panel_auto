@@ -177,7 +177,10 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                     self.logger.debug("从配置文件加载患者信息", field=key, value=value)
 
         # 映射单值字段
-        self._map_single_values(excel_data, report_data)
+        missing_defaults = (getattr(panel_package, "input_contract", None) or {}).get(
+            "missing_source_defaults"
+        ) or {}
+        self._map_single_values(excel_data, report_data, missing_defaults=missing_defaults)
         from reportgen.panels.input_contract import map_optional_panel_fields
 
         map_optional_panel_fields(report_data, excel_data, panel_package)
@@ -344,7 +347,8 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
         return TMB_TABLE_IMMUNO_TIPS
 
     def _map_single_values(
-        self, excel_data: ExcelDataSource, report_data: ReportData
+        self, excel_data: ExcelDataSource, report_data: ReportData,
+        *, missing_defaults: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         映射单值字段
@@ -396,7 +400,12 @@ class FieldMapper(TargetedDrugMixin, ImmuneGeneMixin):
                     )
 
                 # 设置默认值
-                report_data.set_field(var_name, mapping.default_value)
+                value = (missing_defaults or {}).get(var_name, mapping.default_value)
+                report_data.set_field(var_name, value)
+                if var_name in (missing_defaults or {}):
+                    report_data.metadata.setdefault("panel_missing_source_defaults", {})[var_name] = {
+                        "source": "default", "provided": False, "value": value,
+                    }
 
     def _apply_identifier_defaults(self, report_data: ReportData) -> None:
         """补齐可由已有标识稳定推导的报告标识字段。"""
