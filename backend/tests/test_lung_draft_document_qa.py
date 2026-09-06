@@ -134,6 +134,29 @@ def test_flat_historical_toc_becomes_refreshable_without_old_page_numbers(tmp_pa
     assert result["status"] == "FAIL"
 
 
+def test_flat_c_family_toc_excludes_inherited_citations_and_local_reference_captions():
+    document = Document()
+    document.styles.add_style("toc 1", 1)
+    document.add_paragraph("目录")
+    labels = ["第一部分：检测结果", "第二部分：结果解析", "4. 参考文献", "第三部分：附录"]
+    for name in labels:
+        document.add_paragraph(name + "\t99", style="toc 1")
+    for name in labels:
+        document.add_paragraph(name)
+    caption = document.add_paragraph("参考文献：", style="Heading 2")
+    citation = document.add_paragraph(
+        "[3] Synthetic long reference, 2015: 100–200", style="Heading 2"
+    )
+    cell = document.add_table(rows=1, cols=1).cell(0, 0).paragraphs[0]
+    cell.style = "Heading 2"
+    install_refreshable_toc(document)
+    for paragraph in (caption, citation, cell):
+        assert paragraph._p.pPr.find(qn("w:outlineLvl")).get(qn("w:val")) == "9"
+    global_reference = next(p for p in document.paragraphs if p.text == "4. 参考文献")
+    assert global_reference._p.pPr.find(qn("w:outlineLvl")).get(qn("w:val")) == "0"
+    assert caption.text == "参考文献：" and citation.text.startswith("[3] Synthetic")
+
+
 def test_empty_b_family_toc_uses_actual_major_headings():
     document = Document()
     document.add_paragraph("目    录")
@@ -297,6 +320,20 @@ def test_native_sdt_toc_reads_all_cached_pages(tmp_path):
     assert result["mode"] == "native_TOC"
     assert result["status"] == "PASS"
     assert result["page_numbered_line_count"] == result["line_count"] == 2
+
+
+@pytest.mark.parametrize("label", ["[3] Synthetic reference, 2015: 100–200", "https://example.org/reference"])
+def test_native_toc_rejects_bibliography_entries_even_with_valid_pages(tmp_path, label):
+    path = native_toc(tmp_path)
+    document = Document(path)
+    for node in document.element.iter(qn("w:t")):
+        if node.text == "检测项目 62":
+            node.text = label
+    document.save(path)
+    result = _inspect_toc([], output_path=path)
+    assert result["status"] == "FAIL"
+    assert result["citation_entry_count"] == 2
+    assert result["page_numbered_line_count"] == 2
 
 
 @pytest.mark.parametrize("pages", [(None,), (1, None), (0,), (-1,)])

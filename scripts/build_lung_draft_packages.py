@@ -433,15 +433,6 @@ def install_refreshable_toc(doc):
                 # recognizable complete TOC caches (including VML fallbacks).
                 media.getparent().remove(media)
                 cache_labels.update(labels)
-        # The source list style also marks patient cells, figures and blank
-        # paragraphs as outline level 2. A new index must not inherit those.
-        for node in doc.element.body.iter(qn("w:p")):
-            properties = node.get_or_add_pPr()
-            outline = properties.find(qn("w:outlineLvl"))
-            if outline is None:
-                outline = OxmlElement("w:outlineLvl")
-                properties.append(outline)
-            outline.set(qn("w:val"), "9")
         levels = {
             label(p.text): 0 for p in paragraphs[last + 1:]
             if re.fullmatch(r"第[一二三四五六七八九十]+部分\s*[：:].+", p.text.strip())
@@ -451,6 +442,16 @@ def install_refreshable_toc(doc):
         for value in cache_labels:
             if value:
                 levels.setdefault(value, 1)
+    # Both B/C sources contain non-heading paragraphs with direct or inherited
+    # outline levels (patient cells, figures, citations and blank paragraphs).
+    # Keep their appearance but index only matched historical body headings.
+    for node in doc.element.body.iter(qn("w:p")):
+        properties = node.get_or_add_pPr()
+        outline = properties.find(qn("w:outlineLvl"))
+        if outline is None:
+            outline = OxmlElement("w:outlineLvl")
+            properties.append(outline)
+        outline.set(qn("w:val"), "9")
     # Appendix pathway subsections also have local "参考文献：" captions.
     # Only the final global bibliography belongs to the report directory.
     reference_headings = [p for p in paragraphs[last + 1:] if label(p.text) == label("参考文献")]
@@ -458,6 +459,8 @@ def install_refreshable_toc(doc):
     for p in paragraphs[last + 1:]:
         key = label(p.text)
         if key not in levels:
+            continue
+        if entries and key == label("参考文献") and p.text.strip().endswith(("：", ":")):
             continue
         if not entries and key == label("参考文献") and p._p is not reference_headings[-1]._p:
             continue

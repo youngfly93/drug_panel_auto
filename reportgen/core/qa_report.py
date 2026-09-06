@@ -1297,6 +1297,7 @@ def _inspect_native_toc(output_path: Path) -> Optional[Dict[str, Any]]:
             if len(set(re.findall(r"第[一二三四五六七八九十]+部分[：:]", value))) >= 3:
                 stale_caches += 1
         lines, numbered = [], []
+        citation_entries = 0
         for paragraph in block.findall(".//w:p", ns):
             # A heading such as "检测项目 62" is not a cached page number.
             # Word/LibreOffice separate each TOC label and its page with a tab.
@@ -1308,6 +1309,8 @@ def _inspect_native_toc(output_path: Path) -> Optional[Dict[str, Any]]:
             if not value or _compact(value) == "目录":
                 continue
             lines.append(value)
+            if re.match(r"(?:\[\d+\]\s*|https?://)", value):
+                citation_entries += 1
             if re.search(r"\t\s*[1-9]\d*\s*$", value):
                 numbered.append(value)
         targets = {
@@ -1318,15 +1321,17 @@ def _inspect_native_toc(output_path: Path) -> Optional[Dict[str, Any]]:
         unclosed = sorted(t for t in targets & set(bookmarks) if bookmarks[t] not in closed_ids)
         complete = bool(lines) and len(numbered) == len(lines)
         return {
-            "status": "FAIL" if missing or unclosed or stale_caches else ("PASS" if complete else "WARN"),
+            "status": "FAIL" if missing or unclosed or stale_caches or citation_entries else ("PASS" if complete else "WARN"),
             "mode": "native_TOC",
             "line_count": len(lines),
             "page_numbered_line_count": len(numbered),
             "missing_bookmarks": missing,
             "unclosed_bookmarks": unclosed,
             "stale_floating_cache_count": stale_caches,
+            "citation_entry_count": citation_entries,
             "message": (
                 "Native TOC coexists with a historical floating directory." if stale_caches else
+                "Native TOC contains bibliography entries rather than section headings." if citation_entries else
                 "Native TOC has broken bookmark targets." if missing or unclosed else
                 "Native TOC contains cached page numbers for every entry." if complete else
                 "Native TOC has missing cached page numbers."
