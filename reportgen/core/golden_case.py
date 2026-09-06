@@ -10,6 +10,7 @@ import re
 from hashlib import sha1
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
@@ -35,8 +36,11 @@ SUPPORTED_PANELS = {
     "lung_329": "lung_329_pdl1",
     "lung329": "lung_329_pdl1",
     "lung_329_pdl1": "lung_329_pdl1",
-    "lung_588": "lung_588_pdl1",
-    "lung588": "lung_588_pdl1",
+    "lung_13": "lung_13",
+    "lung_62": "lung_62",
+    "lung_62_pdl1": "lung_62_pdl1",
+    "lung_588": "lung_588",
+    "lung588": "lung_588",
     "lung_588_pdl1": "lung_588_pdl1",
 }
 
@@ -393,6 +397,37 @@ def run_visual_render(
 
 
 def _golden_case_spec(panel: str) -> Dict[str, Any]:
+    if panel in {"lung_13", "lung_62", "lung_62_pdl1", "lung_588"}:
+        count = panel.split("_")[1]
+        pdl1 = panel.endswith("_pdl1")
+        name = f"肺癌{count}基因" + ("+PD-L1" if pdl1 else "")
+        return {
+            "expectations": {
+                "project_type": panel,
+                "project_name": name,
+                "expected_context": {
+                    **LUNG_588_PDL1_EXPECTATIONS["expected_context"],
+                    "project_name": name,
+                },
+                "required_qa_checks": list(_LUNG_PDL1_REQUIRED_QA_CHECKS),
+                "required_text": [
+                    "报告组评审草稿（非临床交付）",
+                    "ERBB2", "c.1979G>A", "p.G660D",
+                    *(["TPS 50%，CPS 52", "阳性（高表达）"] if pdl1 else []),
+                ],
+            },
+            "builder": partial(
+                _build_lung_pdl1_golden_input,
+                panel_id=panel,
+                project_name=name,
+                sample_id=f"SYN-{panel.upper()}-GOLDEN",
+                membership_column=f"ExistInsmall{count}",
+                membership_value=1,
+                include_pdl1=pdl1,
+            ),
+            "input_filename": f"SYN-{panel.upper()}-GOLDEN.xlsx",
+            "output_filename": f"golden_{panel}.docx",
+        }
     if panel == "crc_301_msi":
         return {
             "expectations": CRC_301_MSI_EXPECTATIONS,
@@ -629,12 +664,16 @@ def _build_lung_pdl1_golden_input(
     panel_id: str,
     project_name: str,
     sample_id: str,
+    membership_column: str = "ExistInsmall588",
+    membership_value: Any = "Ⅰ类",
+    include_pdl1: bool = True,
 ) -> GoldenCaseInput:
     """Build a deterministic NGS workbook plus explicit synthetic form data."""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     image_path = out.with_suffix(".pdl1.png")
-    _write_synthetic_pdl1_image(image_path)
+    if include_pdl1:
+        _write_synthetic_pdl1_image(image_path)
 
     meta = pd.DataFrame(
         [
@@ -656,7 +695,7 @@ def _build_lung_pdl1_golden_input(
     )
     variation = {
         "ExistIn552": "Ⅰ类",
-        "ExistInsmall588": "Ⅰ类",
+        membership_column: membership_value,
         "Gene_Symbol": "ERBB2",
         "Transcript": "NM_004448.4",
         "Chr": "17",
@@ -678,7 +717,7 @@ def _build_lung_pdl1_golden_input(
         columns=["Sample", "Total", "Unstable", "Percent", "Status"],
     )
     hereditary = pd.DataFrame(
-        columns=["Gene_Symbol", "ExistInsmall588", "ExistIn178"]
+        columns=["Gene_Symbol", membership_column, "ExistIn178"]
     )
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
         meta.to_excel(writer, sheet_name="Meta", index=False)
@@ -745,6 +784,19 @@ def _build_lung_pdl1_golden_input(
             "panel_id": panel_id,
         },
     )
+    if not include_pdl1:
+        excel_data.single_values = {
+            key: value for key, value in excel_data.single_values.items()
+            if not key.startswith("PD-L1")
+        }
+        excel_data.metadata["field_source_overrides"] = {
+            key: value for key, value in excel_data.metadata["field_source_overrides"].items()
+            if not key.startswith("pdl1_")
+        }
+    excel_data.metadata["table_columns"] = {
+        "Variations": list(variation),
+        "Hereditary_tumor": list(hereditary.columns),
+    }
     return GoldenCaseInput(excel_file=out, excel_data=excel_data)
 
 

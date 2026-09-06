@@ -151,6 +151,8 @@
             "enabled": { "type": "boolean" },
             "severity": { "type": "string", "enum": ["warn", "fail"] },
             "scan_scope": { "type": "string" },
+            "start_heading": { "type": "string", "minLength": 1 },
+            "end_heading": { "type": "string", "minLength": 1 },
             "runtime_action": { "type": "string" },
             "suppressed_text": { "type": "string" },
             "terms": { "type": "array", "items": { "type": "string" } },

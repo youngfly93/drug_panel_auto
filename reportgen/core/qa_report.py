@@ -195,7 +195,7 @@ def build_docx_qa_report(
     paragraphs = list(_iter_all_paragraphs(doc))
     text = _read_docx_text(doc)
     compact_text = _compact(text)
-    part3_text = _read_part3_text(doc)
+    part3_text = _read_part3_text(doc, context.get("part3_cross_cancer_residual_scan"))
     table_metrics = _inspect_tables(doc)
     metrics.update(
         {
@@ -1065,20 +1065,29 @@ def _read_docx_text(doc) -> str:
     return "\n".join(parts)
 
 
-def _read_part3_text(doc) -> Optional[str]:
+def _read_part3_text(doc, section_policy: Optional[Mapping[str, Any]] = None) -> Optional[str]:
     """Return the body text inside the dynamic Part-3 section, if present."""
 
     started = False
+    policy = section_policy or {}
+    start_heading = _compact(str(policy.get("start_heading") or ""))
+    end_heading = _compact(str(policy.get("end_heading") or ""))
     parts: List[str] = []
     for paragraph in doc.paragraphs:
         value = str(paragraph.text or "").strip()
         compact = _compact(value)
         if not started:
-            if compact.startswith("第三部分：基因变异及相应靶向/免疫药物解析"):
+            if (start_heading and compact == start_heading) or (
+                not start_heading
+                and compact.startswith("第三部分：基因变异及相应靶向/免疫药物解析")
+            ):
                 started = True
                 parts.append(value)
             continue
-        if compact.startswith("3.阅读说明") or compact.startswith("第四部分：附录"):
+        if (end_heading and compact == end_heading) or (
+            not end_heading
+            and (compact.startswith("3.阅读说明") or compact.startswith("第四部分：附录"))
+        ):
             break
         if value:
             parts.append(value)
@@ -1203,6 +1212,9 @@ def _inspect_toc(
         field_check = _inspect_reportgen_toc_fields(Path(output_path))
         if field_check is not None:
             return field_check
+        native_check = _inspect_native_toc(Path(output_path))
+        if native_check is not None:
+            return native_check
 
     texts = [(p.text or "").strip() for p in paragraphs]
     start_idx = None
@@ -1244,6 +1256,60 @@ def _inspect_toc(
         "page_numbered_line_count": len(page_like),
         "sample_lines": toc_lines[:8],
     }
+
+
+def _inspect_native_toc(output_path: Path) -> Optional[Dict[str, Any]]:
+    """Read native Word TOCs inside SDTs omitted by python-docx paragraphs."""
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    with ZipFile(output_path) as archive:
+        root = ET.fromstring(archive.read("word/document.xml"))
+    bookmarks = {
+        node.get("{" + ns["w"] + "}name"): node.get("{" + ns["w"] + "}id")
+        for node in root.findall(".//w:bookmarkStart", ns)
+    }
+    closed_ids = {
+        node.get("{" + ns["w"] + "}id")
+        for node in root.findall(".//w:bookmarkEnd", ns)
+    }
+    for block in root.findall(".//w:sdt", ns):
+        instructions = [n.text or "" for n in block.findall(".//w:instrText", ns)]
+        if not any(re.match(r"\s*TOC\s", value) for value in instructions):
+            continue
+        lines, numbered = [], []
+        for paragraph in block.findall(".//w:p", ns):
+            # A heading such as "检测项目 62" is not a cached page number.
+            # Word/LibreOffice separate each TOC label and its page with a tab.
+            value = "".join(
+                "\t" if node.tag == "{" + ns["w"] + "}tab" else (node.text or "")
+                for node in paragraph.iter()
+                if node.tag in {"{" + ns["w"] + "}t", "{" + ns["w"] + "}tab"}
+            ).strip()
+            if not value or _compact(value) == "目录":
+                continue
+            lines.append(value)
+            if re.search(r"\t\s*[1-9]\d*\s*$", value):
+                numbered.append(value)
+        targets = {
+            n.get("{" + ns["w"] + "}anchor")
+            for n in block.findall(".//w:hyperlink", ns)
+        } - {None, ""}
+        missing = sorted(targets - set(bookmarks))
+        unclosed = sorted(t for t in targets & set(bookmarks) if bookmarks[t] not in closed_ids)
+        complete = bool(lines) and len(numbered) == len(lines)
+        return {
+            "status": "FAIL" if missing or unclosed else ("PASS" if complete else "WARN"),
+            "mode": "native_TOC",
+            "line_count": len(lines),
+            "page_numbered_line_count": len(numbered),
+            "missing_bookmarks": missing,
+            "unclosed_bookmarks": unclosed,
+            "message": (
+                "Native TOC has broken bookmark targets." if missing or unclosed else
+                "Native TOC contains cached page numbers for every entry." if complete else
+                "Native TOC has missing cached page numbers."
+            ),
+        }
+    return None
 
 
 def _inspect_tables(doc) -> Dict[str, Any]:

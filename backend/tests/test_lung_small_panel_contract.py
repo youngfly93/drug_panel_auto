@@ -13,6 +13,7 @@ for directory in (ROOT, ROOT / "backend"):
     sys.path.insert(0, str(directory))
 
 from reportgen.core.field_mapper import FieldMapper
+from reportgen.core.golden_case import _golden_case_spec, _normalize_panel
 from reportgen.core.project_detector import ProjectDetector
 from reportgen.core.template_bridge_358 import build_undetected_genes, load_panel_config
 from reportgen.core.template_contract import extract_template_contract, validate_declared_contract
@@ -104,6 +105,14 @@ def test_draft_packages_are_valid_and_literal_free(panel, count):
         pkg.template_contract,
     )
     assert declared.ok, declared
+    lists = set(extract_template_contract(str(pkg.resolve_template_file())).required_lists)
+    reference = package("lung_588_pdl1")
+    reference_lists = extract_template_contract(
+        str(reference.resolve_template_file())
+    ).required_lists
+    pgx_lists = {name for name in reference_lists if name.startswith("drug_")}
+    assert pgx_lists <= lists
+    assert "chemotherapy_dosage_rows" in lists
     config = load_panel_config(panel_package=pkg)
     assert len(config.crc_important_genes) == count
     assert len(build_undetected_genes(set(), panel_config=config)) == count
@@ -279,3 +288,19 @@ def test_class_three_variants_keep_primary_rows_but_no_drug_tips(tmp_path):
     assert len(rows) == 1 and rows[0]["gene"] == "ESR1"
     assert rows[0]["benefit_drugs"] == "--"
     assert report.get_table("targeted_drug_tips") == []
+
+
+@pytest.mark.parametrize("panel", ["lung_13", "lung_62", "lung_62_pdl1", "lung_588"])
+def test_each_draft_has_a_product_specific_synthetic_golden_runner(tmp_path, panel):
+    assert _normalize_panel(panel) == panel
+    spec = _golden_case_spec(panel)
+    built = spec["builder"](tmp_path / spec["input_filename"])
+    data = built.excel_data
+    assert data.metadata["synthetic_fixture"] is True
+    assert data.metadata["panel_id"] == panel
+    flag = f"ExistInsmall{panel.split('_')[1]}"
+    assert data.table_data["Variations"][0][flag] == 1
+    assert not any("pdl1" in key.lower() for key in data.table_data["Variations"][0])
+    assert bool(data.single_values.get("PD-L1 TPS")) == panel.endswith("_pdl1")
+    assert built.excel_file.with_suffix(".pdl1.png").exists() == panel.endswith("_pdl1")
+    assert spec["expectations"]["project_type"] == panel

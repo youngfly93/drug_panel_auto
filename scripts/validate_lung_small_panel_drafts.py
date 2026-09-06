@@ -20,6 +20,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -30,12 +31,15 @@ from openpyxl import load_workbook
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from app.services.project_identity import resolve_project_identity
 from app.services.reportgen_bridge import ReportGenBridge
 
 from reportgen.core.enhancer_registry import get_enhancer
+from reportgen.core.template_bridge_358 import load_panel_config
 from reportgen.panels.loader import load_panel_package
+from scripts.build_lung588_historical_golden_template import DRUG_DETAIL_BINDINGS
 from scripts.scan_hardcoded_literals import scan_docx
 from scripts.two_case_leak_test import docx_visible_text
 
@@ -138,6 +142,61 @@ def baseline_context(bridge, raw_path, clinical):
     return report.get_template_context()
 
 
+def inspect_word_scope(document, context, package):
+    """Compare final Word guideline, assayed genes and every maintained PGx row."""
+    def compact(value):
+        return re.sub(r"\s+", "", str("" if value is None else value))
+    config = load_panel_config(panel_package=package)
+    genes, guidelines, pgx = [], [], []
+    guide_table_count = gene_table_count = 0
+    for table in document.tables:
+        headers = [compact(cell.text) for cell in table.rows[0].cells]
+        if headers and re.fullmatch(r"肺癌\d+基因检测列表", headers[0]):
+            gene_table_count += 1
+            genes.extend(
+                compact(cell.text) for row in table.rows[1:] for cell in row.cells
+                if compact(cell.text)
+            )
+        if headers and headers[0] == "检测基因" and "本癌种相关治疗药物" in "".join(headers):
+            guide_table_count += 1
+            guidelines.extend(tuple(compact(c.text) for c in r.cells) for r in table.rows[1:])
+        if len(headers) == 6 and headers[1:4] == ["基因", "检测位点", "等级"]:
+            pgx.extend(tuple(compact(c.text) for c in r.cells) for r in table.rows[1:])
+    guide_rows = context.get("lung_guideline_drug_results") or []
+    columns = len(guidelines[0]) if guidelines else 0
+    expected_guidelines = [
+        tuple(compact(r.get(key)) for key in ("gene", "drugs", "clinical_note", "result"))
+        if columns == 4 else (
+            compact(r.get("gene")), compact(str(r.get("drugs") or "") + str(r.get("clinical_note") or "")),
+            compact(r.get("result")),
+        )
+        for r in guide_rows
+    ]
+    expected_pgx = [
+        tuple(compact(row.get(key)) for key in ("DrugDisplay", "Gene", "Locus", "Level", "Genotype", "Result"))
+        for _, collection in DRUG_DETAIL_BINDINGS for row in context.get(collection) or []
+    ]
+    failures = []
+    if gene_table_count != 1 or Counter(genes) != Counter(config.crc_important_genes):
+        failures.append("word_assayed_gene_list_mismatch")
+    configured_guide_genes = [
+        compact(row.get("display") or "/".join(row.get("genes") or []))
+        for row in config.lung_guideline_drug_rows
+    ]
+    if (
+        guide_table_count != 1 or guidelines != expected_guidelines
+        or [compact(row.get("gene")) for row in guide_rows] != configured_guide_genes
+    ):
+        failures.append("word_guideline_rows_mismatch")
+    if Counter(pgx) != Counter(expected_pgx):
+        failures.append("word_pgx_detail_rows_mismatch")
+    return {
+        "assayed_gene_count": len(genes), "guideline_row_count": len(guidelines),
+        "pgx_detail_row_count": len(pgx), "expected_pgx_detail_row_count": len(expected_pgx),
+        "failures": failures,
+    }
+
+
 def run_case(args, panel, case):
     alias = f"CASE-LUNG-{case}"
     output = args.output_dir / panel / alias
@@ -208,9 +267,12 @@ def run_case(args, panel, case):
     ):
         failures.append("excel_variant_membership_mismatch")
     word_variant_genes, word_targeted_genes = [], []
+    word_scope = {"failures": ["word_missing"]}
     report_file = Path(result.get("output_file") or output / "missing.docx")
     if report_file.is_file():
         document = Document(report_file)
+        word_scope = inspect_word_scope(document, context, package)
+        failures.extend(word_scope["failures"])
         for table in document.tables:
             header = "|".join(c.text for c in table.rows[0].cells)
             if len(table.columns) == 9 and "基因突变信息" in header:
@@ -249,7 +311,7 @@ def run_case(args, panel, case):
         "chemotherapy_dosage_rows",
         "chemotherapy_summary_text",
         "irinotecan_safety_rows",
-    )
+    ) + tuple(collection for _, collection in DRUG_DETAIL_BINDINGS)
     differences = [key for key in parity_keys if context.get(key) != base.get(key)]
     if differences:
         failures.append("588_biomarker_pgx_parity_mismatch")
@@ -320,6 +382,7 @@ def run_case(args, panel, case):
         "expected_variants": expected,
         "word_variant_genes": word_variant_genes,
         "word_targeted_genes": word_targeted_genes,
+        "word_scope": word_scope,
         "parity_differences": differences,
         "hard_literal_count": len(scan.hard),
         "blank_page_gate": blank,

@@ -1,14 +1,14 @@
 {
-  "aggregate_sha256": "f129387a8a2071a4bdcfe0b448433f93b930cba4a734db449c5af5fe36d53501",
+  "aggregate_sha256": "d2312c27e5f756b352a46be6d048ea5380caa2193c0b9a1e3be9dc7cbf52d571",
   "metrics": {
     "drawing_count": 50,
     "inline_shape_count": 5,
-    "jinja_control_count": 22,
-    "jinja_variable_count": 75,
+    "jinja_control_count": 146,
+    "jinja_variable_count": 258,
     "media_part_count": 14,
-    "paragraph_count": 278,
+    "paragraph_count": 340,
     "section_count": 4,
-    "table_count": 15
+    "table_count": 46
   },
   "package_parts_sha256": {
     "word/_rels/document.xml.rels": "5750ae137889e4e638d4a277647823ffbd25a0960b7c071f7f9b72f139dc1bb1",
@@ -18,7 +18,7 @@
     "word/_rels/header5.xml.rels": "df8668324d201580ca4598085e14b49faaec50d3add53eb6552bbf655fcb5dd1",
     "word/_rels/header7.xml.rels": "a134ffb58bad658becad1362f28a7fcb92904a928e5a686fbae9bed93092e9d8",
     "word/_rels/header8.xml.rels": "a134ffb58bad658becad1362f28a7fcb92904a928e5a686fbae9bed93092e9d8",
-    "word/document.xml": "6645cbae56e38463f3401b2aa8850ec578abf08fb0501bbd6c49e56de944da0e",
+    "word/document.xml": "09fb1d5498896378cf5dc3ab12e9d829a3f8916cb1172a64a0f3ae541c950380",
     "word/fontTable.xml": "d4a4f5b545bd5654450855915bc6716e931bd27927025a798c8d966c040cdfce",
     "word/footer1.xml": "cd07d444d541bbd3982528a2e4d5cab93c323f6143f257de43f91e68d231402c",
     "word/footer2.xml": "adb8b2205f601bfbdf0ce5251d372003522520e4bbb00e331431c0a254075d06",
@@ -53,7 +53,7 @@
     "word/theme/theme1.xml": "f615a0c233cf1911d85786fc8e496d4c1d57475c2130cf1324c7b8c9806207a9"
   },
   "paragraph_styles": {
-    "1": 230,
+    "1": 292,
     "10": 14,
     "12": 4,
     "26": 1,
@@ -130,15 +130,16 @@
     "10x7": 1,
     "2x5": 1,
     "3x4": 1,
-    "4x2": 1,
+    "4x2": 2,
     "4x3": 5,
     "4x4": 4,
+    "4x6": 30,
     "5x2": 1,
     "5x9": 1
   },
   "table_styles": {
     "14": 5,
-    "15": 4,
+    "15": 35,
     "16": 5,
     "28": 1
   }

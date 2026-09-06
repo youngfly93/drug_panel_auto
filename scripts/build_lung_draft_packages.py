@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from scripts.build_golden_template_seed import build_seed, count_tokens_in_zip
 from scripts.build_lung588_historical_golden_template import (
+    DRUG_DETAIL_BINDINGS,
     _prune_unreferenced_images,
     _replace_basic_information,
     _replace_pdl1_table,
@@ -324,12 +325,16 @@ def install_shared_modules(doc, spec, tables):
         "{{ msi_detail_interpretation }}",
     ):
         anchor = paragraph_after(anchor, value)
+    anchor = paragraph_after(anchor, "{%p if cnv_review_required %}")
+    anchor = paragraph_after(anchor, "{{ immune_hyperprogression_result }}")
+    anchor = paragraph_after(anchor, "{%p endif %}")
     for collection, title in (
         ("immune_positive_results", "免疫正相关基因（限本产品范围）"),
         ("immune_negative_results", "免疫负相关基因（限本产品范围）"),
         ("immune_hyperprogression_results", "免疫超进展相关基因（限本产品范围）"),
         ("chemotherapy_predictions", "化疗药物来源结果"),
         ("chemotherapy_regimen_predictions", "化疗方案来源结果"),
+        ("chemotherapy_dosage_rows", "历史化疗方案剂量展示（待报告组审核）"),
         ("irinotecan_safety_rows", "伊立替康历史剂量展示（待报告组裁决）"),
     ):
         anchor = paragraph_after(anchor, title, title=True)
@@ -341,6 +346,51 @@ def install_shared_modules(doc, spec, tables):
         node = copy.deepcopy(modules[collection]._tbl)
         anchor.addnext(node)
         anchor = node
+    anchor = paragraph_after(anchor, "药物基因组学明细（CtDrug 来源核对）", title=True)
+    anchor = paragraph_after(anchor, CHEMO_NOTICE)
+    for _, collection in DRUG_DETAIL_BINDINGS:
+        # Preserve the reviewed 588 table geometry and source-derived rows.
+        # Empty drug lists must not create a run of header-only tables.
+        anchor = paragraph_after(anchor, "{%p if " + collection + " %}")
+        node = copy.deepcopy(modules[collection]._tbl)
+        anchor.addnext(node)
+        anchor = paragraph_after(node, "{%p endif %}")
+
+
+def compact_gene_qc_appendix(doc, tables):
+    """Remove historical redundant breaks around short gene/QC blocks."""
+    gene_table, qc_table = tables["genes"], tables["qc"]
+    title = gene_table._tbl.getprevious()
+    if title is not None and title.tag == qn("w:p"):
+        Paragraph(title, None).paragraph_format.page_break_before = False
+        Paragraph(title, None).paragraph_format.keep_with_next = True
+        cursor = title.getprevious()
+        for _ in range(8):
+            if cursor is None or text(cursor).strip():
+                break
+            previous = cursor.getprevious()
+            if cursor.tag == qn("w:p"):
+                if any(list(cursor.iter(qn(tag))) for tag in ("w:sectPr", "w:drawing", "w:pict")):
+                    break
+                cursor.getparent().remove(cursor)
+            cursor = previous
+    cursor = gene_table._tbl.getnext()
+    while cursor is not None and cursor is not qc_table._tbl:
+        following = cursor.getnext()
+        if cursor.tag == qn("w:p") and not list(cursor.iter(qn("w:sectPr"))):
+            if not text(cursor).strip() and not any(
+                list(cursor.iter(qn(tag))) for tag in ("w:drawing", "w:pict")
+            ):
+                cursor.getparent().remove(cursor)
+            else:
+                Paragraph(cursor, None).paragraph_format.page_break_before = False
+                Paragraph(cursor, None).paragraph_format.keep_with_next = True
+        cursor = following
+    for table in (gene_table, qc_table):
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    p.paragraph_format.page_break_before = False
 
 
 def sanitize_final(doc, replacements, panel):
@@ -583,6 +633,7 @@ def build_template(panel, spec, source, work, output):
     )
     for row, name in zip(tables["qc"].rows[1:], qc_fields):
         replace_cell_text(row.cells[-1], field(name))
+    compact_gene_qc_appendix(doc, tables)
     appendix = heading(doc, spec["rich_end"])
     paragraph_after(appendix._p, APPENDIX_NOTICE)
     front = next(p for p in doc.paragraphs if p.text.strip() and "\t" not in p.text)
@@ -691,6 +742,9 @@ def build_package(panel, spec, private_dir, work, packages_dir):
         }
     ]
     raw["processors"] = processors
+    raw["part3_knowledge"]["cross_cancer_residual_scan"].update(
+        start_heading=spec["rich_start"], end_heading=spec["rich_end"]
+    )
     raw["input_contract"]["optional_source_fields"] = {
         "phone": ["联系方式", "联系电话"],
         "family_history": ["家族史"],

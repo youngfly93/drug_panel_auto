@@ -70,6 +70,8 @@ part3_knowledge:
     notice: '第三部分仍检出未被结构化隐藏的跨癌种历史叙述；当前报告只可作为 报告组 pilot 评审稿，命中内容须在正式临床放行前修复并复核。
 
       '
+    start_heading: 第二部分：检测结果解析
+    end_heading: 第三部分：附录
 reviewed_part3_overlay_additions:
 - rules/reviewed_part3_domain_candidates.yaml
 - rules/reviewed_part3_p0_event_narrative_candidates.yaml
