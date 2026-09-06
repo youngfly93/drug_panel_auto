@@ -3,12 +3,108 @@
 import pytest
 from docx import Document
 from docx.oxml import parse_xml
+from reportgen.core.legacy_reference import (
+    _extract_features,
+    _section_presence,
+    snapshot_docx_report,
+)
 from reportgen.core.qa_report import _build_business_checks, _inspect_toc, _read_part3_text
 from reportgen.core.template_bridge_358 import load_panel_config
+from reportgen.core.template_renderer import TemplateRenderer
+from reportgen.docx_sections import find_reference_section_bounds
 from reportgen.panels.loader import load_panel_package
+from scripts.build_lung_draft_packages import install_refreshable_toc
 from scripts.validate_lung_small_panel_drafts import inspect_word_scope
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+@pytest.mark.parametrize("phrase", ["本次共检出体细胞变异：4个", "本次检出体细胞变异：4 个"])
+def test_snapshot_counts_both_reviewed_summary_wordings(phrase):
+    assert _extract_features(phrase, tables=[])["total_variants_count"] == 4
+    assert _extract_features("本次检出其他基因：13个", tables=[])["total_variants_count"] is None
+
+
+def test_panel_section_aliases_do_not_weaken_other_panel_or_missing_section(tmp_path):
+    document = Document()
+    document.add_paragraph("补充检测结果：TMB、MSI 与化疗药物基因组学")
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "基因突变信息"
+    path = tmp_path / "synthetic-sections.docx"
+    document.save(path)
+    aliases = {
+        "variant_summary": ["基因突变信息"],
+        "biomarkers": ["补充检测结果：TMB、MSI 与化疗药物基因组学"],
+    }
+    plain = snapshot_docx_report(path, panel="crc_358_msi")["section_presence"]
+    scoped = snapshot_docx_report(path, panel="lung_62", section_aliases=aliases)[
+        "section_presence"
+    ]
+    assert not plain["variant_summary"] and not plain["biomarkers"]
+    assert scoped["variant_summary"] and scoped["biomarkers"]
+    assert not scoped["gene_list"]
+    assert not _section_presence("实际章节缺失", aliases)["biomarkers"]
+
+
+@pytest.mark.parametrize("values", [[], [""], "任意字符串", [False]])
+def test_empty_or_malformed_section_alias_cannot_match_every_document(values):
+    with pytest.raises(ValueError):
+        _section_presence("无相应章节", {"biomarkers": values})
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    ["第三部分：附录", "5. 附录", "补充检测结果：TMB、MSI 与化疗药物基因组学"],
+)
+def test_reference_cleanup_never_deletes_following_lung_modules(tmp_path, boundary):
+    document = Document()
+    for value in (
+        "检测结果解析",
+        "参考文献",
+        "合成旧文献",
+        boundary,
+        "CNV待复核：合成来源待审",
+        "固定附录保留",
+    ):
+        document.add_paragraph(value)
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "合成 PGx 行"
+    assert find_reference_section_bounds(document.paragraphs) == (1, 3)
+    path = tmp_path / "reference-boundary.docx"
+    document.save(path)
+    TemplateRenderer(log_level="ERROR")._rebuild_reference_section(str(path), {})
+    actual = Document(path)
+    text = "\n".join(p.text for p in actual.paragraphs)
+    assert boundary in text and "CNV待复核：合成来源待审" in text and "固定附录保留" in text
+    assert "合成旧文献" not in text
+    assert actual.tables[0].cell(0, 0).text == "合成 PGx 行"
+
+
+def test_flat_historical_toc_becomes_refreshable_without_old_page_numbers(tmp_path):
+    document = Document()
+    document.styles.add_style("toc 1", 1)
+    document.add_paragraph("目录")
+    labels = ["第一部分：检测结果", "第二部分：结果解析", "第三部分：附录"]
+    for label, page in zip(labels, [42, 56, 99]):
+        document.add_paragraph(label + "\t" + str(page), style="toc 1")
+    body = [document.add_paragraph(label) for label in labels]
+    install_refreshable_toc(document)
+    assert all("\t" not in p.text for p in document.paragraphs)
+    assert all('w:outlineLvl w:val="0"' in p._p.xml for p in body)
+    assert " TOC " in document.element.xml
+    path = tmp_path / "converted-toc.docx"
+    document.save(path)
+    # Empty cache must still fail the page-number check until real LO refresh.
+    assert _inspect_toc([], output_path=path)["status"] == "WARN"
+
+
+def test_empty_b_family_toc_uses_actual_major_headings():
+    document = Document()
+    document.add_paragraph("目    录")
+    labels = ["第一部分：基本信息", "第二部分：检测结果", "第三部分：结果解析", "第四部分：附录"]
+    for label in labels:
+        document.add_paragraph(label)
+    install_refreshable_toc(document)
+    assert " TOC " in document.element.xml
+    assert [p.text for p in document.paragraphs[1:]] == labels
 
 
 def native_toc(tmp_path, pages=(1, 2), target="section", closed=True):

@@ -99,6 +99,8 @@ jobs:
     env:
       OMP_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
+      REPORTGEN_QA_VISUAL_RENDER: all
+      REPORTGEN_QA_VISUAL_RENDER_REQUIRED: "true"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6

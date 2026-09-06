@@ -1,12 +1,12 @@
 {
-  "aggregate_sha256": "d2312c27e5f756b352a46be6d048ea5380caa2193c0b9a1e3be9dc7cbf52d571",
+  "aggregate_sha256": "74d16365c19fe6943620f90fb257425c4a1c8e924d85e7b28ab776e6fa401749",
   "metrics": {
     "drawing_count": 50,
     "inline_shape_count": 5,
     "jinja_control_count": 146,
     "jinja_variable_count": 258,
     "media_part_count": 14,
-    "paragraph_count": 340,
+    "paragraph_count": 313,
     "section_count": 4,
     "table_count": 46
   },
@@ -18,7 +18,7 @@
     "word/_rels/header5.xml.rels": "df8668324d201580ca4598085e14b49faaec50d3add53eb6552bbf655fcb5dd1",
     "word/_rels/header7.xml.rels": "a134ffb58bad658becad1362f28a7fcb92904a928e5a686fbae9bed93092e9d8",
     "word/_rels/header8.xml.rels": "a134ffb58bad658becad1362f28a7fcb92904a928e5a686fbae9bed93092e9d8",
-    "word/document.xml": "09fb1d5498896378cf5dc3ab12e9d829a3f8916cb1172a64a0f3ae541c950380",
+    "word/document.xml": "7c950dd75e3209f8c5eb7ace6f369aa298867b57ba4311aca23eefc719dd6296",
     "word/fontTable.xml": "d4a4f5b545bd5654450855915bc6716e931bd27927025a798c8d966c040cdfce",
     "word/footer1.xml": "cd07d444d541bbd3982528a2e4d5cab93c323f6143f257de43f91e68d231402c",
     "word/footer2.xml": "adb8b2205f601bfbdf0ce5251d372003522520e4bbb00e331431c0a254075d06",
@@ -48,19 +48,16 @@
     "word/media/image5.png": "9915aa1dbd642934559581e3f03eec5745d4b80d3f60093b0d7f45d0995b2580",
     "word/media/image6.png": "448a5eb45288d32a486b60ccb7c4d3332463148fa5f7c8de315c9ed3d6d57799",
     "word/numbering.xml": "c30cc1ead28ebd40bcf7d14802ed28a780011d7b94a414384e6569ba583b2ffd",
-    "word/settings.xml": "644cb71b275ce30d680c1f775ff130cf4ab605cf9efe308ddfd931862996f25a",
+    "word/settings.xml": "2a3f8ff433e8948d8ca39781ef6fa3e17acd3f65d3e821bd9ca9f68add6224c7",
     "word/styles.xml": "a3590589bab2a114d578bdc63624e872ba936b515c063d7975c30482d3e1fba7",
     "word/theme/theme1.xml": "f615a0c233cf1911d85786fc8e496d4c1d57475c2130cf1324c7b8c9806207a9"
   },
   "paragraph_styles": {
     "1": 292,
-    "10": 14,
     "12": 4,
     "26": 1,
     "27": 13,
-    "48": 3,
-    "5": 10,
-    "9": 3
+    "48": 3
   },
   "privacy": {
     "cell_text_emitted": false,

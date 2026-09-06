@@ -393,6 +393,90 @@ def compact_gene_qc_appendix(doc, tables):
                     p.paragraph_format.page_break_before = False
 
 
+def install_refreshable_toc(doc):
+    """Replace flat historical TOC caches with a real index, keeping body styles."""
+    if any("TOC" in (node.text or "") for node in doc.element.iter(qn("w:instrText"))):
+        return
+    paragraphs = list(doc.paragraphs)
+    entries = [p for p in paragraphs if re.fullmatch(r"toc\s+[1-9]", p.style.name, re.I)]
+
+    def label(value):
+        value = str(value).split("\t")[0].strip()
+        return compact(re.sub(r"^\d+(?:\.\d+)*[.．、]?\s*", "", value))
+
+    if entries:
+        levels = {
+            label(p.text): int(re.search(r"[1-9]", p.style.name).group()) - 1
+            for p in entries
+        }
+        toc_heading = None
+        last = paragraphs.index(entries[-1])
+    else:
+        # Some B-family mothers contain only the empty TOC heading. Index the
+        # actual major section headings, never synthesize page numbers.
+        toc_heading = heading(doc, "目录")
+        last = next(i for i, p in enumerate(paragraphs) if p._p is toc_heading._p)
+        levels = {
+            label(p.text): 0 for p in paragraphs[last + 1:]
+            if re.fullmatch(r"第[一二三四五六七八九十]+部分\s*[：:].+", p.text.strip())
+        }
+    matched = 0
+    for p in paragraphs[last + 1:]:
+        key = label(p.text)
+        if key not in levels:
+            continue
+        properties = p._p.get_or_add_pPr()
+        node = properties.find(qn("w:outlineLvl"))
+        if node is None:
+            node = OxmlElement("w:outlineLvl")
+            properties.append(node)
+        node.set(qn("w:val"), str(levels[key]))
+        matched += 1
+    if matched < 3:
+        raise ValueError("Historical TOC cannot be matched to surviving body headings")
+    block = OxmlElement("w:sdt")
+    properties = OxmlElement("w:sdtPr")
+    obj = OxmlElement("w:docPartObj")
+    gallery = OxmlElement("w:docPartGallery")
+    gallery.set(qn("w:val"), "Table of Contents")
+    obj.append(gallery)
+    properties.append(obj)
+    block.append(properties)
+    content = OxmlElement("w:sdtContent")
+    block.append(content)
+    paragraph = OxmlElement("w:p")
+    content.append(paragraph)
+    for field_kind in ("begin", "instruction", "separate", "end"):
+        run = OxmlElement("w:r")
+        paragraph.append(run)
+        node = OxmlElement("w:instrText" if field_kind == "instruction" else "w:fldChar")
+        if field_kind == "instruction":
+            node.text = ' TOC \\o "1-3" \\h \\z \\u '
+            node.set(qn("xml:space"), "preserve")
+        else:
+            node.set(qn("w:fldCharType"), field_kind)
+        run.append(node)
+    if entries:
+        entries[0]._p.addprevious(block)
+    else:
+        toc_heading._p.addnext(block)
+    for p in entries:
+        # An old TOC can carry the front-matter section boundary. Preserve it.
+        sect = p._p.find(".//" + qn("w:sectPr"))
+        if sect is not None:
+            boundary = OxmlElement("w:p")
+            props = OxmlElement("w:pPr")
+            props.append(copy.deepcopy(sect))
+            boundary.append(props)
+            p._p.addnext(boundary)
+        p._p.getparent().remove(p._p)
+    update = doc.settings.element.find(qn("w:updateFields"))
+    if update is None:
+        update = OxmlElement("w:updateFields")
+        doc.settings.element.append(update)
+    update.set(qn("w:val"), "true")
+
+
 def sanitize_final(doc, replacements, panel):
     for table in doc.tables:
         joined = compact(text(table._tbl))
@@ -634,6 +718,7 @@ def build_template(panel, spec, source, work, output):
     for row, name in zip(tables["qc"].rows[1:], qc_fields):
         replace_cell_text(row.cells[-1], field(name))
     compact_gene_qc_appendix(doc, tables)
+    install_refreshable_toc(doc)
     appendix = heading(doc, spec["rich_end"])
     paragraph_after(appendix._p, APPENDIX_NOTICE)
     front = next(p for p in doc.paragraphs if p.text.strip() and "\t" not in p.text)
@@ -934,6 +1019,10 @@ def build_package(panel, spec, private_dir, work, packages_dir):
     write_yaml(package_dir / "panel.yaml", raw)
     qa = yaml.safe_load((BASE / "qa.yaml").read_text())
     qa["panel_id"] = panel
+    qa["current_output"]["section_aliases"] = {
+        "variant_summary": ["基因突变信息"],
+        "biomarkers": ["补充检测结果：TMB、MSI 与化疗药物基因组学"],
+    }
     if not pdl1:
         qa["current_output"]["required_features"] = {
             k: v

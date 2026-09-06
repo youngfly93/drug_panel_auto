@@ -19,6 +19,11 @@ current_output:
     report_id: fail
     sample_id: fail
     date: fail
+  section_aliases:
+    variant_summary:
+    - 基因突变信息
+    biomarkers:
+    - 补充检测结果：TMB、MSI 与化疗药物基因组学
 legacy_reference:
   enabled: true
   source_dir_name: external_runtime_registry_only

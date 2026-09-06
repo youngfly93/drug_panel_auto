@@ -413,6 +413,7 @@ def _golden_case_spec(panel: str) -> Dict[str, Any]:
                 "required_text": [
                     "报告组评审草稿（非临床交付）",
                     "ERBB2", "c.1979G>A", "p.G660D",
+                    "SYNTHETIC-PGX-OBSERVATION",
                     *(["TPS 50%，CPS 52", "阳性（高表达）"] if pdl1 else []),
                 ],
             },
@@ -424,6 +425,8 @@ def _golden_case_spec(panel: str) -> Dict[str, Any]:
                 membership_column=f"ExistInsmall{count}",
                 membership_value=1,
                 include_pdl1=pdl1,
+                include_synthetic_neutral_cnv=True,
+                include_synthetic_pgx=True,
             ),
             "input_filename": f"SYN-{panel.upper()}-GOLDEN.xlsx",
             "output_filename": f"golden_{panel}.docx",
@@ -667,6 +670,8 @@ def _build_lung_pdl1_golden_input(
     membership_column: str = "ExistInsmall588",
     membership_value: Any = "Ⅰ类",
     include_pdl1: bool = True,
+    include_synthetic_neutral_cnv: bool = False,
+    include_synthetic_pgx: bool = False,
 ) -> GoldenCaseInput:
     """Build a deterministic NGS workbook plus explicit synthetic form data."""
     out = Path(path)
@@ -719,6 +724,17 @@ def _build_lung_pdl1_golden_input(
     hereditary = pd.DataFrame(
         columns=["Gene_Symbol", membership_column, "ExistIn178"]
     )
+    # A complete synthetic positive-path contract is separate from real CNV
+    # absence/ambiguity tests. Never apply these invented observations to a
+    # patient workbook or to the real derived-input validator.
+    synthetic_cnv = [
+        {"Gene": gene, "Status": "neutral"}
+        for gene in ("EGFR", "MDM2", "MDM4", "CCND1", "FGF3", "FGF4", "FGF19")
+    ]
+    synthetic_pgx = [{
+        "药物": "顺铂（cisplatin）", "Gene": "ERCC1", "Locus": "rsTEST",
+        "Genotype": "AA", "Level": "1B", "Result": "SYNTHETIC-PGX-OBSERVATION",
+    }]
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
         meta.to_excel(writer, sheet_name="Meta", index=False)
         pd.DataFrame([variation]).to_excel(
@@ -727,6 +743,10 @@ def _build_lung_pdl1_golden_input(
         tmb.to_excel(writer, sheet_name="TMB", index=False, header=False)
         msisensor.to_excel(writer, sheet_name="Msisensor", index=False)
         hereditary.to_excel(writer, sheet_name="Hereditary_tumor", index=False)
+        if include_synthetic_neutral_cnv:
+            pd.DataFrame(synthetic_cnv).to_excel(writer, sheet_name="Cnv", index=False)
+        if include_synthetic_pgx:
+            pd.DataFrame(synthetic_pgx).to_excel(writer, sheet_name="CtDrug", index=False)
 
     form_fields = (
         "pdl1_tps",
@@ -793,6 +813,12 @@ def _build_lung_pdl1_golden_input(
             key: value for key, value in excel_data.metadata["field_source_overrides"].items()
             if not key.startswith("pdl1_")
         }
+    if include_synthetic_neutral_cnv:
+        excel_data.table_data["Cnv"] = synthetic_cnv
+        excel_data.sheet_names.append("Cnv")
+    if include_synthetic_pgx:
+        excel_data.table_data["CtDrug"] = synthetic_pgx
+        excel_data.sheet_names.append("CtDrug")
     excel_data.metadata["table_columns"] = {
         "Variations": list(variation),
         "Hereditary_tumor": list(hereditary.columns),

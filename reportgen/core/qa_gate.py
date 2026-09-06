@@ -489,7 +489,9 @@ def _run_single_current_output_contract(
     started = time.perf_counter()
     try:
         output_root.mkdir(parents=True, exist_ok=True)
-        snapshot = snapshot_docx_report(output_file, panel=panel)
+        snapshot = snapshot_docx_report(
+            output_file, panel=panel, section_aliases=profile.get("section_aliases")
+        )
         snapshot_file = output_root / "current_output_snapshot.json"
         write_json(snapshot_file, snapshot)
         issues = _audit_report_snapshot(snapshot, profile=profile)

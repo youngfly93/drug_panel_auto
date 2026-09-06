@@ -113,6 +113,9 @@ def test_draft_packages_are_valid_and_literal_free(panel, count):
     pgx_lists = {name for name in reference_lists if name.startswith("drug_")}
     assert pgx_lists <= lists
     assert "chemotherapy_dosage_rows" in lists
+    assert "immune_hyperprogression_result" in extract_template_contract(
+        str(pkg.resolve_template_file())
+    ).required_paths
     config = load_panel_config(panel_package=pkg)
     assert len(config.crc_important_genes) == count
     assert len(build_undetected_genes(set(), panel_config=config)) == count
@@ -298,9 +301,19 @@ def test_each_draft_has_a_product_specific_synthetic_golden_runner(tmp_path, pan
     data = built.excel_data
     assert data.metadata["synthetic_fixture"] is True
     assert data.metadata["panel_id"] == panel
+    assert "Cnv" in data.sheet_names
+    assert data.table_data["Cnv"]
+    assert all(row["Status"] == "neutral" for row in data.table_data["Cnv"])
     flag = f"ExistInsmall{panel.split('_')[1]}"
     assert data.table_data["Variations"][0][flag] == 1
     assert not any("pdl1" in key.lower() for key in data.table_data["Variations"][0])
     assert bool(data.single_values.get("PD-L1 TPS")) == panel.endswith("_pdl1")
     assert built.excel_file.with_suffix(".pdl1.png").exists() == panel.endswith("_pdl1")
     assert spec["expectations"]["project_type"] == panel
+    assert "CtDrug" in data.sheet_names
+    mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
+    mapped = mapper.map(data, panel_package=package(panel))
+    pgx = mapped.get_table("drug_shunbo")
+    # PGx is an independent assay source, not cropped by the NGS gene panel.
+    assert len(pgx) == 1 and pgx[0]["Gene"] == "ERCC1"
+    assert pgx[0]["Result"] == "SYNTHETIC-PGX-OBSERVATION"

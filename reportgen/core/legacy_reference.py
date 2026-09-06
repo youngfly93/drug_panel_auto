@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from docx import Document
 
@@ -26,7 +26,7 @@ DATE_RE = re.compile(
     r"\b(?:20\d{2}[./-]\d{1,2}[./-]\d{1,2}|20\d{6})\b"
 )
 PANEL_RE = re.compile(r"结直肠癌\s*(301|358)\s*基因\s*\+?\s*MSI", re.IGNORECASE)
-TOTAL_VARIANTS_RE = re.compile(r"本次共检出体细胞变异[:：]?\s*(\d+)\s*个")
+TOTAL_VARIANTS_RE = re.compile(r"本次(?:共)?检出体细胞变异[:：]?\s*(\d+)\s*个")
 DRUG_VARIANTS_RE = re.compile(r"与靶向药物用药相关的变异有[:：]?\s*(\d+)\s*个")
 TMB_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:mutations/Mb|Muts/Mb|个/Mb).*?(TMB-[HL])")
 TMB_RESULT_RE = re.compile(
@@ -205,6 +205,7 @@ def snapshot_docx_report(
     panel: str,
     include_source_paths: bool = False,
     max_text_chars: int = 12000,
+    section_aliases: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
     """Build one sanitized DOCX snapshot for QA contract checks."""
     snapshot = _snapshot_docx(
@@ -212,6 +213,7 @@ def snapshot_docx_report(
         panel=panel,
         include_source_paths=include_source_paths,
         max_text_chars=max_text_chars,
+        section_aliases=section_aliases,
     )
     if not include_source_paths:
         snapshot.pop("_source_path", None)
@@ -225,6 +227,7 @@ def _snapshot_docx(
     panel: str,
     include_source_paths: bool,
     max_text_chars: int,
+    section_aliases: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
     source_name = path.name
     try:
@@ -253,9 +256,7 @@ def _snapshot_docx(
         "detected_panel": detected_panel,
         "read_error": None,
         "features": features,
-        "section_presence": {
-            key: needle in text for key, needle in KEY_SECTIONS.items()
-        },
+        "section_presence": _section_presence(text, section_aliases),
         "text_excerpt": sanitized_text[: max(0, int(max_text_chars))],
         "paragraph_count": len(paragraphs),
         "table_count": len(tables),
@@ -269,6 +270,22 @@ def _snapshot_docx(
             for idx, table in enumerate(tables)
         ],
         "selection_key": _selection_key(features, table_count=len(tables)),
+    }
+
+
+def _section_presence(
+    text: str, aliases: Optional[Mapping[str, Sequence[str]]] = None
+) -> dict[str, bool]:
+    """Panel-declared heading aliases supplement, never disable, section checks."""
+    configured = aliases or {}
+    for key, values in configured.items():
+        if key not in KEY_SECTIONS or not isinstance(values, (list, tuple)) or not values:
+            raise ValueError(f"Invalid QA section aliases for {key}")
+        if any(not isinstance(value, str) or not value.strip() for value in values):
+            raise ValueError(f"Empty/non-text QA section alias for {key}")
+    return {
+        key: any(needle in text for needle in (default, *configured.get(key, ())))
+        for key, default in KEY_SECTIONS.items()
     }
 
 
