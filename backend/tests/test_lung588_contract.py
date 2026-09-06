@@ -1130,16 +1130,16 @@ def test_lung588_generation_surfaces_pending_pdl1_profile_in_draft(tmp_path):
     assert result["qa_status"] == "WARN"
     qa = json.loads(Path(result["qa_report_file"]).read_text(encoding="utf-8"))
     residual_check = qa["checks"]["part3_cross_cancer_residuals"]
-    assert residual_check["status"] == "PASS"
-    assert residual_check["matched_terms"] == []
+    assert residual_check["status"] == "WARN"
+    assert residual_check["matched_terms"]
     suppression_check = qa["checks"]["part3_cross_cancer_suppression"]
-    assert suppression_check["status"] == "WARN"
-    assert suppression_check["suppressed_field_count"] > 0
+    assert suppression_check["status"] == "PASS"
+    assert suppression_check["suppressed_field_count"] == 0
     assert any(
-        issue["code"] == "PART3_CROSS_CANCER_SUPPRESSION"
+        issue["code"] == "PART3_CROSS_CANCER_RESIDUALS"
         for issue in qa["issues"]
     )
-    assert any(
+    assert not any(
         issue["code"] == "PART3_CROSS_CANCER_FIELDS_SUPPRESSED"
         for stage in result["stage_results"]
         for issue in stage.get("issues") or []

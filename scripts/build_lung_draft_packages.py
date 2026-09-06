@@ -1163,7 +1163,9 @@ def build_package(panel, spec, private_dir, work, packages_dir):
     ]
     raw["processors"] = processors
     raw["part3_knowledge"]["cross_cancer_residual_scan"].update(
-        start_heading=spec["rich_start"], end_heading=spec["rich_end"]
+        start_heading=spec["rich_start"],
+        end_heading=spec["rich_end"],
+        runtime_action="warn_only",
     )
     raw["input_contract"]["optional_source_fields"] = {
         "phone": ["联系方式", "联系电话"],

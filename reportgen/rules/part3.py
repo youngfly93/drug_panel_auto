@@ -30,9 +30,11 @@ def apply_part3_cross_cancer_policy(
     report_data: Any,
     part3_policy: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    """Suppress unsafe historical fields without inventing replacement medicine.
+    """Optionally suppress historical fields; review drafts keep originals.
 
-    The policy operates on structured Part-3 rows before DOCX rendering.  It
+    Suppression is opt-in; the default warn-only mode leaves every row intact
+    for the report group and the independent rendered-text QA scan. The policy
+    operates on structured Part-3 rows before DOCX rendering. When enabled, it
     replaces only fields containing configured cross-cancer terms with a
     neutral review-state notice.  Variant identity, measured values and exact
     Panel drug names are left unchanged.
@@ -43,7 +45,7 @@ def apply_part3_cross_cancer_policy(
     if not isinstance(scan, Mapping):
         return {"enabled": False, "suppressed_field_count": 0, "rows": []}
 
-    action = _clean(scan.get("runtime_action"))
+    action = _clean(scan.get("runtime_action")) or "warn_only"
     if action != "suppress_unsafe_fields":
         return {
             "enabled": False,

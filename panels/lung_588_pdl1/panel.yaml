@@ -77,7 +77,7 @@ part3_knowledge:
     enabled: true
     severity: "warn"
     scan_scope: "part3"
-    runtime_action: "suppress_unsafe_fields"
+    runtime_action: "warn_only"
     suppressed_text: >
       该段历史知识尚未完成肺癌专属审核，本轮评审稿不展示原文；
       待报告组完成肺癌专属复核后补充。

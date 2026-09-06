@@ -1,5 +1,10 @@
 """Regression tests for the lung Part-3 cross-cancer safety boundary."""
 
+from copy import deepcopy
+from pathlib import Path
+
+import pytest
+import yaml
 from reportgen.core.qa_report import _build_business_checks
 from reportgen.models.report_data import ReportData
 from reportgen.rules.part3 import apply_part3_cross_cancer_policy
@@ -13,6 +18,63 @@ POLICY = {
         "suppressed_text": "肺癌专属内容待报告组复核。",
     }
 }
+
+LUNG_PANELS = (
+    "lung_13", "lung_62", "lung_62_pdl1", "lung_588", "lung_588_pdl1", "lung_329_pdl1"
+)
+
+
+@pytest.mark.parametrize("panel_id", LUNG_PANELS)
+def test_lung_defaults_preserve_originals_and_keep_residual_warning(panel_id):
+    root = Path(__file__).resolve().parents[2]
+    package = yaml.safe_load((root / "panels" / panel_id / "panel.yaml").read_text())
+    policy = package["part3_knowledge"]
+    scan = policy["cross_cancer_residual_scan"]
+    assert scan["enabled"] is True
+    assert scan["runtime_action"] == "warn_only"
+    data = ReportData()
+    original = {
+        "gene_knowledge_sections": [{
+            "gene": "SYNTHETIC_GENE",
+            "intro": "结直肠癌历史基因原文。",
+            "fixed_domain_text": "结直肠癌历史结构域原文。",
+            "mutation_narrative": "colorectal historical narrative.",
+            "mutation_analysis": "结直肠癌历史变异原文。",
+        }],
+        "drug_analysis_sections": [{
+            "gene": "SYNTHETIC_GENE", "drug": "SYNTHETIC_DRUG",
+            "relation": "结直肠癌历史药物关系原文。",
+            "clinical": "colorectal historical clinical text.",
+        }],
+    }
+    for name, rows in original.items():
+        data.set_table(name, deepcopy(rows))
+    result = apply_part3_cross_cancer_policy(data, policy)
+    assert result["suppressed_field_count"] == 0
+    for name, rows in original.items():
+        assert data.get_table(name) == rows
+    rendered_part3 = "".join(
+        str(value) for rows in original.values() for row in rows for value in row.values()
+    )
+    checks = _build_business_checks(
+        rendered_part3,
+        {"part3_cross_cancer_residual_scan": scan},
+        panel_id,
+        part3_compact_text=rendered_part3,
+    )
+    assert checks["part3_cross_cancer_residuals"]["status"] == "WARN"
+
+
+def test_unspecified_runtime_action_never_suppresses_originals():
+    policy = deepcopy(POLICY)
+    policy["cross_cancer_residual_scan"].pop("runtime_action")
+    data = ReportData()
+    original = [{"intro": "结直肠癌历史原文。"}]
+    data.set_table("gene_knowledge_sections", deepcopy(original))
+    result = apply_part3_cross_cancer_policy(data, policy)
+    assert result["action"] == "warn_only"
+    assert result["suppressed_field_count"] == 0
+    assert data.get_table("gene_knowledge_sections") == original
 
 
 def test_part3_policy_suppresses_only_patient_visible_unsafe_fields():
