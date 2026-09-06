@@ -23,7 +23,11 @@ from reportgen.core.template_bridge_358 import load_panel_config
 from reportgen.core.template_renderer import TemplateRenderer
 from reportgen.docx_sections import find_reference_section_bounds
 from reportgen.panels.loader import load_panel_package
-from scripts.build_lung_draft_packages import install_refreshable_toc, normalize_draft_case_fields
+from scripts.build_lung_draft_packages import (
+    install_refreshable_toc,
+    normalize_b_family_faq_flow,
+    normalize_draft_case_fields,
+)
 from scripts.validate_lung_small_panel_drafts import inspect_word_scope
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -205,7 +209,7 @@ def test_b_family_floating_toc_is_replaced_and_section_boundary_follows_field():
     install_refreshable_toc(document)
     assert "99" not in document.element.xml
     assert not list(document.element.iter(qn("w:txbxContent")))
-    assert decoration.getparent() is title._p
+    assert not list(title._p.iter(qn("w:pict")))
     assert title._p.find(".//" + qn("w:sectPr")) is None
     field = title._p.getnext()
     assert " TOC " in field.xml
@@ -219,6 +223,30 @@ def test_b_family_floating_toc_is_replaced_and_section_boundary_follows_field():
     assert document.tables[-1].cell(0, 0).text == "固定 FAQ 内容保留"
     assert local_references._p.pPr.find(qn("w:outlineLvl")).get(qn("w:val")) == "9"
     assert global_references._p.pPr.find(qn("w:outlineLvl")).get(qn("w:val")) == "1"
+
+
+def test_b_family_faq_flow_binds_short_blocks_without_changing_answers():
+    document = Document()
+    title = document.add_paragraph("常见问题解答")
+    faq = document.add_table(rows=2, cols=2)
+    faq.cell(0, 0).text = "问题7"
+    faq.cell(0, 1).text = "合成问题"
+    faq.cell(1, 0).merge(faq.cell(1, 1)).text = "合成答案第一行\n合成答案第二行"
+    long_faq = document.add_table(rows=2, cols=1)
+    long_faq.cell(0, 0).text = "问题8"
+    long_faq.cell(1, 0).text = "长答案" * 300
+    next_heading = document.add_paragraph("2. 肺癌诊疗知识")
+    next_heading.paragraph_format.page_break_before = True
+    before = [table._tbl.xml for table in (faq, long_faq)]
+    normalize_b_family_faq_flow(document)
+    assert title.text == "1. 常见问题解答" and title._p.pPr.numPr.numId.val == 0
+    assert not next_heading.paragraph_format.page_break_before
+    assert next_heading.paragraph_format.keep_with_next
+    assert faq.cell(1, 0).text == "合成答案第一行\n合成答案第二行"
+    assert all(row._tr.trPr.find(qn("w:cantSplit")) is not None for row in faq.rows)
+    assert faq.cell(0, 0).paragraphs[0].paragraph_format.keep_with_next
+    assert not faq.cell(1, 0).paragraphs[-1].paragraph_format.keep_with_next
+    assert faq._tbl.xml != before[0] and long_faq._tbl.xml == before[1]
 
 
 @pytest.mark.parametrize("number_id, visible", [(0, False), (1, True), (9, True), (None, True)])

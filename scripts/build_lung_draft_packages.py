@@ -417,9 +417,10 @@ def install_refreshable_toc(doc):
         toc_heading = heading(doc, "目录")
         last = next(i for i, p in enumerate(paragraphs) if p._p is toc_heading._p)
         cache_labels = set()
-        for media in list(toc_heading._p.iter(qn("w:drawing"))) + list(
+        toc_media = list(toc_heading._p.iter(qn("w:drawing"))) + list(
             toc_heading._p.iter(qn("w:pict"))
-        ):
+        )
+        for media in toc_media:
             labels = []
             for node in media.iter(qn("w:p")):
                 value = "".join(
@@ -429,10 +430,17 @@ def install_refreshable_toc(doc):
                 labels.append(label(value))
             major = [value for value in labels if re.match(r"第[一二三四五六七八九十]+部分.+", value)]
             if len(major) >= 3:
-                # Keep decorative shapes and unrelated media; replace only
-                # recognizable complete TOC caches (including VML fallbacks).
+                # Replace recognizable complete caches and their VML fallback.
                 media.getparent().remove(media)
                 cache_labels.update(labels)
+        if cache_labels:
+            # The remaining ornaments belong to the old floating TOC geometry
+            # (its vertical rule otherwise crosses the new native text). Only
+            # this TOC title's media are removed; other document media stay.
+            for media in toc_media:
+                parent = media.getparent()
+                if parent is not None:
+                    parent.remove(media)
         levels = {
             label(p.text): 0 for p in paragraphs[last + 1:]
             if re.fullmatch(r"第[一二三四五六七八九十]+部分\s*[：:].+", p.text.strip())
@@ -576,6 +584,34 @@ def normalize_draft_case_fields(doc, basic_table):
             previous = cursor.getprevious()
             cursor.getparent().remove(cursor)
             cursor = previous
+
+
+def normalize_b_family_faq_flow(doc):
+    """Keep bounded question/answer blocks together and let the appendix flow."""
+    for table in doc.tables:
+        if not re.fullmatch(r"问题\s*\d+", table.cell(0, 0).text.strip()):
+            continue
+        if len(table.rows) > 4 or len(text(table._tbl)) > 800:
+            continue  # Do not bind an unbounded multi-page FAQ into one block.
+        paragraphs = list(table._tbl.iter(qn("w:p")))
+        for index, node in enumerate(paragraphs):
+            paragraph = Paragraph(node, None)
+            paragraph.paragraph_format.keep_together = True
+            paragraph.paragraph_format.keep_with_next = index < len(paragraphs) - 1
+        for row in table.rows:
+            props = row._tr.get_or_add_trPr()
+            if props.find(qn("w:cantSplit")) is None:
+                props.append(OxmlElement("w:cantSplit"))
+    for paragraph in doc.paragraphs:
+        label = re.sub(r"^\d+[.．、]?", "", compact(paragraph.text))
+        if label == "常见问题解答":
+            # The inherited list shares counters with the preceding glossary.
+            # This is the first fixed appendix subsection, not list item 3.
+            replace_paragraph_text(paragraph, "1. 常见问题解答")
+            paragraph._p.get_or_add_pPr().get_or_add_numPr().get_or_add_numId().val = 0
+        elif label == "肺癌诊疗知识":
+            paragraph.paragraph_format.page_break_before = False
+            paragraph.paragraph_format.keep_with_next = True
 
 
 def sanitize_final(doc, replacements, panel):
@@ -826,6 +862,8 @@ def build_template(panel, spec, source, work, output):
     paragraph_after(front._p, NOTICE)
     sanitize_final(doc, replacements, panel)
     normalize_draft_case_fields(doc, tables["basic"])
+    if panel == "lung_588":
+        normalize_b_family_faq_flow(doc)
     fixed = {}
     # Only the fixed appendix may contain a historical literature example.
     after_appendix = False
