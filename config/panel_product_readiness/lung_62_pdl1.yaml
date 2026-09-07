@@ -22,7 +22,14 @@ draft_generation_evidence:
   user_authorized: true
   authorization_date: "2026-09-06"
   business_source_commit: 1fbb2948410c75321530f93d6936498e07c9f3fd
-  producer_sha256: badb6fad3d4aabf103fb9768ea1f62f86f6f5d81ac56fa24dc6925852c29e09f
+  producer_sha256: b0f5b52bbe16e67857f39cbbb192a6474de109b160475aa804af293d83e8ecdd
+  source_safety_validation:
+    baseline_revision: f6c312e19dff2c991a05cd7667165a41010b1628
+    receipt: .work/lung-review-followup-20260907/source-safety-scope.json
+    receipt_sha256: e85d7b4bec5a2551773aa8ebe9350c18d5a6485330630cca819cf49067afe915
+    delta: sibling_lung_588_pdl1_missing_sample_type_is_not_a_source_fact
+    selected_draft_producer_unchanged: true
+    fresh_checks: 80_light_contracts_3_real_mapped_contexts_9_source_scenarios
   incremental_validation:
     baseline_revision: c6e069e4ac14822b43cb0546e57d5212687aa589
     receipt: .work/lung-review-followup-20260907/incremental-scope.json

@@ -69,6 +69,31 @@ audit_date: 2026-09-07
   对应 `sample-type-before.xml` 和 `small-panel-full-after-fixture-fix.xml` 均在私有目录。
   新冻结提交仍须完成正式 CI；不能把 50 个定向通过替代完整发布门禁。
 
+### 默认切换后的缺来源保护补正
+
+测试对象对齐之后，继续检查真实 A/B/C，而不是以修正夹具替代业务核验。三份输入
+的“样本类型/标本类型/Sample Type”均无值，但 f6c312e 的自动 588+PD-L1 预览和表单
+仍继承旧全局“组织”默认。按用户“不杜撰非确定性字段”的边界，给该 pilot 的
+`input_contract.missing_source_defaults.sample_type` 增加“未提供”；仅缺来源时显示
+中性值，预览不把它作为源事实返回、表单不预填。显式组织/血液来源继续保留。
+
+- 三真实输入 × 缺失/组织/血液，共 9 组来源场景通过；缺失时最终报告映射的全部
+  字段中只有 sample_type 改变，其余完全一致。来源回执 `sample-source-before.json`
+  原始 FAIL 保留，`sample-source-after.json` 为开发 PASS。
+- 临床预览开始使用已选肺癌 package，因此旧全局预览的免疫阳性基因/TMB 展示也
+  对齐到该 package 已有的最终映射结果；没有新增或修改医学知识规则，不把全局
+  CRC 风格预览当成肺癌规则。完整字段比较见 `source-safety-scope.json`。
+- 80 个轻量合同通过（3 个整本生成用例交 Linux）；五个评审产品的显式订单检查和
+  588 默认 pilot 的缺来源反例均覆盖，CRC/global 的旧默认保护仍通过。
+- 四 draft 的包和模板未变，只因同族 pilot 配置纳入全局 producer digest 而重新
+  绑定增量证据；原四包选定产品的生成/排版回执仍保留旧来源。新证明 SHA256：
+  `e85d7b4bec5a2551773aa8ebe9350c18d5a6485330630cca819cf49067afe915`。
+- 本机扩展测试曾执行到三个整本用例（后续此类计算限定 Linux）：82 PASS、1 FAIL。
+  唯一失败为 NGS-only 成品内嵌图片 21、模板 19；独立逐字节比对证明额外两张正好是
+  本机已配置的出具/审核签名，与病例 PD-L1 图片无关。旧 JUnit、Word、QA、来源报告
+  及 `local-generation-failure/signature-shapes.json` 均保留。未放宽图片数量断言，
+  尚需没有私人运行时资产的干净 Linux 同用例验证，不能把环境解释当成该验证通过。
+
 ### P2/P3 诊断及条件处置（不冒称产品修复）
 
 - P2：从实际 Vue 源码抽出处理函数，合成 File 第一次调用即进入 API 桩一次并跳转一次。

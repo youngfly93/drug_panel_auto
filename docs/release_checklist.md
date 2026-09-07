@@ -189,6 +189,8 @@ same NGS fingerprint, as do the 588 siblings. The 2026-09-07 review decision
 defaults both families to the +PD-L1 review product; explicit non-IHC orders
 and manual project selection still choose the non-IHC sibling. This default
 does not establish an IHC result: absent values remain not provided.
+The 588+PD-L1 review contract also requires a source for sample type: an absent
+value is displayed as not provided and is not prefilled as tissue in the form.
 The iyun129 deployment wrapper supplies these values by default. The backend
 guards are authoritative: a hidden or absent frontend option alone is not a
 release boundary.

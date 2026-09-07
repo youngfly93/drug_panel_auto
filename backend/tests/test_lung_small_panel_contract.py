@@ -177,10 +177,13 @@ def test_structural_identity_uses_headers_with_all_blank_membership(tmp_path, co
 
 
 @pytest.mark.parametrize(
-    "panel,count", [("lung_13", 13), ("lung_62", 62), ("lung_62_pdl1", 62), ("lung_588", 588)]
+    "panel,count", [
+        ("lung_13", 13), ("lung_62", 62), ("lung_62_pdl1", 62),
+        ("lung_588", 588), ("lung_588_pdl1", 588),
+    ]
 )
 @pytest.mark.parametrize("provided", [None, "组织", "血液"])
-def test_draft_sample_type_needs_a_source_and_never_changes_crc_defaults(
+def test_review_panel_sample_type_needs_a_source_and_never_changes_crc_defaults(
     tmp_path, panel, count, provided,
 ):
     # This is a selected-draft contract, not a shared-fingerprint default test.
@@ -207,6 +210,23 @@ def test_draft_sample_type_needs_a_source_and_never_changes_crc_defaults(
     # The shared mapper must not mutate legacy/global mappings after a draft call.
     legacy = mapper.map(source(tmp_path, 13), panel_package=package("crc_358_msi"))
     assert legacy.get_field("sample_type") == "组织"
+
+
+@pytest.mark.parametrize("provided", [None, "组织", "血液"])
+def test_default_588_pilot_preview_does_not_invent_sample_type(tmp_path, provided):
+    excel = source(tmp_path, 588)
+    if provided is not None:
+        excel.single_values["样本类型"] = provided
+    bridge = ReportGenBridge(config_dir=str(ROOT / "config"), template_dir=str(ROOT / "templates"))
+    assert bridge.detect_project_type(excel.file_path, excel)["project_type"] == "lung_588_pdl1"
+    clinical = bridge.get_mapped_clinical_fields(excel)
+    if provided is None:
+        assert "sample_type" not in clinical
+    else:
+        assert clinical["sample_type"] == provided
+    schema = get_clinical_form_schema("lung_588_pdl1")
+    field = next(f for group in schema.groups for f in group.fields if f.key == "sample_type")
+    assert field.default is None
 
 
 def test_unregistered_legacy_preview_keeps_existing_mapping_behavior(tmp_path, monkeypatch):
