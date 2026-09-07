@@ -183,13 +183,17 @@ def test_structural_identity_uses_headers_with_all_blank_membership(tmp_path, co
 def test_draft_sample_type_needs_a_source_and_never_changes_crc_defaults(
     tmp_path, panel, count, provided,
 ):
-    excel = source(tmp_path, count)
+    # This is a selected-draft contract, not a shared-fingerprint default test.
+    # Keep the mapper and Web preview on the same explicitly ordered product.
+    pkg = package(panel)
+    excel = source(tmp_path, count, project_name=pkg.raw["display_name"])
     if provided:
         excel.single_values["样本类型"] = provided
     mapper = FieldMapper(config_dir=str(ROOT / "config"), log_level="ERROR")
-    report = mapper.map(excel, panel_package=package(panel))
+    report = mapper.map(excel, panel_package=pkg)
     assert report.get_field("sample_type") == (provided or "未提供")
     bridge = ReportGenBridge(config_dir=str(ROOT / "config"), template_dir=str(ROOT / "templates"))
+    assert bridge.detect_project_type(excel.file_path, excel)["project_type"] == panel
     clinical = bridge.get_mapped_clinical_fields(excel)
     if provided:
         assert clinical["sample_type"] == provided

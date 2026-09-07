@@ -8,11 +8,13 @@ audit_date: 2026-09-07
 
 # 肺癌 Excel → Word 准确性复核与整改记录
 
-## 2026-09-07 c6e069e 三项反馈：定向诊断与未发布修复
+## 2026-09-07 c6e069e 三项反馈：定向诊断与发布冻结记录
 
 冻结基线为上方 c6e069e（完整 SHA `c6e069e4ac14822b43cb0546e57d5212687aa589`，
-与审核方使用同一唯一缩写）；开发分支 `codex/lung-default-and-batch-click-fix` 尚未提交、
-未部署。下述开发测试不是冻结候选验收或生产发布证明。用户要求仅重跑受影响检查，
+与审核方使用同一唯一缩写）；P1 业务提交为 `ed2fc7d`，分支
+`codex/lung-default-and-batch-click-fix`。本节冻结时尚未部署，最终状态应查私有
+`.work/lung-review-followup-20260907/deployment_completion.json` 与实际运行身份，
+不能把下述开发测试当作生产发布证明。用户要求仅重跑受影响检查，
 本轮没有重跑 A/B/C × 全产品的分析/生成矩阵，未改医学规则、IHC 数据或临床资格。
 
 用户/Claude 已完成公网登录批量 `aa16f07d`，3 真实 588 + 3 派生 13，共 6/6；
@@ -48,6 +50,24 @@ audit_date: 2026-09-07
   `release-scope-final.xml`、`identity-and-release-final.xml`，不覆盖先前失败。
   shared audit 对账同属 c6e069e，身份缺失/冲突 0；finding 编号覆盖缺口仍保留，
   不将本轮自检称为 Claude 已复核新修复。
+
+### 首次冻结 CI 失败与测试夹具校正
+
+- `ed2fc7d` 的 CI 34070596518：四 draft 合成门禁全部成功；后端原始结果为
+  1093 PASS、2 SKIP、1 FAIL，后续默认 QA 未运行。这不是完整 CI PASS。
+- 唯一失败 `test_draft_sample_type_needs_a_source_and_never_changes_crc_defaults`
+  的 None/lung_588 参数：FieldMapper 显式检查无 PD-L1 draft，但预览 helper 通过
+  中性 Excel 自动选中了新默认的 +PD-L1 pilot，测试比较了两个不同产品。
+  本机原断言复现 1 FAIL/11 PASS；失败日志和 JUnit 原样保留。
+- 将此“指定 draft 的来源合同”夹具填入对应产品的可信项目名称，并新增预览检测
+  必须等于目标 panel 的断言；既有缺来源不填样本类型、显式组织/血液、CRC 旧默认
+  不变等断言全部保留。默认识别由独立的中性文件/无 IHC 名称/+IHC 名称测试覆盖。
+  只校正测试对象，没有改变 588 pilot、CRC 的历史字段默认或医学行为。
+- 修正后整个小 panel 合同文件 50 PASS，scope gate 继续 PASS；producer 指纹不变。
+  日志 `ci-ed2fc7d-failed.log` SHA256 为
+  `d93673ed2e55aacc7963cf4e99e0efea75f3e075ac86286c710e1aa1816f0066`。
+  对应 `sample-type-before.xml` 和 `small-panel-full-after-fixture-fix.xml` 均在私有目录。
+  新冻结提交仍须完成正式 CI；不能把 50 个定向通过替代完整发布门禁。
 
 ### P2/P3 诊断及条件处置（不冒称产品修复）
 

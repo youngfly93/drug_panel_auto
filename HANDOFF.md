@@ -1,7 +1,7 @@
 # HANDOFF —— 基因组 Panel 自动化报告系统（Web 平台）
 
 > 当前状态快照。更新就改这个文件，别新建 `_v2`。
-> 最近更新：**2026-09-07**（生产 c6e069e；P1 家族默认已在本地修正，P2/P3 尚未闭环，本轮未提交部署）。
+> 最近更新：**2026-09-07**（发布冻结时生产 c6e069e；P1 业务 ed2fc7d；首次 CI 测试夹具问题已修，最终部署状态另查私有完成回执）。
 
 ---
 
@@ -19,7 +19,7 @@
   `.work/lung-small-panel-derived-inputs/release_c6e069e/deployment_completion.json`。
   用户另以公网登录批量 aa16f07d 完成 6/6（3 真实 588 + 3 派生 13），C13 四变异/
   三靶向、42 页、零压制已复核；不要再把该路径写成尚未覆盖。
-- 当前分支 `codex/lung-default-and-batch-click-fix`，HEAD 仍 c6e069e，修改未提交。
+- 当前分支 `codex/lung-default-and-batch-click-fix`，P1 业务已提交 ed2fc7d。
   P1 不只 priority：检测器会用 `identity_family.default_project_type` 覆盖排序。
   四个 588/62 兄弟包现默认 `*_pdl1`、含 PD-L1 priority 40/无 PD-L1 30；显式无 PD-L1
   选择仍有效。建包脚本、定向测试和架构/发布说明同步；未动医学规则或 warn_only。
@@ -43,6 +43,13 @@
   发布前仍需冻结提交/CI、单例历史发布门禁、正式 wrapper 与小批公网单击验证。
   不能从本地定向 PASS 推导已经部署；P3 跨渲染器待核不阻断本次身份修复。
 - 自检记录在 `audit/lung-report-accuracy-review.codex.md`；Claude 原稿不改。
+- ed2fc7d 的四 draft CI 门禁成功，但完整后端 1093 PASS/2 SKIP/1 FAIL：
+  无 PD-L1 draft 的样本类型测试让预览自动选到了 +PD-L1 pilot。已把该指定产品
+  夹具填入可信项目名称，新增“预览必须选中目标 panel”的断言；未弱化来源断言，
+  未改业务/医学/模板。整个小 panel 合同文件 50 PASS，producer 指纹保持不变。
+  新提交仍需正式 CI/部署。本节为冻结前记录，部署后补充统一写到私有
+  `.work/lung-review-followup-20260907/deployment_completion.json`，以免文档提交反复
+  改动已冻结发布身份；不把旧失败或旧候选历史回执改为新提交的通过证明。
 
 ## 0.12 2026-09-06 恢复原文、授权 draft 部署（历史继续点，部署状态已由 0.13 更新）
 
