@@ -597,7 +597,7 @@ def test_lung588_project_detection_accepts_reviewed_structural_fingerprint(tmp_p
     ).detect(str(path), excel_data=excel_data)
 
     assert result["detected"] is True
-    assert result["project_type"] == "lung_588"
+    assert result["project_type"] == "lung_588_pdl1"
     assert result["identity_source"] == "ngs_family_default"
     assert result["confidence"] == 1.0
     assert any(

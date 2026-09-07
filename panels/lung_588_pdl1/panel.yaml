@@ -16,9 +16,9 @@ aliases:
 project_detector_rules:
   identity_family:
     id: "lung_588"
-    default_project_type: "lung_588"
+    default_project_type: "lung_588_pdl1"
     pdl1: true
-  priority: 20
+  priority: 40
   keywords:
     - "588基因+PD-L1"
   keyword_groups:

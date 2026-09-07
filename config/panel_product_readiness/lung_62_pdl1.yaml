@@ -11,7 +11,8 @@ draft_build_allowed: true
 decision: >-
   User-authorized report-group draft access is supported by pinned A/B/C
   engineering receipts. The C-family draft shares the lung_62 NGS fingerprint;
-  PD-L1 order/form selection chooses this sibling, without an invented flag.
+  This sibling is the default review product; an explicit non-IHC order/selection
+  chooses lung_62, without an invented flag or inferred IHC result.
   Missing case-specific IHC remains visibly absent, not a draft-access blocker.
   Original narratives and WARN remain; clinical promotion requires separate
   report-group approval and true paired inputs.
@@ -21,7 +22,15 @@ draft_generation_evidence:
   user_authorized: true
   authorization_date: "2026-09-06"
   business_source_commit: 1fbb2948410c75321530f93d6936498e07c9f3fd
-  producer_sha256: 4723a131e2d8b9495ed360592167acafca07c56fe0bbad98d23d2a643e096f05
+  producer_sha256: badb6fad3d4aabf103fb9768ea1f62f86f6f5d81ac56fa24dc6925852c29e09f
+  incremental_validation:
+    baseline_revision: c6e069e4ac14822b43cb0546e57d5212687aa589
+    receipt: .work/lung-review-followup-20260907/incremental-scope.json
+    receipt_sha256: df684bbf4dc1e317ea474752a4d1f3e53b7b07924ab9ea8436da1110ae4b7cc3
+    scope: identity_defaults_only_selected_product_rendering_unchanged
+    inherited_gates: selected_product_rendering_original_receipts_below
+    fresh_checks: 25_synthetic_identity_9_existing_input_defaults_12_explicit_choices
+    not_claimed: fresh_abc_generation_matrix_or_clinical_promotion
   template_sha256: 94f3983af19e6afe6c9561f8eab8892334e0ef518e9d5be23ee7dc303b49cee8
   case_aliases: [A, B, C]
   raw_qa_statuses: [WARN, WARN, WARN]

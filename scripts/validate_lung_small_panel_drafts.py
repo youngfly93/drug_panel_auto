@@ -248,7 +248,9 @@ def run_case(args, panel, case):
         bridge,
         excel_path=source,
         excel_data=excel,
-        requested_project_type=panel if panel.endswith("_pdl1") else None,
+        # This invocation validates the requested product, including an
+        # explicit non-IHC sibling; family defaults are checked independently.
+        requested_project_type=panel,
     )
     if identity.project_type != panel:
         raise ValueError("NGS family detection or same-family disambiguation failed")

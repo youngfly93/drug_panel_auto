@@ -19,7 +19,15 @@ draft_generation_evidence:
   user_authorized: true
   authorization_date: "2026-09-06"
   business_source_commit: 1fbb2948410c75321530f93d6936498e07c9f3fd
-  producer_sha256: 3a72deb2fcb08a0720346687f730c5029ce506b28d018e5873d3db30b5177413
+  producer_sha256: 3641c5f95be4656ef746c28b5dda36a1bffec9af6d30b19b9df9ff3d2da756bb
+  incremental_validation:
+    baseline_revision: c6e069e4ac14822b43cb0546e57d5212687aa589
+    receipt: .work/lung-review-followup-20260907/incremental-scope.json
+    receipt_sha256: df684bbf4dc1e317ea474752a4d1f3e53b7b07924ab9ea8436da1110ae4b7cc3
+    scope: identity_defaults_only_selected_product_rendering_unchanged
+    inherited_gates: selected_product_rendering_original_receipts_below
+    fresh_checks: 25_synthetic_identity_9_existing_input_defaults_12_explicit_choices
+    not_claimed: fresh_abc_generation_matrix_or_clinical_promotion
   template_sha256: 31a3f5a87744ed3902251b196cdf40960c4eb76cf3712ccd87d7bcd4b87afe1a
   case_aliases: [A, B, C]
   raw_qa_statuses: [WARN, WARN, WARN]

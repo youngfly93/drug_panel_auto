@@ -14,7 +14,7 @@ project_detector_rules:
     - type: regex
       pattern: (?:肺癌\s*62(?:\s*基因)?|62\s*基因)(?:.*PD[\s-]*L1)
     weight: 1
-  priority: 20
+  priority: 40
   structural_fingerprints:
   - id: lung62_ngs_family_v1
     confidence: 1.0
@@ -29,7 +29,7 @@ project_detector_rules:
         - ExistIn178
   identity_family:
     id: lung_62
-    default_project_type: lung_62
+    default_project_type: lung_62_pdl1
     pdl1: true
 batch_generation:
   enabled: true

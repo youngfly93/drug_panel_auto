@@ -129,18 +129,24 @@ def test_draft_packages_are_valid_and_literal_free(panel, count):
 
 
 @pytest.mark.parametrize("count", [62, 588])
-def test_shared_fingerprint_defaults_to_ngs_not_ihc_even_with_filename(tmp_path, count):
-    excel = source(tmp_path, count, f"肺癌{count}基因+PD-L1.xlsx")
+@pytest.mark.parametrize("filename", ["neutral.xlsx", "肺癌{count}基因.xlsx", "肺癌{count}基因+PD-L1.xlsx"])
+def test_shared_fingerprint_defaults_to_pdl1_review_product_not_filename(tmp_path, count, filename):
+    excel = source(tmp_path, count, filename.format(count=count))
     result = ProjectDetector(config_dir=str(ROOT / "config"), log_level="ERROR").detect(
         excel.file_path, excel
     )
-    assert result["project_type"] == f"lung_{count}"
+    assert result["project_type"] == f"lung_{count}_pdl1"
     assert result["identity_source"] == "ngs_family_default"
     assert result["identity_conflicts"] == []
     assert {item["id"] for item in result["family_choices"]} == {
         f"lung_{count}",
         f"lung_{count}_pdl1",
     }
+    # This selects a review template; it is not evidence that IHC was performed.
+    assert not any(key.startswith("pdl1_") for key in excel.single_values)
+    assert package(f"lung_{count}_pdl1").project_detector_rules["priority"] > (
+        package(f"lung_{count}").project_detector_rules["priority"]
+    )
 
 
 @pytest.mark.parametrize("count", [13, 62, 588])
@@ -161,7 +167,7 @@ def test_structural_identity_uses_headers_with_all_blank_membership(tmp_path, co
     assert flag in excel.metadata["table_columns"]["Hereditary_tumor"]
     assert all(flag not in row for row in excel.get_table_data("Hereditary_tumor"))
     identity = resolve_project_identity(bridge, excel_path=path, excel_data=excel)
-    assert identity.project_type == f"lung_{count}"
+    assert identity.project_type == ("lung_13" if count == 13 else f"lung_{count}_pdl1")
     assert identity.detection["confidence"] == 1.0
 
     # An actually absent required header must not be inferred from membership values.
@@ -208,19 +214,21 @@ def test_unregistered_legacy_preview_keeps_existing_mapping_behavior(tmp_path, m
 
 
 @pytest.mark.parametrize("count", [62, 588])
-def test_trusted_order_or_explicit_choice_selects_pdl1_within_family(tmp_path, count):
+@pytest.mark.parametrize("pdl1", [False, True])
+def test_trusted_order_or_explicit_choice_selects_either_family_member(tmp_path, count, pdl1):
     bridge = ReportGenBridge(config_dir=str(ROOT / "config"), template_dir=str(ROOT / "templates"))
     excel = source(tmp_path, count)
+    selected_type = f"lung_{count}" + ("_pdl1" if pdl1 else "")
     chosen = resolve_project_identity(
         bridge,
         excel_path=excel.file_path,
         excel_data=excel,
-        requested_project_type=f"lung_{count}_pdl1",
+        requested_project_type=selected_type,
     )
-    assert chosen.project_type == f"lung_{count}_pdl1"
-    excel.single_values["project_name"] = f"肺癌{count}基因+PD-L1"
+    assert chosen.project_type == selected_type
+    excel.single_values["project_name"] = f"肺癌{count}基因" + ("+PD-L1" if pdl1 else "")
     detected = bridge.detect_project_type(excel.file_path, excel)
-    assert detected["project_type"] == f"lung_{count}_pdl1"
+    assert detected["project_type"] == selected_type
     assert detected["identity_source"] == "trusted_project_text"
 
 

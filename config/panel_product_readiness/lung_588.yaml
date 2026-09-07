@@ -11,14 +11,23 @@ decision: >-
   User-authorized report-group draft access is supported by pinned raw A/B/C
   engineering receipts and the traceable non-IHC historical layout.
   NGS Excel shares ExistIn552 + ExistInsmall588 with lung_588_pdl1 and defaults
-  to this product. Original narratives and WARN remain visible; this record
-  grants no clinical production promotion.
+  to that pilot review sibling. An explicit non-IHC order/selection chooses this
+  product. Original narratives and WARN remain visible; this record grants no
+  clinical production promotion or inferred IHC result.
 draft_generation_evidence:
   scope: report_group_review_only
   user_authorized: true
   authorization_date: "2026-09-06"
   business_source_commit: 1fbb2948410c75321530f93d6936498e07c9f3fd
-  producer_sha256: 251e61a10d9840252c4b2bf43ae0c6a52aba03384ee5631531827aed6f9e15a3
+  producer_sha256: 355d98787d9720b5fdc6f3cd704540e1d50f5eba2204129ec968eaecaf4ef2cd
+  incremental_validation:
+    baseline_revision: c6e069e4ac14822b43cb0546e57d5212687aa589
+    receipt: .work/lung-review-followup-20260907/incremental-scope.json
+    receipt_sha256: df684bbf4dc1e317ea474752a4d1f3e53b7b07924ab9ea8436da1110ae4b7cc3
+    scope: identity_defaults_only_selected_product_rendering_unchanged
+    inherited_gates: selected_product_rendering_original_receipts_below
+    fresh_checks: 25_synthetic_identity_9_existing_input_defaults_12_explicit_choices
+    not_claimed: fresh_abc_generation_matrix_or_clinical_promotion
   template_sha256: 9a1485b677b10522e51fe32543141d69d0a39de90ec68d8264f43128ada8ef85
   case_aliases: [A, B, C]
   raw_qa_statuses: [WARN, WARN, WARN]

@@ -103,8 +103,12 @@ python scripts/validate_lung_excel_request_list.py \
   TP53 G245D、PIK3CA A1066V 四行；靶向提示为 BRAF、ERBB2、PIK3CA 三行。
   没有为凑行数而排除 PIK3CA 的业务规则。
 - 62 与 62+PD-L1 共用 `ExistIn552 + ExistInsmall62`；588 两变体共用
-  `ExistIn552 + ExistInsmall588`。结构识别 NGS 家族，默认无 PD-L1；受信项目/订单
-  或网页下拉可选同族含 PD-L1 变体。填写 PD-L1 结果/来源字段自动选择同族含 PD-L1
+  `ExistIn552 + ExistInsmall588`。结构识别 NGS 家族；2026-09-07 审核反馈将原先
+  “默认无 PD-L1”更新为默认含 PD-L1 的评审产品（588 为已验证 pilot，62 为 draft）。
+  两个兄弟包的 `identity_family.default_project_type` 必须一致，含 PD-L1 优先级为
+  40、无 PD-L1 为 30。受信项目/订单或网页下拉仍可显式选择无 PD-L1 变体。
+  默认产品不是已做 IHC 的证据，缺失的 IHC 字段仍显示未提供。
+  填写 PD-L1 结果/来源字段自动选择同族含 PD-L1
   产品，不以文件名或虚构的 Excel 列确定免疫组化订单，不允许跨 NGS 产品覆盖。
 - 62+PD-L1 复用 `legacy_unspecified_ihc_transcription_v1`，未知字段明确缺失。
   批量表单不得跨病例共享 PD-L1 数值、来源或图片。

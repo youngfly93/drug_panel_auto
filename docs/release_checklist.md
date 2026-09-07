@@ -185,8 +185,10 @@ The first guard blocks direct/core generation, the second blocks Web API entry
 points, and the third removes unpromoted products from the production
 generation selector. Batch case isolation remains independently enforced by
 each lung pilot/draft's committed Panel contract. The 62 siblings share the
-same NGS fingerprint, as do the 588 siblings; default to non-IHC and disambiguate
-by order/project selection or case-specific PD-L1 form values.
+same NGS fingerprint, as do the 588 siblings. The 2026-09-07 review decision
+defaults both families to the +PD-L1 review product; explicit non-IHC orders
+and manual project selection still choose the non-IHC sibling. This default
+does not establish an IHC result: absent values remain not provided.
 The iyun129 deployment wrapper supplies these values by default. The backend
 guards are authoritative: a hidden or absent frontend option alone is not a
 release boundary.

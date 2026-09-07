@@ -1242,7 +1242,7 @@ def build_package(panel, spec, private_dir, work, packages_dir):
         "keyword_groups": [
             {"any": [{"type": "regex", "pattern": pattern}], "weight": 1}
         ],
-        "priority": 30 if not pdl1 else 20,
+        "priority": 40 if pdl1 else 30,
         "structural_fingerprints": [
             {
                 "id": f"lung{number}_ngs_family_v1",
@@ -1257,7 +1257,7 @@ def build_package(panel, spec, private_dir, work, packages_dir):
     if number in (62, 588):
         rules["identity_family"] = {
             "id": f"lung_{number}",
-            "default_project_type": f"lung_{number}",
+            "default_project_type": f"lung_{number}_pdl1",
             "pdl1": pdl1,
         }
     raw["project_detector_rules"] = rules

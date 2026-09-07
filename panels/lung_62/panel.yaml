@@ -29,7 +29,7 @@ project_detector_rules:
         - ExistIn178
   identity_family:
     id: lung_62
-    default_project_type: lung_62
+    default_project_type: lung_62_pdl1
     pdl1: false
 batch_generation:
   enabled: true

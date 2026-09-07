@@ -1,7 +1,7 @@
 # HANDOFF —— 基因组 Panel 自动化报告系统（Web 平台）
 
 > 当前状态快照。更新就改这个文件，别新建 `_v2`。
-> 最近更新：**2026-09-06**（已授权仅部署 draft；六肺包恢复 warn-only，原文可见；临床资格不变，发布验收进行中）。
+> 最近更新：**2026-09-07**（生产 c6e069e；P1 家族默认已在本地修正，P2/P3 尚未闭环，本轮未提交部署）。
 
 ---
 
@@ -13,7 +13,38 @@
 `current_release`、`REVISION`、进程 cwd 和健康检查四项实时证据为准，不能由本文档
 静态推断。
 
-## 0.12 2026-09-06 恢复原文、授权 draft 部署（最新继续点）
+## 0.13 2026-09-07 c6e069e 审核反馈（最新继续点）
+
+- c6e069e 已于前轮部署完成；证据在
+  `.work/lung-small-panel-derived-inputs/release_c6e069e/deployment_completion.json`。
+  用户另以公网登录批量 aa16f07d 完成 6/6（3 真实 588 + 3 派生 13），C13 四变异/
+  三靶向、42 页、零压制已复核；不要再把该路径写成尚未覆盖。
+- 当前分支 `codex/lung-default-and-batch-click-fix`，HEAD 仍 c6e069e，修改未提交。
+  P1 不只 priority：检测器会用 `identity_family.default_project_type` 覆盖排序。
+  四个 588/62 兄弟包现默认 `*_pdl1`、含 PD-L1 priority 40/无 PD-L1 30；显式无 PD-L1
+  选择仍有效。建包脚本、定向测试和架构/发布说明同步；未动医学规则或 warn_only。
+- 25 定向回归 PASS；9 真实/派生文件自动识别和 12 显式选择 PASS；10 包静态验证无问题。
+  文件集中于 `.work/lung-review-followup-20260907/`。未跑全套病例生成。
+- P2 用户已关闭旧空间并授权新开；ego-browser 空间 15 公网真实六文件诊断证实：
+  视口外自动化 click 命中 HTML，不发请求；滚至可见后首次点击即尝试 POST。
+  诊断阶段 XHR.send 前拦截避免重跑六稿，尚非后台 200 证据；重载已撤掉插桩。
+  未复现同一可见按钮需二次点击，不臆改前端。部署后小批真实请求另验。
+- P3 审核方原 Word（aa16f07d C588）的 Linux 第 3 页导读完整（376 字符），82 页。
+  临时接回 front_matter_spacing 后仍同页数/同字符分布；未证实能解决用户问题，
+  试验业务改动已撤回，before/after 及失败/通过单测回执保留。用户已补 Mac LO
+  25.8.4.2 的 86 页/p3 空白证据，同 Word 全 SHA 一致；Linux LO 7.3.7.2 再以
+  自动空白页导出开启重放，仍 82 页/p3 导读正常。按用户条件记为 LO 版本/渲染环境
+  差异、Windows Word 待核，不做模板修改，也不否定本机空白证据。
+- 远端诊断目录 `/media/desk16/iy12922/apps/reportgen-lung-review-20260907.cFaMIm`；
+  只复制成品并重放排版，没有改生产依赖/配置/服务。没有常驻验收实例或监听端口。
+- 四 draft producer 已按七文件的受影响闭包重绑定；旧原始 QA/生成回执不变，
+  新增量证明 SHA 为 df684bbf4dc1e317ea474752a4d1f3e53b7b07924ab9ea8436da1110ae4b7cc3。
+  仅身份配置/验证器选择变化，模板/医学规则/前端未变，旧默认识别断言不复用。
+  发布前仍需冻结提交/CI、单例历史发布门禁、正式 wrapper 与小批公网单击验证。
+  不能从本地定向 PASS 推导已经部署；P3 跨渲染器待核不阻断本次身份修复。
+- 自检记录在 `audit/lung-report-accuracy-review.codex.md`；Claude 原稿不改。
+
+## 0.12 2026-09-06 恢复原文、授权 draft 部署（历史继续点，部署状态已由 0.13 更新）
 
 - 用户已明确接受原始医学 WARN、缺失 A IHC、派生样本号无法富集姓名和 P2 排版待办，
   它们不阻断报告组 draft；禁止再要求 raw QA PASS 或完整 IHC 才给草稿。临床签发另审。

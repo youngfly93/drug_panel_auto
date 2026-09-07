@@ -2,11 +2,90 @@
 module: lung-report-accuracy-review
 agent: codex
 identity_kind: git_commit
-identity_value: da8e62de672ecaa5416d3c2b29e3e9294531f519
-audit_date: 2026-09-05
+identity_value: c6e069e
+audit_date: 2026-09-07
 ---
 
 # 肺癌 Excel → Word 准确性复核与整改记录
+
+## 2026-09-07 c6e069e 三项反馈：定向诊断与未发布修复
+
+冻结基线为上方 c6e069e（完整 SHA `c6e069e4ac14822b43cb0546e57d5212687aa589`，
+与审核方使用同一唯一缩写）；开发分支 `codex/lung-default-and-batch-click-fix` 尚未提交、
+未部署。下述开发测试不是冻结候选验收或生产发布证明。用户要求仅重跑受影响检查，
+本轮没有重跑 A/B/C × 全产品的分析/生成矩阵，未改医学规则、IHC 数据或临床资格。
+
+用户/Claude 已完成公网登录批量 `aa16f07d`，3 真实 588 + 3 派生 13，共 6/6；
+13 C 稿四变异/三靶向、42 页、原文可见已由审核方核实。接受这一新增证据，
+不再沿用此前“公网登录批量尚未覆盖”的陈述；它不表示真实 329 或小 panel 同案 UAT 已完成。
+
+| id | severity | claim | evidence | verdict |
+|---|---|---|---|---|
+| lung-report-accuracy-review-19 | P1 | c6e069e 的 588/62 同指纹选择被无 PD-L1 家族默认覆盖，仅提高 priority 不足以修复。 | c6e069e:reportgen/core/project_detector.py:128；panels/lung_588/panel.yaml:33；panels/lung_62/panel.yaml:32；.work/lung-review-followup-20260907/identity-before.xml（10 FAIL） | CONFIRMED |
+| lung-report-accuracy-review-20 | P2 | 审核方两次观测首次 UI 点击无请求；本轮证实视口外自动化点击未命中按钮，可见按钮首次点击立即尝试 POST，尚未复现同一可见按钮需第二击。 | audit/lung-report-accuracy-review.claude.md:89；.work/lung-review-followup-20260907/p2-visible-vs-offscreen.json | UNSURE |
+| lung-report-accuracy-review-21 | P3 | 审核方的 588 C 第 3 页低内容在本轮 Linux 确定性字体环境未复现；不能以不同渲染器结果否定原发现。 | audit/lung-report-accuracy-review.claude.md:90；.work/lung-review-followup-20260907/front_matter_replay.json；同目录 before/case-c-588-before-03.png | UNSURE |
+
+### P1 开发修复及证据
+
+- 四个兄弟包的 `identity_family.default_project_type` 一致指向各自 `*_pdl1`；
+  含 PD-L1 优先级 40，无 PD-L1 保持 30。建包脚本同步，避免重建恢复旧默认。
+- 受信订单和显式 `project_type` 可选任一兄弟产品；不同癌种/基因数仍拒绝覆盖。
+  默认含 PD-L1 是评审模板选择，不是已做 IHC 的证明，不填造任何结果。
+- 定向合成回归 25 PASS；9 份既有真实/派生文件自动识别 + 12 个显式选择全部 PASS；
+  注册包静态验证 10 包、0 error/0 warning。13 旗标、变异/药物规则、六包 `warn_only` 未变。
+- `identity-final.xml` SHA256：`a7b3d367901e1751b68a1203c1d31310e2e580b4bb65cbe4bb8cc40f81988a89`；
+  `real-input-identity.json`：`e8bdb1126201c5d54c3ca3d13cf64b94892fef363f5a2a126c3e2dc93e61e895`。
+- 原 draft producer 指纹因本次业务修改过期，范围门禁按预期 FAIL，见
+  `.work/lung-review-followup-20260907/scope-before-evidence-refresh.json`。
+  后续已按受影响闭包重绑定：七个 producer 文件仅改变身份默认/优先级、建包配置、
+  验证器显式选择；检测器可执行 AST、所有模板、医学规则、前端完全未变。原始生成
+  回执和七门禁保留旧来源，仅复用选定产品的生成/排版证据；旧默认识别断言由本轮
+  定向证据替代，不声称新跑了 A/B/C 矩阵。增量证据 `incremental-scope.json` SHA256：
+  `df684bbf4dc1e317ea474752a4d1f3e53b7b07924ab9ea8436da1110ae4b7cc3`。
+  四个 readiness 均保留 draft/production=false；冻结 CI 和部署另行验收。
+- 重绑定后 scope gate PASS；发布/资格保护 48 PASS、2 个平台跳过；另一次身份/发布
+  定向重放 23 PASS。回执为 `scope-after-evidence-refresh.json`、
+  `release-scope-final.xml`、`identity-and-release-final.xml`，不覆盖先前失败。
+  shared audit 对账同属 c6e069e，身份缺失/冲突 0；finding 编号覆盖缺口仍保留，
+  不将本轮自检称为 Claude 已复核新修复。
+
+### P2/P3 诊断及条件处置（不冒称产品修复）
+
+- P2：从实际 Vue 源码抽出处理函数，合成 File 第一次调用即进入 API 桩一次并跳转一次。
+  这只排查了 handler，不覆盖 pointer/focus、上传控件、遮挡或真实网络。随后用户明确
+  说明旧空间已关闭并授权新开，已创建 ego-browser 空间 15，从公网登录态进入
+  `/generate`，真实上传六份文件。900×684 视口下按钮中心落在视口外，自动化 click
+  实际 target=HTML，零请求；滚动至可见且命中按钮后，首次 pointer click 立即触发
+  `POST /api/v1/reports/batch-files`。为避免重跑六份报告，诊断阶段在 XHR.send 前拦截，
+  不是后台 200/生成完成证据。重载已撤掉插桩，不改业务前端；部署后另做小批真实请求。
+  尚未复现“同一可见按钮第一次无响应、第二次成功”，不否定审核方原观察。
+  `p2-visible-vs-offscreen.json` SHA256：
+  `69f0324058df1e01ac9504829cea84b8b4da5f8a79fc55d515971284ba1b1edc`。
+- P3：从审核方实际公网 ZIP 提取 C 无 PD-L1 成品，Word SHA256 为
+  `072c5b393182e8438c660fe6ee85d35df7eb2b6b4ef7cffb4f1ebd35235332ae`。
+  在 iyun129 只重放排版，不重算分析。LibreOffice 7.3.7.2 + 已登记 CJK v3 字体，
+  原稿 82 页、第 3 页导读正文 376 字符；图片显示导读完整、没有尾段独占页。
+- 曾验证“缺少 front_matter_spacing”假设：临时接回后文字序列完全不变，导读略上移，
+  但仍 82 页、各前置页字符分布相同。该结果未复现或证明解决用户所见缺陷，已撤回
+  本轮试验性配置/测试改动，保留 before/after 图片、XML 测试和回执，不据此宣称 P3 已修。
+- 排版回执 SHA256：`53d72aef55749cc4793d347cd16e149f37feaaaae742687625909ac9edeef863`。
+  首次私有 probe 因 venv 无 PyMuPDF 在导入处退出；随后使用已安装 Poppler 完成同 Word
+  重放。这是 verifier plumbing 更换，不是生成或科学失败，不装改生产依赖。
+- 用户补充 `.work/claude_p3_evidence_c6e069e/` 原 Word 与上述 SHA 全字节一致；
+  本机 LO 25.8.4.2 为 86 页、p3 完全空白，已查看 p2–p4 拼图确认。为排除 PDF 默认
+  隐藏自动空白页，本轮 iyun129 显式 `include_automatic_blank_pages=True` 再渲染
+  同 Word，仍 82 页，p3 导读 376 字符；唯一零文本页为已有图形封面 p1。
+  `native-blank-pages-receipt.json` SHA256：
+  `4b393a8431a559232c2413694759c595ab0b9e272f1fc0a52a8bd016ac17daf3`。
+  按用户条件归为“LO 版本/渲染环境差异，Windows Word 核一次”，不应用未经验证的
+  ddba488 同类模板修改。P3 保留跨渲染器待核，不宣称空白缺陷已修复。
+
+结构/方法保真：需求沿用本模块和用户 2026-09-07 三项反馈；工程链为
+`Excel → 识别/人工覆盖 → 批量提交 → 既有 Word 排版重放`。新增诊断脚本均有四行头，
+仅写 ignored `.work/lung-review-followup-20260907/`；没有新分析或图件重算，
+`scripts/analysis`/`scripts/figures` 重组不适用。患者文件及派生输入未进入 Git。
+
+## 历史记录（下述冻结身份、判定与旧失败保留）
 
 2026-09-06 后续处置（不改判下述冻结发现）：#13 已随 PR #50 合入 main；用户新规格
 要求 #14/#15 暂保留历史显示并转报告组裁决。包含三项修改的旧候选 295ebd2 在服务
@@ -15,7 +94,7 @@ audit_date: 2026-09-05
 `audit/lung-small-panel-derived-inputs.codex.md`。下文 R10–R12 是此前候选的历史证据，
 不能用于声称新策略或新产品已经通过全部门禁。
 
-当前冻结审计对象为 `da8e62de672ecaa5416d3c2b29e3e9294531f519`；新增发现使用
+以下 2026-09-05 的冻结审计对象为 `da8e62de672ecaa5416d3c2b29e3e9294531f519`；当时新增发现使用
 13–18，不复用历史条目的 id。当前修复仍为未提交开发工作树，后文的测试通过只说明
 开发候选行为，不是冻结提交验收或生产发布证明。
 

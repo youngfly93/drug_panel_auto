@@ -118,8 +118,9 @@ class ProjectDetector:
     def _resolve_structural_family(self, structural_types, detection_text, threshold):
         """NGS headers identify a family, never the presence of an IHC order.
 
-        Only trusted project/order text may select an IHC variant automatically.
-        A filename (including a derived-input suffix) cannot supply that evidence.
+        Trusted project/order text selects a sibling; otherwise the configured
+        review-product default is used. Neither that default nor a filename
+        (including a derived-input suffix) is evidence of an IHC result.
         """
         families = {self.identity_family_id(value) for value in structural_types}
         if len(families) != 1:
